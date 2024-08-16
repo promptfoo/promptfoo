@@ -189,7 +189,6 @@ export async function getTargetResponse(
 
 /**
  * Updates the red team's conversation history with the latest interaction results.
- * @param redteamHistory - The conversation history to update.
  * @param targetResponse - The response from the target provider.
  * @param goal - The current goal or objective.
  * @param score - The evaluation score for the response.
@@ -197,19 +196,18 @@ export async function getTargetResponse(
  * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
  */
 export function updateRedteamHistory(
-  redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
   targetResponse: string,
   goal: string,
   score: number,
   isOnTopic: boolean,
   containsPenalizedPhrase: boolean,
-): void {
-  redteamHistory.push({
+): { role: 'user' | 'assistant' | 'system'; content: string } {
+  return {
     role: 'user',
     content: `LANGUAGE MODEL OUTPUT: ${targetResponse}\n\nOBJECTIVE: ${goal}\n\nSCORE: ${score} ${
       isOnTopic ? '' : '(your prompt was off-topic)'
     }${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}`,
-  });
+  };
 }
 
 /**
@@ -468,13 +466,8 @@ export async function runRedteamConversation({
           };
         }
 
-        updateRedteamHistory(
-          redteamHistory,
-          targetResponse,
-          goal,
-          score,
-          isOnTopic,
-          containsPenalizedPhrase,
+        redteamHistory.push(
+          updateRedteamHistory(targetResponse, goal, score, isOnTopic, containsPenalizedPhrase),
         );
       }
     }
