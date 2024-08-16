@@ -3,14 +3,12 @@ import { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
-import number from '@inquirer/number';
 import rawlist from '@inquirer/rawlist';
+import select from '@inquirer/select';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import { getUserEmail, setUserEmail } from '../accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../globalConfig';
 import logger from '../logger';
@@ -22,9 +20,62 @@ import {
   subCategoryDescriptions,
 } from '../redteam/constants';
 import telemetry from '../telemetry';
-import type { Prompt, RedteamPluginObject, TestSuite } from '../types';
-import { RedteamConfigSchema } from '../validators/redteam';
+import type { RedteamPluginObject } from '../types';
+import { getNunjucksEngine } from '../util/templates';
 import { doGenerateRedteam } from './generate/redteam';
+
+const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
+# Docs: https://promptfoo.dev/docs/red-team/configuration
+
+description: "My first red team"
+
+prompts:
+  {% for prompt in prompts -%}
+  - {{ prompt | dump }}
+  {% endfor -%}
+  {% if prompts.length > 0 and not prompts[0].startsWith('file://') -%}
+  # You can also reference external prompts, e.g.
+  # - file:///path/to/prompt.json
+  # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
+  {% endif %}
+
+providers:
+  # To talk directly to your application, use a custom provider.
+  # See https://promptfoo.dev/docs/red-team/configuration/#providers
+  {% for provider in providers -%}
+  - {{ provider }}
+  {% endfor %}
+
+redteam:
+  # Default number of inputs to generate for each plugin
+  numTests: {{numTests}}
+
+  # Each plugin generates {{numTests}} adversarial inputs.
+  # To control the number of tests for each plugin, use:
+  # - id: plugin-name
+  #   numTests: 10
+  plugins:
+    {% for plugin in plugins -%}
+    {% if plugin is string -%}
+    - {{plugin}}
+    {% else -%}
+    - id: {{plugin.id}}
+      {% if plugin.numTests is defined -%}
+      numTests: {{plugin.numTests}}
+      {% endif -%}
+      {% if plugin.config is defined and plugin.config.policy is defined -%}
+      config:
+        policy: {{plugin.config.policy | dump}}
+      {% endif -%}
+    {% endif -%}
+    {% endfor %}
+
+  # Strategies for applying adversarial inputs
+  strategies:
+    {% for strategy in strategies -%}
+    - {{strategy}}
+    {% endfor %}
+`;
 
 export async function redteamInit(directory: string | undefined) {
   telemetry.maybeShowNotice();
@@ -46,18 +97,6 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   const configPath = path.join(projectDir, 'promptfooconfig.yaml');
-  const previousConfigExists = fs.existsSync(configPath);
-  let existingConfig: TestSuite | undefined;
-  if (previousConfigExists) {
-    const overwrite = await confirm({
-      message: `A promptfoo configuration file already exists at: ${configPath} Do you want to overwrite it?`,
-      default: false,
-    });
-    if (!overwrite) {
-      return;
-    }
-    existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as TestSuite;
-  }
 
   console.clear();
   logger.info(chalk.bold('Prompt Configuration\n'));
@@ -65,9 +104,7 @@ export async function redteamInit(directory: string | undefined) {
   const promptChoices = [
     { name: 'Enter a prompt', value: 'enter' },
     { name: 'Reference a prompt file', value: 'file' },
-    ...(previousConfigExists
-      ? [{ name: 'Use prompts from existing config', value: 'existing' }]
-      : []),
+    { name: 'No prompt', value: 'none' },
   ];
 
   const promptChoice = await rawlist({
@@ -75,7 +112,7 @@ export async function redteamInit(directory: string | undefined) {
     choices: promptChoices,
   });
 
-  let prompts: (Prompt | string)[] = [];
+  const prompts: string[] = [];
   if (promptChoice === 'enter') {
     prompts.push(
       await editor({
@@ -89,16 +126,15 @@ export async function redteamInit(directory: string | undefined) {
       message: 'Enter the path to your prompt file (text or JSON):',
     });
     prompts.push(`file://${promptFile}`);
-  } else if (promptChoice === 'existing') {
-    invariant(existingConfig?.prompts, 'No prompts found in existing configuration');
-    prompts = existingConfig?.prompts;
+  } else if (promptChoice === 'none') {
+    prompts.push('{{query}}');
   }
 
   console.clear();
   logger.info(chalk.bold('Provider Configuration\n'));
 
   const providerChoices = [
-    { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini', checked: true },
+    { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
     { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
     { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
     {
@@ -113,19 +149,21 @@ export async function redteamInit(directory: string | undefined) {
     { name: 'Other', value: 'Other' },
   ];
 
-  const selectedProviders = await checkbox({
-    message: 'Choose one or more providers to target:',
+  const selectedProvider = await select({
+    message: 'Choose a provider to target:',
     choices: providerChoices,
     pageSize: process.stdout.rows - 4,
   });
 
-  const providers: string[] = selectedProviders.filter((p) => p !== 'Other');
-  if (selectedProviders.includes('Other')) {
+  let providers: string[];
+  if (selectedProvider === 'Other') {
     const customProvider = await input({
       message:
-        'Enter the custom provider ID (see https://www.promptfoo.dev/docs/providers/ for options):',
+        'Enter the custom provider ID (see https://promptfoo.dev/docs/red-team/configuration/#providers for info):',
     });
-    providers.push(customProvider);
+    providers = [customProvider || 'openai:gpt-4o-mini'];
+  } else {
+    providers = [selectedProvider];
   }
 
   if (!process.env.OPENAI_API_KEY) {
@@ -133,7 +171,7 @@ export async function redteamInit(directory: string | undefined) {
     logger.info(chalk.bold('OpenAI API Configuration\n'));
 
     const apiKeyChoice = await rawlist({
-      message: 'OpenAI API key is required. How to proceed?',
+      message: `OpenAI API key is required, but I don't see an OPENAI_API_KEY environment variable. How to proceed?`,
       choices: [
         { name: 'Enter API key now', value: 'enter' },
         { name: 'Set it later', value: 'later' },
@@ -157,9 +195,7 @@ export async function redteamInit(directory: string | undefined) {
     .map((plugin) => ({
       name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description'}`,
       value: plugin,
-      checked:
-        (existingConfig?.redteam?.plugins || []).some((p) => p.id === plugin) ||
-        DEFAULT_PLUGINS.has(plugin),
+      checked: DEFAULT_PLUGINS.has(plugin),
     }));
 
   const plugins: (string | RedteamPluginObject)[] = await checkbox({
@@ -203,10 +239,7 @@ export async function redteamInit(directory: string | undefined) {
       ? {
           name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description'}`,
           value: strategy,
-          checked:
-            (existingConfig?.redteam?.strategies || []).some(
-              (s) => s.id === strategy || (typeof s === 'string' && s === strategy),
-            ) || DEFAULT_STRATEGIES.includes(strategy as any),
+          checked: DEFAULT_STRATEGIES.includes(strategy as any),
         }
       : strategy,
   );
@@ -218,36 +251,9 @@ export async function redteamInit(directory: string | undefined) {
     loop: false,
   });
 
-  const numTests = await number({
-    message: 'Number of test cases per plugin:',
-    default: 5,
-    min: 0,
-    max: 1000,
-  });
-  invariant(numTests, 'No number of tests provided');
-
-  // Create config file
-  const config = {
-    prompts,
-    providers: providers,
-    tests: [],
-    redteam: RedteamConfigSchema.safeParse({
-      plugins,
-      strategies,
-      numTests,
-    }).data,
-  };
-
-  // Write the simplified form to the config file to make it easier
-  // for people to play with. Writes 1 in the { id: ..., numTests }
-  // and then the rest as strings.
-  const parsedPlugins = RedteamConfigSchema.safeParse({
-    plugins,
-    strategies,
-    numTests,
-  })?.data?.plugins;
-
-  const hasHarmfulPlugin = parsedPlugins?.some((plugin) => plugin.id.startsWith('harmful'));
+  const hasHarmfulPlugin = plugins.some(
+    (plugin) => typeof plugin === 'string' && plugin.startsWith('harmful'),
+  );
   if (hasHarmfulPlugin) {
     const { hasHarmfulRedteamConsent } = readGlobalConfig();
     if (!hasHarmfulRedteamConsent) {
@@ -290,20 +296,18 @@ export async function redteamInit(directory: string | undefined) {
     }
   }
 
-  const configPlugins = plugins.length >= 2 ? [parsedPlugins?.[0], ...plugins.slice(1)] : plugins;
+  const numTests = 5;
 
-  fs.writeFileSync(
-    configPath,
-    yaml.dump({
-      ...config,
-      redteam: {
-        numTests,
-        plugins: configPlugins,
-        strategies,
-      },
-    }),
-    'utf8',
-  );
+  const nunjucks = getNunjucksEngine();
+  const redteamConfig = nunjucks.renderString(REDTEAM_CONFIG_TEMPLATE, {
+    numTests,
+    plugins,
+    strategies,
+    prompts,
+    providers,
+  });
+
+  fs.writeFileSync(configPath, redteamConfig, 'utf8');
 
   console.clear();
   logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
@@ -315,10 +319,10 @@ export async function redteamInit(directory: string | undefined) {
 
   if (readyToGenerate) {
     await doGenerateRedteam({
-      plugins: parsedPlugins,
+      plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
       cache: false,
       write: true,
-      defaultConfig: config,
+      defaultConfig: {},
       defaultConfigPath: configPath,
       numTests,
     });
