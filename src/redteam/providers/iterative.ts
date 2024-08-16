@@ -7,7 +7,7 @@
  *
  * The main components of this file include:
  * - Helper functions for initializing providers, rendering prompts, and evaluating responses
- * - A `runRedteamConversation` function that orchestrates the iterative attack process
+ * - A `runRedteamConversation` export function that orchestrates the iterative attack process
  * - A `RedteamIterativeProvider` class that implements the `ApiProvider` interface for integration
  *   with the larger system
  *
@@ -56,7 +56,7 @@ const MAX_NO_IMPROVEMENT = 15;
  * Initializes and returns the default OpenAI chat completion provider.
  * @returns A promise that resolves to an OpenAiChatCompletionProvider instance.
  */
-async function defaultInitializeProviders(): Promise<OpenAiChatCompletionProvider> {
+export async function defaultInitializeProviders(): Promise<OpenAiChatCompletionProvider> {
   return new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
     config: {
       temperature: TEMPERATURE,
@@ -94,7 +94,7 @@ export function renderSystemPrompts(
  * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
  * @returns A promise that resolves to the evaluation score.
  */
-async function evaluateResponse(
+export async function evaluateResponse(
   redteamProvider: OpenAiChatCompletionProvider,
   judgeSystemPrompt: string,
   targetResponse: string,
@@ -128,7 +128,7 @@ async function evaluateResponse(
  * @param redteamHistory - The conversation history of the red team.
  * @returns A promise that resolves to an object containing the improvement and new prompt.
  */
-async function getNewPrompt(
+export async function getNewPrompt(
   redteamProvider: OpenAiChatCompletionProvider,
   redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
 ): Promise<{ improvement: string; prompt: string }> {
@@ -148,7 +148,7 @@ async function getNewPrompt(
  * @param targetPrompt - The prompt to be checked.
  * @returns A promise that resolves to a boolean indicating if the prompt is on-topic.
  */
-async function checkIfOnTopic(
+export async function checkIfOnTopic(
   redteamProvider: OpenAiChatCompletionProvider,
   onTopicSystemPrompt: string,
   targetPrompt: string,
@@ -176,7 +176,7 @@ async function checkIfOnTopic(
  * @param targetPrompt - The prompt to send to the target provider.
  * @returns A promise that resolves to the target provider's response as a string.
  */
-async function getTargetResponse(
+export async function getTargetResponse(
   targetProvider: ApiProvider,
   targetPrompt: string,
 ): Promise<string> {
@@ -196,7 +196,7 @@ async function getTargetResponse(
  * @param isOnTopic - Whether the prompt was on-topic.
  * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
  */
-function updateRedteamHistory(
+export function updateRedteamHistory(
   redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
   targetResponse: string,
   goal: string,
@@ -215,7 +215,7 @@ function updateRedteamHistory(
 /**
  * Represents a node in the search tree.
  */
-interface TreeNode {
+export interface TreeNode {
   prompt: string;
   score: number;
   children: TreeNode[];
@@ -229,7 +229,7 @@ interface TreeNode {
  * @param depth - The depth of the node in the tree.
  * @returns A new TreeNode object.
  */
-function createTreeNode(prompt: string, score: number, depth: number): TreeNode {
+export function createTreeNode(prompt: string, score: number, depth: number): TreeNode {
   return { prompt, score, children: [], depth };
 }
 
@@ -239,7 +239,7 @@ function createTreeNode(prompt: string, score: number, depth: number): TreeNode 
  * @param depth - The depth of the node in the tree.
  * @returns The number of branches to explore for the node.
  */
-function calculateBranches(score: number, depth: number): number {
+export function calculateBranches(score: number, depth: number): number {
   // Adjust branching based on score and depth
   let branches = BASE_BRANCHES;
 
@@ -263,12 +263,12 @@ function calculateBranches(score: number, depth: number): number {
 
 /**
  * Calculates the similarity between two prompts using Jaccard similarity.
+ * Simple metric to avoid exploring the same prompt multiple times.
  * @param prompt1 - The first prompt.
  * @param prompt2 - The second prompt.
  * @returns A similarity score between 0 and 1.
  */
-function calculateSimilarity(prompt1: string, prompt2: string): number {
-  // This is a simple Jaccard similarity. You might want to use a more sophisticated method.
+export function calculateSimilarity(prompt1: string, prompt2: string): number {
   const set1 = new Set(prompt1.toLowerCase().split(/\s+/));
   const set2 = new Set(prompt2.toLowerCase().split(/\s+/));
   const intersection = new Set([...set1].filter((x) => set2.has(x)));
@@ -282,7 +282,7 @@ function calculateSimilarity(prompt1: string, prompt2: string): number {
  * @param numToSelect - The number of nodes to select.
  * @returns An array of selected diverse nodes.
  */
-function selectDiverseBestNodes(nodes: TreeNode[], numToSelect: number): TreeNode[] {
+export function selectDiverseBestNodes(nodes: TreeNode[], numToSelect: number): TreeNode[] {
   // Sort nodes by score in descending order
   const sortedNodes = nodes.sort((a, b) => b.score - a.score);
 
@@ -314,7 +314,7 @@ function selectDiverseBestNodes(nodes: TreeNode[], numToSelect: number): TreeNod
  * @param params - The parameters for the red team conversation.
  * @returns A promise that resolves to an object with the output and metadata.
  */
-async function runRedteamConversation({
+export async function runRedteamConversation({
   prompt,
   filters,
   vars,
@@ -519,7 +519,7 @@ class RedteamIterativeProvider implements ApiProvider {
   /**
    * Creates a new instance of RedteamIterativeProvider.
    * @param config - The configuration object for the provider.
-   * @param initializeProviders - A function to initialize the OpenAI providers.
+   * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
   constructor(
     readonly config: Record<string, string | object>,
