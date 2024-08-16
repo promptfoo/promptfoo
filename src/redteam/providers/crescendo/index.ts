@@ -12,6 +12,7 @@ import type {
   NunjucksFilterMap,
 } from '../../../types';
 import { getNunjucksEngine } from '../../../util/templates';
+import { isBasicRefusal } from '../../util';
 import { ATTACKER_MODEL, TEMPERATURE } from '../constants';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
@@ -200,10 +201,17 @@ class CrescendoProvider implements ApiProvider {
     return {
       output: lastResponse,
       metadata: {
-        roundsCompleted: roundNum,
-        backtrackCount,
-        evalFlag,
-        evalPercentage,
+        // Displayed in UI
+        redteamFinalPrompt: this.memory
+          .getConversation(this.redTeamingChatConversationId)
+          .map((m) => `[${m.role}] ${m.content}`)
+          .join('\n\n'),
+
+        // Misc stats
+        crescendoRoundsCompleted: roundNum,
+        crescendoBacktrackCount: backtrackCount,
+        crescendoResult: evalFlag,
+        crescendoConfidence: evalPercentage,
       },
     };
   }
@@ -339,6 +347,15 @@ class CrescendoProvider implements ApiProvider {
     lastResponse: string,
   ): Promise<[boolean, string]> {
     logger.debug(`Getting refusal score for prompt: ${attackPrompt}`);
+    // Short-circuit refusal grading for standard refusal prefixes
+    if (isBasicRefusal(lastResponse)) {
+      logger.debug(
+        'Response contains a standard refusal prefix. Short-circuiting refusal grading.',
+      );
+      return [true, 'The output contains a standard refusal.'];
+    }
+
+    // Otherwise, use the scoring chat to grade the refusal
     const refusalInput = JSON.stringify({
       conversation_objective: attackPrompt,
       response_to_evaluate_input: lastResponse,
