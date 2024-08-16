@@ -8,6 +8,7 @@ import * as path from 'path';
 import { parse as parsePath } from 'path';
 import invariant from 'tiny-invariant';
 import { testCaseFromCsvRow } from './csv';
+import { getEnvar, getEnvBool } from './envars';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
 import { loadApiProvider } from './providers';

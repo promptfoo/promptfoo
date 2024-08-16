@@ -3,6 +3,7 @@ import yaml from 'js-yaml';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import cliState from './cliState';
+import { getEnvBool } from './envars';
 import { importModule } from './esm';
 import logger from './logger';
 import { runPython } from './python/pythonUtils';
@@ -160,7 +161,7 @@ export async function renderPrompt(
 
   // Render prompt
   try {
-    if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
+    if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
       return nunjucks.renderString(basePrompt, vars);
     }
 

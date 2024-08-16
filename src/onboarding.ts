@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
 import { redteamInit } from './commands/redteam';
+import { getEnvar } from './envars';
 import logger from './logger';
 import { getNunjucksEngine } from './util/templates';
 
@@ -442,7 +443,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   fs.writeFileSync(path.join(process.cwd(), directory, 'promptfooconfig.yaml'), config);
   fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
-  const isNpx = process.env.npm_execpath?.includes('npx');
+  const isNpx = getEnvar('npm_execpath')?.includes('npx');
   const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
   if (directory === '.') {
     logger.info(
