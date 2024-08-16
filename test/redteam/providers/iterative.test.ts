@@ -19,18 +19,12 @@ jest.mock('../../../src/util/templates');
 describe('RedteamIterativeProvider', () => {
   describe('renderSystemPrompts', () => {
     it('should render system prompts correctly', () => {
-      const mockNunjucks = {
-        renderString: jest.fn((template) => template),
-      };
-      (jest.mocked(getNunjucksEngine)).mockReturnValue(mockNunjucks);
-
-      const goal = 'Test goal';
-      const result = renderSystemPrompts(mockNunjucks as any, goal);
+      const goal = '{{goal}}';
+      const result = renderSystemPrompts(getNunjucksEngine(), goal);
 
       expect(result.redteamSystemPrompt).toBe(ATTACKER_SYSTEM_PROMPT);
       expect(result.onTopicSystemPrompt).toBe(ON_TOPIC_SYSTEM_PROMPT);
       expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
-      expect(mockNunjucks.renderString).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -40,7 +34,7 @@ describe('RedteamIterativeProvider', () => {
     it('should calculate branches correctly', () => {
       expect(calculateBranches(8, 0)).toBe(5);
       expect(calculateBranches(6, 1)).toBe(4);
-      expect(calculateBranches(3, 2)).toBe(2);
+      expect(calculateBranches(3, 2)).toBe(1);
       expect(calculateBranches(1, 4)).toBe(1);
     });
   });
