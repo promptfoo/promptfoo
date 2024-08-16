@@ -98,7 +98,8 @@ async function runRedteamConversation({
     ]);
     const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-    const isOnTopic = JSON.parse(isOnTopicResp.output).isOnTopic;
+    const isOnTopic = JSON.parse(isOnTopicResp.output).onTopic;
+    invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
     const targetResp = await targetProvider.callApi(targetPrompt);
     invariant(targetResp.output, 'Expected output to be defined');
