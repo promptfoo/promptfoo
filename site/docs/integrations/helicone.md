@@ -1,5 +1,5 @@
 ---
-sidebar_label: 🧊 Helicone
+sidebar_label: Helicone
 ---
 
 # Helicone integration
@@ -8,7 +8,7 @@ sidebar_label: 🧊 Helicone
 
 To reference prompts in Helicone:
 
-1. Log into [helicone](https://www.helicone.ai) or create an account. Once you have an account, you can generate an [API key](https://helicone.ai/developer).
+1. Log into [Helicone](https://www.helicone.ai) or create an account. Once you have an account, you can generate an [API key](https://helicone.ai/developer).
 
 2. Set the `HELICONE_API_KEY` and environment variables as desired.
 
