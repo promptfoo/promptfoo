@@ -8,7 +8,7 @@
  * The main components of this file include:
  * - Helper functions for initializing providers, rendering prompts, and evaluating responses
  * - A `runRedteamConversation` export function that orchestrates the iterative attack process
- * - A `RedteamIterativeProvider` class that implements the `ApiProvider` interface for integration
+ * - A `RedteamIterativeTreeProvider` class that implements the `ApiProvider` interface for integration
  *   with the larger system
  *
  * @module RedteamIterative
@@ -505,12 +505,12 @@ export async function runRedteamConversation({
 /**
  * Represents a provider for iterative red team attacks.
  */
-class RedteamIterativeProvider implements ApiProvider {
+class RedteamIterativeTreeProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly initializeProviders: () => Promise<OpenAiChatCompletionProvider>;
 
   /**
-   * Creates a new instance of RedteamIterativeProvider.
+   * Creates a new instance of RedteamIterativeTreeProvider.
    * @param config - The configuration object for the provider.
    * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
@@ -518,7 +518,7 @@ class RedteamIterativeProvider implements ApiProvider {
     readonly config: Record<string, string | object>,
     initializeProviders = defaultInitializeProviders,
   ) {
-    logger.debug(`RedteamIterativeProvider config: ${JSON.stringify(config)}`);
+    logger.debug(`RedteamIterativeTreeProvider config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
     this.initializeProviders = initializeProviders;
@@ -529,7 +529,7 @@ class RedteamIterativeProvider implements ApiProvider {
    * @returns The provider's identifier string.
    */
   id(): string {
-    return 'promptfoo:redteam:iterative';
+    return 'promptfoo:redteam:iterative:tree';
   }
 
   /**
@@ -557,4 +557,4 @@ class RedteamIterativeProvider implements ApiProvider {
   }
 }
 
-export default RedteamIterativeProvider;
+export default RedteamIterativeTreeProvider;
