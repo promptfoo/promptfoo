@@ -27,6 +27,8 @@ import { doGenerateRedteam } from './generate/redteam';
 const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
 # Docs: https://promptfoo.dev/docs/red-team/configuration
 
+description: "My first red team"
+
 prompts:
   {% for prompt in prompts -%}
   - {{ prompt | dump }}
