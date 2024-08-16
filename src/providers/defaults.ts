@@ -1,3 +1,4 @@
+import { getEnvar } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides } from '../types';
 import {
@@ -32,9 +33,9 @@ interface DefaultProviders {
 
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
   const preferAnthropic =
-    !process.env.OPENAI_API_KEY &&
+    !getEnvar('OPENAI_API_KEY') &&
     !env?.OPENAI_API_KEY &&
-    (process.env.ANTHROPIC_API_KEY || env?.ANTHROPIC_API_KEY);
+    (getEnvar('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY);
 
   if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');

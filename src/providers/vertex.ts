@@ -1,5 +1,6 @@
 import Clone from 'rfdc';
 import { getCache, isCacheEnabled } from '../cache';
+import { getEnvar } from '../envars';
 import logger from '../logger';
 import type {
   ApiEmbeddingProvider,
@@ -121,7 +122,7 @@ class VertexGenericProvider implements ApiProvider {
     return (
       this.config.apiHost ||
       this.env?.VERTEX_API_HOST ||
-      process.env.VERTEX_API_HOST ||
+      getEnvar('VERTEX_API_HOST') ||
       `${this.getRegion()}-aiplatform.googleapis.com`
     );
   }
@@ -131,17 +132,17 @@ class VertexGenericProvider implements ApiProvider {
       (await getGoogleClient()).projectId ||
       this.config.projectId ||
       this.env?.VERTEX_PROJECT_ID ||
-      process.env.VERTEX_PROJECT_ID
+      getEnvar('VERTEX_PROJECT_ID')
     );
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.VERTEX_API_KEY || process.env.VERTEX_API_KEY;
+    return this.config.apiKey || this.env?.VERTEX_API_KEY || getEnvar('VERTEX_API_KEY');
   }
 
   getRegion(): string {
     return (
-      this.config.region || this.env?.VERTEX_REGION || process.env.VERTEX_REGION || 'us-central1'
+      this.config.region || this.env?.VERTEX_REGION || getEnvar('VERTEX_REGION') || 'us-central1'
     );
   }
 
@@ -149,7 +150,7 @@ class VertexGenericProvider implements ApiProvider {
     return (
       this.config.publisher ||
       this.env?.VERTEX_PUBLISHER ||
-      process.env.VERTEX_PUBLISHER ||
+      getEnvar('VERTEX_PUBLISHER') ||
       'google'
     );
   }

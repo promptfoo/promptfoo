@@ -1,8 +1,9 @@
 import nunjucks from 'nunjucks';
+import { getEnvBool } from '../envars';
 import type { NunjucksFilterMap } from '../types';
 
 export function getNunjucksEngine(filters?: NunjucksFilterMap, throwOnUndefined: boolean = false) {
-  if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return {
       renderString: (template: string) => template,
     };

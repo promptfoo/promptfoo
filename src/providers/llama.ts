@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../cache';
+import { getEnvar } from '../envars';
 import type { ApiProvider, ProviderResponse } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
@@ -66,7 +67,7 @@ export class LlamaProvider implements ApiProvider {
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.LLAMA_BASE_URL || 'http://localhost:8080'}/completion`,
+        `${getEnvar('LLAMA_BASE_URL') || 'http://localhost:8080'}/completion`,
         {
           method: 'POST',
           headers: {

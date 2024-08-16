@@ -1,3 +1,4 @@
+import { getEnvBool } from '../envars';
 import type { AssertionSet, GradingResult } from '../types';
 
 const DEFAULT_TOKENS_USED = {
@@ -82,7 +83,7 @@ export class AssertionsResult {
 
     this.failedReason = result.reason;
 
-    if (process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES) {
+    if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
       throw new Error(result.reason);
     }
   }

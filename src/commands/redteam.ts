@@ -12,6 +12,7 @@ import yaml from 'js-yaml';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { getUserEmail, setUserEmail } from '../accounts';
+import { getEnvar } from '../envars';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../globalConfig';
 import logger from '../logger';
 import {
@@ -128,7 +129,7 @@ export async function redteamInit(directory: string | undefined) {
     providers.push(customProvider);
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!getEnvar('OPENAI_API_KEY')) {
     console.clear();
     logger.info(chalk.bold('OpenAI API Configuration\n'));
 

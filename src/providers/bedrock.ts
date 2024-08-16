@@ -3,6 +3,7 @@ import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import dedent from 'dedent';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
+import { getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -176,9 +177,12 @@ interface IBedrockModel {
   output: (responseJson: any) => any;
 }
 
-export function parseValue(value: string, defaultValue: any) {
+export function parseValue(value: string | number, defaultValue: any) {
   if (typeof defaultValue === 'number') {
-    return Number.isNaN(parseFloat(value)) ? defaultValue : parseFloat(value);
+    if (typeof value === 'string') {
+      return Number.isNaN(parseFloat(value)) ? defaultValue : parseFloat(value);
+    }
+    return value;
   }
   return value;
 }
@@ -187,7 +191,7 @@ export function addConfigParam(
   params: any,
   key: string,
   configValue: any,
-  envValue?: string | undefined,
+  envValue?: string | number | undefined,
   defaultValue?: any,
 ) {
   if (configValue !== undefined || envValue !== undefined || defaultValue !== undefined) {
@@ -292,7 +296,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         params,
         'temperature',
         config?.temperature,
-        process.env.AWS_BEDROCK_TEMPERATURE,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
         0.01,
       );
       addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
@@ -300,7 +304,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         params,
         'max_gen_len',
         config?.max_gen_len,
-        process.env.AWS_BEDROCK_MAX_GEN_LEN,
+        getEnvInt('AWS_BEDROCK_MAX_GEN_LEN'),
         1024,
       );
       return params;
