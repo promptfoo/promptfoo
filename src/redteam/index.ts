@@ -7,10 +7,10 @@ import type { TestCaseWithPlugin } from '../types';
 import { isApiProvider, isProviderOptions, type ApiProvider } from '../types';
 import type { SynthesizeOptions } from '../types/redteam';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS } from './constants';
+import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import { Plugins, validatePlugins } from './plugins';
+import { Plugins } from './plugins';
 import { Strategies, validateStrategies } from './strategies';
 
 // These plugins refer to a collection of tests.
@@ -40,7 +40,6 @@ export async function synthesize({
   entities: string[];
   testCases: TestCaseWithPlugin[];
 }> {
-  validatePlugins(plugins);
   validateStrategies(strategies);
 
   let redteamProvider: ApiProvider;
@@ -93,6 +92,39 @@ export async function synthesize({
       plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
     }
   }
+
+  // Apply aliases for NIST and OWASP mappings
+  const expandedPlugins: typeof plugins = [];
+  const expandPlugin = (
+    plugin: (typeof plugins)[0],
+    mapping: { plugins: string[]; strategies: string[] },
+  ) => {
+    mapping.plugins.forEach((p: string) =>
+      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
+    );
+    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
+  };
+
+  plugins.forEach((plugin) => {
+    const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
+      (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
+    );
+
+    if (mappingKey) {
+      const mapping =
+        ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
+        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((m) =>
+          plugin.id.startsWith(`${mappingKey}:`),
+        );
+      if (mapping) {
+        expandPlugin(plugin, mapping);
+      }
+    } else {
+      expandedPlugins.push(plugin);
+    }
+  });
+
+  plugins = expandedPlugins;
 
   // Deduplicate, filter out the category names, and sort
   plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();

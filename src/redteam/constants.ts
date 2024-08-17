@@ -119,6 +119,197 @@ export const ALL_PLUGINS: readonly Plugin[] = [
   ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS]),
 ].sort() as Plugin[];
 
+export const OWASP_LLM_TOP_10_MAPPING: Record<
+  string,
+  { plugins: Plugin[]; strategies: Strategy[] }
+> = {
+  'owasp:llm:01': {
+    plugins: ['harmful', 'contracts', 'politics'],
+    strategies: ['prompt-injection', 'jailbreak'],
+  },
+  'owasp:llm:02': {
+    plugins: ['harmful', 'overreliance'],
+    strategies: [],
+  },
+  'owasp:llm:03': {
+    plugins: ['harmful', 'overreliance', 'hallucination'],
+    strategies: [],
+  },
+  'owasp:llm:06': {
+    plugins: ['harmful:privacy', 'pii:direct', 'pii:api-db', 'pii:session', 'pii:social'],
+    strategies: ['prompt-injection', 'jailbreak'],
+  },
+  'owasp:llm:07': {
+    plugins: ['rbac', 'bola', 'bfla', 'sql-injection', 'shell-injection', 'debug-access'],
+    strategies: [],
+  },
+  'owasp:llm:08': {
+    plugins: ['excessive-agency', 'rbac'],
+    strategies: [],
+  },
+  'owasp:llm:09': {
+    plugins: ['overreliance', 'hallucination'],
+    strategies: [],
+  },
+};
+
+export const OWASP_API_TOP_10_MAPPING: Record<
+  string,
+  { plugins: Plugin[]; strategies: Strategy[] }
+> = {
+  'owasp:api:01': {
+    plugins: ['bola', 'rbac'],
+    strategies: [],
+  },
+  'owasp:api:02': {
+    plugins: ['bfla', 'rbac'],
+    strategies: [],
+  },
+  'owasp:api:03': {
+    plugins: ['excessive-agency', 'overreliance'],
+    strategies: [],
+  },
+  'owasp:api:04': {
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session'],
+    strategies: [],
+  },
+  'owasp:api:05': {
+    plugins: ['rbac', 'bola', 'bfla'],
+    strategies: [],
+  },
+  'owasp:api:06': {
+    plugins: ['harmful:misinformation-disinformation', 'overreliance'],
+    strategies: [],
+  },
+  'owasp:api:07': {
+    plugins: ['sql-injection', 'shell-injection'],
+    strategies: [],
+  },
+  'owasp:api:08': {
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session'],
+    strategies: [],
+  },
+  'owasp:api:09': {
+    plugins: ['overreliance', 'harmful:specialized-advice'],
+    strategies: [],
+  },
+  'owasp:api:10': {
+    plugins: ['debug-access', 'harmful:privacy'],
+    strategies: [],
+  },
+};
+
+export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'nist:ai:measure:1.1': {
+    plugins: ['harmful:misinformation-disinformation', 'overreliance', 'excessive-agency'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'nist:ai:measure:1.2': {
+    plugins: ['harmful:misinformation-disinformation', 'overreliance', 'excessive-agency'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'nist:ai:measure:2.1': {
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session', 'pii:direct', 'pii:social'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.2': {
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session', 'pii:direct', 'pii:social'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.3': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.4': {
+    plugins: ['overreliance', 'excessive-agency', 'harmful:misinformation-disinformation'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'nist:ai:measure:2.5': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.6': {
+    plugins: [
+      'harmful:unsafe-practices',
+      'harmful:chemical-biological-weapons',
+      'harmful:indiscriminate-weapons',
+    ],
+    strategies: [],
+  },
+  'nist:ai:measure:2.7': {
+    plugins: ['harmful:cybercrime', 'sql-injection', 'shell-injection'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'nist:ai:measure:2.8': {
+    plugins: ['rbac', 'bola', 'bfla'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.9': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.10': {
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session', 'pii:direct', 'pii:social'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.11': {
+    plugins: ['harmful:hate', 'harmful:harassment-bullying', 'harmful:insults'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.12': {
+    plugins: [],
+    strategies: [],
+  },
+  'nist:ai:measure:2.13': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:3.1': {
+    plugins: ['overreliance', 'excessive-agency', 'harmful:misinformation-disinformation'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'nist:ai:measure:3.2': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:3.3': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:4.1': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:4.2': {
+    plugins: ['overreliance', 'excessive-agency', 'harmful:misinformation-disinformation'],
+    strategies: [],
+  },
+  'nist:ai:measure:4.3': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+};
+
+// Aliased plugins are like collections, except they are hidden from the standard plugin list.
+export const ALIASED_PLUGINS = [
+  'owasp:llm',
+  'owasp:api',
+  'nist:ai',
+  'nist:ai:measure',
+  ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
+  ...Object.keys(OWASP_API_TOP_10_MAPPING),
+  ...Object.keys(NIST_AI_RMF_MAPPING),
+] as const;
+
+export const ALIASED_PLUGIN_MAPPINGS: Record<
+  string,
+  Record<string, { plugins: string[]; strategies: string[] }>
+> = {
+  'nist:ai:measure': NIST_AI_RMF_MAPPING,
+  'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
+  'owasp:api': OWASP_API_TOP_10_MAPPING,
+};
+
 export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
