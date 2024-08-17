@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import invariant from 'tiny-invariant';
 import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
@@ -8,6 +9,7 @@ import { runPython } from './python/pythonUtils';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { isJavascriptFile, renderVarsInObject } from './util';
 import { getNunjucksEngine } from './util/templates';
+import { transform } from './util/transform';
 
 export function resolveVariables(
   variables: Record<string, string | object>,
@@ -142,6 +144,18 @@ export async function renderPrompt(
       version !== 'latest' ? Number(version) : undefined,
     );
     return langfuseResult;
+  } else if (prompt.raw.startsWith('helicone://')) {
+    const { getPrompt } = await import('./integrations/helicone');
+    const heliconePrompt = prompt.raw.slice('helicone://'.length);
+    const [id, version] = heliconePrompt.split(':');
+    const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
+    const heliconeResult = await getPrompt(
+      id,
+      vars,
+      majorVersion !== undefined ? Number(majorVersion) : undefined,
+      minorVersion !== undefined ? Number(minorVersion) : undefined,
+    );
+    return heliconeResult;
   }
 
   // Render prompt
@@ -157,5 +171,27 @@ export async function renderPrompt(
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch (err) {
     return nunjucks.renderString(basePrompt, vars);
+  }
+}
+
+/**
+ * Runs extension hooks for the given hook name and context.
+ * @param extensions - An array of extension paths.
+ * @param hookName - The name of the hook to run.
+ * @param context - The context object to pass to the hook.
+ * @returns A Promise that resolves when all hooks have been run.
+ */
+export async function runExtensionHook(
+  extensions: string[] | undefined,
+  hookName: string,
+  context: any,
+) {
+  if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
+    return;
+  }
+  for (const extension of extensions) {
+    invariant(typeof extension === 'string', 'extension must be a string');
+    logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
+    await transform(extension, hookName, context, false);
   }
 }

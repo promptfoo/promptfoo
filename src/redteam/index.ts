@@ -35,13 +35,14 @@ const formatTestCount = (numTests: number) => {
 };
 
 export async function synthesize({
+  entities: entitiesOverride,
+  injectVar,
+  language,
+  plugins,
   prompts,
   provider,
-  injectVar,
   purpose: purposeOverride,
-  entities: entitiesOverride,
   strategies,
-  plugins,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -167,13 +168,10 @@ export async function synthesize({
     if (plugin) {
       updateProgress();
       logger.debug(`Generating tests for ${pluginId}...`);
-      const pluginTests = await action(
-        redteamProvider,
-        purpose,
-        injectVar,
-        plugin.numTests,
-        plugin.config,
-      );
+      const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
+        language,
+        ...(plugin.config || {}),
+      });
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,

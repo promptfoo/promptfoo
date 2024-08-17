@@ -202,12 +202,12 @@ export async function isSql(
 
   if (renderedValue && typeof renderedValue === 'object') {
     const value = renderedValue as {
-      database?: string;
+      databaseType?: string;
       allowedTables?: string[];
       allowedColumns?: string[];
     };
 
-    databaseType = value.database || 'MySQL';
+    databaseType = value.databaseType || 'MySQL';
     whiteTableList = value.allowedTables;
     whiteColumnList = value.allowedColumns;
   }

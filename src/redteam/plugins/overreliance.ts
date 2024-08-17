@@ -2,6 +2,8 @@ import dedent from 'dedent';
 import type { Assertion } from '../../types';
 import { PluginBase, RedteamModelGrader } from './base';
 
+export const PLUGIN_ID = 'promptfoo:redteam:overreliance';
+
 export class OverreliancePlugin extends PluginBase {
   protected async getTemplate(): Promise<string> {
     return dedent`
@@ -30,7 +32,7 @@ export class OverreliancePlugin extends PluginBase {
   protected getAssertions(prompt: string): Assertion[] {
     return [
       {
-        type: 'promptfoo:redteam:overreliance',
+        type: PLUGIN_ID,
         metric: 'Overreliance',
       },
     ];
@@ -38,7 +40,7 @@ export class OverreliancePlugin extends PluginBase {
 }
 
 export class OverrelianceGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:overreliance';
+  id = PLUGIN_ID;
   rubric = dedent`
     Query: '{{prompt}}'
 

@@ -8,18 +8,19 @@ Here is the main structure of the promptfoo configuration file:
 
 ### Config
 
-| Property                        | Type                                                                                                                   | Required | Description                                                                                                      |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
-| description                     | string                                                                                                                 | No       | Optional description of what your LLM is trying to do                                                            |
-| providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](/docs/providers/openai#using-functions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use                                                                   |
-| prompts                         | string \| string[]                                                                                                     | Yes      | One or more prompts to load                                                                                      |
-| tests                           | string \| [Test Case](#test-case)[]                                                                                    | Yes      | Path to a test file, OR list of LLM prompt variations (aka "test case")                                          |
-| defaultTest                     | Partial [Test Case](#test-case)                                                                                        | No       | Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example. |
-| outputPath                      | string                                                                                                                 | No       | Where to write output. Writes to console/web viewer if not set.                                                  |
-| evaluateOptions.maxConcurrency  | number                                                                                                                 | No       | Maximum number of concurrent requests. Defaults to 4                                                             |
-| evaluateOptions.repeat          | number                                                                                                                 | No       | Number of times to run each test case . Defaults to 1                                                            |
-| evaluateOptions.delay           | number                                                                                                                 | No       | Force the test runner to wait after each API call (milliseconds)                                                 |
-| evaluateOptions.showProgressBar | boolean                                                                                                                | No       | Whether to display the progress bar                                                                              |
+| Property                        | Type                                                                                                                   | Required | Description                                                                                                                                                                                                 |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| description                     | string                                                                                                                 | No       | Optional description of what your LLM is trying to do                                                                                                                                                       |
+| providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](/docs/providers/openai#using-functions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use                                                                                                                                                              |
+| prompts                         | string \| string[]                                                                                                     | Yes      | One or more prompts to load                                                                                                                                                                                 |
+| tests                           | string \| [Test Case](#test-case)[]                                                                                    | Yes      | Path to a test file, OR list of LLM prompt variations (aka "test case")                                                                                                                                     |
+| defaultTest                     | Partial [Test Case](#test-case)                                                                                        | No       | Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.                                                                                            |
+| outputPath                      | string                                                                                                                 | No       | Where to write output. Writes to console/web viewer if not set.                                                                                                                                             |
+| evaluateOptions.maxConcurrency  | number                                                                                                                 | No       | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                        |
+| evaluateOptions.repeat          | number                                                                                                                 | No       | Number of times to run each test case . Defaults to 1                                                                                                                                                       |
+| evaluateOptions.delay           | number                                                                                                                 | No       | Force the test runner to wait after each API call (milliseconds)                                                                                                                                            |
+| evaluateOptions.showProgressBar | boolean                                                                                                                | No       | Whether to display the progress bar                                                                                                                                                                         |
+| extensions                      | string[]                                                                                                               | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
 
 ### Test Case
 
@@ -54,11 +55,90 @@ More details on using assertions, including examples [here](/docs/configuration/
 
 :::note
 
-promptfoo supports `.js` and `.json` extensions in addition to `.yaml`.
+promptfoo supports `.js` and `.json` file extensions in addition to `.yaml`.
 
 It automatically loads `promptfooconfig.*`, but you can use a custom config file with `promptfoo eval -c path/to/config`.
 
 :::
+
+## Extension Hooks
+
+promptfoo supports extension hooks that allow you to run custom code at specific points in the evaluation lifecycle. These hooks are defined in extension files specified in the `extensions` property of the configuration.
+
+### Available Hooks
+
+| Hook Name  | Description                                   | Arguments                                         |
+| ---------- | --------------------------------------------- | ------------------------------------------------- |
+| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                            |
+| afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` |
+| beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
+| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
+
+### Implementing Hooks
+
+To implement these hooks, create a JavaScript or Python file with a function that handles the hooks you want to use. Then, specify the path to this file and the function name in the `extensions` array in your configuration.
+
+:::note
+All extensions receive all event types (beforeAll, afterAll, beforeEach, afterEach). It's up to the extension function to decide which events to handle based on the `hookName` parameter.
+:::
+
+Example extension file (Python):
+
+```python
+def extension_hook(hook_name, context):
+    if hook_name == 'beforeAll':
+        print(f"Setting up test suite: {context['suite'].get('description', '')}")
+        # Perform any necessary setup
+    elif hook_name == 'afterAll':
+        print(f"Test suite completed: {context['suite'].get('description', '')}")
+        print(f"Total tests: {len(context['results'])}")
+        # Perform any necessary teardown or reporting
+    elif hook_name == 'beforeEach':
+        print(f"Running test: {context['test'].get('description', '')}")
+        # Prepare for individual test
+    elif hook_name == 'afterEach':
+        print(f"Test completed: {context['test'].get('description', '')}. Pass: {context['result'].get('success', False)}")
+        # Clean up after individual test or log results
+```
+
+Example extension file (JavaScript):
+
+```javascript
+async function extensionHook(hookName, context) {
+  if (hookName === 'beforeAll') {
+    console.log(`Setting up test suite: ${context.suite.description || ''}`);
+    // Perform any necessary setup
+  } else if (hookName === 'afterAll') {
+    console.log(`Test suite completed: ${context.suite.description || ''}`);
+    console.log(`Total tests: ${context.results.length}`);
+    // Perform any necessary teardown or reporting
+  } else if (hookName === 'beforeEach') {
+    console.log(`Running test: ${context.test.description || ''}`);
+    // Prepare for individual test
+  } else if (hookName === 'afterEach') {
+    console.log(
+      `Test completed: ${context.test.description || ''}. Pass: ${context.result.success || false}`,
+    );
+    // Clean up after individual test or log results
+  }
+}
+
+module.exports = extensionHook;
+```
+
+Example configuration:
+
+```yaml
+extensions:
+  - file:./path/to/your/extension.js:extensionHook
+  - file:./path/to/your/extension.py:extension_hook
+```
+
+:::important
+When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells promptfoo which function to call in the extension file.
+:::
+
+These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 
 ## Provider-related types
 

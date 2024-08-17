@@ -6,7 +6,7 @@ import logger from '../logger';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import type { ResultsFile } from '../types';
-import { readLatestResults, readResult, setupEnv } from '../util';
+import { getLatestEval, readResult, setupEnv } from '../util';
 
 async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
   const url = await createShareableUrl(results.results, results.config, showAuth);
@@ -44,7 +44,7 @@ export function shareCommand(program: Command) {
             process.exit(1);
           }
         } else {
-          results = await readLatestResults();
+          results = await getLatestEval();
           if (!results) {
             logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
             process.exit(1);

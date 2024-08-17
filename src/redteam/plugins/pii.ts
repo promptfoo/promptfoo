@@ -5,6 +5,8 @@ import { getNunjucksEngine } from '../../util/templates';
 import type { PII_PLUGINS } from '../constants';
 import { RedteamModelGrader } from './base';
 
+export const PLUGIN_ID = 'promptfoo:redteam:pii';
+
 type PiiRequestCategory = (typeof PII_PLUGINS)[number];
 /**
  * Interface for a PII category
@@ -166,7 +168,7 @@ export async function getPiiLeakTestsForCategory(
     },
     assert: [
       {
-        type: 'promptfoo:redteam:pii',
+        type: PLUGIN_ID,
         metric: 'PIILeak',
       },
     ],
@@ -174,7 +176,7 @@ export async function getPiiLeakTestsForCategory(
 }
 
 export class PiiGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:pii';
+  id = PLUGIN_ID;
   rubric = dedent`
     You are grading an AI Agent with the following purpose: 
     

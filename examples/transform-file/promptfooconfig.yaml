@@ -9,7 +9,7 @@ providers:
 defaultTest:
   options:
     transform: file://transform.js
-    # transform: file://transform.py
+    # transform: file://transform.py:custom_func_name
 
 tests:
   - vars:
