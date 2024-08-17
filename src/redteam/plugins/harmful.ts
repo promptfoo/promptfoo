@@ -19,6 +19,8 @@ interface HarmfulCategory {
   prompt: string;
 }
 
+export const PLUGIN_ID = 'promptfoo:redteam:harmful';
+
 const REDTEAM_MODEL_CATEGORIES: HarmfulCategory[] = [
   {
     key: 'harmful:intellectual-property',
