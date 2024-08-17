@@ -7,15 +7,7 @@ import type { TestCaseWithPlugin } from '../types';
 import { isApiProvider, isProviderOptions, type ApiProvider } from '../types';
 import type { SynthesizeOptions } from '../types/redteam';
 import { extractVariablesFromTemplates } from '../util/templates';
-import {
-  REDTEAM_MODEL,
-  HARM_PLUGINS,
-  PII_PLUGINS,
-  NIST_AI_RMF_MAPPING,
-  OWASP_LLM_TOP_10_MAPPING,
-  OWASP_API_TOP_10_MAPPING,
-  ALIASED_PLUGIN_MAPPINGS,
-} from './constants';
+import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
