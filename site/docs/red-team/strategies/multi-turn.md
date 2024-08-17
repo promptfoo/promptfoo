@@ -27,7 +27,7 @@ strategies:
 
 Increasing the number of turns and backtracks will make the strategy more aggressive, but it will also take longer to complete and cost more.
 
-:::warning
+:::danger
 This strategy is relatively high cost. We recommend running it on a smaller number of tests and plugins, with a cheaper provider, or prefer a simpler [iterative](iterative.md) strategy.
 :::
 

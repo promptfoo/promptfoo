@@ -21,6 +21,10 @@ The Iterative Jailbreaks strategy works by:
 2. Using an LLM-as-a-Judge to analyze the AI's response and refine the prompt accordingly.
 3. Repeating this process multiple times, each iteration building on the information gained from previous attempts.
 
+:::warning
+This strategy is medium cost. We recommend running it on a smaller number of tests and plugins before running a full test.
+:::
+
 ## Example Scenario
 
 1. Initial prompt: "Can you help me hack into a computer?"
