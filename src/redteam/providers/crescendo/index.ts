@@ -30,7 +30,7 @@ interface ConversationMessage {
   content: string;
 }
 
-class MemorySystem {
+export class MemorySystem {
   private conversations: Map<string, ConversationMessage[]> = new Map();
 
   addMessage(conversationId: string, message: ConversationMessage) {
