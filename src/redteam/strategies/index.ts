@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import type { TestCase, TestCaseWithPlugin } from '../../types';
 import { addBase64Encoding } from './base64';
+import { addCrescendo } from './crescendo';
 import { addInjections } from './injections';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
@@ -66,6 +67,15 @@ export const Strategies: Strategy[] = [
       logger.debug('Adding Base64 encoding to all test cases');
       const newTestCases = addBase64Encoding(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'crescendo',
+    action: (testCases, injectVar) => {
+      logger.debug('Adding Crescendo to all test cases');
+      const newTestCases = addCrescendo(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
       return newTestCases;
     },
   },

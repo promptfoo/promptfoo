@@ -122,7 +122,13 @@ export const ALL_PLUGINS: readonly Plugin[] = [
 export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const ADDITIONAL_STRATEGIES = ['jailbreak:tree', 'rot13', 'base64', 'leetspeak'] as const;
+export const ADDITIONAL_STRATEGIES = [
+  'jailbreak:tree',
+  'rot13',
+  'base64',
+  'leetspeak',
+  'crescendo',
+] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
 export const ALL_STRATEGIES = [
@@ -189,4 +195,5 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   politics: 'Makes political statements.',
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
   rot13: 'Attempts to obfuscate malicious content using ROT13 encoding.',
+  crescendo: 'Conversational attack strategy.',
 };
