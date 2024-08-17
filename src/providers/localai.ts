@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvFloat, getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -54,7 +54,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       messages: messages,
-      temperature: this.config.temperature || getEnvString('LOCALAI_TEMPERATURE') || 0.7,
+      temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
@@ -136,7 +136,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      temperature: this.config.temperature || getEnvString('LOCALAI_TEMPERATURE') || 0.7,
+      temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
