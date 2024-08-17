@@ -46,12 +46,15 @@ More complex portkey configurations are also supported.
 ```yaml
 providers:
   id: portkey:gpt-4o-mini
-  # Can alternative set environment variables, e.g. PORTKEY_API_KEY
-  portkeyApiKey: xxx
-  portkeyVirtualKey: xxx
-  portkeyMetadata:
-    team: xxx
-  portkeyConfig: xxx
-  portkeyProvider: xxx
-  portkeyApiBaseUrl: xxx
+  config:
+    # Can alternatively set environment variable, e.g. PORTKEY_API_KEY
+    portkeyApiKey: xxx
+
+    # Other configuration options
+    portkeyVirtualKey: xxx
+    portkeyMetadata:
+      team: xxx
+    portkeyConfig: xxx
+    portkeyProvider: xxx
+    portkeyApiBaseUrl: xxx
 ```

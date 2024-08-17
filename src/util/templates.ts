@@ -2,11 +2,14 @@ import nunjucks from 'nunjucks';
 import { getEnvBool } from '../envars';
 import type { NunjucksFilterMap } from '../types';
 
-export function getNunjucksEngine(filters?: NunjucksFilterMap, throwOnUndefined: boolean = false) {
+export function getNunjucksEngine(
+  filters?: NunjucksFilterMap,
+  throwOnUndefined: boolean = false,
+): nunjucks.Environment {
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return {
       renderString: (template: string) => template,
-    };
+    } as unknown as nunjucks.Environment;
   }
 
   const env = nunjucks.configure({
