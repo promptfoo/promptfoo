@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 
@@ -23,7 +24,7 @@ export async function runPython(
   );
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
-    pythonPath: options.pythonExecutable || process.env.PROMPTFOO_PYTHON || 'python',
+    pythonPath: options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON') || 'python',
     scriptPath: __dirname,
     args: [absPath, method, tempJsonPath, outputPath],
   };

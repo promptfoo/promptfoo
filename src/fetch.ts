@@ -2,6 +2,7 @@ import fetch from 'node-fetch';
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 import { ProxyAgent } from 'proxy-agent';
 import invariant from 'tiny-invariant';
+import { getEnvInt, getEnvBool } from './envars';
 import logger from './logger';
 
 export async function fetchWithProxy(
@@ -69,16 +70,14 @@ export async function fetchWithRetries(
   retries: number = 4,
 ): Promise<Response> {
   let lastError;
-  const backoff = process.env.PROMPTFOO_REQUEST_BACKOFF_MS
-    ? parseInt(process.env.PROMPTFOO_REQUEST_BACKOFF_MS, 10)
-    : 5000;
+  const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
 
   for (let i = 0; i < retries; i++) {
     let response;
     try {
       response = await fetchWithTimeout(url, options, timeout);
 
-      if (process.env.PROMPTFOO_RETRY_5XX && response.status >= 500 && response.status < 600) {
+      if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 

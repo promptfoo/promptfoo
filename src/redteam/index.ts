@@ -134,7 +134,7 @@ export async function synthesize({
   const totalSteps = plugins.length + 2; // +2 for initial setup steps
   let currentStep = 0;
 
-  if (process.env.LOG_LEVEL !== 'debug') {
+  if (logger.level !== 'debug') {
     progressBar.start(100, 0);
   }
 
@@ -201,7 +201,7 @@ export async function synthesize({
   testCases.push(...newTestCases);
 
   // Finish progress bar
-  if (process.env.LOG_LEVEL !== 'debug') {
+  if (logger.level !== 'debug') {
     progressBar.update(100);
     progressBar.stop();
   }

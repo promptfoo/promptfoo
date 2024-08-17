@@ -14,6 +14,7 @@ import rouge from 'rouge';
 import invariant from 'tiny-invariant';
 import { AssertionsResult } from './assertions/AssertionsResult';
 import cliState from './cliState';
+import { getEnvBool, getEnvInt } from './envars';
 import { importModule } from './esm';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
@@ -51,9 +52,7 @@ import { extractJsonObjects, isJavascriptFile } from './util';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
-const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
-  ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
-  : 3;
+const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
@@ -68,7 +67,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
 
 export function createAjv(): Ajv {
   const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
-    strictSchema: !['1', 'true'].includes(process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE || ''),
+    strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
   };
   const ajv = new Ajv(ajvOptions);
   addFormats(ajv);
@@ -1186,7 +1185,7 @@ ${
           },
           body: JSON.stringify({ output, context }),
         },
-        process.env.WEBHOOK_TIMEOUT ? parseInt(process.env.WEBHOOK_TIMEOUT, 10) : 5000,
+        getEnvInt('WEBHOOK_TIMEOUT', 5000),
       );
 
       if (!response.ok) {

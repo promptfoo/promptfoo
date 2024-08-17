@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
@@ -58,7 +59,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
     options: { config?: CohereChatOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
-    this.apiKey = config?.apiKey || env?.COHERE_API_KEY || process.env.COHERE_API_KEY || '';
+    this.apiKey = config?.apiKey || env?.COHERE_API_KEY || getEnvString('COHERE_API_KEY') || '';
     this.modelName = modelName;
     if (!CohereChatCompletionProvider.COHERE_CHAT_MODELS.includes(this.modelName)) {
       logger.warn(`Using unknown Cohere chat model: ${this.modelName}`);
@@ -123,7 +124,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
-            'X-Client-Name': process.env.COHERE_CLIENT_NAME || 'promptfoo',
+            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
           },
           body: JSON.stringify(body),
         },
