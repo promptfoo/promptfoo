@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvar } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -67,7 +67,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvar('HF_API_TOKEN');
+    return this.config.apiKey || getEnvString('HF_API_TOKEN');
   }
 
   getConfig() {
@@ -164,7 +164,7 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvar('HF_API_TOKEN');
+    return this.config.apiKey || getEnvString('HF_API_TOKEN');
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
@@ -254,7 +254,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvar('HF_API_TOKEN');
+    return this.config.apiKey || getEnvString('HF_API_TOKEN');
   }
 
   async callApi(): Promise<ProviderResponse> {
@@ -336,7 +336,7 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvar('HF_API_TOKEN');
+    return this.config.apiKey || getEnvString('HF_API_TOKEN');
   }
 
   toString(): string {
@@ -447,8 +447,8 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvar('HF_API_TOKEN')
-              ? { Authorization: `Bearer ${getEnvar('HF_API_TOKEN')}` }
+            ...(getEnvString('HF_API_TOKEN')
+              ? { Authorization: `Bearer ${getEnvString('HF_API_TOKEN')}` }
               : {}),
           },
           body: JSON.stringify(params),

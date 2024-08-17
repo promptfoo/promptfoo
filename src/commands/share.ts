@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import readline from 'readline';
 import { URL } from 'url';
-import { getEnvar } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
@@ -52,7 +52,7 @@ export function shareCommand(program: Command) {
           }
         }
 
-        if (cmdObj.yes || getEnvar('PROMPTFOO_DISABLE_SHARE_WARNING')) {
+        if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
           await createPublicUrl(results, cmdObj.showAuth);
         } else {
           const reader = readline.createInterface({
@@ -60,7 +60,7 @@ export function shareCommand(program: Command) {
             output: process.stdout,
           });
 
-          const baseUrl = getEnvar('PROMPTFOO_SHARING_APP_BASE_URL');
+          const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
           const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
 
           reader.question(

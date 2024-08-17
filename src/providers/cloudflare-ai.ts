@@ -1,7 +1,7 @@
 import type Cloudflare from 'cloudflare';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
-import { getEnvar } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -89,7 +89,7 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.CLOUDFLARE_API_KEY ||
-      getEnvar('CLOUDFLARE_API_KEY');
+      getEnvString('CLOUDFLARE_API_KEY');
 
     invariant(
       apiTokenCandidate,
@@ -103,7 +103,7 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.CLOUDFLARE_ACCOUNT_ID ||
-      getEnvar('CLOUDFLARE_ACCOUNT_ID');
+      getEnvString('CLOUDFLARE_ACCOUNT_ID');
 
     invariant(
       accountIdCandidate,

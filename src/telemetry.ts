@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import packageJson from '../package.json';
+import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
 import { maybeRecordFirstRun } from './globalConfig';
 import logger from './logger';
@@ -17,8 +18,6 @@ const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 
 const TELEMETRY_TIMEOUT_MS = 1000;
-
-import { getEnvBool } from './envars';
 
 export class Telemetry {
   private events: TelemetryEvent[] = [];

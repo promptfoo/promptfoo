@@ -2,7 +2,7 @@ import type { Cache } from 'cache-manager';
 import fetch from 'node-fetch';
 import Replicate from 'replicate';
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvar, getEnvFloat, getEnvInt } from '../envars';
+import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type {
   ApiModerationProvider,
@@ -55,8 +55,8 @@ export class ReplicateProvider implements ApiProvider {
       config?.apiKey ||
       env?.REPLICATE_API_KEY ||
       env?.REPLICATE_API_TOKEN ||
-      getEnvar('REPLICATE_API_TOKEN') ||
-      getEnvar('REPLICATE_API_KEY');
+      getEnvString('REPLICATE_API_TOKEN') ||
+      getEnvString('REPLICATE_API_KEY');
     this.config = config || {};
     this.id = id ? () => id : this.id;
   }
@@ -107,7 +107,7 @@ export class ReplicateProvider implements ApiProvider {
     const systemPrompt =
       messages.find((message) => message.role === 'system')?.content ||
       this.config.system_prompt ||
-      getEnvar('REPLICATE_SYSTEM_PROMPT');
+      getEnvString('REPLICATE_SYSTEM_PROMPT');
     const userPrompt = messages.find((message) => message.role === 'user')?.content || prompt;
 
     logger.debug(`Calling Replicate: ${prompt}`);
@@ -121,7 +121,7 @@ export class ReplicateProvider implements ApiProvider {
         top_k: this.config.top_k || getEnvInt('REPLICATE_TOP_K'),
         repetition_penalty:
           this.config.repetition_penalty || getEnvFloat('REPLICATE_REPETITION_PENALTY'),
-        stop_sequences: this.config.stop_sequences || getEnvar('REPLICATE_STOP_SEQUENCES'),
+        stop_sequences: this.config.stop_sequences || getEnvString('REPLICATE_STOP_SEQUENCES'),
         seed: this.config.seed || getEnvInt('REPLICATE_SEED'),
         system_prompt: systemPrompt,
         prompt: userPrompt,

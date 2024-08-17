@@ -2,6 +2,7 @@ import fetch from 'node-fetch';
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 import { ProxyAgent } from 'proxy-agent';
 import invariant from 'tiny-invariant';
+import { getEnvInt, getEnvBool } from './envars';
 import logger from './logger';
 
 export async function fetchWithProxy(
@@ -61,8 +62,6 @@ async function handleRateLimit(response: Response): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 60_000));
   }
 }
-
-import { getEnvInt, getEnvBool } from './envars';
 
 export async function fetchWithRetries(
   url: RequestInfo,

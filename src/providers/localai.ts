@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvar } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -28,7 +28,7 @@ class LocalAiGenericProvider implements ApiProvider {
     this.apiBaseUrl =
       config?.apiBaseUrl ||
       env?.LOCALAI_BASE_URL ||
-      getEnvar('LOCALAI_BASE_URL') ||
+      getEnvString('LOCALAI_BASE_URL') ||
       'http://localhost:8080/v1';
     this.config = config || {};
     this.id = id ? () => id : this.id;
@@ -54,7 +54,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       messages: messages,
-      temperature: this.config.temperature || getEnvar('LOCALAI_TEMPERATURE') || 0.7,
+      temperature: this.config.temperature || getEnvString('LOCALAI_TEMPERATURE') || 0.7,
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
@@ -136,7 +136,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      temperature: this.config.temperature || getEnvar('LOCALAI_TEMPERATURE') || 0.7,
+      temperature: this.config.temperature || getEnvString('LOCALAI_TEMPERATURE') || 0.7,
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 

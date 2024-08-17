@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import winston from 'winston';
+import { getEnvString } from './envars';
 
 export const LOG_LEVELS = {
   error: 0,
@@ -21,14 +22,12 @@ const customFormatter = winston.format.printf(({ level, message, ...args }) => {
   throw new Error(`Invalid log level: ${level}`);
 });
 
-import { getEnvar } from './envars';
-
 const logger = winston.createLogger({
   levels: LOG_LEVELS,
   format: winston.format.combine(winston.format.simple(), customFormatter),
   transports: [
     new winston.transports.Console({
-      level: getEnvar('LOG_LEVEL', 'info'),
+      level: getEnvString('LOG_LEVEL', 'info'),
     }),
   ],
 });

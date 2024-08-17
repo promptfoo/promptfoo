@@ -4,7 +4,7 @@ import type {
   TextGenerationCreateOutput,
 } from '@ibm-generative-ai/node-sdk';
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvar } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
@@ -114,7 +114,7 @@ export class BAMChatProvider implements ApiProvider {
     this.config = config;
     this.moderations = moderations;
     this.id = id ? () => id : this.id;
-    this.apiKey = getEnvar('BAM_API_KEY');
+    this.apiKey = getEnvString('BAM_API_KEY');
   }
 
   id(): string {
@@ -133,7 +133,7 @@ export class BAMChatProvider implements ApiProvider {
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.BAM_API_KEY ||
-      getEnvar('BAM_API_KEY')
+      getEnvString('BAM_API_KEY')
     );
   }
 

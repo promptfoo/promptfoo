@@ -100,9 +100,9 @@ type EnvVarKey = keyof EnvVars;
  * @param defaultValue Optional default value if the environment variable is not set.
  * @returns The value of the environment variable, or the default value if provided.
  */
-export function getEnvar(key: EnvVarKey): string | undefined;
-export function getEnvar(key: EnvVarKey, defaultValue: string): string;
-export function getEnvar(key: EnvVarKey, defaultValue?: string): string | undefined {
+export function getEnvString(key: EnvVarKey): string | undefined;
+export function getEnvString(key: EnvVarKey, defaultValue: string): string;
+export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
   const value = process.env[key];
   if (value === undefined) {
     return defaultValue;
@@ -117,7 +117,7 @@ export function getEnvar(key: EnvVarKey, defaultValue?: string): string | undefi
  * @returns The boolean value of the environment variable, or the default value if provided.
  */
 export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
-  const value = getEnvar(key) || defaultValue;
+  const value = getEnvString(key) || defaultValue;
   if (typeof value === 'boolean') {
     return value;
   }
@@ -136,7 +136,7 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
 export function getEnvInt(key: EnvVarKey): number | undefined;
 export function getEnvInt(key: EnvVarKey, defaultValue: number): number;
 export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undefined {
-  const value = getEnvar(key) || defaultValue;
+  const value = getEnvString(key) || defaultValue;
   if (typeof value === 'number') {
     return Math.floor(value);
   }
@@ -158,7 +158,7 @@ export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undef
 export function getEnvFloat(key: EnvVarKey): number | undefined;
 export function getEnvFloat(key: EnvVarKey, defaultValue: number): number;
 export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | undefined {
-  const value = getEnvar(key) || defaultValue;
+  const value = getEnvString(key) || defaultValue;
   if (typeof value === 'number') {
     return value;
   }

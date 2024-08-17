@@ -1,4 +1,4 @@
-import { getEnvar, getEnvBool, getEnvInt, getEnvFloat } from '../src/envars';
+import { getEnvString, getEnvBool, getEnvInt, getEnvFloat } from '../src/envars';
 
 describe('envars', () => {
   const originalEnv = process.env;
@@ -15,15 +15,15 @@ describe('envars', () => {
   describe('getEnvar', () => {
     it('should return the value of an existing environment variable', () => {
       process.env.PROMPTFOO_AUTHOR = 'test value';
-      expect(getEnvar('PROMPTFOO_AUTHOR')).toBe('test value');
+      expect(getEnvString('PROMPTFOO_AUTHOR')).toBe('test value');
     });
 
     it('should return undefined for a non-existing environment variable', () => {
-      expect(getEnvar('PROMPTFOO_AUTHOR')).toBeUndefined();
+      expect(getEnvString('PROMPTFOO_AUTHOR')).toBeUndefined();
     });
 
     it('should return the default value for a non-existing environment variable', () => {
-      expect(getEnvar('PROMPTFOO_AUTHOR', 'default')).toBe('default');
+      expect(getEnvString('PROMPTFOO_AUTHOR', 'default')).toBe('default');
     });
   });
 

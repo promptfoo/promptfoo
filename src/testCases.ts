@@ -8,7 +8,7 @@ import * as path from 'path';
 import { parse as parsePath } from 'path';
 import invariant from 'tiny-invariant';
 import { testCaseFromCsvRow } from './csv';
-import { getEnvar, getEnvBool } from './envars';
+import { getEnvString, getEnvBool } from './envars';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
@@ -273,7 +273,7 @@ export async function synthesize({
   numTestCasesPerPersona = numTestCasesPerPersona || 3;
 
   let progressBar;
-  if (getEnvar('LOG_LEVEL') !== 'debug') {
+  if (getEnvString('LOG_LEVEL') !== 'debug') {
     const cliProgress = await import('cli-progress');
     progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
     const totalProgressSteps = 1 + numPersonas * numTestCasesPerPersona;

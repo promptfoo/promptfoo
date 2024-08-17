@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvar } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
@@ -48,8 +48,8 @@ class PalmGenericProvider implements ApiProvider {
       this.config.apiHost ||
       this.env?.GOOGLE_API_HOST ||
       this.env?.PALM_API_HOST ||
-      getEnvar('GOOGLE_API_HOST') ||
-      getEnvar('PALM_API_HOST') ||
+      getEnvString('GOOGLE_API_HOST') ||
+      getEnvString('PALM_API_HOST') ||
       DEFAULT_API_HOST
     );
   }
@@ -59,8 +59,8 @@ class PalmGenericProvider implements ApiProvider {
       this.config.apiKey ||
       this.env?.GOOGLE_API_KEY ||
       this.env?.PALM_API_KEY ||
-      getEnvar('GOOGLE_API_KEY') ||
-      getEnvar('PALM_API_KEY')
+      getEnvString('GOOGLE_API_KEY') ||
+      getEnvString('PALM_API_KEY')
     );
   }
 

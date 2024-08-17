@@ -1,5 +1,5 @@
 import type { GlobalConfig } from './configTypes';
-import { getEnvar } from './envars';
+import { getEnvString } from './envars';
 import { readGlobalConfig, writeGlobalConfig } from './globalConfig';
 
 export function getUserEmail(): string | null {
@@ -13,5 +13,5 @@ export function setUserEmail(email: string) {
 }
 
 export function getAuthor(): string | null {
-  return getEnvar('PROMPTFOO_AUTHOR') || getUserEmail() || null;
+  return getEnvString('PROMPTFOO_AUTHOR') || getUserEmail() || null;
 }

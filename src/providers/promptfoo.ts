@@ -1,4 +1,4 @@
-import { getEnvar } from '../envars';
+import { getEnvString } from '../envars';
 import { fetchWithRetries } from '../fetch';
 import logger from '../logger';
 import type {
@@ -46,7 +46,7 @@ class PromptfooHarmfulCompletionProvider implements ApiProvider {
       // See here for a prompt you can use with Llama 3 base to host your own inference endpoint:
       // https://gist.github.com/typpo/3815d97a638f1a41d28634293aff33a0
       const response = await fetchWithRetries(
-        getEnvar('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT') ||
+        getEnvString('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT') ||
           'https://api.promptfoo.dev/redteam/generateHarmful',
         {
           method: 'POST',

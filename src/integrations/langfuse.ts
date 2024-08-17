@@ -1,10 +1,10 @@
 import { Langfuse } from 'langfuse';
-import { getEnvar } from '../envars';
+import { getEnvString } from '../envars';
 
 const langfuseParams = {
-  publicKey: getEnvar('LANGFUSE_PUBLIC_KEY'),
-  secretKey: getEnvar('LANGFUSE_SECRET_KEY'),
-  baseUrl: getEnvar('LANGFUSE_HOST'),
+  publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),
+  secretKey: getEnvString('LANGFUSE_SECRET_KEY'),
+  baseUrl: getEnvString('LANGFUSE_HOST'),
 };
 
 const langfuse = new Langfuse(langfuseParams);

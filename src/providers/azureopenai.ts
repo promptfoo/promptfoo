@@ -7,7 +7,7 @@ import type {
 } from '@azure/openai-assistants';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
-import { getEnvar, getEnvFloat, getEnvInt } from '../envars';
+import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -86,13 +86,13 @@ class AzureOpenAiGenericProvider implements ApiProvider {
     this.deploymentName = deploymentName;
 
     this.apiHost =
-      config?.apiHost || env?.AZURE_OPENAI_API_HOST || getEnvar('AZURE_OPENAI_API_HOST');
+      config?.apiHost || env?.AZURE_OPENAI_API_HOST || getEnvString('AZURE_OPENAI_API_HOST');
     this.apiBaseUrl =
       config?.apiBaseUrl ||
       env?.AZURE_OPENAI_API_BASE_URL ||
       env?.AZURE_OPENAI_BASE_URL ||
-      getEnvar('AZURE_OPENAI_API_BASE_URL') ||
-      getEnvar('AZURE_OPENAI_BASE_URL');
+      getEnvString('AZURE_OPENAI_API_BASE_URL') ||
+      getEnvString('AZURE_OPENAI_BASE_URL');
 
     this.config = config || {};
     this.id = id ? () => id : this.id;
@@ -128,7 +128,7 @@ class AzureOpenAiGenericProvider implements ApiProvider {
               this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
             : undefined) ||
           this.env?.AZURE_OPENAI_API_KEY ||
-          getEnvar('AZURE_OPENAI_API_KEY');
+          getEnvString('AZURE_OPENAI_API_KEY');
         if (!this._cachedApiKey) {
           throw new Error('Azure OpenAI API key must be set');
         }
@@ -254,8 +254,8 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
 
     let stop: string;
     try {
-      stop = getEnvar('OPENAI_STOP')
-        ? JSON.parse(getEnvar('OPENAI_STOP') || '')
+      stop = getEnvString('OPENAI_STOP')
+        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
         : this.config?.stop || ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
@@ -341,8 +341,8 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
 
     let stop: string;
     try {
-      stop = getEnvar('OPENAI_STOP')
-        ? JSON.parse(getEnvar('OPENAI_STOP') || '')
+      stop = getEnvString('OPENAI_STOP')
+        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
         : this.config?.stop;
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);

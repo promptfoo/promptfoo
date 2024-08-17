@@ -1,6 +1,6 @@
 import Anthropic, { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvar, getEnvFloat, getEnvInt } from '../envars';
+import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
@@ -183,7 +183,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
-    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || getEnvar('ANTHROPIC_API_KEY');
+    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
     this.anthropic = new Anthropic({ apiKey: this.apiKey, baseURL: this.config.apiBaseUrl });
   }
 
@@ -308,7 +308,7 @@ export class AnthropicCompletionProvider implements ApiProvider {
   ) {
     const { config, id, env } = options;
     this.modelName = modelName;
-    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || getEnvar('ANTHROPIC_API_KEY');
+    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
     this.anthropic = new Anthropic({ apiKey: this.apiKey });
     this.config = config || {};
     this.id = id ? () => id : this.id;
@@ -331,8 +331,8 @@ export class AnthropicCompletionProvider implements ApiProvider {
 
     let stop: string[];
     try {
-      stop = getEnvar('ANTHROPIC_STOP')
-        ? JSON.parse(getEnvar('ANTHROPIC_STOP') || '')
+      stop = getEnvString('ANTHROPIC_STOP')
+        ? JSON.parse(getEnvString('ANTHROPIC_STOP') || '')
         : ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`ANTHROPIC_STOP is not a valid JSON string: ${err}`);

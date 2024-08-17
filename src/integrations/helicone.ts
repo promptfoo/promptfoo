@@ -1,6 +1,6 @@
-import { getEnvar } from '../envars';
+import { getEnvString } from '../envars';
 
-const heliconeApiKey = getEnvar('HELICONE_API_KEY');
+const heliconeApiKey = getEnvString('HELICONE_API_KEY');
 
 interface PromptVersionCompiled {
   id: string;

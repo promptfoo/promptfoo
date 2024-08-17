@@ -1,7 +1,7 @@
 import type { Cache } from 'cache-manager';
 import OpenAI from 'openai';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
-import { getEnvar, getEnvFloat, getEnvInt } from '../envars';
+import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type {
   ApiModerationProvider,
@@ -195,7 +195,9 @@ export class OpenAiGenericProvider implements ApiProvider {
 
   getOrganization(): string | undefined {
     return (
-      this.config.organization || this.env?.OPENAI_ORGANIZATION || getEnvar('OPENAI_ORGANIZATION')
+      this.config.organization ||
+      this.env?.OPENAI_ORGANIZATION ||
+      getEnvString('OPENAI_ORGANIZATION')
     );
   }
 
@@ -204,7 +206,8 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost = this.config.apiHost || this.env?.OPENAI_API_HOST || getEnvar('OPENAI_API_HOST');
+    const apiHost =
+      this.config.apiHost || this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
     if (apiHost) {
       return `https://${apiHost}/v1`;
     }
@@ -212,8 +215,8 @@ export class OpenAiGenericProvider implements ApiProvider {
       this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
       this.env?.OPENAI_BASE_URL ||
-      getEnvar('OPENAI_API_BASE_URL') ||
-      getEnvar('OPENAI_BASE_URL') ||
+      getEnvString('OPENAI_API_BASE_URL') ||
+      getEnvString('OPENAI_BASE_URL') ||
       this.getApiUrlDefault()
     );
   }
@@ -226,7 +229,7 @@ export class OpenAiGenericProvider implements ApiProvider {
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.OPENAI_API_KEY ||
-      getEnvar('OPENAI_API_KEY')
+      getEnvString('OPENAI_API_KEY')
     );
   }
 
@@ -359,8 +362,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
     let stop: string;
     try {
-      stop = getEnvar('OPENAI_STOP')
-        ? JSON.parse(getEnvar('OPENAI_STOP') || '')
+      stop = getEnvString('OPENAI_STOP')
+        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
         : this.config?.stop || ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
