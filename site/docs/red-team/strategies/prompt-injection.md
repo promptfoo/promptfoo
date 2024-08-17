@@ -26,6 +26,6 @@ Prompt injection is a widely known attack vector. Although foundation labs are m
 
 - [Iterative Jailbreak](iterative.md)
 - [Tree Jailbreak](tree.md)
-- [Crescendo](crescendo.md)
+- [Multi-turn Jailbreaks](multi-turn.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

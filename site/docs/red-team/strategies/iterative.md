@@ -41,6 +41,6 @@ This can test consistency across a wide range of malicious inputs and identify t
 
 - [Prompt Injections](prompt-injection.md)
 - [Tree-based Jailbreaks](tree.md)
-- [Crescendo](crescendo.md)
+- [Multi-turn Jailbreaks](multi-turn.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

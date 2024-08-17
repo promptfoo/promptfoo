@@ -61,6 +61,6 @@ This approach can cover a wide range of inputs and identify weaknesses that migh
 
 - [Iterative Jailbreaks](iterative.md)
 - [Prompt Injections](prompt-injection.md)
-- [Crescendo](crescendo.md)
+- [Multi-turn Jailbreaks](multi-turn.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
