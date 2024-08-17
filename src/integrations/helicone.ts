@@ -1,4 +1,6 @@
-const heliconeApiKey = process.env.HELICONE_API_KEY;
+import { getEnvString } from '../envars';
+
+const heliconeApiKey = getEnvString('HELICONE_API_KEY');
 
 interface PromptVersionCompiled {
   id: string;

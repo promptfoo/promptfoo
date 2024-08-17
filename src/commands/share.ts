@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import readline from 'readline';
 import { URL } from 'url';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
@@ -51,7 +52,7 @@ export function shareCommand(program: Command) {
           }
         }
 
-        if (cmdObj.yes || process.env.PROMPTFOO_DISABLE_SHARE_WARNING) {
+        if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
           await createPublicUrl(results, cmdObj.showAuth);
         } else {
           const reader = readline.createInterface({
@@ -59,9 +60,8 @@ export function shareCommand(program: Command) {
             output: process.stdout,
           });
 
-          const hostname = process.env.PROMPTFOO_SHARING_APP_BASE_URL
-            ? new URL(process.env.PROMPTFOO_SHARING_APP_BASE_URL).hostname
-            : 'app.promptfoo.dev';
+          const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
+          const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
 
           reader.question(
             `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,

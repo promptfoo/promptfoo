@@ -10,6 +10,7 @@ import type { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getUserEmail, setUserEmail } from '../accounts';
+import { getEnvString } from '../envars';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../globalConfig';
 import logger from '../logger';
 import {
@@ -170,7 +171,7 @@ export async function redteamInit(directory: string | undefined) {
     providers = [selectedProvider];
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!getEnvString('OPENAI_API_KEY')) {
     console.clear();
     logger.info(chalk.bold('OpenAI API Configuration\n'));
 
