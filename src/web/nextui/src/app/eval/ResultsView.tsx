@@ -550,18 +550,19 @@ export default function ResultsView({
                 Table Settings
               </Button>
             </Tooltip>
-            {config?.metadata?.redteam && (
-              <Tooltip title="View vulnerability scan report" placement="bottom">
-                <Button
-                  color="primary"
-                  variant="contained"
-                  startIcon={<EyeIcon />}
-                  onClick={() => router.push(`/report/?evalId=${evalId || defaultEvalId}`)}
-                >
-                  Vulnerability Report
-                </Button>
-              </Tooltip>
-            )}
+            {config?.redteam ||
+              (config?.metadata?.redteam && (
+                <Tooltip title="View vulnerability scan report" placement="bottom">
+                  <Button
+                    color="primary"
+                    variant="contained"
+                    startIcon={<EyeIcon />}
+                    onClick={() => router.push(`/report/?evalId=${evalId || defaultEvalId}`)}
+                  >
+                    Vulnerability Report
+                  </Button>
+                </Tooltip>
+              ))}
           </ResponsiveStack>
         </Box>
       </ResponsiveStack>
