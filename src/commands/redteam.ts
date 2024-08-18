@@ -336,7 +336,7 @@ export async function redteamInit(directory: string | undefined) {
       '\n' +
         chalk.blue(
           'To generate test cases later, use the command: ' +
-            chalk.bold('promptfoo generate redteam'),
+            chalk.bold('promptfoo redteam generate'),
         ),
     );
   }
@@ -345,10 +345,8 @@ export async function redteamInit(directory: string | undefined) {
   await telemetry.send();
 }
 
-export function redteamCommand(program: Command) {
-  const redteamCommand = program.command('redteam').description('Red team LLM applications');
-
-  redteamCommand
+export function initRedteamCommand(program: Command) {
+  program
     .command('init [directory]')
     .description('Initialize red teaming project')
     .action(async (directory: string | undefined) => {

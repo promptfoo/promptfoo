@@ -197,11 +197,12 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
 
 export function generateRedteamCommand(
   program: Command,
+  command: 'redteam' | 'generate',
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
 ) {
   program
-    .command('redteam')
+    .command(command) // generate or redteam depending on if called from redteam or generate
     .description('Generate adversarial test cases')
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file')

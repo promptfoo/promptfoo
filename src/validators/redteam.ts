@@ -53,7 +53,7 @@ export const RedteamStrategySchema = z.union([
 ]);
 
 /**
- * Schema for `promptfoo generate redteam` command options
+ * Schema for `promptfoo redteam generate` command options
  */
 export const RedteamGenerateOptionsSchema = z.object({
   cache: z.boolean().describe('Whether to use caching'),
