@@ -7,6 +7,7 @@ import rawlist from '@inquirer/rawlist';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import type { Command } from 'commander';
+import dedent from 'dedent';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getUserEmail, setUserEmail } from '../accounts';
@@ -30,6 +31,9 @@ const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
 
 description: "My first red team"
 
+{% if purpose is defined -%}
+purpose: {{ purpose | dump }}
+{% endif %}
 prompts:
   {% for prompt in prompts -%}
   - {{ prompt | dump }}
@@ -82,21 +86,34 @@ redteam:
   {% endif -%}
 `;
 
+const CUSTOM_PROVIDER_TEMPLATE = `# Custom provider for red teaming
+# Docs: https://promptfoo.dev/docs/red-team/configuration/#providers
+
+import http.client
+import urllib.parse
+import json
+
+def call_api(prompt, options, context):
+    parsed_url = urllib.parse.urlparse('https://example.com/api/chat)
+    conn = http.client.HTTPSConnection(parsed_url.netloc)
+    
+    headers = {'Content-Type': 'application/json'}
+    payload = json.dumps({'user_chat': prompt})
+    
+    conn.request("POST", parsed_url.path or "/", body=payload, headers=headers)
+    response = conn.getresponse()
+    
+    return {
+      "output": response.read().decode()
+    }
+`;
+
 export async function redteamInit(directory: string | undefined) {
   telemetry.maybeShowNotice();
   telemetry.record('command_used', { name: 'redteam init - started' });
   await telemetry.send();
 
-  console.clear();
-  logger.info(chalk.bold('Red Team Initialization\n'));
-
-  let projectDir = directory;
-  if (!projectDir) {
-    projectDir = await input({
-      message: 'Where do you want to create the project?',
-      default: '.',
-    });
-  }
+  const projectDir = directory || '.';
   if (projectDir !== '.' && !fs.existsSync(projectDir)) {
     fs.mkdirSync(projectDir, { recursive: true });
   }
@@ -104,71 +121,95 @@ export async function redteamInit(directory: string | undefined) {
   const configPath = path.join(projectDir, 'promptfooconfig.yaml');
 
   console.clear();
-  logger.info(chalk.bold('Prompt Configuration\n'));
+  logger.info(chalk.bold('Red Team Configuration\n'));
 
-  const promptChoices = [
-    { name: 'Enter a prompt', value: 'enter' },
-    { name: 'Reference a prompt file', value: 'file' },
-    { name: 'No prompt', value: 'none' },
-  ];
-
-  const promptChoice = await rawlist({
-    message: 'How would you like to specify the prompt?',
-    choices: promptChoices,
+  const redTeamChoice = await select({
+    message: 'What would you like to do?',
+    choices: [
+      { name: 'Not sure yet', value: 'not_sure' },
+      { name: 'Red team a prompt, model, or chatbot', value: 'prompt_model_chatbot' },
+      { name: 'Red team a RAG', value: 'rag' },
+      { name: 'Red team an Agent', value: 'agent' },
+    ],
+    pageSize: process.stdout.rows - 6,
   });
 
   const prompts: string[] = [];
-  if (promptChoice === 'enter') {
-    prompts.push(
-      await editor({
-        message: 'Enter your prompt:',
-        default:
-          'You are a helpful concise assistant.\n\nUser query: {{query}}\n\n(NOTE: your prompt must include "{{query}}" as a placeholder for user input)',
-      }),
-    );
-  } else if (promptChoice === 'file') {
-    const promptFile = await input({
-      message: 'Enter the path to your prompt file (text or JSON):',
+  let purpose: string | undefined;
+
+  const useCustomProvider = redTeamChoice === 'rag' || redTeamChoice === 'agent';
+  let deferGeneration = useCustomProvider;
+  const defaultPrompt =
+    'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}';
+  const defaultPurpose = 'Travel agent specializing in budget trips to Europe';
+  if (useCustomProvider) {
+    purpose =
+      (await input({
+        message: dedent`What is the purpose of your application? This is used to tailor the attacks. Be as specific as possible.
+        (e.g. "${defaultPurpose}")\n`,
+      })) || defaultPurpose;
+    prompts.push(`{{query}}`);
+  } else if (redTeamChoice === 'prompt_model_chatbot') {
+    const promptChoice = await select({
+      message: 'Do you want to enter a prompt now or later?',
+      choices: [
+        { name: 'Enter prompt now', value: 'now' },
+        { name: 'Enter prompt later', value: 'later' },
+      ],
     });
-    prompts.push(`file://${promptFile}`);
-  } else if (promptChoice === 'none') {
-    prompts.push('{{query}}');
+
+    let prompt: string;
+    if (promptChoice === 'now') {
+      prompt = await editor({
+        message: 'Enter the prompt you want to test against:',
+        default: dedent`You are a helpful concise assistant.
+        
+        User query: {{query}}
+        
+        (NOTE: your prompt must include "{{query}}" as a placeholder for user input)`,
+      });
+    } else {
+      prompt = defaultPrompt;
+      deferGeneration = true;
+    }
+    prompts.push(prompt);
+  } else {
+    prompts.push(
+      'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}',
+    );
   }
 
-  console.clear();
-  logger.info(chalk.bold('Provider Configuration\n'));
-
-  const providerChoices = [
-    { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
-    { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
-    { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
-    {
-      name: 'anthropic:claude-3-5-sonnet-20240620',
-      value: 'anthropic:messages:claude-3-5-sonnet-20240620',
-    },
-    {
-      name: 'anthropic:claude-3-opus-20240307',
-      value: 'anthropic:messages:claude-3-opus-20240307',
-    },
-    { name: 'vertex:gemini-pro', value: 'vertex:gemini-pro' },
-    { name: 'Other', value: 'Other' },
-  ];
-
-  const selectedProvider = await select({
-    message: 'Choose a provider to target:',
-    choices: providerChoices,
-    pageSize: process.stdout.rows - 4,
-  });
-
   let providers: string[];
-  if (selectedProvider === 'Other') {
-    const customProvider = await input({
-      message:
-        'Enter the custom provider ID (see https://promptfoo.dev/docs/red-team/configuration/#providers for info):',
-    });
-    providers = [customProvider || 'openai:gpt-4o-mini'];
+  if (useCustomProvider) {
+    providers = ['python:chat.py'];
   } else {
-    providers = [selectedProvider];
+    const providerChoices = [
+      { name: `I'll choose later`, value: 'Other' },
+      { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
+      { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
+      { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
+      {
+        name: 'anthropic:claude-3-5-sonnet-20240620',
+        value: 'anthropic:messages:claude-3-5-sonnet-20240620',
+      },
+      {
+        name: 'anthropic:claude-3-opus-20240307',
+        value: 'anthropic:messages:claude-3-opus-20240307',
+      },
+      { name: 'vertex:gemini-pro', value: 'vertex:gemini-pro' },
+    ];
+
+    const selectedProvider = await select({
+      message: 'Choose a model to target:',
+      choices: providerChoices,
+      pageSize: process.stdout.rows - 6,
+    });
+    if (selectedProvider === 'Other') {
+      providers = ['openai:gpt-4o-mini'];
+      deferGeneration = true;
+    } else {
+      providers = [selectedProvider];
+    }
   }
 
   if (!getEnvString('OPENAI_API_KEY')) {
@@ -188,6 +229,7 @@ export async function redteamInit(directory: string | undefined) {
       process.env.OPENAI_API_KEY = apiKey;
       logger.info('OPENAI_API_KEY set for this session.');
     } else {
+      deferGeneration = true;
       logger.warn('Remember to set OPENAI_API_KEY before generating the dataset.');
     }
   }
@@ -204,9 +246,9 @@ export async function redteamInit(directory: string | undefined) {
     }));
 
   const plugins: (string | RedteamPluginObject)[] = await checkbox({
-    message: 'Select plugins to enable:',
+    message: `Plugins generate adversarial inputs. Select the ones you want to use. Don't worry, you can change this later:`,
     choices: pluginChoices,
-    pageSize: process.stdout.rows - 4,
+    pageSize: process.stdout.rows - 6,
     loop: false,
     validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
   });
@@ -221,7 +263,7 @@ export async function redteamInit(directory: string | undefined) {
 
     const policyDescription = await input({
       message:
-        'You selected the `policy` plugin. Please enter your custom policy description (leave empty to skip):',
+        'You selected the `policy` plugin. Please enter your custom policy description, or leave empty to skip.\n(e.g. "Never talk about the weather")',
     });
 
     if (policyDescription.trim() !== '') {
@@ -250,9 +292,9 @@ export async function redteamInit(directory: string | undefined) {
   );
 
   const strategies = await checkbox({
-    message: 'Select strategies to enable:',
+    message: `Strategies are attack methods. Select the ones you want to use. Don't worry, you can change this later:`,
     choices: strategyChoices,
-    pageSize: process.stdout.rows - 4,
+    pageSize: process.stdout.rows - 6,
     loop: false,
   });
 
@@ -305,44 +347,60 @@ export async function redteamInit(directory: string | undefined) {
 
   const nunjucks = getNunjucksEngine();
   const redteamConfig = nunjucks.renderString(REDTEAM_CONFIG_TEMPLATE, {
+    purpose,
     numTests,
     plugins,
     strategies,
     prompts,
     providers,
   });
-
   fs.writeFileSync(configPath, redteamConfig, 'utf8');
+
+  if (useCustomProvider) {
+    fs.writeFileSync(path.join(projectDir, 'chat.py'), CUSTOM_PROVIDER_TEMPLATE, 'utf8');
+  }
 
   console.clear();
   logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
 
-  const readyToGenerate = await confirm({
-    message: 'Are you ready to generate adversarial test cases?',
-    default: true,
-  });
+  telemetry.record('command_used', { name: 'redteam init' });
+  await telemetry.send();
 
-  if (readyToGenerate) {
-    await doGenerateRedteam({
-      plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
-      cache: false,
-      write: true,
-      defaultConfig: {},
-      defaultConfigPath: configPath,
-      numTests,
-    });
-  } else {
+  if (deferGeneration) {
     logger.info(
       '\n' +
         chalk.blue(
-          'To generate test cases later, use the command: ' +
-            chalk.bold('promptfoo redteam generate'),
+          'To generate test cases after editing your configuration, use the command: ' +
+            chalk.bold('promptfoo generate redteam -w'),
         ),
     );
-  }
+    return;
+  } else {
+    const readyToGenerate = await confirm({
+      message: 'Are you ready to generate adversarial test cases?',
+      default: true,
+    });
 
-  telemetry.record('command_used', { name: 'redteam init' });
-  await telemetry.send();
+    if (readyToGenerate) {
+      await doGenerateRedteam({
+        purpose,
+        plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
+        cache: false,
+        write: true,
+        defaultConfig: {},
+        defaultConfigPath: configPath,
+        numTests,
+      });
+    } else {
+      logger.info(
+        '\n' +
+          chalk.blue(
+            'To generate test cases later, use the command: ' +
+              chalk.bold('promptfoo generate redteam -w'),
+          ),
+      );
+    }
+  }
 }
 
 export function initRedteamCommand(program: Command) {
