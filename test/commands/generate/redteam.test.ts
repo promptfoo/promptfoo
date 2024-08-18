@@ -3,10 +3,10 @@ import { doGenerateRedteam } from '../../../src/commands/generate/redteam';
 import * as configModule from '../../../src/config';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
+import { DEFAULT_PLUGINS, DEFAULT_STRATEGIES } from '../../../src/redteam/constants';
 import type { RedteamGenerateOptions } from '../../../src/types/redteam';
 import { writePromptfooConfig } from '../../../src/util/config';
 
-// Mock modules that interact with the file system or external services
 jest.mock('fs');
 jest.mock('yaml');
 jest.mock('../../../src/redteam');
@@ -14,7 +14,6 @@ jest.mock('../../../src/util/config');
 jest.mock('../../../src/logger');
 jest.mock('../../../src/telemetry');
 
-// Update the mock for the config module
 jest.mock('../../../src/config', () => ({
   readConfigs: jest.fn(),
   resolveConfigs: jest.fn(),
@@ -23,25 +22,30 @@ jest.mock('../../../src/config', () => ({
 describe('doGenerateRedteam', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Mock resolveConfigs to return a more complete object
     jest.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         prompts: [],
+        providers: [],
       },
       config: {
         redteam: {
-          // Add any necessary redteam config properties here
+          plugins: [],
+          strategies: [],
         },
       },
     });
   });
 
   it('should generate redteam tests and write to output file', async () => {
-    // Set up mock implementation for readConfigs
-    jest.mocked(configModule.readConfigs).mockResolvedValue([{}]);
+    jest.mocked(configModule.readConfigs).mockResolvedValue([
+      {
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        providers: [],
+        tests: [],
+      },
+    ] as any);
 
-    // Mock input
     const options: RedteamGenerateOptions = {
       output: 'output.yaml',
       config: 'config.yaml',
@@ -50,7 +54,6 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    // Mock file system
     jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         prompts: [{ raw: 'Test prompt' }],
@@ -59,7 +62,6 @@ describe('doGenerateRedteam', () => {
       }),
     );
 
-    // Mock synthesize function
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
@@ -70,19 +72,21 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
+      plugins: [...DEFAULT_PLUGINS].map((p) => ({ id: p, numTests: 5 })),
+      strategies: DEFAULT_STRATEGIES.map((s) => ({ id: s })),
     });
 
-    // Execute function
     await doGenerateRedteam(options);
 
-    // Updated Assertions
-    expect(synthesize).toHaveBeenCalledWith({
-      language: undefined,
-      numTests: undefined,
-      plugins: expect.any(Array),
-      prompts: expect.any(Array),
-      strategies: expect.any(Array),
-    });
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        language: undefined,
+        numTests: undefined,
+        plugins: expect.any(Array),
+        prompts: [],
+        strategies: expect.any(Array),
+      }),
+    );
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         prompts: [{ raw: 'Test prompt' }],
@@ -110,6 +114,35 @@ describe('doGenerateRedteam', () => {
       'output.yaml',
     );
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Wrote 1 new test cases'));
+  });
+
+  it('should write to config file when write option is true', async () => {
+    const options: RedteamGenerateOptions = {
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tests: [],
+        redteam: expect.objectContaining({
+          purpose: 'Test purpose',
+          entities: [],
+        }),
+      }),
+      'config.yaml',
+    );
   });
 
   it('should handle missing configuration file', async () => {
