@@ -145,7 +145,7 @@ export async function redteamInit(directory: string | undefined) {
   if (useCustomProvider) {
     purpose =
       (await input({
-        message: dedent`What is the purpose of your application?
+        message: dedent`What is the purpose of your application? This is used to tailor the attacks. Be as specific as possible.
         (e.g. "${defaultPurpose}")\n`,
       })) || defaultPurpose;
     prompts.push(`{{query}}`);
