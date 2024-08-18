@@ -157,7 +157,6 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
         },
       },
       tests: redteamTests,
-      metadata: { ...existingYaml.metadata, redteam: true },
       redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
     };
     writePromptfooConfig(updatedYaml, options.output);
@@ -182,7 +181,6 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
       },
     };
     existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
-    existingConfig.metadata = { ...(existingConfig.metadata || {}), redteam: true };
     existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
     writePromptfooConfig(existingConfig, configPath);
     logger.info(
