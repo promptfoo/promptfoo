@@ -5,7 +5,7 @@ sidebar_label: 'Configuration'
 
 # Redteam Configuration
 
-The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo generate redteam`. It allows you to specify the plugins and other parameters of your redteam tests.
+The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
 
 ## Getting Started
 
@@ -212,7 +212,7 @@ policy: >
 To see a complete list of available plugins, run:
 
 ```bash
-promptfoo generate redteam --help
+promptfoo redteam generate --help
 ```
 
 ### Strategies
@@ -274,7 +274,7 @@ A common use case is to use a [custom HTTP endpoint](/docs/providers/http/) or [
 To use the `openai:chat:gpt-4o-mini` model, you can override the provider on the command line:
 
 ```sh
-npx promptfoo@latest generate redteam -w --provider openai:chat:gpt-4o-mini
+npx promptfoo@latest redteam generate -w --provider openai:chat:gpt-4o-mini
 ```
 
 Or in the config:

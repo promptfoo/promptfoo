@@ -144,7 +144,7 @@ Learn more about [prompt formats](/docs/configuration/parameters/#prompts).
 The `init` step will do this for you automatically, but in case you'd like to manually re-generate your adversarial inputs:
 
 ```sh
-npx promptfoo@latest generate redteam -w
+npx promptfoo@latest redteam generate -w
 ```
 
 This will generate several hundred adversarial inputs across many categories of potential harm.
@@ -152,10 +152,10 @@ This will generate several hundred adversarial inputs across many categories of 
 You can reduce the number of test cases by setting the specific [plugins](/docs/guides/llm-redteaming#step-3-generate-adversarial-test-cases) you want to run. For example, to only generate harmful inputs:
 
 ```sh
-npx promptfoo@latest generate redteam -w --plugins harmful
+npx promptfoo@latest redteam generate -w --plugins harmful
 ```
 
-Run `npx promptfoo@latest generate redteam --help` to see all available plugins.
+Run `npx promptfoo@latest redteam generate --help` to see all available plugins.
 
 #### Changing the provider
 

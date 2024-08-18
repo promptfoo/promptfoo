@@ -336,7 +336,7 @@ export async function redteamInit(directory: string | undefined) {
       '\n' +
         chalk.blue(
           'To generate test cases later, use the command: ' +
-            chalk.bold('promptfoo generate redteam'),
+            chalk.bold('promptfoo redteam generate'),
         ),
     );
   }

@@ -199,7 +199,7 @@ promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test case
 While in beta, this feature depends on OpenAI and requires the `OPENAI_API_KEY` environment variable.
 :::
 
-## `promptfoo generate redteam`
+## `promptfoo redteam generate`
 
 BETA: Generate adversarial test cases to challenge your prompts and models.
 
@@ -228,13 +228,13 @@ providers:
 This command will generate adversarial test cases and write them to the file:
 
 ```sh
-promptfoo generate redteam -w
+promptfoo redteam generate -w
 ```
 
 This command overrides the system purpose and the variable to inject adversarial user input:
 
 ```sh
-promptfoo generate redteam -w --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
+promptfoo redteam generate -w --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
 ```
 
 :::danger
