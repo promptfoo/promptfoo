@@ -1,9 +1,9 @@
 import fs from 'fs';
+import cliState from '../../../src/cliState';
 import { doGenerateRedteam } from '../../../src/commands/generate/redteam';
 import * as configModule from '../../../src/config';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
-import { DEFAULT_PLUGINS, DEFAULT_STRATEGIES } from '../../../src/redteam/constants';
 import type { RedteamGenerateOptions } from '../../../src/types/redteam';
 import { writePromptfooConfig } from '../../../src/util/config';
 
@@ -72,8 +72,6 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
-      plugins: [...DEFAULT_PLUGINS].map((p) => ({ id: p, numTests: 5 })),
-      strategies: DEFAULT_STRATEGIES.map((s) => ({ id: s })),
     });
 
     await doGenerateRedteam(options);
@@ -101,8 +99,6 @@ describe('doGenerateRedteam', () => {
         redteam: expect.objectContaining({
           purpose: 'Test purpose',
           entities: ['Test entity'],
-          plugins: expect.any(Array),
-          strategies: expect.any(Array),
         }),
         defaultTest: {
           metadata: {
@@ -207,5 +203,38 @@ describe('doGenerateRedteam', () => {
       }),
       'redteam.yaml',
     );
+  });
+
+  it('should update cliState with basePath', async () => {
+    const options: RedteamGenerateOptions = {
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/base/path',
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      config: {
+        redteam: {
+          plugins: [],
+          strategies: [],
+        },
+      },
+    });
+
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(cliState.basePath).toBe('/mock/base/path');
   });
 });
