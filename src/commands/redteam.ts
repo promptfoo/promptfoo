@@ -383,6 +383,7 @@ export async function redteamInit(directory: string | undefined) {
 
     if (readyToGenerate) {
       await doGenerateRedteam({
+        purpose,
         plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
         cache: false,
         write: true,
