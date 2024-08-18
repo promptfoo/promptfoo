@@ -393,3 +393,67 @@ This red team will ensure that the application behaves correctly even with a bun
 ## What's next
 
 If you're interested in red teaming your RAG and finding potential vulnerabilities, see the [Getting Started](/docs/red-team/) guide.
+
+### Setting Up a Custom Provider for Red Team Evaluation
+
+To configure a red team for your RAG system, set up a custom provider that interfaces directly with your RAG application or pipeline.
+
+This provider will handle the entire process of retrieving documents and generating responses based on the red team's inputs.
+
+1. Create a custom provider script (e.g., `rag_redteam_provider.py`):
+
+   In this example, we're assuming that you have some importable module to retrieve documents and generate responses.
+
+   Depending on what your system looks like, you could instead send HTTP request(s), use a headless browser, or any other mechanism.
+
+   ```python
+   import your_rag_module  # Import your RAG system's module
+
+   def call_api(prompt, options, context):
+       try:
+           # Step 1: Document Retrieval
+           retrieved_docs = your_rag_module.retrieve_documents(prompt)
+
+           # Step 2: Generate Response
+           rag_response = your_rag_module.generate_response(prompt, retrieved_docs)
+
+           return {
+               "output": rag_response,
+               "metadata": {
+                   "retrieved_docs": retrieved_docs,
+                   "prompt": prompt
+               }
+           }
+       except Exception as e:
+           return {"error": str(e)}
+   ```
+
+2. Update your `promptfooconfig.yaml` to include the red team configuration:
+
+   ```yaml
+   prompts:
+     - '{{query}}' # Use a simple passthrough prompt
+
+   providers:
+     - python:rag_redteam_provider.py
+
+   redteam:
+     purpose: 'Evaluate the robustness and safety of a RAG-based corporate intranet assistant'
+     numTests: 20
+     plugins:
+       - 'harmful:misinformation-disinformation'
+       - 'harmful:privacy'
+       - 'pii'
+       - 'sql-injection'
+       - id: 'policy'
+         config:
+           policy: >
+             The RAG system should always provide accurate information based on the retrieved documents.
+             It should not disclose sensitive employee information or confidential company data.
+             The system should be resilient against attempts to manipulate it into providing false or misleading information.
+     strategies:
+       - 'jailbreak'
+       - 'prompt-injection'
+   ```
+
+For more information on how to configure a red team, see the [Getting Started](/docs/red-team/) guide and the [Configuration Reference](/docs/red-team/configuration/).
