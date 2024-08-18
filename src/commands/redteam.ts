@@ -31,6 +31,9 @@ const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
 
 description: "My first red team"
 
+{% if purpose is defined -%}
+purpose: {{ purpose | dump }}
+{% endif %}
 prompts:
   {% for prompt in prompts -%}
   - {{ prompt | dump }}
