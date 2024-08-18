@@ -206,7 +206,6 @@ export async function redteamInit(directory: string | undefined) {
     });
     if (selectedProvider === 'Other') {
       providers = ['openai:gpt-4o-mini'];
-      deferGeneration = true;
     } else {
       providers = [selectedProvider];
     }
