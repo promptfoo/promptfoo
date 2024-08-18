@@ -370,7 +370,7 @@ export async function redteamInit(directory: string | undefined) {
       '\n' +
         chalk.blue(
           'To generate test cases after editing your configuration, use the command: ' +
-            chalk.bold('promptfoo generate redteam -w'),
+            chalk.bold('promptfoo generate redteam'),
         ),
     );
     return;
@@ -385,7 +385,8 @@ export async function redteamInit(directory: string | undefined) {
         purpose,
         plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
         cache: false,
-        write: true,
+        write: false,
+        output: 'redteam.yaml',
         defaultConfig: {},
         defaultConfigPath: configPath,
         numTests,
@@ -395,7 +396,7 @@ export async function redteamInit(directory: string | undefined) {
         '\n' +
           chalk.blue(
             'To generate test cases later, use the command: ' +
-              chalk.bold('promptfoo generate redteam -w'),
+              chalk.bold('promptfoo generate redteam'),
           ),
       );
     }

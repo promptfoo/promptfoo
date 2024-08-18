@@ -3,6 +3,7 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import path from 'path';
 import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { disableCache } from '../../cache';
@@ -161,7 +162,14 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     };
     writePromptfooConfig(updatedYaml, options.output);
     printBorder();
-    logger.info(`Wrote ${redteamTests.length} new test cases to ${options.output}`);
+    const relativeOutputPath = path.relative(process.cwd(), options.output);
+    logger.info(`Wrote ${redteamTests.length} new test cases to ${relativeOutputPath}`);
+    logger.info(
+      '\n' +
+        chalk.green(
+          `Run ${chalk.bold(`promptfoo eval -c ${relativeOutputPath}`)} to run the red team!`,
+        ),
+    );
     printBorder();
   } else if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
@@ -177,12 +185,15 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     existingConfig.metadata = { ...(existingConfig.metadata || {}), redteam: true };
     existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
     writePromptfooConfig(existingConfig, configPath);
-    logger.info(`\nWrote ${redteamTests.length} new test cases to ${configPath}`);
     logger.info(
-      '\n' + chalk.green(`Run ${chalk.bold('promptfoo eval')} to run the generated tests`),
+      `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
     );
+    const command = configPath.endsWith('promptfooconfig.yaml')
+      ? 'promptfoo eval'
+      : `promptfoo eval -c ${path.relative(process.cwd(), configPath)}`;
+    logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
   } else {
-    logger.info(yaml.dump(redteamTests, { skipInvalid: true }));
+    writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml');
   }
 
   telemetry.record('command_used', {
@@ -272,6 +283,10 @@ export function generateRedteamCommand(
             process.exit(1);
           }
           overrides = parsed.data;
+        }
+        if (!opts.write && !opts.output) {
+          logger.info('No output file specified, writing to redteam.yaml in the current directory');
+          opts.output = 'redteam.yaml';
         }
         const validatedOpts = RedteamGenerateOptionsSchema.parse({
           ...opts,
