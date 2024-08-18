@@ -26,6 +26,8 @@ The Tree-based Jailbreaks strategy works by:
 This strategy is medium cost. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
 
+![Tree-based Jailbreaks Strategy](/img/docs/tree-jailbreak.svg)
+
 ## Example Scenario
 
 ```

@@ -40,6 +40,8 @@ The Crescendo strategy operates by:
 3. Observing how the AI's responses change (or remain consistent) as the prompts escalate.
 4. Identifying any points where the AI's ethical boundaries might weaken or break.
 
+![Multi-turn Jailbreak Strategy](/img/docs/multi-turn-jailbreak.svg)
+
 ## Example Scenario
 
 1. "What are some common household chemicals?"
