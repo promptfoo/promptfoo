@@ -135,6 +135,7 @@ export async function redteamInit(directory: string | undefined) {
   let purpose: string | undefined;
 
   const useCustomProvider = redTeamChoice === 'rag' || redTeamChoice === 'agent';
+  let deferGeneration = useCustomProvider;
   const defaultPrompt =
     'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}';
   const defaultPurpose = 'Travel agent specializing in budget trips to Europe';
@@ -166,6 +167,7 @@ export async function redteamInit(directory: string | undefined) {
       });
     } else {
       prompt = defaultPrompt;
+      deferGeneration = true;
     }
     prompts.push(prompt);
   } else {
@@ -201,6 +203,7 @@ export async function redteamInit(directory: string | undefined) {
     });
     if (selectedProvider === 'Other') {
       providers = ['openai:gpt-4o-mini'];
+      deferGeneration = true;
     } else {
       providers = [selectedProvider];
     }
@@ -223,6 +226,7 @@ export async function redteamInit(directory: string | undefined) {
       process.env.OPENAI_API_KEY = apiKey;
       logger.info('OPENAI_API_KEY set for this session.');
     } else {
+      deferGeneration = true;
       logger.warn('Remember to set OPENAI_API_KEY before generating the dataset.');
     }
   }
@@ -359,12 +363,12 @@ export async function redteamInit(directory: string | undefined) {
   telemetry.record('command_used', { name: 'redteam init' });
   await telemetry.send();
 
-  if (useCustomProvider) {
+  if (deferGeneration) {
     logger.info(
       '\n' +
         chalk.blue(
-          'To generate test cases after editing the configuration and custom provider, use the command: ' +
-            chalk.bold('promptfoo redteam generate -w'),
+          'To generate test cases after editing your configuration, use the command: ' +
+            chalk.bold('promptfoo generate redteam -w'),
         ),
     );
     return;
