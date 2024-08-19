@@ -124,7 +124,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
   { plugins: Plugin[]; strategies: Strategy[] }
 > = {
   'owasp:llm:01': {
-    plugins: ['harmful', 'contracts', 'politics'],
+    plugins: ['harmful'],
     strategies: ['prompt-injection', 'jailbreak'],
   },
   'owasp:llm:02': {
