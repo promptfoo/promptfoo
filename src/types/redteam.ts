@@ -50,7 +50,7 @@ export interface SynthesizeOptions {
   numTests: number;
   language: string;
   plugins: { id: string; numTests: number; config?: Record<string, any> }[];
-  prompts: string[];
+  prompts: [string, ...string[]];
   provider?: ApiProvider | ProviderOptions | string;
   purpose?: string;
   strategies: { id: string }[];
