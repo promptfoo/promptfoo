@@ -157,7 +157,7 @@
     "python-shell": "^5.0.0",
     "replicate": "^0.32.0",
     "rfdc": "^1.4.1",
-    "rouge": "git+https://github.com/kenlimmj/rouge.git#f35111b599aca55f1d4dc1d4a3d15e28e7f7c55f",
+    "js-rouge": "3.0.0",
     "semver": "^7.6.3",
     "socket.io": "^4.7.5",
     "tiny-invariant": "^1.3.3",
