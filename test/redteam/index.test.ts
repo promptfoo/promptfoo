@@ -1,14 +1,24 @@
+import cliProgress from 'cli-progress';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import { synthesize } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
+import { extractVariablesFromTemplates } from '../../src/util/templates';
 
+jest.mock('cli-progress');
 jest.mock('../../src/logger');
 jest.mock('../../src/providers');
 jest.mock('../../src/redteam/extraction/entities');
 jest.mock('../../src/redteam/extraction/purpose');
+jest.mock('../../src/util/templates', () => {
+  const originalModule = jest.requireActual('../../src/util/templates');
+  return {
+    ...originalModule,
+    extractVariablesFromTemplates: jest.fn(originalModule.extractVariablesFromTemplates),
+  };
+});
 
 jest.mock('process', () => ({
   ...jest.requireActual('process'),
@@ -142,5 +152,58 @@ describe('synthesize', () => {
     ).rejects.toThrow('Process.exit called with code 1');
 
     expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
+  it('should handle empty prompts array', async () => {
+    await expect(
+      synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: [] as unknown as [string, ...string[]],
+        strategies: [],
+      }),
+    ).rejects.toThrow('Prompts array cannot be empty');
+  });
+
+  it('should use default injectVar when no variables found in prompts', async () => {
+    jest.mocked(extractVariablesFromTemplates).mockReturnValue([]);
+
+    await synthesize({
+      language: 'en',
+      numTests: 1,
+      plugins: [{ id: 'test-plugin', numTests: 1 }],
+      prompts: ['Test prompt'],
+      strategies: [],
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'No variables found in prompts. Using "query" as the inject variable.',
+    );
+  });
+
+  it('should use the progress bar', async () => {
+    const mockStart = jest.fn();
+    const mockUpdate = jest.fn();
+    const mockStop = jest.fn();
+    jest.mocked(cliProgress.SingleBar).mockReturnValue({
+      start: mockStart,
+      update: mockUpdate,
+      stop: mockStop,
+    } as any);
+
+    await synthesize({
+      language: 'en',
+      numTests: 1,
+      plugins: [{ id: 'test-plugin', numTests: 1 }],
+      prompts: ['Test prompt'],
+      strategies: [],
+    });
+
+    expect(mockStart).toHaveBeenCalledWith(100, 0);
+    expect(mockUpdate).toHaveBeenCalledWith(33);
+    expect(mockUpdate).toHaveBeenCalledWith(66);
+    expect(mockUpdate).toHaveBeenCalledWith(100);
+    expect(mockStop).toHaveBeenCalledWith();
   });
 });

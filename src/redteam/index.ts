@@ -40,6 +40,9 @@ export async function synthesize({
   entities: string[];
   testCases: TestCaseWithPlugin[];
 }> {
+  if (prompts.length === 0) {
+    throw new Error('Prompts array cannot be empty');
+  }
   validateStrategies(strategies);
 
   let redteamProvider: ApiProvider;
