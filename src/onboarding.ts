@@ -30,7 +30,7 @@ tests:
       {%- elif language == 'javascript' -%}
       context: file://context.js
       {%- else -%}
-      context: file://context.txt
+      context: file://context.py
       {%- endif %}
 
   - vars:
