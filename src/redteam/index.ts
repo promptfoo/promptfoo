@@ -67,7 +67,15 @@ export async function synthesize({
     )}\n`,
   );
   if (strategies.length > 0) {
-    logger.info(`Using strategies: ${strategies.map((s) => s.id).join(', ')}`);
+    const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
+    logger.info(
+      `Using strategies:\n\n${chalk.yellow(
+        strategies
+          .map((s) => `${s.id} (${formatTestCount(totalPluginTests)})`)
+          .sort()
+          .join('\n'),
+      )}\n`,
+    );
   }
   logger.info('Generating...');
 
