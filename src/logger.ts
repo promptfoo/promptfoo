@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import winston from 'winston';
+import { getEnvString } from './envars';
 
 export const LOG_LEVELS = {
   error: 0,
@@ -26,7 +27,7 @@ const logger = winston.createLogger({
   format: winston.format.combine(winston.format.simple(), customFormatter),
   transports: [
     new winston.transports.Console({
-      level: process.env.LOG_LEVEL || 'info',
+      level: getEnvString('LOG_LEVEL', 'info'),
     }),
   ],
 });

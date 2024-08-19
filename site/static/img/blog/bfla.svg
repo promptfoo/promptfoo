@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 550">
+  <rect width="800" height="550" fill="#f0f8ff"/>
+  
+  <text x="400" y="40" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#0000FF">Privilege Escalation in LLM Agent Systems</text>
+  
+  <!-- Regular User -->
+  <circle cx="100" cy="275" r="40" fill="#FFA500"/>
+  <text x="100" y="340" font-family="Arial, sans-serif" font-size="16" text-anchor="middle">Regular User</text>
+  
+  <!-- LLM Agent -->
+  <rect x="350" y="100" width="100" height="400" fill="#4B0082" rx="10" ry="10"/>
+  <text x="400" y="130" font-family="Arial, sans-serif" font-size="16" fill="white" text-anchor="middle">LLM Agent</text>
+  
+  <!-- Server -->
+  <rect x="600" y="100" width="150" height="400" fill="#2F4F4F"/>
+  <text x="675" y="130" font-family="Arial, sans-serif" font-size="16" fill="white" text-anchor="middle">Server</text>
+  
+  <!-- Function Levels on Server -->
+  <rect x="610" y="150" width="130" height="60" fill="#32CD32" rx="5" ry="5"/>
+  <text x="675" y="185" font-family="Arial, sans-serif" font-size="14" fill="white" text-anchor="middle">View Data</text>
+  
+  <rect x="610" y="220" width="130" height="60" fill="#FFD700" rx="5" ry="5"/>
+  <text x="675" y="255" font-family="Arial, sans-serif" font-size="14" fill="black" text-anchor="middle">Edit Data</text>
+  
+  <rect x="610" y="290" width="130" height="60" fill="#FF4500" rx="5" ry="5"/>
+  <text x="675" y="325" font-family="Arial, sans-serif" font-size="14" fill="white" text-anchor="middle">Admin</text>
+  
+  <!-- Connections -->
+  <path d="M 140 275 Q 245 210 350 180" fill="none" stroke="#000080" stroke-width="2" marker-end="url(#arrowheadRight)" marker-start="url(#arrowheadLeft)"/>
+  <path d="M 140 275 Q 245 320 350 250" fill="none" stroke="#8B0000" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowheadRight)"/>
+  <path d="M 140 275 Q 245 390 350 320" fill="none" stroke="#8B0000" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowheadRight)"/>
+  <path d="M 450 250 L 600 250" fill="none" stroke="#000080" stroke-width="2" marker-end="url(#arrowheadRight)" marker-start="url(#arrowheadLeft)"/>
+  
+  <!-- Labels -->
+  <text x="245" y="200" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Authorized: viewUserData()</text>
+  <text x="245" y="305" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#8B0000">Exploit: editUserData()</text>
+  <text x="245" y="400" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#8B0000">Exploit: deleteUser()</text>
+  <text x="525" y="230" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Execute functions</text>
+  
+  <!-- Arrowhead definitions -->
+  <defs>
+    <marker id="arrowheadRight" markerWidth="5" markerHeight="4" refX="0" refY="2" orient="auto">
+      <polygon points="0 0, 5 2, 0 4" />
+    </marker>
+    <marker id="arrowheadLeft" markerWidth="5" markerHeight="4" refX="5" refY="2" orient="auto">
+      <polygon points="5 0, 0 2, 5 4" />
+    </marker>
+  </defs>
+</svg>

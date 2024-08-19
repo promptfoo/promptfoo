@@ -6,6 +6,10 @@ import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemText from '@mui/material/ListItemText';
+import Modal from '@mui/material/Modal';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { ResultsFile, SharedResults } from '../eval/types';
@@ -21,6 +25,8 @@ import './Report.css';
 const App: React.FC = () => {
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
+  const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
+  const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
 
   React.useEffect(() => {
     const fetchEvalById = async (id: string) => {
@@ -50,7 +56,8 @@ const App: React.FC = () => {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
   }
 
-  const prompt = evalData.results.table.head.prompts[0];
+  const prompts = evalData.results.table.head.prompts;
+  const selectedPrompt = prompts[selectedPromptIndex];
   const tableData = evalData.results.table.body;
 
   const categoryStats = evalData.results.results.reduce(
@@ -104,6 +111,17 @@ const App: React.FC = () => {
     {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
   );
 
+  const handlePromptChipClick = () => {
+    if (prompts.length > 1) {
+      setIsPromptModalOpen(true);
+    }
+  };
+
+  const handlePromptSelect = (index: number) => {
+    setSelectedPromptIndex(index);
+    setIsPromptModalOpen(false);
+  };
+
   return (
     <Container>
       <Stack spacing={4} pb={8} pt={2}>
@@ -128,9 +146,11 @@ const App: React.FC = () => {
               size="small"
               label={
                 <>
-                  <strong>Model:</strong> {prompt.provider}
+                  <strong>Model:</strong> {selectedPrompt.provider}
                 </>
               }
+              onClick={handlePromptChipClick}
+              style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
             />
             <Chip
               size="small"
@@ -145,22 +165,73 @@ const App: React.FC = () => {
               label={
                 <>
                   <strong>Prompt:</strong> &quot;
-                  {prompt.raw.length > 40 ? `${prompt.raw.substring(0, 40)}...` : prompt.raw}
+                  {selectedPrompt.raw.length > 40
+                    ? `${selectedPrompt.raw.substring(0, 40)}...`
+                    : selectedPrompt.raw}
                   &quot;
                 </>
               }
+              onClick={handlePromptChipClick}
+              style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
             />
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} />
         <RiskCategories categoryStats={categoryStats} />
         <TestSuites evalId={evalId} categoryStats={categoryStats} />
-        {/*
-        <div>
-          <Vulnerabilities />
-        </div>
-            */}
       </Stack>
+      <Modal
+        open={isPromptModalOpen}
+        onClose={() => setIsPromptModalOpen(false)}
+        aria-labelledby="prompt-modal-title"
+        sx={{
+          '& .MuiModal-root': {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          },
+          '& .MuiBox-root': {
+            width: '80%',
+            maxWidth: 800,
+            maxHeight: '90vh',
+            overflowY: 'auto',
+          },
+        }}
+      >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 400,
+            bgcolor: 'background.paper',
+            boxShadow: 24,
+            p: 4,
+          }}
+        >
+          <Typography id="prompt-modal-title" variant="h6" component="h2" gutterBottom>
+            View results for...
+          </Typography>
+          <List>
+            {prompts.map((prompt, index) => (
+              <ListItem
+                key={index}
+                button
+                onClick={() => handlePromptSelect(index)}
+                selected={index === selectedPromptIndex}
+              >
+                <ListItemText
+                  primary={`${prompt.provider}`}
+                  secondary={
+                    prompt.raw.length > 100 ? `${prompt.raw.substring(0, 100)}...` : prompt.raw
+                  }
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Modal>
     </Container>
   );
 };

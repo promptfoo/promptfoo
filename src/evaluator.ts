@@ -8,7 +8,8 @@ import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
-import { renderPrompt } from './evaluatorHelpers';
+import { getEnvBool, getEnvInt } from './envars';
+import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { generatePrompts } from './suggestions';
@@ -141,7 +142,7 @@ class Evaluator {
     const conversationKey = `${provider.label || provider.id()}:${prompt.id}`;
     const usesConversation = prompt.raw.includes('_conversation');
     if (
-      !process.env.PROMPTFOO_DISABLE_CONVERSATION_VAR &&
+      !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
       !test.options?.disableConversationVar &&
       usesConversation
     ) {
@@ -225,8 +226,8 @@ class Evaluator {
 
       if (!response.cached) {
         let sleep = provider.delay ?? delay;
-        if (!sleep && process.env.PROMPTFOO_DELAY_MS) {
-          sleep = parseInt(process.env.PROMPTFOO_DELAY_MS, 10) || 0;
+        if (!sleep) {
+          sleep = getEnvInt('PROMPTFOO_DELAY_MS', 0);
         }
         if (sleep) {
           logger.debug(`Sleeping for ${sleep}ms`);
@@ -327,6 +328,8 @@ class Evaluator {
   async evaluate(): Promise<EvaluateSummary> {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
+
+    await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -504,7 +507,7 @@ class Evaluator {
 
       // Finalize test case eval
       const varCombinations =
-        process.env.PROMPTFOO_DISABLE_VAR_EXPANSION || testCase.options.disableVarExpansion
+        getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options.disableVarExpansion
           ? [testCase.vars]
           : generateVarCombinations(testCase.vars || {});
 
@@ -580,6 +583,9 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
+      await runExtensionHook(testSuite.extensions, 'beforeEach', {
+        test: evalStep.test,
+      });
       const row = await this.runEval(evalStep);
 
       results.push(row);
@@ -647,7 +653,7 @@ class Evaluator {
       }
 
       if (testSuite.derivedMetrics) {
-        const math = await import('mathjs');
+        const math = await import('mathjs'); // TODO: move this
         for (const metric of testSuite.derivedMetrics) {
           if (metrics.namedScores[metric.name] === undefined) {
             metrics.namedScores[metric.name] = 0;
@@ -682,6 +688,11 @@ class Evaluator {
       metrics.tokenUsage.total =
         (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.cost += row.cost || 0;
+
+      await runExtensionHook(testSuite.extensions, 'afterEach', {
+        test: evalStep.test,
+        result: row,
+      });
     };
 
     // Set up main progress bars
@@ -874,6 +885,11 @@ class Evaluator {
       progressBar.stop();
     }
 
+    await runExtensionHook(testSuite.extensions, 'afterAll', {
+      results: results,
+      suite: testSuite,
+    });
+
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
       numTests: tests.length,
@@ -892,14 +908,13 @@ class Evaluator {
         new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
       ).sort(),
       eventSource: options.eventSource || 'default',
-      ci: Boolean(
-        process.env.CI ||
-          process.env.GITHUB_ACTIONS ||
-          process.env.TRAVIS ||
-          process.env.CIRCLECI ||
-          process.env.JENKINS ||
-          process.env.GITLAB_CI,
-      ),
+      ci:
+        getEnvBool('CI') ||
+        getEnvBool('GITHUB_ACTIONS') ||
+        getEnvBool('TRAVIS') ||
+        getEnvBool('CIRCLECI') ||
+        getEnvBool('JENKINS') ||
+        getEnvBool('GITLAB_CI'),
       hasAnyPass: results.some((r) => r.success),
     });
 

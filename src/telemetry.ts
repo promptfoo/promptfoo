@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import packageJson from '../package.json';
+import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
 import { maybeRecordFirstRun } from './globalConfig';
 import logger from './logger';
@@ -22,7 +23,7 @@ export class Telemetry {
   private events: TelemetryEvent[] = [];
 
   get disabled() {
-    return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
   }
 
   record(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {

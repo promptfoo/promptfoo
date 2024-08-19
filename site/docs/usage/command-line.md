@@ -162,7 +162,8 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_REF_PARSER`         | Prevents JSON schema dereferencing                                                                                                               |                |
 | `PROMPTFOO_DISABLE_TEMPLATING`         | Disable Nunjucks rendering                                                                                                                       |                |
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`      | Prevents Array-type vars from being expanded into multiple test cases                                                                            |                |
-| `PROMPTFOO_FAILED_TEST_EXIT_CODE`      | Override the exit code (100) when there is at least 1 test case failure                                                                          | 100            |
+| `PROMPTFOO_FAILED_TEST_EXIT_CODE`      | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                   | 100            |
+| `PROMPTFOO_PASS_RATE_THRESHOLD`        | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 0 failures                                                          | 0              |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`       | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior. |                |
 | `FORCE_COLOR`                          | Set to 0 to disable terminal colors for printed outputs                                                                                          |                |
 
@@ -199,7 +200,7 @@ promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test case
 While in beta, this feature depends on OpenAI and requires the `OPENAI_API_KEY` environment variable.
 :::
 
-## `promptfoo generate redteam`
+## `promptfoo redteam generate`
 
 BETA: Generate adversarial test cases to challenge your prompts and models.
 
@@ -228,13 +229,13 @@ providers:
 This command will generate adversarial test cases and write them to the file:
 
 ```sh
-promptfoo generate redteam -w
+promptfoo redteam generate -w
 ```
 
 This command overrides the system purpose and the variable to inject adversarial user input:
 
 ```sh
-promptfoo generate redteam -w --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
+promptfoo redteam generate -w --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
 ```
 
 :::danger

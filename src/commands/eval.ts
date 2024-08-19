@@ -7,14 +7,22 @@ import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { resolveConfigs } from '../config';
+import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import type { CommandLineOptions, EvaluateOptions, TestSuite, UnifiedConfig } from '../types';
+import type {
+  CommandLineOptions,
+  EvaluateOptions,
+  Scenario,
+  TestSuite,
+  UnifiedConfig,
+} from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
+import { maybeLoadFromExternalFile } from '../util';
 import {
   migrateResultsFromFileSystemToDatabase,
   printBorder,
@@ -98,6 +106,15 @@ export async function doEval(
     if (cmdObj.generateSuggestions) {
       options.generateSuggestions = true;
     }
+    // load scenarios or tests from an external file
+    if (testSuite.scenarios) {
+      testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
+    }
+    for (const scenario of testSuite.scenarios || []) {
+      if (scenario.tests) {
+        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
+      }
+    }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
@@ -176,8 +193,11 @@ export async function doEval(
       }
     }
     printBorder();
+    const totalTests = summary.stats.successes + summary.stats.failures;
+    const passRate = (summary.stats.successes / totalTests) * 100;
     logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
     logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
+    logger.debug(`Pass Rate: ${passRate.toFixed(2)}%`);
     logger.info(
       `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
     );
@@ -257,9 +277,16 @@ export async function doEval(
     } else {
       logger.info('Done.');
 
-      if (summary.stats.failures > 0) {
-        const exitCode = Number(process.env.PROMPTFOO_FAILED_TEST_EXIT_CODE);
-        process.exit(isNaN(exitCode) ? 100 : exitCode);
+      const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
+      const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
+
+      if (passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)) {
+        logger.warn(
+          chalk.yellow(
+            `Pass rate ${passRate.toFixed(2)}% is below the threshold of ${passRateThreshold}%`,
+          ),
+        );
+        process.exit(Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100);
       }
     }
   };

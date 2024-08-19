@@ -13,21 +13,14 @@ import clsx from 'clsx';
 import NewsletterForm from '../components/NewsletterForm';
 import styles from './index.module.css';
 
-function HomepageHeader() {
+function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1>Find and fix LLM vulnerabilities</h1>
         <p>Open-source LLM testing used by 25,000+ developers</p>
         <div className={styles.buttons}>
-          <Link
-            className="button button--primary button--lg"
-            to={
-              typeof window !== 'undefined' && window.location.hash === '#redteam'
-                ? '/docs/red-team'
-                : '/docs/intro'
-            }
-          >
+          <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
           </Link>
           <Link
@@ -188,6 +181,14 @@ function HomepageWalkthrough() {
 }
 
 export default function Home(): JSX.Element {
+  const [getStartedUrl, setGetStartedUrl] = React.useState('/docs/intro');
+
+  React.useEffect(() => {
+    if (window.location.hash === '#redteam') {
+      setGetStartedUrl('/docs/red-team');
+    }
+  }, []);
+
   return (
     <Layout
       title="Secure & reliable LLMs"
@@ -197,7 +198,7 @@ export default function Home(): JSX.Element {
         <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
-      <HomepageHeader />
+      <HomepageHeader getStartedUrl={getStartedUrl} />
       <HomepageWalkthrough />
       <main>
         <section className={styles.logoSection}>
@@ -227,7 +228,7 @@ export default function Home(): JSX.Element {
         <div className={styles.ctaSection}>
           <h2>Make your LLM app reliable & secure</h2>
           <div className={styles.buttons}>
-            <Link className="button button--primary button--lg" to="/docs/intro">
+            <Link className="button button--primary button--lg" to={getStartedUrl}>
               Read Start Guide
             </Link>
             <Link

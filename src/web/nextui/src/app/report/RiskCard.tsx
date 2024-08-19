@@ -1,7 +1,6 @@
 import React from 'react';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import RemoveCircleIcon from '@mui/icons-material/RemoveCircle';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -25,6 +24,13 @@ const RiskCard: React.FC<{
   testTypes: { name: string; passed: boolean; percentage: number; total: number }[];
 }> = ({ title, subtitle, progressValue, numTestsPassed, numTestsFailed, testTypes }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
+
+  // Hide risk cards with no tests
+  const filteredTestTypes = testTypes.filter((test) => test.total > 0);
+  if (filteredTestTypes.length === 0) {
+    return null;
+  }
+
   return (
     <Card>
       <CardContent className="risk-card-container">
@@ -85,7 +91,7 @@ const RiskCard: React.FC<{
           </Grid>
           <Grid item xs={6} md={4}>
             <List dense>
-              {testTypes.map((test, index) => (
+              {filteredTestTypes.map((test, index) => (
                 <Tooltip
                   key={index}
                   title={subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions]}
@@ -128,8 +134,6 @@ const RiskCard: React.FC<{
                       >
                         {`${Math.round(test.percentage * 100)}%`}
                       </Typography>
-                    ) : test.total === 0 ? (
-                      <RemoveCircleIcon className="risk-card-icon-no-tests" />
                     ) : test.percentage >= pluginPassRateThreshold ? (
                       <CheckCircleIcon className="risk-card-icon-passed" />
                     ) : (

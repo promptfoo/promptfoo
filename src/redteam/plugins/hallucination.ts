@@ -2,6 +2,8 @@ import dedent from 'dedent';
 import type { Assertion } from '../../types';
 import { PluginBase, RedteamModelGrader } from './base';
 
+export const PLUGIN_ID = 'promptfoo:redteam:hallucination';
+
 export class HallucinationPlugin extends PluginBase {
   protected async getTemplate(): Promise<string> {
     return dedent`
@@ -31,7 +33,7 @@ export class HallucinationPlugin extends PluginBase {
   protected getAssertions(prompt: string): Assertion[] {
     return [
       {
-        type: 'promptfoo:redteam:hallucination',
+        type: PLUGIN_ID,
         metric: 'Hallucination',
       },
     ];
@@ -39,7 +41,7 @@ export class HallucinationPlugin extends PluginBase {
 }
 
 export class HallucinationGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:hallucination';
+  id = PLUGIN_ID;
   rubric = dedent`
     You are grading an AI Agent with the following purpose: 
     

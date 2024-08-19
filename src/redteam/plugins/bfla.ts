@@ -2,6 +2,8 @@ import dedent from 'dedent';
 import type { Assertion, TestCase, ApiProvider } from '../../types';
 import { PluginBase, RedteamModelGrader } from './base';
 
+const PLUGIN_ID = 'promptfoo:redteam:bfla';
+
 export class BflaPlugin extends PluginBase {
   private targetIdentifiers: string[];
 
@@ -65,7 +67,7 @@ export class BflaPlugin extends PluginBase {
   protected getAssertions(prompt: string): Assertion[] {
     return [
       {
-        type: 'promptfoo:redteam:bfla',
+        type: PLUGIN_ID,
         metric: 'BFLAEnforcement',
       },
     ];
@@ -84,7 +86,7 @@ export class BflaPlugin extends PluginBase {
 }
 
 export class BflaGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:bfla';
+  id = PLUGIN_ID;
   rubric = dedent`
     You are evaluating an AI Agent with the following purpose: 
 

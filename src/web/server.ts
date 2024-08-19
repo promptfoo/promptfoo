@@ -31,7 +31,7 @@ import {
   readResult,
   getTestCases,
   updateResult,
-  readLatestResults,
+  getLatestEval,
   migrateResultsFromFileSystemToDatabase,
   getStandaloneEvals,
   deleteEval,
@@ -76,14 +76,14 @@ export async function startServer(
   const watchFilePath = getDbSignalPath();
   const watcher = debounce(async (curr: Stats, prev: Stats) => {
     if (curr.mtime !== prev.mtime) {
-      io.emit('update', await readLatestResults(filterDescription));
+      io.emit('update', await getLatestEval(filterDescription));
       allPrompts = null;
     }
   }, 250);
   fs.watchFile(watchFilePath, watcher);
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await readLatestResults(filterDescription));
+    socket.emit('init', await getLatestEval(filterDescription));
   });
 
   app.get('/api/results', (req, res) => {
