@@ -1,7 +1,4 @@
-import chalk from 'chalk';
-import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import logger from '../../logger';
 import type { ApiProvider, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS } from '../constants';
 import { BflaPlugin } from './bfla';
@@ -133,26 +130,3 @@ export const Plugins: Plugin[] = [
       new SsrfPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
 ];
-
-export function validatePlugins(
-  plugins: { id: string; numTests: number; config?: Record<string, any> }[],
-): void {
-  const invalidPlugins = plugins.filter((plugin) => !Plugins.map((p) => p.key).includes(plugin.id));
-  if (invalidPlugins.length > 0) {
-    const validPluginsString = Plugins.map((p) => p.key).join(', ');
-    const invalidPluginsString = invalidPlugins.map((p) => p.id).join(', ');
-    logger.error(
-      dedent`Invalid plugin(s): ${invalidPluginsString}. 
-          
-          ${chalk.green(`Valid plugins are: ${validPluginsString}`)}`,
-    );
-    process.exit(1);
-  }
-  const pluginsWithoutNumTests = plugins.filter(
-    (plugin) => !Number.isSafeInteger(plugin.numTests) || plugin.numTests <= 0,
-  );
-  if (pluginsWithoutNumTests.length > 0) {
-    const pluginsWithoutNumTestsString = pluginsWithoutNumTests.map((p) => p.id).join(', ');
-    throw new Error(`Plugins without a numTests: ${pluginsWithoutNumTestsString}`);
-  }
-}

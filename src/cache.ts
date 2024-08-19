@@ -4,27 +4,24 @@ import fsStore from 'cache-manager-fs-hash';
 import fs from 'fs';
 import type { RequestInfo, RequestInit } from 'node-fetch';
 import path from 'path';
+import { getEnvBool, getEnvString, getEnvInt } from './envars';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
 import { getConfigDirectoryPath } from './util/config';
 
 let cacheInstance: Cache | undefined;
 
-let enabled =
-  typeof process.env.PROMPTFOO_CACHE_ENABLED === 'undefined'
-    ? true
-    : process.env.PROMPTFOO_CACHE_ENABLED === '1' ||
-      process.env.PROMPTFOO_CACHE_ENABLED === 'true' ||
-      process.env.PROMPTFOO_CACHE_ENABLED === 'yes';
+let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 
 const cacheType =
-  process.env.PROMPTFOO_CACHE_TYPE || (process.env.NODE_ENV === 'test' ? 'memory' : 'disk');
+  getEnvString('PROMPTFOO_CACHE_TYPE') || (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
 
 export function getCache() {
   if (!cacheInstance) {
     let cachePath = '';
     if (cacheType === 'disk' && enabled) {
-      cachePath = process.env.PROMPTFOO_CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache');
+      cachePath =
+        getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
       if (!fs.existsSync(cachePath)) {
         logger.info(`Creating cache folder at ${cachePath}.`);
         fs.mkdirSync(cachePath, { recursive: true });
@@ -33,10 +30,10 @@ export function getCache() {
     cacheInstance = cacheManager.caching({
       store: cacheType === 'disk' && enabled ? fsStore : 'memory',
       options: {
-        max: process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT || 10_000, // number of files
+        max: getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT', 10_000), // number of files
         path: cachePath,
-        ttl: process.env.PROMPTFOO_CACHE_TTL || 60 * 60 * 24 * 14, // in seconds, 14 days
-        maxsize: process.env.PROMPTFOO_CACHE_MAX_SIZE || 1e7, // in bytes, 10mb
+        ttl: getEnvInt('PROMPTFOO_CACHE_TTL', 60 * 60 * 24 * 14), // in seconds, 14 days
+        maxsize: getEnvInt('PROMPTFOO_CACHE_MAX_SIZE', 1e7), // in bytes, 10mb
         //zip: true, // whether to use gzip compression
       },
     });

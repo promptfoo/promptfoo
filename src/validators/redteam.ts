@@ -10,6 +10,7 @@ import {
   HARM_PLUGINS,
   PII_PLUGINS,
   COLLECTIONS,
+  ALIASED_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
 } from '../redteam/constants';
 import type { RedteamConfig, RedteamPluginObject } from '../types/redteam';
@@ -19,7 +20,9 @@ import { ProviderSchema } from '../validators/providers';
  * Schema for individual redteam plugins
  */
 const RedteamPluginObjectSchema = z.object({
-  id: z.enum(REDTEAM_ALL_PLUGINS as [string, ...string[]]).describe('Name of the plugin'),
+  id: z
+    .enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]])
+    .describe('Name of the plugin'),
   numTests: z
     .number()
     .int()
@@ -33,7 +36,9 @@ const RedteamPluginObjectSchema = z.object({
  * Schema for individual redteam plugins or their shorthand.
  */
 export const RedteamPluginSchema = z.union([
-  z.enum(REDTEAM_ALL_PLUGINS as [string, ...string[]]).describe('Name of the plugin'),
+  z
+    .enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]])
+    .describe('Name of the plugin'),
   RedteamPluginObjectSchema,
 ]);
 
@@ -48,7 +53,7 @@ export const RedteamStrategySchema = z.union([
 ]);
 
 /**
- * Schema for `promptfoo generate redteam` command options
+ * Schema for `promptfoo redteam generate` command options
  */
 export const RedteamGenerateOptionsSchema = z.object({
   cache: z.boolean().describe('Whether to use caching'),

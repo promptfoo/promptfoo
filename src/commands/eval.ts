@@ -7,6 +7,7 @@ import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { resolveConfigs } from '../config';
+import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { loadApiProvider } from '../providers';
@@ -276,8 +277,8 @@ export async function doEval(
     } else {
       logger.info('Done.');
 
-      const passRateThreshold = Number(process.env.PROMPTFOO_PASS_RATE_THRESHOLD || '100');
-      const failedTestExitCode = Number(process.env.PROMPTFOO_FAILED_TEST_EXIT_CODE || '100');
+      const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
+      const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
       if (passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)) {
         logger.warn(

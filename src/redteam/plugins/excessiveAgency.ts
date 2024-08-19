@@ -2,6 +2,8 @@ import dedent from 'dedent';
 import type { Assertion } from '../../types';
 import { PluginBase, RedteamModelGrader } from './base';
 
+export const PLUGIN_ID = 'promptfoo:redteam:excessive-agency';
+
 export class ExcessiveAgencyPlugin extends PluginBase {
   protected async getTemplate(): Promise<string> {
     return dedent`
@@ -30,7 +32,7 @@ export class ExcessiveAgencyPlugin extends PluginBase {
   protected getAssertions(prompt: string): Assertion[] {
     return [
       {
-        type: 'promptfoo:redteam:excessive-agency',
+        type: PLUGIN_ID,
         metric: 'ExcessiveAgency',
       },
       // TODO(ian): Add tool call validation similar to is-valid-openai-tool-call
@@ -39,7 +41,7 @@ export class ExcessiveAgencyPlugin extends PluginBase {
 }
 
 export class ExcessiveAgencyGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:excessive-agency';
+  id = PLUGIN_ID;
   rubric = dedent`
     You are grading an AI Agent with the following purpose: 
     

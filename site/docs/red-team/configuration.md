@@ -5,7 +5,7 @@ sidebar_label: 'Configuration'
 
 # Redteam Configuration
 
-The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo generate redteam`. It allows you to specify the plugins and other parameters of your redteam tests.
+The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
 
 ## Getting Started
 
@@ -212,10 +212,10 @@ policy: >
 To see a complete list of available plugins, run:
 
 ```bash
-promptfoo generate redteam --help
+promptfoo redteam generate --help
 ```
 
-## Strategies
+### Strategies
 
 Strategies modify or generate additional test cases based on the output of other plugins.
 
@@ -225,9 +225,12 @@ Strategies modify or generate additional test cases based on the output of other
 - `prompt-injection`: Wraps the payload in a prompt injection (Default)
 - `jailbreak`: Applies a linear probe jailbreak technique to deliver the payload (Default)
 - `jailbreak:tree`: Applies a tree-based jailbreak technique
+- `crescendo`: Applies a multi-turn jailbreak technique
 - `rot13`: Applies ROT13 encoding to the injected variable, shifting each letter 13 positions in the alphabet
 - `base64`: Encodes the injected variable using Base64 encoding
 - `leetspeak`: Converts the injected variable to leetspeak, replacing certain letters with numbers or symbols
+
+See [Strategies](/docs/category/strategies/) for comprehensive descriptions of each strategy.
 
 #### Strategy Specification
 
@@ -258,13 +261,183 @@ redteam:
   language: 'German'
 ```
 
-### Provider
+## Providers
 
 The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_.
 
 Note that this is separate from the "target" model(s), which are set in the top-level [`providers` configuration](/docs/configuration/guide/).
 
 A common use case is to use a [custom HTTP endpoint](/docs/providers/http/) or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
+
+### Changing the model
+
+To use the `openai:chat:gpt-4o-mini` model, you can override the provider on the command line:
+
+```sh
+npx promptfoo@latest redteam generate -w --provider openai:chat:gpt-4o-mini
+```
+
+Or in the config:
+
+```yaml
+redteam:
+  provider:
+    id: openai:chat:gpt-4o-mini
+    # Optional config
+    config:
+      temperature: 0.5
+```
+
+A local model via [ollama](/docs/providers/ollama/) would look similar:
+
+```yaml
+redteam:
+  provider: ollama:chat:llama3.1
+```
+
+:::warning
+Some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
+:::
+
+### Custom Providers
+
+In some cases your target application may require custom requests or setups.
+
+- **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
+- **APIs**: See setup instructions for [OpenAI](/docs/providers/openai), [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
+
+#### HTTP requests
+
+For example, to send a customized HTTP request, use a [HTTP Provider](/docs/providers/http/):
+
+```yaml
+providers:
+  - id: 'https://example.com/generate'
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        myPrompt: '{{prompt}}'
+      responseParser: 'json.output'
+```
+
+#### Custom scripts
+
+Alternatively, you can use a custom [Python](/docs/providers/python/), [Javascript](/docs/providers/custom-api/), or other [script](/docs/providers/custom-script/) in order to precisely construct your requests.
+
+For example, let's create a Python provider. Your config would look like this:
+
+```yaml
+providers:
+  - id: 'python:send_redteam.py'
+    label: 'Test script 1' # Optional display label
+```
+
+The interface that you need to implement in `send_redteam.py` looks like this:
+
+```py
+def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]):
+    # ...
+    return {
+      "output": "..."
+    }
+```
+
+Your script's purpose is to take the adversarial input `prompt`, process it however you like, and return the `output` for grading.
+
+Here's a simple example of a script that makes its own HTTP request:
+
+```py
+import requests
+
+def call_api(prompt, options, context):
+    url = "https://example.com/api/endpoint"
+
+    payload = {
+        "user_input": prompt,
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        result = response.json()
+        return {
+            "output": result.get("response", "No response received")
+        }
+    except requests.RequestException as e:
+        return {
+            "output": None,
+            "error": f"An error occurred: {str(e)}"
+        }
+```
+
+There is no limitation to the number of requests or actions your Python script can take. Here's an example provider that uses a headless browser to click around on a webpage for the redteam:
+
+```py
+import json
+from playwright.sync_api import sync_playwright
+
+def call_api(prompt, options, context):
+    # Extract configuration from options
+    config = options.get('config', {})
+    url = config.get('url', 'https://www.example.com/app')
+
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+
+            page.goto(url)
+
+            page.fill('input[name="q"]', prompt)
+            page.press('input[name="q"]', 'Enter')
+
+            page.wait_for_selector('#search')
+
+            # Extract the results
+            results = page.query_selector_all('.g')
+            output = [result.inner_text() for result in results[:3]]
+
+            return {
+                "output": json.dumps(output),
+            }
+
+        except Exception as e:
+            return {
+                "error": str(e)
+            }
+
+        finally:
+            # Always close the browser
+            if 'browser' in locals():
+                browser.close()
+```
+
+### Passthrough prompts
+
+In most cases, if you're handling the prompting in a script, you can just make `prompt` passthrough the variable in your `promptfooconfig.yaml`.
+
+In this case, be sure to specify a `purpose`, because the redteam generator can no longer infer the purpose from your prompt. The purpose is used to tailor the adversarial inputs:
+
+```yaml
+prompts:
+  - '{{query}}' # Just send the query as-is to the provider
+
+purpose: 'Act as a travel agent with a focus on European holidays'
+
+providers:
+  - python:send_redteam.py
+
+redteam:
+  numTests: 10
+```
+
+### Accepted formats
 
 You can set up the provider in several ways:
 
