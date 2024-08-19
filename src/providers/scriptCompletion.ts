@@ -18,6 +18,40 @@ function stripText(text: string) {
   return text.replace(ANSI_ESCAPE, '');
 }
 
+export function parseScriptParts(scriptPath: string): string[] {
+  const scriptPartsRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
+  let match;
+  const scriptParts = [];
+
+  while ((match = scriptPartsRegex.exec(scriptPath)) !== null) {
+    if (match[1]) {
+      scriptParts.push(match[1]);
+    } else if (match[2]) {
+      scriptParts.push(match[2]);
+    } else {
+      scriptParts.push(match[0]);
+    }
+  }
+
+  return scriptParts;
+}
+
+export function getFileHashes(scriptParts: string[]): string[] {
+  const fileHashes: string[] = [];
+
+  for (const part of scriptParts) {
+    const cleanPart = part.replace(/^['"]|['"]$/g, '');
+    if (fs.existsSync(cleanPart) && fs.statSync(cleanPart).isFile()) {
+      const fileContent = fs.readFileSync(cleanPart);
+      const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
+      fileHashes.push(fileHash);
+      logger.debug(`File hash for ${cleanPart}: ${fileHash}`);
+    }
+  }
+
+  return fileHashes;
+}
+
 export class ScriptCompletionProvider implements ApiProvider {
   constructor(
     private scriptPath: string,
@@ -29,20 +63,8 @@ export class ScriptCompletionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const fileHashes: string[] = [];
-
-    // Parse all filepaths out of the command string
-    const scriptParts = this.scriptPath.match(/[^\s"']+|"([^"]*)"|'([^']*)'/g) || [];
-    for (const part of scriptParts) {
-      // Remove quotes if present
-      const cleanPart = part.replace(/^['"]|['"]$/g, '');
-      if (fs.existsSync(cleanPart) && fs.statSync(cleanPart).isFile()) {
-        const fileContent = fs.readFileSync(cleanPart);
-        const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
-        fileHashes.push(fileHash);
-        logger.debug(`File hash for ${cleanPart}: ${fileHash}`);
-      }
-    }
+    const scriptParts = parseScriptParts(this.scriptPath);
+    const fileHashes = getFileHashes(scriptParts);
 
     if (fileHashes.length === 0) {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
@@ -66,22 +88,6 @@ export class ScriptCompletionProvider implements ApiProvider {
     }
 
     return new Promise<ProviderResponse>((resolve, reject) => {
-      const scriptPartsRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
-      let match;
-      const scriptParts = [];
-
-      while ((match = scriptPartsRegex.exec(this.scriptPath)) !== null) {
-        // If it's a quoted match, push the first group (ignoring the quotes)
-        if (match[1]) {
-          scriptParts.push(match[1]);
-        } else if (match[2]) {
-          // If it's a single-quoted match, push the second group (ignoring the quotes)
-          scriptParts.push(match[2]);
-        } else {
-          // Otherwise, push the whole match
-          scriptParts.push(match[0]);
-        }
-      }
       const command = scriptParts.shift();
       invariant(command, 'No command found in script path');
       // These are not useful in the shell
