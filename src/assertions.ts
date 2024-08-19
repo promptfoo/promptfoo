@@ -5,7 +5,7 @@ import async from 'async';
 import { XMLParser } from 'fast-xml-parser';
 import { distance as levenshtein } from 'fastest-levenshtein';
 import fs from 'fs';
-import rouge from 'js-rouge';
+import * as rouge from 'js-rouge';
 import yaml from 'js-yaml';
 import { type Option as sqlParserOption } from 'node-sql-parser';
 import util from 'node:util';
@@ -108,7 +108,7 @@ function handleRougeScore(
 ): GradingResult {
   const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
   const rougeMethod = rouge[fnName];
-  const score = rougeMethod(output, expected);
+  const score = rougeMethod(output, expected, {});
   const pass = score >= (assertion.threshold || 0.75) != inverted;
 
   return {
