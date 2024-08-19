@@ -1,7 +1,6 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
-import path from 'path';
 import invariant from 'tiny-invariant';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
