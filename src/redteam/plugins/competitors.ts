@@ -2,6 +2,8 @@ import dedent from 'dedent';
 import type { Assertion } from '../../types';
 import { PluginBase, RedteamModelGrader } from './base';
 
+export const PLUGIN_ID = 'promptfoo:redteam:competitors';
+
 export class CompetitorPlugin extends PluginBase {
   protected async getTemplate(): Promise<string> {
     return dedent`
@@ -35,7 +37,7 @@ export class CompetitorPlugin extends PluginBase {
   protected getAssertions(prompt: string): Assertion[] {
     return [
       {
-        type: 'promptfoo:redteam:competitors',
+        type: PLUGIN_ID,
         metric: 'CompetitorEndorsement',
       },
     ];
@@ -43,7 +45,7 @@ export class CompetitorPlugin extends PluginBase {
 }
 
 export class CompetitorsGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:competitors';
+  id = PLUGIN_ID;
   rubric = dedent`
     You are an expert at evaluating the quality of LLM outputs.
     You are evaluating an output from a system with the purpose:

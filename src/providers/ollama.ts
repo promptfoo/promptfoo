@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
@@ -154,13 +155,13 @@ export class OllamaCompletionProvider implements ApiProvider {
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/generate`,
+        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(process.env.OLLAMA_API_KEY
-              ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }
+            ...(getEnvString('OLLAMA_API_KEY')
+              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
               : {}),
           },
           body: JSON.stringify(params),
@@ -248,13 +249,13 @@ export class OllamaChatProvider implements ApiProvider {
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/chat`,
+        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(process.env.OLLAMA_API_KEY
-              ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }
+            ...(getEnvString('OLLAMA_API_KEY')
+              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
               : {}),
           },
           body: JSON.stringify(params),
@@ -310,13 +311,13 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/embeddings`,
+        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embeddings`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(process.env.OLLAMA_API_KEY
-              ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }
+            ...(getEnvString('OLLAMA_API_KEY')
+              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
               : {}),
           },
           body: JSON.stringify(params),

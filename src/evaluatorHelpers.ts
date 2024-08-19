@@ -3,6 +3,7 @@ import yaml from 'js-yaml';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import cliState from './cliState';
+import { getEnvBool } from './envars';
 import { importModule } from './esm';
 import logger from './logger';
 import { runPython } from './python/pythonUtils';
@@ -144,11 +145,23 @@ export async function renderPrompt(
       version !== 'latest' ? Number(version) : undefined,
     );
     return langfuseResult;
+  } else if (prompt.raw.startsWith('helicone://')) {
+    const { getPrompt } = await import('./integrations/helicone');
+    const heliconePrompt = prompt.raw.slice('helicone://'.length);
+    const [id, version] = heliconePrompt.split(':');
+    const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
+    const heliconeResult = await getPrompt(
+      id,
+      vars,
+      majorVersion !== undefined ? Number(majorVersion) : undefined,
+      minorVersion !== undefined ? Number(minorVersion) : undefined,
+    );
+    return heliconeResult;
   }
 
   // Render prompt
   try {
-    if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
+    if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
       return nunjucks.renderString(basePrompt, vars);
     }
 

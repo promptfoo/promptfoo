@@ -15,6 +15,7 @@ import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
 import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/tables';
+import { getEnvBool, getEnvInt } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
@@ -482,8 +483,7 @@ export async function migrateResultsFromFileSystemToDatabase() {
   logger.info('Migration complete. Please restart your web server if it is running.');
 }
 
-const RESULT_HISTORY_LENGTH =
-  parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || DEFAULT_QUERY_LIMIT;
+const RESULT_HISTORY_LENGTH = getEnvInt('RESULT_HISTORY_LENGTH', DEFAULT_QUERY_LIMIT);
 
 export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
   const sortedFilenames = listPreviousResultFilenames_fileSystem();
@@ -986,7 +986,7 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
   // Renders nunjucks template strings with context variables
-  if (!vars || process.env.PROMPTFOO_DISABLE_TEMPLATING) {
+  if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
   }
   if (typeof obj === 'string') {
@@ -1064,7 +1064,7 @@ export function parsePathOrGlob(
   try {
     stats = fs.statSync(filePath);
   } catch (err) {
-    if (process.env.PROMPTFOO_STRICT_FILES) {
+    if (getEnvBool('PROMPTFOO_STRICT_FILES')) {
       throw err;
     }
   }

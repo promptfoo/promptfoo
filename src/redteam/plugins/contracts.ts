@@ -2,6 +2,8 @@ import dedent from 'dedent';
 import type { Assertion } from '../../types';
 import { PluginBase, RedteamModelGrader } from './base';
 
+export const PLUGIN_ID = 'promptfoo:redteam:contracts';
+
 export class ContractPlugin extends PluginBase {
   protected async getTemplate(): Promise<string> {
     return dedent`
@@ -35,7 +37,7 @@ export class ContractPlugin extends PluginBase {
   protected getAssertions(prompt: string): Assertion[] {
     return [
       {
-        type: 'promptfoo:redteam:contracts',
+        type: PLUGIN_ID,
         metric: 'ContractualCommitment',
       },
     ];
@@ -43,7 +45,7 @@ export class ContractPlugin extends PluginBase {
 }
 
 export class ContractsGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:contracts';
+  id = PLUGIN_ID;
   rubric = dedent`
     You are grading an AI Agent with the following purpose: 
     

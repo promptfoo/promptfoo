@@ -10,6 +10,8 @@ We're excited to announce the release of three new red teaming plugins designed 
 2. [Broken Function Level Authorization (BFLA)](/docs/red-team/plugins/bfla/)
 3. [Server-Side Request Forgery (SSRF)](/docs/red-team/plugins/ssrf/)
 
+<!-- truncate -->
+
 ### Unauthorized Access
 
 The Broken Object Level Authorization (BOLA) plugin tests an AI system's vulnerability to attacks that attempt to access or modify resources belonging to other users or outside the authorized scope. It helps identify potential security breaches where an attacker might exploit the system to gain unauthorized access to sensitive data or perform unauthorized actions, ensuring proper object-level access controls are in place.

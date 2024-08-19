@@ -550,7 +550,8 @@ export default function ResultsView({
                 Table Settings
               </Button>
             </Tooltip>
-            {config?.metadata?.redteam && (
+            {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
+            {(config?.redteam || config?.metadata?.redteam) && (
               <Tooltip title="View vulnerability scan report" placement="bottom">
                 <Button
                   color="primary"

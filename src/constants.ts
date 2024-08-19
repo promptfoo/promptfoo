@@ -1,6 +1,9 @@
 import packageJson from '../package.json';
 
 export const VERSION = packageJson.version;
+
+// We use process.env in this file because it's imported by the next.js server as well.
+
 // This is used for fetching and sharing evals.
 export const REMOTE_API_BASE_URL =
   // TODO(ian): Backwards compatibility, 2024-04-01

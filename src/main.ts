@@ -13,7 +13,7 @@ import { generateRedteamCommand } from './commands/generate/redteam';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
-import { redteamCommand } from './commands/redteam';
+import { initRedteamCommand } from './commands/redteam';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { versionCommand } from './commands/version';
@@ -72,7 +72,6 @@ async function main() {
   importCommand(program);
   initCommand(program);
   listCommand(program);
-  redteamCommand(program);
   shareCommand(program);
   showCommand(program);
   versionCommand(program);
@@ -80,7 +79,11 @@ async function main() {
 
   const generateCommand = program.command('generate').description('Generate synthetic data');
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
-  generateRedteamCommand(generateCommand, defaultConfig, defaultConfigPath);
+  generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
+
+  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
+  initRedteamCommand(redteamBaseCommand);
+  generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
 
   if (!process.argv.slice(2).length) {
     program.outputHelp();

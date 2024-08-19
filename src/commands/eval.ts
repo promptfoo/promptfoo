@@ -7,6 +7,7 @@ import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { resolveConfigs } from '../config';
+import { getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { loadApiProvider } from '../providers';
@@ -274,8 +275,8 @@ export async function doEval(
       logger.info('Done.');
 
       if (summary.stats.failures > 0) {
-        const exitCode = Number(process.env.PROMPTFOO_FAILED_TEST_EXIT_CODE);
-        process.exit(isNaN(exitCode) ? 100 : exitCode);
+        const exitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
+        process.exit(exitCode);
       }
     }
   };
