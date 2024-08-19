@@ -124,7 +124,7 @@ You can begin red teaming your application in less than 5 minutes.
     </CodeBlock>
 
   </TabItem>
-  <TabItem value="homebrew" label="Homebrew">
+  <TabItem value="brew" label="brew">
     Install:
     <CodeBlock language="bash">
       brew install promptfoo
@@ -188,7 +188,7 @@ The `init` step will do this for you automatically, but in case you'd like to ma
       promptfoo redteam generate
     </CodeBlock>
   </TabItem>
-  <TabItem value="homebrew" label="Homebrew">
+  <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
       promptfoo redteam generate
     </CodeBlock>
@@ -210,7 +210,7 @@ You can reduce the number of test cases by setting the specific [plugins](/docs/
       promptfoo redteam generate --plugins harmful
     </CodeBlock>
   </TabItem>
-  <TabItem value="homebrew" label="Homebrew">
+  <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
       promptfoo redteam generate --plugins harmful
     </CodeBlock>
@@ -238,7 +238,7 @@ Now that we've generated the test cases, we're ready to run the adversarial eval
       promptfoo eval -c redteam.yaml
     </CodeBlock>
   </TabItem>
-  <TabItem value="homebrew" label="Homebrew">
+  <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
       promptfoo eval -c redteam.yaml
     </CodeBlock>
@@ -258,7 +258,7 @@ Now that we've generated the test cases, we're ready to run the adversarial eval
       promptfoo view
     </CodeBlock>
   </TabItem>
-  <TabItem value="homebrew" label="Homebrew">
+  <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
       promptfoo view
     </CodeBlock>

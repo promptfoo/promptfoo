@@ -22,7 +22,7 @@ To get started, run this command:
 promptfoo init`}
     </CodeBlock>
   </TabItem>
-  <TabItem value="homebrew" label="Homebrew">
+  <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
       {`brew install promptfoo
 promptfoo init`}
@@ -90,7 +90,7 @@ This will create a `promptfooconfig.yaml` file in your current directory.
          promptfoo eval
        </CodeBlock>
      </TabItem>
-     <TabItem value="homebrew" label="Homebrew">
+     <TabItem value="brew" label="brew">
        <CodeBlock language="bash">
          promptfoo eval
        </CodeBlock>
@@ -110,7 +110,7 @@ This will create a `promptfooconfig.yaml` file in your current directory.
          promptfoo view
        </CodeBlock>
      </TabItem>
-     <TabItem value="homebrew" label="Homebrew">
+     <TabItem value="brew" label="brew">
        <CodeBlock language="bash">
          promptfoo view
        </CodeBlock>
@@ -238,7 +238,7 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
       promptfoo eval -o output.html
     </CodeBlock>
   </TabItem>
-  <TabItem value="homebrew" label="Homebrew">
+  <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
       promptfoo eval -o output.html
     </CodeBlock>
@@ -271,7 +271,7 @@ A simple `npx promptfoo@latest eval` will run the example. Also note that you ca
       promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
     </CodeBlock>
   </TabItem>
-  <TabItem value="homebrew" label="Homebrew">
+  <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
       promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
     </CodeBlock>
