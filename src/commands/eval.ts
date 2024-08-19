@@ -275,18 +275,21 @@ export async function doEval(
           );
       }
     } else {
-      logger.info('Done.');
-
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
       if (passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)) {
-        logger.warn(
-          chalk.yellow(
-            `Pass rate ${passRate.toFixed(2)}% is below the threshold of ${passRateThreshold}%`,
-          ),
-        );
+        if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
+          logger.info(
+            chalk.white(
+              `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
+            ),
+          );
+        }
+        logger.info('Done.');
         process.exit(Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100);
+      } else {
+        logger.info('Done.');
       }
     }
   };

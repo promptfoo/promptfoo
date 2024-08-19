@@ -1,5 +1,5 @@
 {
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,
-  "cSpell.words": ["redteam"]
+  "cSpell.words": ["PROMPTFOO", "redteam"]
 }
