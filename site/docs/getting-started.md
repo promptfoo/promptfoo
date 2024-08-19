@@ -10,7 +10,7 @@ import TabItem from '@theme/TabItem';
 
 To get started, run this command:
 
-<Tabs>
+<Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
       npx promptfoo@latest init
@@ -22,7 +22,7 @@ To get started, run this command:
 promptfoo init`}
     </CodeBlock>
   </TabItem>
-  <TabItem value="homebrew" label="Homebrew">
+  <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
       {`brew install promptfoo
 promptfoo init`}
@@ -79,17 +79,43 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
 1. **Run the evaluation**: This tests every prompt, model, and test case:
 
-   ```
-   npx promptfoo@latest eval
-   ```
+   <Tabs groupId="promptfoo-command">
+     <TabItem value="npx" label="npx" default>
+       <CodeBlock language="bash">
+         npx promptfoo@latest eval
+       </CodeBlock>
+     </TabItem>
+     <TabItem value="npm" label="npm">
+       <CodeBlock language="bash">
+         promptfoo eval
+       </CodeBlock>
+     </TabItem>
+     <TabItem value="brew" label="brew">
+       <CodeBlock language="bash">
+         promptfoo eval
+       </CodeBlock>
+     </TabItem>
+   </Tabs>
 
 1. After the evaluation is complete, open the web viewer to review the outputs:
 
-   ```
-   npx promptfoo@latest view
-   ```
-
-   [&raquo; More information on using the web viewer](/docs/usage/web-ui)
+   <Tabs groupId="promptfoo-command">
+     <TabItem value="npx" label="npx" default>
+       <CodeBlock language="bash">
+         npx promptfoo@latest view
+       </CodeBlock>
+     </TabItem>
+     <TabItem value="npm" label="npm">
+       <CodeBlock language="bash">
+         promptfoo view
+       </CodeBlock>
+     </TabItem>
+     <TabItem value="brew" label="brew">
+       <CodeBlock language="bash">
+         promptfoo view
+       </CodeBlock>
+     </TabItem>
+   </Tabs>
 
 ### Configuration
 
@@ -201,9 +227,23 @@ Have a look at the setup and full output [here](https://github.com/promptfoo/pro
 
 You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-cli/output.json), YAML, or an HTML file:
 
-```
-npx promptfoo@latest eval -o output.html
-```
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest eval -o output.html
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo eval -o output.html
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo eval -o output.html
+    </CodeBlock>
+  </TabItem>
+</Tabs>
 
 ![Table output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
 
@@ -220,9 +260,23 @@ providers: [openai:gpt-4o-mini, openai:gpt-4]
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
 
-```
-npx promptfoo@latest eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
-```
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+    </CodeBlock>
+  </TabItem>
+</Tabs>
 
 Produces this HTML table:
 
