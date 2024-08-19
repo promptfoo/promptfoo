@@ -8,6 +8,7 @@ export const riskCategories = {
     'rbac',
     'bola',
     'bfla',
+    'prompt-extraction',
     'ssrf',
     'shell-injection',
     'sql-injection',

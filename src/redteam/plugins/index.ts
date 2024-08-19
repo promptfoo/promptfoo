@@ -15,6 +15,7 @@ import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PolicyPlugin } from './policy';
 import { PoliticsPlugin } from './politics';
+import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
@@ -128,5 +129,15 @@ export const Plugins: Plugin[] = [
     key: 'ssrf',
     action: (provider, purpose, injectVar, n, config) =>
       new SsrfPlugin(provider, purpose, injectVar, config).generateTests(n),
+  },
+  {
+    key: 'prompt-extraction',
+    action: (provider, purpose, injectVar, n, config) =>
+      new PromptExtractionPlugin(
+        provider,
+        purpose,
+        injectVar,
+        config as { systemPrompt: string },
+      ).generateTests(n),
   },
 ];

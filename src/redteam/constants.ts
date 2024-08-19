@@ -90,6 +90,7 @@ export const ADDITIONAL_PLUGINS = [
   'debug-access',
   'imitation',
   'rbac',
+  'prompt-extraction',
   'ssrf',
   'shell-injection',
   'sql-injection',
@@ -386,4 +387,5 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
   rot13: 'Attempts to obfuscate malicious content using ROT13 encoding',
   crescendo: 'Conversational attack strategy (high cost)',
+  'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
 };
