@@ -1,6 +1,7 @@
 import checkbox from '@inquirer/checkbox';
 import { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
+import { ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import rawlist from '@inquirer/rawlist';
@@ -408,6 +409,25 @@ export function initRedteamCommand(program: Command) {
     .command('init [directory]')
     .description('Initialize red teaming project')
     .action(async (directory: string | undefined) => {
-      await redteamInit(directory);
+      try {
+        await redteamInit(directory);
+      } catch (err) {
+        if (err instanceof ExitPromptError) {
+          logger.info(
+            '\n' +
+              chalk.blue(
+                'Red team initialization paused. To continue setup later, use the command: ',
+              ) +
+              chalk.bold('promptfoo redteam init'),
+          );
+          logger.info(
+            chalk.blue('For help or feedback, visit ') +
+              chalk.green('https://www.promptfoo.dev/contact/'),
+          );
+          process.exit(130);
+        } else {
+          throw err;
+        }
+      }
     });
 }
