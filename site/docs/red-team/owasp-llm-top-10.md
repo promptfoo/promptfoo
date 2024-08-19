@@ -4,7 +4,7 @@ sidebar_position: 20
 
 # OWASP LLM Top 10
 
-The OWASP Top 10 for Large Language Model Applications educates about security risks in deploying and managing LLMs. It lists the top 10 critical vulnerabilities in LLM applications, highlighting their impact, exploitability, and prevalence.
+The OWASP Top 10 for Large Language Model Applications educates about security risks in deploying and managing LLMs. It lists the top critical vulnerabilities in LLM applications based on impact, exploitability, and prevalence.
 
 The currently top 10 are:
 
