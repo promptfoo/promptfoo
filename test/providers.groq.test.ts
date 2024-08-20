@@ -1,5 +1,6 @@
 import { clearCache, disableCache, enableCache } from '../src/cache';
 import { GroqProvider } from '../src/providers/groq';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../src/util';
 
 jest.mock('groq-sdk', () => {
   return {
@@ -14,6 +15,10 @@ jest.mock('groq-sdk', () => {
   };
 });
 jest.mock('../src/logger');
+jest.mock('../src/util', () => ({
+  maybeLoadFromExternalFile: jest.fn(),
+  renderVarsInObject: jest.fn(),
+}));
 
 describe('Groq', () => {
   afterEach(async () => {
@@ -37,7 +42,7 @@ describe('Groq', () => {
     });
 
     describe('callApi', () => {
-      it('should call Groq API and return output', async () => {
+      it('should call Groq API and return output with correct structure', async () => {
         const mockResponse = {
           choices: [{ message: { content: 'Test output' } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
@@ -51,11 +56,19 @@ describe('Groq', () => {
           expect.objectContaining({
             messages: expect.arrayContaining([
               expect.objectContaining({
+                role: 'system',
+                content: 'You are a helpful assistant.',
+              }),
+              expect.objectContaining({
                 role: 'user',
                 content: 'Test prompt',
               }),
             ]),
             model: 'mixtral-8x7b-32768',
+            temperature: 0.7,
+            max_tokens: 1000,
+            top_p: 1,
+            tool_choice: 'auto',
           }),
         );
 
@@ -78,6 +91,7 @@ describe('Groq', () => {
         (provider as any).groq = { chat: { completions: { create: mockCreate } } };
 
         await provider.callApi('Test prompt');
+        jest.clearAllMocks(); // Add this line
         const cachedResult = await provider.callApi('Test prompt');
 
         expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -122,7 +136,7 @@ describe('Groq', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result).toEqual({
-          error: 'API call error: APIError: API Error',
+          error: 'API call error: 400 APIError: API Error',
         });
       });
 
@@ -138,12 +152,14 @@ describe('Groq', () => {
         });
       });
 
-      it('should pass custom configuration options', async () => {
+      it('should pass custom configuration options including tools and tool_choice', async () => {
         const customProvider = new GroqProvider('mixtral-8x7b-32768', {
           config: {
             temperature: 0.7,
             max_tokens: 100,
             top_p: 0.9,
+            tools: [{ type: 'function', function: { name: 'test_function' } }],
+            tool_choice: 'auto',
           },
         });
 
@@ -161,7 +177,167 @@ describe('Groq', () => {
             temperature: 0.7,
             max_tokens: 100,
             top_p: 0.9,
+            tools: [{ type: 'function', function: { name: 'test_function' } }],
+            tool_choice: 'auto',
+            messages: expect.any(Array),
+            model: 'mixtral-8x7b-32768',
           }),
+        );
+      });
+
+      it('should handle tool calls and function callbacks', async () => {
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_123',
+                    type: 'function',
+                    function: { name: 'test_function', arguments: '{"arg": "value"}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
+        const mockCallback = jest.fn().mockResolvedValue('Function result');
+
+        const customProvider = new GroqProvider('mixtral-8x7b-32768', {
+          config: {
+            functionToolCallbacks: {
+              test_function: mockCallback,
+            },
+          },
+        });
+        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
+
+        const result = await customProvider.callApi('Test prompt');
+
+        expect(mockCallback).toHaveBeenCalledWith('{"arg": "value"}');
+        expect(result.output).toContain(
+          '[{"id":"call_123","type":"function","function":{"name":"test_function","arguments":"{\\"arg\\": \\"value\\"}"}}]',
+        );
+        expect(result.output).toContain('[Function Result: Function result]');
+      });
+
+      it('should use custom system prompt', async () => {
+        const customProvider = new GroqProvider('mixtral-8x7b-32768', {
+          config: {
+            systemPrompt: 'Custom system prompt',
+          },
+        });
+
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
+        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
+
+        await customProvider.callApi('Test prompt');
+
+        expect(mockCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            messages: expect.arrayContaining([
+              expect.objectContaining({
+                role: 'system',
+                content: 'Custom system prompt',
+              }),
+            ]),
+          }),
+        );
+      });
+
+      it('should handle empty response', async () => {
+        const mockResponse = {
+          choices: [{ message: { content: '' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
+        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('');
+      });
+
+      it('should handle unexpected API response structure', async () => {
+        const mockResponse = {};
+        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
+        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
+
+        await expect(provider.callApi('Test prompt')).resolves.toEqual({
+          error: 'API call error: Error: Invalid response from Groq API',
+        });
+      });
+
+      it('should use context and options in callApi', async () => {
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
+        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
+
+        const context = {
+          vars: { test: 'value' },
+          prompt: { raw: 'Test prompt', label: 'test' },
+        };
+        const options = { includeLogProbs: true };
+
+        await provider.callApi('Test prompt', context, options);
+
+        expect(renderVarsInObject).toHaveBeenCalledWith(
+          expect.objectContaining({
+            messages: expect.any(Array),
+            model: 'mixtral-8x7b-32768',
+            temperature: expect.any(Number),
+            max_tokens: expect.any(Number),
+            top_p: expect.any(Number),
+            tool_choice: expect.any(String),
+          }),
+          context.vars,
+        );
+      });
+
+      it('should use maybeLoadFromExternalFile for tools configuration', async () => {
+        const customProvider = new GroqProvider('mixtral-8x7b-32768', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'external_tool',
+                  description: 'An external tool',
+                },
+              },
+            ],
+          },
+        });
+
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
+        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
+
+        await customProvider.callApi('Test prompt');
+
+        expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+          expect.arrayContaining([
+            expect.objectContaining({
+              type: 'function',
+              function: {
+                name: 'external_tool',
+                description: 'An external tool',
+              },
+            }),
+          ]),
         );
       });
     });

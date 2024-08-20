@@ -1,4 +1,5 @@
 import Groq from 'groq-sdk';
+import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -82,6 +83,21 @@ export class GroqProvider implements ApiProvider {
       tool_choice: this.config.tool_choice ?? 'auto',
     };
 
+    const cacheKey = `groq:${JSON.stringify(params)}`;
+    if (isCacheEnabled()) {
+      const cachedResult = await getCache().get<ProviderResponse>(cacheKey);
+      if (cachedResult) {
+        logger.debug(`Returning cached response for ${prompt}: ${JSON.stringify(cachedResult)}`);
+        return {
+          ...cachedResult,
+          tokenUsage: {
+            ...cachedResult.tokenUsage,
+            cached: cachedResult.tokenUsage?.total,
+          },
+        };
+      }
+    }
+
     try {
       const chatCompletion = await this.groq.chat.completions.create(params);
 
@@ -116,7 +132,7 @@ export class GroqProvider implements ApiProvider {
         }
       }
 
-      return {
+      const result: ProviderResponse = {
         output,
         tokenUsage: {
           total: chatCompletion.usage?.total_tokens,
@@ -124,6 +140,16 @@ export class GroqProvider implements ApiProvider {
           completion: chatCompletion.usage?.completion_tokens,
         },
       };
+
+      if (isCacheEnabled()) {
+        try {
+          await getCache().set(cacheKey, result);
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
+      }
+
+      return result;
     } catch (err: any) {
       logger.error(`Groq API call error: ${err}`);
       const errorMessage = err.status ? `${err.status} ${err.name}: ${err.message}` : `${err}`;
