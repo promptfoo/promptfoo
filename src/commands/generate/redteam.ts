@@ -272,7 +272,7 @@ export function generateRedteamCommand(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
       (val) => parseInt(val, 10),
-      defaultConfig.evaluateOptions?.maxConcurrency
+      defaultConfig.evaluateOptions?.maxConcurrency,
     )
     .action((opts: Partial<RedteamGenerateOptions>): void => {
       try {

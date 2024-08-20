@@ -1,3 +1,4 @@
+import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import invariant from 'tiny-invariant';
@@ -53,6 +54,7 @@ export async function synthesize({
   entities: entitiesOverride,
   injectVar,
   language,
+  maxConcurrency = 1,
   plugins,
   prompts,
   provider,
@@ -103,7 +105,23 @@ export async function synthesize({
       )}\n`,
     );
   }
-  logger.info('Generating...');
+
+  // Calculate total number of tests
+  const totalTests =
+    plugins.reduce((sum, p) => sum + (p.numTests || 0), 0) * (strategies.length + 1);
+
+  logger.info(
+    `Generating ${chalk.bold(totalTests)} test${totalTests === 1 ? '' : 's'} ` +
+      `(${plugins.length} plugin${plugins.length === 1 ? '' : 's'}, ` +
+      `${strategies.length} strateg${strategies.length === 1 ? 'y' : 'ies'}, max concurrency: ${maxConcurrency})`,
+  );
+
+  // Initialize progress bar
+  const progressBar = new ProgressBar(totalTests);
+
+  if (logger.level !== 'debug') {
+    progressBar.start();
+  }
 
   // Get vars
   if (typeof injectVar !== 'string') {
@@ -163,17 +181,6 @@ export async function synthesize({
   // Deduplicate, filter out the category names, and sort
   plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
 
-  // Calculate total number of tests
-  const totalTests =
-    plugins.reduce((sum, p) => sum + (p.numTests || 0), 0) * (strategies.length + 1);
-
-  // Initialize progress bar
-  const progressBar = new ProgressBar(totalTests);
-
-  if (logger.level !== 'debug') {
-    progressBar.start();
-  }
-
   // Get purpose
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
   progressBar.increment();
@@ -185,7 +192,7 @@ export async function synthesize({
   logger.debug(`System purpose: ${purpose}`);
 
   const testCases: TestCaseWithPlugin[] = [];
-  for (const plugin of plugins) {
+  await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
       progressBar.increment();
@@ -207,7 +214,7 @@ export async function synthesize({
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
     }
-  }
+  });
 
   const newTestCases: TestCaseWithPlugin[] = [];
 
