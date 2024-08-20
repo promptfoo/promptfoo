@@ -70,45 +70,6 @@ function generateReport(
   return `\nTest Generation Report:\n${table.toString()}`;
 }
 
-/**
- * A class to manage and display a progress bar.
- */
-export class ProgressBar {
-  private bar: cliProgress.SingleBar;
-  private currentValue: number;
-
-  /**
-   * @param total - The total number of steps in the progress bar.
-   */
-  constructor(private total: number) {
-    this.bar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-    this.currentValue = 0;
-  }
-
-  /**
-   * Starts the progress bar.
-   */
-  start(): void {
-    this.bar.start(this.total, 0);
-  }
-
-  /**
-   * Increments the progress bar.
-   * @param value - The amount to increment by (default: 1).
-   */
-  increment(value = 1): void {
-    this.currentValue += value;
-    this.bar.update(this.currentValue);
-  }
-
-  /**
-   * Stops the progress bar.
-   */
-  stop(): void {
-    this.bar.stop();
-  }
-}
-
 const categories = {
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
@@ -197,10 +158,10 @@ export async function synthesize({
       `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n`,
   );
 
-  const progressBar = new ProgressBar(totalPluginTests + 2);
-
+  let progressBar: cliProgress.SingleBar | null = null;
   if (logger.level !== 'debug') {
-    progressBar.start();
+    progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+    progressBar.start(totalPluginTests + 2, 0);
   }
 
   if (typeof injectVar !== 'string') {
@@ -258,11 +219,11 @@ export async function synthesize({
   plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
 
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
-  progressBar.increment();
+  progressBar?.increment();
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
     : await extractEntities(redteamProvider, prompts);
-  progressBar.increment();
+  progressBar?.increment();
 
   logger.debug(`System purpose: ${purpose}`);
 
@@ -273,7 +234,7 @@ export async function synthesize({
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
-      progressBar.increment(plugin.numTests);
+      progressBar?.increment(plugin.numTests);
       logger.debug(`Generating tests for ${plugin.id}...`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
         language,
@@ -293,11 +254,11 @@ export async function synthesize({
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
-      progressBar.increment(plugin.numTests);
+      progressBar?.increment(plugin.numTests);
     }
   });
 
-  if (logger.level !== 'debug') {
+  if (progressBar) {
     progressBar.stop();
   }
 
