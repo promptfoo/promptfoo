@@ -53,5 +53,8 @@
   "service": "promptfoo_dev",
   "workspaceFolder": "/workspace",
   "userEnvProbe": "loginInteractiveShell",
-  "remoteUser": "promptfoo"
+  "remoteUser": "promptfoo",
+  "mounts": [
+    "source=${localWorkspaceFolder}/node_modules,target=/workspace/node_modules,type=volume"
+  ]
 }
