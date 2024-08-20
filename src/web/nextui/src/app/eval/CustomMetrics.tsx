@@ -34,11 +34,11 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
             {metric}:{' '}
             {metricTotals && metricTotals[metric] ? (
               <>
-                {((score / metricTotals[metric]) * 100).toFixed(2)}% ({score}/{metricTotals[metric]}
-                )
+                {((score / metricTotals[metric]) * 100).toFixed(2)}% ({score.toFixed(2)}/
+                {metricTotals[metric].toFixed(2)})
               </>
             ) : (
-              score
+              score.toFixed(2)
             )}
           </span>
         ) : null,

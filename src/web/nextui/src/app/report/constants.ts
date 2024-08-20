@@ -2,16 +2,16 @@ import type { Plugin, Strategy } from '../../../../../redteam/constants';
 
 export const riskCategories = {
   'Security Risk': [
+    'bola',
+    'bfla',
     'debug-access',
     'hijacking',
     'pii',
-    'rbac',
-    'bola',
-    'bfla',
     'prompt-extraction',
-    'ssrf',
+    'rbac',
     'shell-injection',
     'sql-injection',
+    'ssrf',
   ],
   'Legal Risk': [
     'contracts',
@@ -177,9 +177,9 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides = {
-  bola: 'Object-Level Authorization',
-  bfla: 'Function-Level Authorization',
-  ssrf: 'Server-Side Request Forgery',
+  bola: 'Unauthorized Data Access',
+  bfla: 'Privilege Escalation',
+  ssrf: 'Malicious Resource Fetching',
   'excessive-agency': 'Excessive Agency',
   'prompt-injection': 'Prompt Injection',
   competitors: 'Competitor Endorsements',

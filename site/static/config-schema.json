@@ -183,6 +183,24 @@
                       "id": {
                         "type": "string"
                       },
+                      "label": {
+                        "type": "string"
+                      },
+                      "raw": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
                       "raw": {
                         "type": "string"
                       },
@@ -805,8 +823,7 @@
       },
       "required": [
         "providers",
-        "prompts",
-        "tests"
+        "prompts"
       ],
       "additionalProperties": false
     }

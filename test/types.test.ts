@@ -1,9 +1,14 @@
+import fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
+import path from 'path';
 import { z } from 'zod';
 import {
   AssertionSchema,
   BaseAssertionTypesSchema,
   isGradingResult,
   VarsSchema,
+  TestSuiteConfigSchema,
 } from '../src/types';
 
 describe('AssertionSchema', () => {
@@ -156,4 +161,26 @@ describe('isGradingResult', () => {
       expect(isGradingResult(result)).toBe(false);
     });
   });
+});
+
+describe('TestSuiteConfigSchema', () => {
+  const rootDir = path.join(__dirname, '..');
+  const configFiles = globSync(`${rootDir}/examples/**/promptfooconfig.{yaml,yml,json}`);
+
+  it('should find configuration files', () => {
+    expect(configFiles.length).toBeGreaterThan(0);
+  });
+
+  for (const file of configFiles) {
+    const relativePath = path.relative(rootDir, file);
+    it(`should validate ${relativePath}`, async () => {
+      const configContent = fs.readFileSync(file, 'utf8');
+      const config = yaml.load(configContent);
+      const result = TestSuiteConfigSchema.safeParse(config);
+      if (!result.success) {
+        console.error(`Validation failed for ${file}:`, result.error);
+      }
+      expect(result.success).toBe(true);
+    });
+  }
 });

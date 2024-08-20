@@ -416,8 +416,6 @@ In order to build the next.js app, you'll have to set some placeholder envars (i
 DATABASE_URL="postgresql://..."
 
 NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE=1
-NEXT_PUBLIC_SUPABASE_URL=https://placeholder.promptfoo.dev
-NEXT_PUBLIC_SUPABASE_ANON_KEY=abc123
 ```
 
 Then run:

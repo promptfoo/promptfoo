@@ -6,12 +6,8 @@
 name: Test and Publish Multi-arch Docker Image
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
   release:
-    types: [published]
+    types: [created]
   workflow_dispatch:
 
 concurrency:

@@ -40,6 +40,9 @@ export async function synthesize({
   entities: string[];
   testCases: TestCaseWithPlugin[];
 }> {
+  if (prompts.length === 0) {
+    throw new Error('Prompts array cannot be empty');
+  }
   validateStrategies(strategies);
 
   let redteamProvider: ApiProvider;
@@ -163,11 +166,11 @@ export async function synthesize({
   logger.debug(`System purpose: ${purpose}`);
 
   const testCases: TestCaseWithPlugin[] = [];
-  for (const { key: pluginId, action } of Plugins) {
-    const plugin = plugins.find((p) => p.id === pluginId);
-    if (plugin) {
+  for (const plugin of plugins) {
+    const { action } = Plugins.find((p) => p.key === plugin.id) || {};
+    if (action) {
       updateProgress();
-      logger.debug(`Generating tests for ${pluginId}...`);
+      logger.debug(`Generating tests for ${plugin.id}...`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
         language,
         ...(plugin.config || {}),
@@ -177,11 +180,13 @@ export async function synthesize({
           ...t,
           metadata: {
             ...(t.metadata || {}),
-            pluginId,
+            pluginId: plugin.id,
           },
         })),
       );
-      logger.debug(`Added ${pluginTests.length} ${pluginId} test cases`);
+      logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
+    } else {
+      logger.warn(`Plugin ${plugin.id} not registered, skipping`);
     }
   }
 
