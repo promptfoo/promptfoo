@@ -14,8 +14,6 @@ env:
   OPENAI_API_KEY: xxx
   ANTHROPIC_API_KEY: xxx
   AZURE_OPENAI_API_HOST: xxx
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: xxx
-  NEXT_PUBLIC_SUPABASE_URL: https://placeholder.promptfoo.dev
   NEXT_TELEMETRY_DISABLED: 1
 jobs:
   build:
