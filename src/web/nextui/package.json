@@ -13,12 +13,12 @@
   "dependencies": {
     "@emotion/react": "^11.13.0",
     "@emotion/styled": "^11.13.0",
-    "@mui/icons-material": "^5.16.4",
-    "@mui/material": "^5.16.4",
+    "@mui/icons-material": "^5.16.7",
+    "@mui/material": "^5.16.7",
     "@mui/x-charts": "7.10.0",
     "@supabase/auth-helpers-nextjs": "^0.7.4",
     "@supabase/supabase-js": "^2.44.4",
-    "@tanstack/react-table": "^8.19.3",
+    "@tanstack/react-table": "^8.20.1",
     "better-sqlite3": "^11.1.2",
     "cache-manager": "^4.1.0",
     "cache-manager-fs-hash": "^1.0.0",
@@ -53,18 +53,18 @@
     "socket.io-client": "^4.7.5",
     "tiny-invariant": "^1.3.3",
     "typescript": "^5.5.4",
-    "use-debounce": "^10.0.1",
+    "use-debounce": "^10.0.3",
     "uuid": "^10.0.0",
-    "zustand": "^4.5.4"
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.4.7",
+    "@testing-library/jest-dom": "^6.4.8",
     "@testing-library/react": "^16.0.0",
     "@types/better-sqlite3": "^7.6.11",
     "@types/diff": "^5.2.1",
     "@types/fuzzysearch": "^1.0.2",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "20.14.11",
+    "@types/node": "22.4.1",
     "@types/prismjs": "^1.26.4",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -72,6 +72,6 @@
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4.3.1",
     "jsdom": "^24.1.1",
-    "vitest": "^2.0.4"
+    "vitest": "^2.0.5"
   }
 }

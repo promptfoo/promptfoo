@@ -17,13 +17,14 @@
   },
   "dependencies": {
     "@calcom/embed-react": "^1.5.0",
-    "@docusaurus/core": "^3.5.1",
-    "@docusaurus/plugin-google-gtag": "^3.5.1",
-    "@docusaurus/preset-classic": "^3.5.1",
-    "@docusaurus/theme-search-algolia": "^3.5.1",
+    "@docusaurus/core": "3.5.1",
+    "@docusaurus/plugin-content-docs": "3.5.1",
+    "@docusaurus/plugin-google-gtag": "3.5.1",
+    "@docusaurus/preset-classic": "3.5.1",
+    "@docusaurus/theme-search-algolia": "3.5.1",
     "@mdx-js/react": "^3.0.1",
     "@monaco-editor/react": "^4.6.0",
-    "@mui/icons-material": "^5.16.4",
+    "@mui/icons-material": "^5.16.7",
     "@segment/ajv-human-errors": "^2.13.0",
     "clsx": "^2.1.1",
     "docusaurus-plugin-image-zoom": "^2.0.0",
@@ -32,7 +33,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.5.1",
+    "@docusaurus/module-type-aliases": "3.5.1",
     "@tsconfig/docusaurus": "^2.0.3",
     "typescript": "^5.5.4"
   },
