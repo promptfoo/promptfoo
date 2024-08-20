@@ -560,18 +560,28 @@ export const TestSuiteConfigSchema = z.object({
   // Optional description of what you're trying to test
   description: z.string().optional(),
 
-  // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
+  // One or more LLM APIs to use, for example: openai:gpt-4o-mini, openai:gpt-4o, localai:chat:vicuna
   providers: ProvidersSchema,
 
   // One or more prompt files to load
   prompts: z.union([
     z.string(),
-    z.array(z.union([z.string(), PromptSchema])),
+    z.array(
+      z.union([
+        z.string(),
+        z.object({
+          id: z.string(),
+          label: z.string().optional(),
+          raw: z.string().optional(),
+        }),
+        PromptSchema,
+      ]),
+    ),
     z.record(z.string(), z.string()),
   ]),
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
-  tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]),
+  tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]).optional(),
 
   // Scenarios, groupings of data and tests to be evaluated
   scenarios: z.array(ScenarioSchema).optional(),
@@ -596,7 +606,7 @@ export const TestSuiteConfigSchema = z.object({
   // Nunjucks filters
   nunjucksFilters: z.record(z.string(), z.string()).optional(),
 
-  // Envar overrides
+  // Envvar overrides
   env: ProviderEnvOverridesSchema.optional(),
 
   // Metrics to calculate after the eval has been completed

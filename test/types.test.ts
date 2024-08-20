@@ -174,10 +174,6 @@ describe('TestSuiteConfigSchema', () => {
   configFiles.forEach((file) => {
     const relativePath = path.relative(rootDir, file);
 
-    /* if (!relativePath.includes('custom-prompt-function')) {
-      return;
-    } */
-
     it(`should validate ${relativePath}`, () => {
       // TODO: Add other formats
       const configContent = fs.readFileSync(file, 'utf8');
@@ -185,9 +181,9 @@ describe('TestSuiteConfigSchema', () => {
 
       const result = TestSuiteConfigSchema.safeParse(config);
 
-      /* if (!result.success) {
+      if (!result.success) {
         console.error(`Validation failed for ${file}:`, result.error);
-      } */
+      }
 
       expect(result.success).toBe(true);
     });

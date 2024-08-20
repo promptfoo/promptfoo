@@ -286,7 +286,14 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
       config.prompts
-        .map((prompt) => makeAbsolute(configPaths[idx], prompt))
+        .map((prompt) => {
+          invariant(
+            typeof prompt === 'string' ||
+              (typeof prompt === 'object' && typeof prompt.raw === 'string'),
+            'Invalid prompt',
+          );
+          return makeAbsolute(configPaths[idx], prompt as string | Prompt);
+        })
         .forEach((prompt) => addSeenPrompt(prompt));
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }

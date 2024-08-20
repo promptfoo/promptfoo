@@ -18,6 +18,11 @@ export const PromptFunctionSchema = z
   )
   .returns(z.promise(z.union([z.string(), z.any()])));
 
+export const PromptInputSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+});
+
 export const PromptSchema = z.object({
   id: z.string().optional(),
   raw: z.string(),
