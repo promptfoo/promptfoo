@@ -165,27 +165,22 @@ describe('isGradingResult', () => {
 
 describe('TestSuiteConfigSchema', () => {
   const rootDir = path.join(__dirname, '..');
-  const configFiles = globSync(`${rootDir}/examples/**/promptfooconfig.yaml`);
+  const configFiles = globSync(`${rootDir}/examples/**/promptfooconfig.{yaml,yml,json}`);
 
   it('should find configuration files', () => {
     expect(configFiles.length).toBeGreaterThan(0);
   });
 
-  configFiles.forEach((file) => {
+  for (const file of configFiles) {
     const relativePath = path.relative(rootDir, file);
-
-    it(`should validate ${relativePath}`, () => {
-      // TODO: Add other formats
+    it(`should validate ${relativePath}`, async () => {
       const configContent = fs.readFileSync(file, 'utf8');
       const config = yaml.load(configContent);
-
       const result = TestSuiteConfigSchema.safeParse(config);
-
       if (!result.success) {
         console.error(`Validation failed for ${file}:`, result.error);
       }
-
       expect(result.success).toBe(true);
     });
-  });
+  }
 });
