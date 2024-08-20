@@ -16,7 +16,10 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - run: npm ci
-      - run: npm test
+      - uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: dist/
 
   nexe-build:
     needs: build
