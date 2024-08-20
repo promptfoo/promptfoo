@@ -22,8 +22,12 @@ import { Strategies, validateStrategies } from './strategies';
  * @returns A colored string indicating the status.
  */
 function getStatus(requested: number, generated: number): string {
-  if (generated === 0) {return chalk.red('Failed');}
-  if (generated < requested) {return chalk.yellow('Partial');}
+  if (generated === 0) {
+    return chalk.red('Failed');
+  }
+  if (generated < requested) {
+    return chalk.yellow('Partial');
+  }
   return chalk.green('Success');
 }
 
@@ -185,9 +189,12 @@ export async function synthesize({
   const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
 
   logger.info(
-    `Generating ${chalk.bold(totalTests)} test${totalTests === 1 ? '' : 's'} ` +
-      `(${plugins.length} plugin${plugins.length === 1 ? '' : 's'}, ` +
-      `${strategies.length} strateg${strategies.length === 1 ? 'y' : 'ies'}, max concurrency: ${maxConcurrency})`,
+    chalk.bold(`Test Generation Summary:`) +
+      `\n• Total tests: ${chalk.cyan(totalTests)}` +
+      `\n• Plugin tests: ${chalk.cyan(totalPluginTests)}` +
+      `\n• Plugins: ${chalk.cyan(plugins.length)}` +
+      `\n• Strategies: ${chalk.cyan(strategies.length)}` +
+      `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n`,
   );
 
   const progressBar = new ProgressBar(totalPluginTests + 2);
@@ -290,7 +297,25 @@ export async function synthesize({
     }
   });
 
+  if (logger.level !== 'debug') {
+    progressBar.stop();
+  }
+
   const newTestCases: TestCaseWithPlugin[] = [];
+
+  if (strategies.length > 0) {
+    const existingTestCount = testCases.length;
+    const totalStrategyTests = existingTestCount * strategies.length;
+
+    logger.info(
+      chalk.bold(
+        `\nGenerating additional tests using ${strategies.length} strateg${strategies.length === 1 ? 'y' : 'ies'}:`,
+      ) +
+        `\n• Existing tests: ${chalk.cyan(existingTestCount)}` +
+        `\n• Expected new tests: ${chalk.cyan(totalStrategyTests)}` +
+        `\n• Total expected tests: ${chalk.cyan(existingTestCount + totalStrategyTests)}`,
+    );
+  }
 
   for (const { key, action } of Strategies) {
     const strategy = strategies.find((s) => s.id === key);
@@ -315,11 +340,6 @@ export async function synthesize({
   }
 
   testCases.push(...newTestCases);
-
-  if (logger.level !== 'debug') {
-    progressBar.stop();
-  }
-
   logger.info(generateReport(pluginResults, strategyResults));
 
   return { purpose, entities, testCases };
