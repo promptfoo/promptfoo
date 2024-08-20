@@ -128,11 +128,9 @@ export abstract class RedteamModelGrader {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
     const vars = {
+      ...test.metadata,
       prompt,
       entities: test.metadata?.entities ?? [],
-      harmCategory: test.metadata?.harmCategory,
-      policy: test.metadata?.policy,
-      purpose: test.metadata?.purpose,
       tools: maybeLoadFromExternalFile(provider?.config?.tools),
     };
     let finalRubric: string;
