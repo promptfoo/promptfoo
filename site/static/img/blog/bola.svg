@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <rect width="800" height="400" fill="#f0f8ff"/>
+  
+  <text x="400" y="40" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#0000FF">Broken Function Level Authorization in AI Systems</text>
+  
+  <!-- User Alice -->
+  <circle cx="100" cy="150" r="40" fill="#FFA500"/>
+  <text x="100" y="200" font-family="Arial, sans-serif" font-size="16" text-anchor="middle">Alice</text>
+  
+  <!-- Attacker -->
+  <circle cx="100" cy="300" r="40" fill="#FF4500"/>
+  <text x="100" y="350" font-family="Arial, sans-serif" font-size="16" text-anchor="middle">Attacker</text>
+  
+  <!-- AI System -->
+  <rect x="350" y="150" width="100" height="150" fill="#4B0082" rx="10" ry="10"/>
+  <text x="400" y="230" font-family="Arial, sans-serif" font-size="16" fill="white" text-anchor="middle">AI</text>
+  
+  <!-- Server -->
+  <rect x="650" y="175" width="80" height="100" fill="#2F4F4F"/>
+  <text x="690" y="290" font-family="Arial, sans-serif" font-size="16" text-anchor="middle">Server</text>
+  
+  <!-- Connections -->
+  <path d="M 140 150 Q 245 150 350 200" fill="none" stroke="#000080" stroke-width="2"/>
+  <path d="M 140 300 Q 245 300 350 250" fill="none" stroke="#8B0000" stroke-width="2" stroke-dasharray="5,5"/>
+  <path d="M 450 225 L 650 225" fill="none" stroke="#000080" stroke-width="2"/>
+  
+  <!-- Labels -->
+  <text x="245" y="130" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Authorized request</text>
+  <text x="245" y="330" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#8B0000">Unauthorized access attempt</text>
+  <text x="550" y="210" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Data retrieval</text>
+</svg>

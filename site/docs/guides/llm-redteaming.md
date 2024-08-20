@@ -58,7 +58,7 @@ You can specify your redteam configuration directly in `promptfooconfig.yaml`. S
 Then create adversarial test cases:
 
 ```sh
-npx promptfoo@latest generate redteam -w
+npx promptfoo@latest redteam generate -w
 ```
 
 The `-w` option overwrites the `promptfooconfig.yaml` file to include the newly generated test cases.
@@ -238,10 +238,10 @@ For more information, see [Overriding the LLM grader](/docs/configuration/expect
 
 ## Step 3: Generate adversarial test cases
 
-Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo generate redteam` command:
+Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo redteam generate` command:
 
 ```sh
-npx promptfoo@latest generate redteam -w
+npx promptfoo@latest redteam generate -w
 ```
 
 This command works by reading your prompts and providers, and then generating a set of adversarial inputs that stress-test your prompts/models in a variety of situations. Test generation usually takes about 5 minutes.
@@ -292,7 +292,7 @@ It also tests for a variety of harmful input and output scenarios from the [ML C
 By default, all of the above will be included in the redteam. To use specific types of tests, use `--plugins`:
 
 ```yaml
-npx promptfoo@latest generate redteam -w --plugins 'harmful,jailbreak,hijacking'
+npx promptfoo@latest redteam generate -w --plugins 'harmful,jailbreak,hijacking'
 ```
 
 The following plugins are enabled by default:

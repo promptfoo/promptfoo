@@ -4,6 +4,7 @@ venv
 drizzle
 src/web/nextui/out
 src/web/nextui/.next
+site/static/config-schema.json
 
 site/.docusaurus
 site/build

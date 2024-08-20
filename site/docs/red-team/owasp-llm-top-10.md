@@ -4,7 +4,22 @@ sidebar_position: 20
 
 # OWASP LLM Top 10
 
-Promptfoo is an open-source tool that can help address many of the vulnerabilities outlined in the OWASP LLM Top 10. This guide will walk through how to use Promptfoo's features to test for and mitigate AI risks.
+The OWASP Top 10 for Large Language Model Applications educates about security risks in deploying and managing LLMs. It lists the top critical vulnerabilities in LLM applications based on impact, exploitability, and prevalence.
+
+The currently top 10 are:
+
+1. [LLM01: Prompt Injection](#1-prompt-injection-llm01)
+2. [LLM02: Insecure Output Handling](#2-insecure-output-handling-llm02)
+3. [LLM03: Training Data Poisoning](#3-training-data-poisoning-llm03)
+4. [LLM04: Model Denial of Service](#4-model-denial-of-service-llm04)
+5. [LLM05: Supply Chain Vulnerabilities](#5-supply-chain-vulnerabilities-llm05)
+6. [LLM06: Sensitive Information Disclosure](#6-sensitive-information-disclosure-llm06)
+7. [LLM07: Insecure Plugin Design](#7-insecure-plugin-design-llm07)
+8. [LLM08: Excessive Agency](#8-excessive-agency-llm08)
+9. [LLM09: Overreliance](#9-overreliance-llm09)
+10. [LLM10: Model Theft](#10-model-theft-llm10)
+
+Promptfoo is an open-source tool that helps identify and remediate many of the vulnerabilities outlined in the OWASP LLM Top 10. This guide will walk through how to use Promptfoo's features to test for and mitigate AI risks.
 
 ## 1. Prompt Injection (LLM01)
 
@@ -17,16 +32,16 @@ Example configuration:
 ```yaml
 redteam:
   plugins:
-    # Include plugins for behaviors that you want to avoid
-    - 'harmful'
-    - 'contracts'
-    - 'politics'
+    - owasp:llm:01
+    # Include any other plugins for behaviors that you want to avoid
+    - contracts
+    - politics
     # ...
   strategies:
     # Add prompt injection strategy
-    - 'prompt-injection'
+    - prompt-injection
     # Additional strategies such as "jailbreak" are related to prompt injection
-    - 'jailbreak'
+    - jailbreak
 ```
 
 ## 2. Insecure Output Handling (LLM02)
@@ -61,9 +76,17 @@ Example configuration:
 ```yaml
 redteam:
   plugins:
-    - 'harmful'
-    - 'overreliance'
-    - 'hallucination'
+    - harmful
+    - overreliance
+    - hallucination
+```
+
+Or, using the OWASP shorthand:
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:03
 ```
 
 ## 4. Model Denial of Service (LLM04)
@@ -111,15 +134,23 @@ Example configuration:
 ```yaml
 redteam:
   plugins:
-    - 'harmful:privacy'
-    - 'pii:direct'
-    - 'pii:api-db'
-    - 'pii:session'
-    - 'pii:social'
+    - harmful:privacy
+    - pii:direct
+    - pii:api-db
+    - pii:session
+    - pii:social
   strategies:
-    # Additional strategies to extract PII
-    - 'prompt-injection'
-    - 'jailbreak'
+    # Apply additional techniques to extract PII
+    - prompt-injection
+    - jailbreak
+```
+
+Or, using the OWASP shorthand:
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:06
 ```
 
 ## 7. Insecure Plugin Design (LLM07)
@@ -140,12 +171,20 @@ Example configuration:
 ```yaml
 redteam:
   plugins:
-    - 'rbac'
-    - 'bofa'
-    - 'bfla'
-    - 'sql-injection'
-    - 'shell-injection'
-    - 'debug-access'
+    - rbac # Role-Based Access Control
+    - bofa # Broken Object-Level Authorization (aka IDOR-type vulnerabilities)
+    - bfla # Broken Function-Level Authorization
+    - sql-injection
+    - shell-injection
+    - debug-access
+```
+
+Or, using the OWASP shorthand:
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:07
 ```
 
 ## 8. Excessive Agency (LLM08)
@@ -160,8 +199,16 @@ Example configuration:
 ```yaml
 redteam:
   plugins:
-    - 'excessive-agency'
-    - 'rbac' # role-based access control
+    - excessive-agency
+    - rbac # role-based access control
+```
+
+Or, using the OWASP shorthand:
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:08
 ```
 
 ## 9. Overreliance (LLM09)
@@ -176,8 +223,16 @@ Example configuration:
 ```yaml
 redteam:
   plugins:
-    - 'overreliance'
-    - 'hallucination'
+    - overreliance
+    - hallucination
+```
+
+Using the OWASP shorthand:
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:09
 ```
 
 ## 10. Model Theft (LLM10)
@@ -199,5 +254,16 @@ tests:
 ## What's next
 
 The OWASP LLM Top 10 is rapidly evolving, but the above examples should give you a good starting point for testing your LLM applications. Regular testing with Promptfoo can help ensure your LLM applications remain secure and robust against a wide range of potential threats.
+
+You can automatically include _all_ of the OWASP LLM Top 10 with the following shorthand configuration:
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm
+  strategies:
+    - prompt-injection
+    - jailbreak
+```
 
 To learn more about setting up Promptfoo and finding LLM vulnerabilities, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).

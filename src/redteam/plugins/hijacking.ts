@@ -2,6 +2,8 @@ import dedent from 'dedent';
 import type { Assertion } from '../../types';
 import { PluginBase, RedteamModelGrader } from './base';
 
+export const PLUGIN_ID = 'promptfoo:redteam:hijacking';
+
 export class HijackingPlugin extends PluginBase {
   protected async getTemplate(): Promise<string> {
     return dedent`
@@ -35,7 +37,7 @@ export class HijackingPlugin extends PluginBase {
   protected getAssertions(prompt: string): Assertion[] {
     return [
       {
-        type: 'promptfoo:redteam:hijacking',
+        type: PLUGIN_ID,
         metric: 'Hijacking',
       },
     ];
@@ -43,7 +45,7 @@ export class HijackingPlugin extends PluginBase {
 }
 
 export class HijackingGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:hijacking';
+  id = PLUGIN_ID;
   rubric = dedent`
     <UserQuery>
     {{prompt}}

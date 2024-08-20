@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
-import { desc, eq, like, and } from 'drizzle-orm';
+import { desc, eq, like, and, sql } from 'drizzle-orm';
 import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -15,6 +15,7 @@ import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
 import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/tables';
+import { getEnvBool, getEnvInt } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
@@ -290,13 +291,14 @@ export function listPreviousResults(
   datasetId?: string,
 ): ResultLightweight[] {
   const db = getDb();
+  const startTime = performance.now();
+
   const query = db
     .select({
       evalId: evals.id,
       createdAt: evals.createdAt,
       description: evals.description,
-      config: evals.config,
-      results: evals.results,
+      numTests: sql<number>`json_array_length(${evals.results}->'table'->'body')`,
       datasetId: evalsToDatasets.datasetId,
     })
     .from(evals)
@@ -309,17 +311,19 @@ export function listPreviousResults(
     );
 
   const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
+  const mappedResults = results.map((result) => ({
+    evalId: result.evalId,
+    createdAt: result.createdAt,
+    description: result.description,
+    numTests: result.numTests,
+    datasetId: result.datasetId,
+  }));
 
-  return results.map((result) => {
-    const numTests = result.results.table.body.length;
-    return {
-      evalId: result.evalId,
-      createdAt: result.createdAt,
-      description: result.description,
-      numTests,
-      datasetId: result.datasetId,
-    };
-  });
+  const endTime = performance.now();
+  const executionTime = endTime - startTime;
+  logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
+
+  return mappedResults;
 }
 
 /**
@@ -479,8 +483,7 @@ export async function migrateResultsFromFileSystemToDatabase() {
   logger.info('Migration complete. Please restart your web server if it is running.');
 }
 
-const RESULT_HISTORY_LENGTH =
-  parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || DEFAULT_QUERY_LIMIT;
+const RESULT_HISTORY_LENGTH = getEnvInt('RESULT_HISTORY_LENGTH', DEFAULT_QUERY_LIMIT);
 
 export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
   const sortedFilenames = listPreviousResultFilenames_fileSystem();
@@ -578,9 +581,7 @@ export async function updateResult(
   }
 }
 
-export async function readLatestResults(
-  filterDescription?: string,
-): Promise<ResultsFile | undefined> {
+export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
   const db = getDb();
   let latestResults = await db
     .select({
@@ -941,19 +942,20 @@ export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): Standal
     .limit(limit)
     .all();
 
-  const flatResults: StandaloneEval[] = [];
-  results.forEach((result) => {
-    const table = result.results.table;
-    table.head.prompts.forEach((col) => {
-      flatResults.push({
-        evalId: result.evalId,
-        promptId: result.promptId,
-        datasetId: result.datasetId,
-        ...col,
-      });
-    });
+  return results.flatMap((result) => {
+    const {
+      evalId,
+      promptId,
+      datasetId,
+      results: { table },
+    } = result;
+    return table.head.prompts.map((col) => ({
+      evalId,
+      promptId,
+      datasetId,
+      ...col,
+    }));
   });
-  return flatResults;
 }
 
 export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
@@ -984,7 +986,7 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
   // Renders nunjucks template strings with context variables
-  if (!vars || process.env.PROMPTFOO_DISABLE_TEMPLATING) {
+  if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
   }
   if (typeof obj === 'string') {
@@ -1062,7 +1064,7 @@ export function parsePathOrGlob(
   try {
     stats = fs.statSync(filePath);
   } catch (err) {
-    if (process.env.PROMPTFOO_STRICT_FILES) {
+    if (getEnvBool('PROMPTFOO_STRICT_FILES')) {
       throw err;
     }
   }

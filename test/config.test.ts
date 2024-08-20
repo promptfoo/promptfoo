@@ -109,6 +109,7 @@ describe('readConfigs', () => {
       description: 'test1',
       providers: ['provider1'],
       prompts: ['prompt1'],
+      extensions: [],
       tests: ['test1'],
       scenarios: ['scenario1'],
       defaultTest: {
@@ -136,6 +137,7 @@ describe('readConfigs', () => {
       description: 'test2',
       providers: ['provider2'],
       prompts: ['prompt2'],
+      extensions: [],
       tests: ['test2'],
       scenarios: ['scenario2'],
       defaultTest: {
@@ -166,6 +168,7 @@ describe('readConfigs', () => {
       providers: ['provider1', 'provider2'],
       prompts: ['prompt1', 'prompt2'],
       tests: ['test1', 'test2'],
+      extensions: [],
       scenarios: ['scenario1', 'scenario2'],
       defaultTest: {
         description: 'defaultTest2',
@@ -292,6 +295,92 @@ describe('readConfigs', () => {
       key1: 'value1',
       key2: 'value2',
     });
+  });
+
+  it('combines extensions from multiple configs', async () => {
+    const config1 = {
+      extensions: ['extension1', 'extension2'],
+    };
+    const config2 = {
+      extensions: ['extension3'],
+    };
+
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(config1))
+      .mockReturnValueOnce(JSON.stringify(config2));
+    jest.spyOn(console, 'warn').mockImplementation();
+
+    const result = await readConfigs(['config1.json', 'config2.json']);
+
+    expect(result.extensions).toEqual(['extension1', 'extension2', 'extension3']);
+  });
+
+  it('handles configs without extensions', async () => {
+    const config1 = {
+      description: 'Config without extensions',
+    };
+    const config2 = {
+      extensions: ['extension1'],
+    };
+
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(config1))
+      .mockReturnValueOnce(JSON.stringify(config2));
+
+    const result = await readConfigs(['config1.json', 'config2.json']);
+
+    expect(result.extensions).toEqual(['extension1']);
+  });
+
+  it('warns when multiple configs and extensions are detected', async () => {
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(
+        JSON.stringify({
+          extensions: ['extension1'],
+        }),
+      )
+      .mockReturnValueOnce(
+        JSON.stringify({
+          extensions: ['extension2'],
+        }),
+      );
+
+    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    await readConfigs(['config1.json', 'config2.json']);
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  it('warns when multiple extensions are detected and multiple configs are provided', async () => {
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(
+        JSON.stringify({
+          extensions: ['extension1', 'extension2'],
+        }),
+      )
+      .mockReturnValueOnce(
+        JSON.stringify({
+          description: 'Config without extensions',
+        }),
+      );
+
+    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    await readConfigs(['config1.json', 'config2.json']);
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
+    );
+    consoleSpy.mockRestore();
   });
 });
 

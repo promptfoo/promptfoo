@@ -7,6 +7,7 @@ import invariant from 'tiny-invariant';
 import { readAssertions } from './assertions';
 import { validateAssertions } from './assertions/validateAssertions';
 import { filterTests } from './commands/eval/filterTests';
+import { getEnvBool } from './envars';
 import { importModule } from './esm';
 import logger from './logger';
 import { readPrompts, readProviderPromptMap } from './prompts';
@@ -23,7 +24,7 @@ import type {
 import { isJavascriptFile, readFilters } from './util';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
-  if (process.env.PROMPTFOO_DISABLE_REF_PARSER) {
+  if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
     return rawConfig;
   }
 
@@ -204,6 +205,18 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
+  const extensions: UnifiedConfig['extensions'] = [];
+  for (const config of configs) {
+    if (Array.isArray(config.extensions)) {
+      extensions.push(...config.extensions);
+    }
+  }
+  if (extensions.length > 1 && configs.length > 1) {
+    console.warn(
+      'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
+    );
+  }
+
   const redteam: UnifiedConfig['redteam'] = {
     plugins: [],
     strategies: [],
@@ -315,6 +328,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
     ),
+    extensions,
     redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
     sharing: !configs.some((config) => config.sharing === false),
@@ -376,13 +390,13 @@ export async function resolveConfigs(
     tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests || [],
     scenarios: fileConfig.scenarios || defaultConfig.scenarios,
     env: fileConfig.env || defaultConfig.env,
-    sharing:
-      process.env.PROMPTFOO_DISABLE_SHARING === '1'
-        ? false
-        : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
+    sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
+      ? false
+      : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
     defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
+    extensions: fileConfig.extensions || defaultConfig.extensions || [],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
   };
@@ -466,6 +480,7 @@ export async function resolveConfigs(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
       basePath,
     ),
+    extensions: config.extensions,
   };
 
   if (testSuite.tests) {

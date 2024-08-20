@@ -7,10 +7,10 @@ import type { TestCaseWithPlugin } from '../types';
 import { isApiProvider, isProviderOptions, type ApiProvider } from '../types';
 import type { SynthesizeOptions } from '../types/redteam';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS } from './constants';
+import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import { Plugins, validatePlugins } from './plugins';
+import { Plugins } from './plugins';
 import { Strategies, validateStrategies } from './strategies';
 
 // These plugins refer to a collection of tests.
@@ -40,7 +40,9 @@ export async function synthesize({
   entities: string[];
   testCases: TestCaseWithPlugin[];
 }> {
-  validatePlugins(plugins);
+  if (prompts.length === 0) {
+    throw new Error('Prompts array cannot be empty');
+  }
   validateStrategies(strategies);
 
   let redteamProvider: ApiProvider;
@@ -68,7 +70,15 @@ export async function synthesize({
     )}\n`,
   );
   if (strategies.length > 0) {
-    logger.info(`Using strategies: ${strategies.map((s) => s.id).join(', ')}`);
+    const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
+    logger.info(
+      `Using strategies:\n\n${chalk.yellow(
+        strategies
+          .map((s) => `${s.id} (${formatTestCount(totalPluginTests)})`)
+          .sort()
+          .join('\n'),
+      )}\n`,
+    );
   }
   logger.info('Generating...');
 
@@ -94,6 +104,39 @@ export async function synthesize({
     }
   }
 
+  // Apply aliases for NIST and OWASP mappings
+  const expandedPlugins: typeof plugins = [];
+  const expandPlugin = (
+    plugin: (typeof plugins)[0],
+    mapping: { plugins: string[]; strategies: string[] },
+  ) => {
+    mapping.plugins.forEach((p: string) =>
+      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
+    );
+    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
+  };
+
+  plugins.forEach((plugin) => {
+    const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
+      (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
+    );
+
+    if (mappingKey) {
+      const mapping =
+        ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
+        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((m) =>
+          plugin.id.startsWith(`${mappingKey}:`),
+        );
+      if (mapping) {
+        expandPlugin(plugin, mapping);
+      }
+    } else {
+      expandedPlugins.push(plugin);
+    }
+  });
+
+  plugins = expandedPlugins;
+
   // Deduplicate, filter out the category names, and sort
   plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
 
@@ -102,7 +145,7 @@ export async function synthesize({
   const totalSteps = plugins.length + 2; // +2 for initial setup steps
   let currentStep = 0;
 
-  if (process.env.LOG_LEVEL !== 'debug') {
+  if (logger.level !== 'debug') {
     progressBar.start(100, 0);
   }
 
@@ -123,11 +166,11 @@ export async function synthesize({
   logger.debug(`System purpose: ${purpose}`);
 
   const testCases: TestCaseWithPlugin[] = [];
-  for (const { key: pluginId, action } of Plugins) {
-    const plugin = plugins.find((p) => p.id === pluginId);
-    if (plugin) {
+  for (const plugin of plugins) {
+    const { action } = Plugins.find((p) => p.key === plugin.id) || {};
+    if (action) {
       updateProgress();
-      logger.debug(`Generating tests for ${pluginId}...`);
+      logger.debug(`Generating tests for ${plugin.id}...`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
         language,
         ...(plugin.config || {}),
@@ -137,11 +180,13 @@ export async function synthesize({
           ...t,
           metadata: {
             ...(t.metadata || {}),
-            pluginId,
+            pluginId: plugin.id,
           },
         })),
       );
-      logger.debug(`Added ${pluginTests.length} ${pluginId} test cases`);
+      logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
+    } else {
+      logger.warn(`Plugin ${plugin.id} not registered, skipping`);
     }
   }
 
@@ -169,7 +214,7 @@ export async function synthesize({
   testCases.push(...newTestCases);
 
   // Finish progress bar
-  if (process.env.LOG_LEVEL !== 'debug') {
+  if (logger.level !== 'debug') {
     progressBar.update(100);
     progressBar.stop();
   }
