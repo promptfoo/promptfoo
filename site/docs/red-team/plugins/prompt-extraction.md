@@ -4,9 +4,9 @@ sidebar_label: Prompt Extraction
 
 # Prompt Extraction Plugin
 
-The Prompt Extraction red teaming plugin is designed to test an AI system's vulnerability to attacks that attempt to extract the system prompt from the model. The system prompt is instructions provided to the model to guide its behavior.
+The Prompt Extraction red teaming plugin tests an AI system's vulnerability to attacks aimed at extracting the system prompt from the model. The system prompt consists of instructions given to the model to guide its behavior.
 
-This plugin helps identify potential security breaches where an attacker might be able to extract the system prompt from the model.
+This plugin helps identify potential security breaches where an attacker might extract the model's system prompt.
 
 ## Purpose
 
