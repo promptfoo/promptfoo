@@ -13,6 +13,29 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
 import { Strategies, validateStrategies } from './strategies';
 
+export class ProgressBar {
+  private bar: cliProgress.SingleBar;
+  private currentValue: number;
+
+  constructor(private total: number) {
+    this.bar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+    this.currentValue = 0;
+  }
+
+  start(): void {
+    this.bar.start(this.total, 0);
+  }
+
+  increment(value = 1): void {
+    this.currentValue += value;
+    this.bar.update(this.currentValue);
+  }
+
+  stop(): void {
+    this.bar.stop();
+  }
+}
+
 // These plugins refer to a collection of tests.
 const categories = {
   harmful: Object.keys(HARM_PLUGINS),
@@ -140,28 +163,24 @@ export async function synthesize({
   // Deduplicate, filter out the category names, and sort
   plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
 
+  // Calculate total number of tests
+  const totalTests =
+    plugins.reduce((sum, p) => sum + (p.numTests || 0), 0) * (strategies.length + 1);
+
   // Initialize progress bar
-  const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-  const totalSteps = plugins.length + 2; // +2 for initial setup steps
-  let currentStep = 0;
+  const progressBar = new ProgressBar(totalTests);
 
   if (logger.level !== 'debug') {
-    progressBar.start(100, 0);
+    progressBar.start();
   }
-
-  const updateProgress = () => {
-    currentStep += 1;
-    const progress = Math.floor((currentStep / totalSteps) * 100);
-    progressBar.update(progress);
-  };
 
   // Get purpose
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
-  updateProgress();
+  progressBar.increment();
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
     : await extractEntities(redteamProvider, prompts);
-  updateProgress();
+  progressBar.increment();
 
   logger.debug(`System purpose: ${purpose}`);
 
@@ -169,7 +188,7 @@ export async function synthesize({
   for (const plugin of plugins) {
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
-      updateProgress();
+      progressBar.increment();
       logger.debug(`Generating tests for ${plugin.id}...`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
         language,
@@ -195,7 +214,7 @@ export async function synthesize({
   for (const { key, action } of Strategies) {
     const strategy = strategies.find((s) => s.id === key);
     if (strategy) {
-      updateProgress();
+      progressBar.increment();
       logger.debug(`Generating ${key} tests`);
       const strategyTestCases = action(testCases, injectVar);
       newTestCases.push(
@@ -215,7 +234,6 @@ export async function synthesize({
 
   // Finish progress bar
   if (logger.level !== 'debug') {
-    progressBar.update(100);
     progressBar.stop();
   }
 

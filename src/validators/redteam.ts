@@ -116,6 +116,12 @@ export const RedteamConfigSchema = z
       )
       .optional()
       .default(['default']),
+    maxConcurrency: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum number of concurrent API calls'),
   })
   .transform((data): RedteamConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();

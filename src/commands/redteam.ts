@@ -53,7 +53,8 @@ providers:
   {% endfor %}
 
 redteam:
-  # Default number of inputs to generate for each plugin
+  # Default number of inputs to generate for each plugin.
+  # The total number of tests will be (numTests * plugins.length * (1 + strategies.length))
   numTests: {{numTests}}
 
   {% if plugins.length > 0 -%}
