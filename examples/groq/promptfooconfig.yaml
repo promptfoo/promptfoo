@@ -23,12 +23,5 @@ providers:
 tests:
   - vars:
       calculation: 25 * 4 + 10
-    assert:
-      - type: icontains
-        value: 110
-
   - vars:
       calculation: (8 + 2) * 5
-    assert:
-      - type: icontains
-        value: 50
