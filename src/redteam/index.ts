@@ -1,6 +1,7 @@
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import Table from 'cli-table3';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
@@ -13,6 +14,42 @@ import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
 import { Strategies, validateStrategies } from './strategies';
+
+function getStatus(requested: number, generated: number): string {
+  if (generated === 0) {
+    return chalk.red('Failed');
+  }
+  if (generated < requested) {
+    return chalk.yellow('Partial');
+  }
+  return chalk.green('Success');
+}
+
+function generateReport(
+  pluginResults: Record<string, { requested: number; generated: number }>,
+  strategyResults: Record<string, { requested: number; generated: number }>,
+): string {
+  const table = new Table({
+    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'],
+    colWidths: [5, 10, 40, 12, 12, 14],
+  });
+
+  let rowIndex = 1;
+
+  for (const [id, { requested, generated }] of Object.entries(pluginResults).sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    table.push([rowIndex++, 'Plugin', id, requested, generated, getStatus(requested, generated)]);
+  }
+
+  for (const [id, { requested, generated }] of Object.entries(strategyResults).sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    table.push([rowIndex++, 'Strategy', id, requested, generated, getStatus(requested, generated)]);
+  }
+
+  return `\nTest Generation Report:\n${table.toString()}`;
+}
 
 export class ProgressBar {
   private bar: cliProgress.SingleBar;
@@ -191,11 +228,14 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
+  const pluginResults: Record<string, { requested: number; generated: number }> = {};
+  const strategyResults: Record<string, { requested: number; generated: number }> = {};
+
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
-      progressBar.increment();
+      progressBar.increment(plugin.numTests);
       logger.debug(`Generating tests for ${plugin.id}...`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
         language,
@@ -211,8 +251,10 @@ export async function synthesize({
         })),
       );
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
+      pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
+      pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
     }
   });
 
@@ -221,7 +263,7 @@ export async function synthesize({
   for (const { key, action } of Strategies) {
     const strategy = strategies.find((s) => s.id === key);
     if (strategy) {
-      progressBar.increment();
+      progressBar.increment(plugins.reduce((sum, p) => sum + (p.numTests || 0), 0));
       logger.debug(`Generating ${key} tests`);
       const strategyTestCases = action(testCases, injectVar);
       newTestCases.push(
@@ -234,6 +276,10 @@ export async function synthesize({
           },
         })),
       );
+      strategyResults[key] = {
+        requested: testCases.length,
+        generated: strategyTestCases.length,
+      };
     }
   }
 
@@ -243,6 +289,9 @@ export async function synthesize({
   if (logger.level !== 'debug') {
     progressBar.stop();
   }
+
+  // Generate report
+  logger.info(generateReport(pluginResults, strategyResults));
 
   return { purpose, entities, testCases };
 }

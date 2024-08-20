@@ -302,7 +302,6 @@ export function generateRedteamCommand(
           defaultConfigPath,
           ...(overrides.plugins ? { plugins: overrides.plugins } : {}),
           ...(overrides.strategies ? { strategies: overrides.strategies } : {}),
-          maxConcurrency: opts.maxConcurrency,
         });
         doGenerateRedteam(validatedOpts);
       } catch (error) {
