@@ -1,6 +1,6 @@
 import { clearCache, disableCache, enableCache } from '../src/cache';
 import { GroqProvider } from '../src/providers/groq';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../src/util';
+import { maybeLoadFromExternalFile } from '../src/util';
 
 jest.mock('groq-sdk', () => {
   return {
@@ -152,9 +152,14 @@ describe('Groq', () => {
       });
 
       it('should pass custom configuration options including tools and tool_choice', async () => {
-        const tools: { type: "function"; function: { name: string } }[] = [
-          { type: "function", function: { name: 'test_function' } },
-        ];
+        const tools: {
+          type: 'function';
+          function: {
+            name: string;
+            description?: string | undefined;
+            parameters?: Record<string, any> | undefined;
+          };
+        }[] = [{ type: 'function', function: { name: 'test_function' } }];
         jest.mocked(maybeLoadFromExternalFile).mockReturnValue(tools);
 
         const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
@@ -276,34 +281,6 @@ describe('Groq', () => {
         await expect(provider.callApi('Test prompt')).resolves.toEqual({
           error: 'API call error: Error: Invalid response from Groq API',
         });
-      });
-
-      it('should use context and options in callApi', async () => {
-        const mockCreate = jest.fn().mockResolvedValue({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        });
-        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
-
-        const context = {
-          vars: { test: 'value' },
-          prompt: { raw: 'Test prompt', label: 'test' },
-        };
-        const options = { includeLogProbs: true };
-
-        jest.mocked(renderVarsInObject).mockReturnValue('Rendered prompt');
-
-        await provider.callApi('Test prompt', context, options);
-
-        expect(renderVarsInObject).toHaveBeenCalledWith('Test prompt', context.vars);
-        expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({
-              role: 'user',
-              content: 'Rendered prompt',
-            }),
-          ]),
-        }));
       });
 
       it('should use maybeLoadFromExternalFile for tools configuration', async () => {

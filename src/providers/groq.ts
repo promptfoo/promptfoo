@@ -79,11 +79,13 @@ export class GroqProvider implements ApiProvider {
       temperature: this.config.temperature ?? 0.7,
       max_tokens: this.config.max_tokens ?? 1000,
       top_p: this.config.top_p ?? 1,
-      tools: this.config.tools
-        ? maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars))
-        : undefined,
+      tools: this.config.tools ? maybeLoadFromExternalFile(this.config.tools) : undefined,
       tool_choice: this.config.tool_choice ?? 'auto',
     };
+
+    if (context?.vars && this.config.tools) {
+      params.tools = maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context.vars));
+    }
 
     const cacheKey = `groq:${JSON.stringify(params)}`;
     if (isCacheEnabled()) {
