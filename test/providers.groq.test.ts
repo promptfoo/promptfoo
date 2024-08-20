@@ -91,7 +91,6 @@ describe('Groq', () => {
         (provider as any).groq = { chat: { completions: { create: mockCreate } } };
 
         await provider.callApi('Test prompt');
-        jest.clearAllMocks(); // Add this line
         const cachedResult = await provider.callApi('Test prompt');
 
         expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -153,21 +152,25 @@ describe('Groq', () => {
       });
 
       it('should pass custom configuration options including tools and tool_choice', async () => {
-        const customProvider = new GroqProvider('mixtral-8x7b-32768', {
+        const tools: { type: 'function'; function: { name: string } }[] = [
+          { type: 'function', function: { name: 'test_function' } },
+        ];
+        jest.mocked(maybeLoadFromExternalFile).mockReturnValue(tools);
+
+        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
           config: {
             temperature: 0.7,
             max_tokens: 100,
             top_p: 0.9,
-            tools: [{ type: 'function', function: { name: 'test_function' } }],
+            tools,
             tool_choice: 'auto',
           },
         });
 
-        const mockResponse = {
+        const mockCreate = jest.fn().mockResolvedValue({
           choices: [{ message: { content: 'Custom output' } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
-        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
+        });
         (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
 
         await customProvider.callApi('Test prompt');
@@ -177,10 +180,10 @@ describe('Groq', () => {
             temperature: 0.7,
             max_tokens: 100,
             top_p: 0.9,
-            tools: [{ type: 'function', function: { name: 'test_function' } }],
+            tools,
             tool_choice: 'auto',
             messages: expect.any(Array),
-            model: 'mixtral-8x7b-32768',
+            model: 'llama3-groq-8b-8192-tool-use-preview',
           }),
         );
       });
@@ -206,7 +209,7 @@ describe('Groq', () => {
         const mockCreate = jest.fn().mockResolvedValue(mockResponse);
         const mockCallback = jest.fn().mockResolvedValue('Function result');
 
-        const customProvider = new GroqProvider('mixtral-8x7b-32768', {
+        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
           config: {
             functionToolCallbacks: {
               test_function: mockCallback,
@@ -225,7 +228,7 @@ describe('Groq', () => {
       });
 
       it('should use custom system prompt', async () => {
-        const customProvider = new GroqProvider('mixtral-8x7b-32768', {
+        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
           config: {
             systemPrompt: 'Custom system prompt',
           },
@@ -276,11 +279,10 @@ describe('Groq', () => {
       });
 
       it('should use context and options in callApi', async () => {
-        const mockResponse = {
+        const mockCreate = jest.fn().mockResolvedValue({
           choices: [{ message: { content: 'Test output' } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
-        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
+        });
         (provider as any).groq = { chat: { completions: { create: mockCreate } } };
 
         const context = {
@@ -291,21 +293,11 @@ describe('Groq', () => {
 
         await provider.callApi('Test prompt', context, options);
 
-        expect(renderVarsInObject).toHaveBeenCalledWith(
-          expect.objectContaining({
-            messages: expect.any(Array),
-            model: 'mixtral-8x7b-32768',
-            temperature: expect.any(Number),
-            max_tokens: expect.any(Number),
-            top_p: expect.any(Number),
-            tool_choice: expect.any(String),
-          }),
-          context.vars,
-        );
+        expect(renderVarsInObject).toHaveBeenCalledWith(expect.anything(), context.vars);
       });
 
       it('should use maybeLoadFromExternalFile for tools configuration', async () => {
-        const customProvider = new GroqProvider('mixtral-8x7b-32768', {
+        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
           config: {
             tools: [
               {

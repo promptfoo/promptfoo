@@ -79,7 +79,9 @@ export class GroqProvider implements ApiProvider {
       temperature: this.config.temperature ?? 0.7,
       max_tokens: this.config.max_tokens ?? 1000,
       top_p: this.config.top_p ?? 1,
-      tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)),
+      tools: this.config.tools
+        ? maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars))
+        : undefined,
       tool_choice: this.config.tool_choice ?? 'auto',
     };
 
