@@ -44,41 +44,42 @@ export type EnvVars = {
   WEBHOOK_TIMEOUT?: number;
 
   // 3rd party
+  ANTHROPIC_MAX_TOKENS?: number;
+  ANTHROPIC_STOP?: string;
+  ANTHROPIC_TEMPERATURE?: number;
+  AWS_BEDROCK_MAX_GEN_LEN?: number;
+  AWS_BEDROCK_TEMPERATURE?: number;
+  COHERE_CLIENT_NAME?: string;
+  GROQ_API_KEY?: string;
   HELICONE_API_KEY?: string;
+  HF_API_TOKEN?: string;
+  LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
-  LANGFUSE_HOST?: string;
-  PORTKEY_API_KEY?: string;
-  ANTHROPIC_MAX_TOKENS?: number;
-  ANTHROPIC_TEMPERATURE?: number;
-  ANTHROPIC_STOP?: string;
-  OPENAI_STOP?: string;
-  OPENAI_MAX_TOKENS?: number;
-  OPENAI_TEMPERATURE?: number;
-  OPENAI_TOP_P?: number;
-  AWS_BEDROCK_TEMPERATURE?: number;
-  AWS_BEDROCK_MAX_GEN_LEN?: number;
-  COHERE_CLIENT_NAME?: string;
   LLAMA_BASE_URL?: string;
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
-  OLLAMA_BASE_URL?: string;
   OLLAMA_API_KEY?: string;
-  OPENAI_PRESENCE_PENALTY?: number;
-  OPENAI_FREQUENCY_PENALTY?: number;
+  OLLAMA_BASE_URL?: string;
   OPENAI_BEST_OF?: number;
-  REPLICATE_SYSTEM_PROMPT?: string;
+  OPENAI_FREQUENCY_PENALTY?: number;
+  OPENAI_MAX_TOKENS?: number;
+  OPENAI_PRESENCE_PENALTY?: number;
+  OPENAI_STOP?: string;
+  OPENAI_TEMPERATURE?: number;
+  OPENAI_TOP_P?: number;
+  PORTKEY_API_KEY?: string;
   REPLICATE_MAX_LENGTH?: number;
   REPLICATE_MAX_NEW_TOKENS?: number;
-  REPLICATE_TEMPERATURE?: number;
-  REPLICATE_TOP_P?: number;
-  REPLICATE_TOP_K?: number;
   REPLICATE_REPETITION_PENALTY?: number;
-  REPLICATE_STOP_SEQUENCES?: string;
   REPLICATE_SEED?: number;
-  VOYAGE_API_KEY?: string;
+  REPLICATE_STOP_SEQUENCES?: string;
+  REPLICATE_SYSTEM_PROMPT?: string;
+  REPLICATE_TEMPERATURE?: number;
+  REPLICATE_TOP_K?: number;
+  REPLICATE_TOP_P?: number;
   VOYAGE_API_BASE_URL?: string;
-  HF_API_TOKEN?: string;
+  VOYAGE_API_KEY?: string;
 
   // node/npm
   NODE_ENV?: string;
@@ -86,11 +87,11 @@ export type EnvVars = {
 
   // CI
   CI?: boolean;
-  GITHUB_ACTIONS?: boolean;
-  TRAVIS?: boolean;
   CIRCLECI?: boolean;
-  JENKINS?: boolean;
+  GITHUB_ACTIONS?: boolean;
   GITLAB_CI?: boolean;
+  JENKINS?: boolean;
+  TRAVIS?: boolean;
 } & EnvOverrides;
 
 type EnvVarKey = keyof EnvVars;

@@ -1,3 +1,5 @@
+description: 'Groq Provider Demo'
+
 prompts:
   - 'Answer this question as concisely as possible: {{calculation}}'
   - 'Calculate the following and provide a brief explanation: {{calculation}}'
