@@ -7,6 +7,8 @@ import type {
   EnvOverrides,
   ProviderResponse,
 } from '../types';
+import { maybeLoadFromExternalFile } from '../util';
+import { renderVarsInObject } from '../util';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface GroqCompletionOptions {
@@ -24,6 +26,7 @@ interface GroqCompletionOptions {
     };
   }>;
   tool_choice?: 'none' | 'auto' | { type: 'function'; function: { name: string } };
+  functionToolCallbacks?: Record<string, (arg: string) => Promise<string>>;
 }
 
 export class GroqProvider implements ApiProvider {
@@ -61,44 +64,65 @@ export class GroqProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> =
-      parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      {
+        role: 'system',
+        content:
+          'You are a helpful assistant that provides weather information. Always use the get_weather function to retrieve weather data.',
+      },
+      ...parseChatPrompt(prompt, [{ role: 'user' as const, content: prompt }]),
+    ];
 
     const params = {
       messages,
       model: this.config.model || this.modelName,
-      temperature: this.config.temperature,
-      max_tokens: this.config.max_tokens,
-      top_p: this.config.top_p,
-      tools: this.config.tools,
-      tool_choice: this.config.tool_choice,
+      temperature: this.config.temperature || 0.7,
+      max_tokens: this.config.max_tokens || 1000,
+      top_p: this.config.top_p || 1,
+      tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)),
+      tool_choice: this.config.tool_choice || 'auto',
     };
 
     try {
-      const chatCompletion = await this.groq.chat.completions.create(params);
+      const chatCompletion = await this.groq.chat.completions.create(params as any);
 
       if (!chatCompletion || !chatCompletion.choices || chatCompletion.choices.length === 0) {
         throw new Error('Invalid response from Groq API');
       }
 
-      const outputBlocks = [];
-      if (chatCompletion.choices[0].message.content) {
-        outputBlocks.push(chatCompletion.choices[0].message.content);
+      const choice = chatCompletion.choices[0];
+      let output = '';
+
+      if (choice.message.content) {
+        output = choice.message.content;
       }
 
-      if (chatCompletion.choices[0].message.tool_calls) {
-        for (const toolCall of chatCompletion.choices[0].message.tool_calls) {
-          if (toolCall.function) {
-            outputBlocks.push(
-              `[Function Call: ${toolCall.function.name}]`,
-              `Arguments: ${toolCall.function.arguments}`,
+      if (choice.message.tool_calls) {
+        const toolCalls = choice.message.tool_calls.map((toolCall) => ({
+          id: toolCall.id,
+          type: toolCall.type,
+          function: {
+            name: toolCall.function.name,
+            arguments: toolCall.function.arguments,
+          },
+        }));
+        output = JSON.stringify(toolCalls);
+      }
+
+      // Handle function tool callbacks
+      if (this.config.functionToolCallbacks && choice.message.tool_calls) {
+        for (const toolCall of choice.message.tool_calls) {
+          if (toolCall.function && this.config.functionToolCallbacks[toolCall.function.name]) {
+            const functionResult = await this.config.functionToolCallbacks[toolCall.function.name](
+              toolCall.function.arguments,
             );
+            output += `\n\n[Function Result: ${functionResult}]`;
           }
         }
       }
 
       const response: ProviderResponse = {
-        output: outputBlocks.join('\n\n'),
+        output,
         tokenUsage: {
           total: chatCompletion.usage?.total_tokens,
           prompt: chatCompletion.usage?.prompt_tokens,
