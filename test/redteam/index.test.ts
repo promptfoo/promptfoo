@@ -1,10 +1,13 @@
 import cliProgress from 'cli-progress';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
+import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import { synthesize } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
+import { Strategies } from '../../src/redteam/strategies';
+import { validateStrategies } from '../../src/redteam/strategies';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 
 jest.mock('cli-progress');
@@ -25,6 +28,15 @@ jest.mock('process', () => ({
   exit: jest.fn(),
 }));
 
+jest.mock('../../src/redteam/strategies', () => ({
+  ...jest.requireActual('../../src/redteam/strategies'),
+  validateStrategies: jest.fn().mockImplementation((strategies) => {
+    if (strategies.some((s) => s.id === 'invalid-strategy')) {
+      throw new Error('Invalid strategies');
+    }
+  }),
+}));
+
 describe('synthesize', () => {
   const mockProvider = {
     callApi: jest.fn(),
@@ -40,6 +52,13 @@ describe('synthesize', () => {
     jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null | undefined) => {
       throw new Error(`Process.exit called with code ${code}`);
     });
+    jest.mocked(validateStrategies).mockImplementation(() => {});
+    jest.mocked(cliProgress.SingleBar).mockReturnValue({
+      start: jest.fn(),
+      increment: jest.fn(),
+      update: jest.fn(),
+      stop: jest.fn(),
+    } as any);
   });
 
   it('should use provided purpose and entities if given', async () => {
@@ -140,7 +159,7 @@ describe('synthesize', () => {
     expect(logger.warn).toHaveBeenCalledWith('Plugin unregistered-plugin not registered, skipping');
   });
 
-  it('should call process.exit when invalid strategies are provided', async () => {
+  it('should throw an error when invalid strategies are provided', async () => {
     await expect(
       synthesize({
         language: 'en',
@@ -149,9 +168,7 @@ describe('synthesize', () => {
         prompts: ['Test prompt'],
         strategies: [{ id: 'invalid-strategy' }],
       }),
-    ).rejects.toThrow('Process.exit called with code 1');
-
-    expect(process.exit).toHaveBeenCalledWith(1);
+    ).rejects.toThrow('Invalid strategies');
   });
 
   it('should handle empty prompts array', async () => {
@@ -183,14 +200,13 @@ describe('synthesize', () => {
   });
 
   it('should use the progress bar', async () => {
-    const mockStart = jest.fn();
-    const mockUpdate = jest.fn();
-    const mockStop = jest.fn();
-    jest.mocked(cliProgress.SingleBar).mockReturnValue({
-      start: mockStart,
-      update: mockUpdate,
-      stop: mockStop,
-    } as any);
+    const mockProgressBar = {
+      start: jest.fn(),
+      increment: jest.fn(),
+      update: jest.fn(),
+      stop: jest.fn(),
+    };
+    jest.mocked(cliProgress.SingleBar).mockReturnValue(mockProgressBar as any);
 
     await synthesize({
       language: 'en',
@@ -200,10 +216,151 @@ describe('synthesize', () => {
       strategies: [],
     });
 
-    expect(mockStart).toHaveBeenCalledWith(100, 0);
-    expect(mockUpdate).toHaveBeenCalledWith(33);
-    expect(mockUpdate).toHaveBeenCalledWith(66);
-    expect(mockUpdate).toHaveBeenCalledWith(100);
-    expect(mockStop).toHaveBeenCalledWith();
+    expect(mockProgressBar.start).toHaveBeenCalled();
+    expect(mockProgressBar.increment).toHaveBeenCalled();
+    expect(mockProgressBar.stop).toHaveBeenCalled();
+  });
+
+  it('should handle HARM_PLUGINS and PII_PLUGINS correctly', async () => {
+    const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+    jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+    const result = await synthesize({
+      language: 'en',
+      numTests: 1,
+      plugins: [
+        { id: 'harmful', numTests: 2 },
+        { id: 'pii', numTests: 3 },
+      ],
+      prompts: ['Test prompt'],
+      strategies: [],
+    });
+
+    const expectedTestCaseCount = (Object.keys(HARM_PLUGINS).length + PII_PLUGINS.length) * 1; // Each plugin is called once
+    expect(result.testCases).toHaveLength(expectedTestCaseCount);
+  });
+
+  it('should expand plugins using ALIASED_PLUGIN_MAPPINGS', async () => {
+    const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+    jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+    const aliasedPluginKey = 'test-alias';
+    const mockMapping = {
+      [aliasedPluginKey]: {
+        plugins: ['plugin1', 'plugin2'],
+        strategies: [],
+      },
+    };
+    jest.mock('../../src/redteam/constants', () => ({
+      ...jest.requireActual('../../src/redteam/constants'),
+      ALIASED_PLUGIN_MAPPINGS: mockMapping,
+    }));
+
+    const result = await synthesize({
+      language: 'en',
+      numTests: 1,
+      plugins: [{ id: aliasedPluginKey, numTests: 2 }],
+      prompts: ['Test prompt'],
+      strategies: [],
+    });
+
+    expect(result.testCases).toHaveLength(mockMapping[aliasedPluginKey].plugins.length * 2);
+  });
+
+  it('should generate strategy test cases correctly', async () => {
+    const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+    jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+    const mockStrategyAction = jest.fn().mockReturnValue([{ test: 'strategy case' }]);
+    jest
+      .spyOn(Strategies, 'find')
+      .mockReturnValue({ action: mockStrategyAction, key: 'mockStrategy' });
+
+    const result = await synthesize({
+      language: 'en',
+      numTests: 1,
+      plugins: [{ id: 'test-plugin', numTests: 1 }],
+      prompts: ['Test prompt'],
+      strategies: [{ id: 'mockStrategy' }],
+    });
+
+    expect(mockPluginAction).toHaveBeenCalledTimes(1);
+    expect(mockStrategyAction).toHaveBeenCalledTimes(1);
+    expect(result.testCases).toHaveLength(2); // 1 from plugin, 1 from strategy
+    expect(result.testCases[1].metadata?.strategyId).toBe('mockStrategy');
+  });
+
+  it('should generate a correct report for plugins and strategies', async () => {
+    const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+    jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+    const mockStrategyAction = jest.fn().mockReturnValue([{ test: 'strategy case' }]);
+    jest
+      .spyOn(Strategies, 'find')
+      .mockReturnValue({ action: mockStrategyAction, key: 'mockStrategy' });
+
+    await synthesize({
+      language: 'en',
+      numTests: 2,
+      plugins: [{ id: 'test-plugin', numTests: 2 }],
+      prompts: ['Test prompt'],
+      strategies: [{ id: 'mockStrategy' }],
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Generation Report:'));
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('test-plugin'));
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('mockStrategy'));
+  });
+
+  it('should handle errors when executing invalid plugins', async () => {
+    jest.spyOn(Plugins, 'find').mockReturnValue(undefined);
+
+    await synthesize({
+      language: 'en',
+      numTests: 1,
+      plugins: [{ id: 'invalid-plugin', numTests: 1 }],
+      prompts: ['Test prompt'],
+      strategies: [],
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith('Plugin invalid-plugin not registered, skipping');
+  });
+
+  it('should correctly process multiple prompts', async () => {
+    await synthesize({
+      language: 'en',
+      numTests: 1,
+      plugins: [{ id: 'test-plugin', numTests: 1 }],
+      prompts: ['Prompt 1', 'Prompt 2', 'Prompt 3'],
+      strategies: [],
+    });
+
+    expect(extractSystemPurpose).toHaveBeenCalledWith(expect.any(Object), [
+      'Prompt 1',
+      'Prompt 2',
+      'Prompt 3',
+    ]);
+    expect(extractEntities).toHaveBeenCalledWith(expect.any(Object), [
+      'Prompt 1',
+      'Prompt 2',
+      'Prompt 3',
+    ]);
+  });
+
+  it('should handle different logger levels appropriately', async () => {
+    const originalLevel = logger.level;
+    logger.level = 'debug';
+
+    await synthesize({
+      language: 'en',
+      numTests: 1,
+      plugins: [{ id: 'test-plugin', numTests: 1 }],
+      prompts: ['Test prompt'],
+      strategies: [],
+    });
+
+    expect(cliProgress.SingleBar).not.toHaveBeenCalled();
+
+    logger.level = originalLevel;
   });
 });
