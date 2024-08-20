@@ -152,8 +152,8 @@ describe('Groq', () => {
       });
 
       it('should pass custom configuration options including tools and tool_choice', async () => {
-        const tools: { type: 'function'; function: { name: string } }[] = [
-          { type: 'function', function: { name: 'test_function' } },
+        const tools: { type: "function"; function: { name: string } }[] = [
+          { type: "function", function: { name: 'test_function' } },
         ];
         jest.mocked(maybeLoadFromExternalFile).mockReturnValue(tools);
 
@@ -291,9 +291,19 @@ describe('Groq', () => {
         };
         const options = { includeLogProbs: true };
 
+        jest.mocked(renderVarsInObject).mockReturnValue('Rendered prompt');
+
         await provider.callApi('Test prompt', context, options);
 
-        expect(renderVarsInObject).toHaveBeenCalledWith(expect.anything(), context.vars);
+        expect(renderVarsInObject).toHaveBeenCalledWith('Test prompt', context.vars);
+        expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              role: 'user',
+              content: 'Rendered prompt',
+            }),
+          ]),
+        }));
       });
 
       it('should use maybeLoadFromExternalFile for tools configuration', async () => {
