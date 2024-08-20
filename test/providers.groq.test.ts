@@ -1,4 +1,3 @@
-import Groq from 'groq-sdk';
 import { clearCache, disableCache, enableCache } from '../src/cache';
 import { GroqProvider } from '../src/providers/groq';
 
@@ -26,7 +25,7 @@ describe('Groq', () => {
     const provider = new GroqProvider('mixtral-8x7b-32768');
 
     it('should initialize with correct model name', () => {
-      expect(provider.modelName).toBe('mixtral-8x7b-32768');
+      expect(provider.getModelName()).toBe('mixtral-8x7b-32768');
     });
 
     it('should return correct id', () => {
@@ -44,16 +43,7 @@ describe('Groq', () => {
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
         const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        jest.mocked(Groq).mockImplementation(
-          () =>
-            ({
-              chat: {
-                completions: {
-                  create: mockCreate,
-                },
-              },
-            }) as any,
-        );
+        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
 
         const result = await provider.callApi('Test prompt');
 
@@ -85,16 +75,7 @@ describe('Groq', () => {
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
         const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        jest.mocked(Groq).mockImplementation(
-          () =>
-            ({
-              chat: {
-                completions: {
-                  create: mockCreate,
-                },
-              },
-            }) as any,
-        );
+        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
 
         await provider.callApi('Test prompt');
         const cachedResult = await provider.callApi('Test prompt');
@@ -117,16 +98,7 @@ describe('Groq', () => {
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
         const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        jest.mocked(Groq).mockImplementation(
-          () =>
-            ({
-              chat: {
-                completions: {
-                  create: mockCreate,
-                },
-              },
-            }) as any,
-        );
+        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
 
         disableCache();
 
@@ -141,41 +113,23 @@ describe('Groq', () => {
       });
 
       it('should handle API errors', async () => {
-        const mockError = new Error('API Error');
+        const mockError = new Error('API Error') as any;
         mockError.name = 'APIError';
-        (mockError as any).status = 400;
+        mockError.status = 400;
         const mockCreate = jest.fn().mockRejectedValue(mockError);
-        jest.mocked(Groq).mockImplementation(
-          () =>
-            ({
-              chat: {
-                completions: {
-                  create: mockCreate,
-                },
-              },
-            }) as any,
-        );
+        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
 
         const result = await provider.callApi('Test prompt');
 
         expect(result).toEqual({
-          error: 'API call error: 400 APIError: API Error',
+          error: 'API call error: APIError: API Error',
         });
       });
 
       it('should handle non-API errors', async () => {
         const mockError = new Error('Unknown error');
         const mockCreate = jest.fn().mockRejectedValue(mockError);
-        jest.mocked(Groq).mockImplementation(
-          () =>
-            ({
-              chat: {
-                completions: {
-                  create: mockCreate,
-                },
-              },
-            }) as any,
-        );
+        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
 
         const result = await provider.callApi('Test prompt');
 
@@ -198,16 +152,7 @@ describe('Groq', () => {
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
         const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        jest.mocked(Groq).mockImplementation(
-          () =>
-            ({
-              chat: {
-                completions: {
-                  create: mockCreate,
-                },
-              },
-            }) as any,
-        );
+        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
 
         await customProvider.callApi('Test prompt');
 
