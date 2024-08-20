@@ -1,3 +1,4 @@
+import path from 'path';
 import { maybeReadConfig } from '../src/config';
 import { loadDefaultConfig } from '../src/main';
 
@@ -35,7 +36,7 @@ describe('loadDefaultConfig', () => {
 
     expect(result).toEqual({
       defaultConfig: mockConfig,
-      defaultConfigPath: '/test/path/promptfooconfig.json',
+      defaultConfigPath: path.normalize('/test/path/promptfooconfig.json'),
     });
     expect(maybeReadConfig).toHaveBeenCalledTimes(3);
   });
@@ -49,7 +50,7 @@ describe('loadDefaultConfig', () => {
     expectedExtensions.forEach((ext, index) => {
       expect(maybeReadConfig).toHaveBeenNthCalledWith(
         index + 1,
-        `/test/path/promptfooconfig.${ext}`,
+        path.normalize(`/test/path/promptfooconfig.${ext}`),
       );
     });
   });
