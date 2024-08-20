@@ -4,6 +4,10 @@ sidebar_label: Intro
 title: LLM red teaming guide (open source)
 ---
 
+import CodeBlock from '@theme/CodeBlock';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # LLM red teaming
 
 LLM red teaming is a proactive approach to finding vulnerabilities in AI systems by simulating malicious inputs.
@@ -100,10 +104,40 @@ You can begin red teaming your application in less than 5 minutes.
 
 ### Initialize the project
 
-```sh
-npx promptfoo@latest redteam init my-project
-cd my-project
-```
+<Tabs groupId="installation-method">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest redteam init my-project
+      cd my-project
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    Install:
+    <CodeBlock language="bash">
+      npm install -g promptfoo
+    </CodeBlock>
+
+    Run:
+    <CodeBlock language="bash">
+      promptfoo redteam init my-project
+      cd my-project
+    </CodeBlock>
+
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    Install:
+    <CodeBlock language="bash">
+      brew install promptfoo
+    </CodeBlock>
+
+    Run:
+    <CodeBlock language="bash">
+      promptfoo redteam init my-project
+      cd my-project
+    </CodeBlock>
+
+  </TabItem>
+</Tabs>
 
 The `init` command creates some placeholders, including a `promptfooconfig.yaml` file. We'll use this config file to do most of our setup.
 
@@ -143,17 +177,45 @@ Learn more about [prompt formats](/docs/configuration/parameters/#prompts).
 
 The `init` step will do this for you automatically, but in case you'd like to manually re-generate your adversarial inputs:
 
-```sh
-npx promptfoo@latest redteam generate -w
-```
+<Tabs groupId="installation-method">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest redteam generate
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo redteam generate
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo redteam generate
+    </CodeBlock>
+  </TabItem>
+</Tabs>
 
-This will generate several hundred adversarial inputs across many categories of potential harm.
+This will generate several hundred adversarial inputs across many categories of potential harm and save them in `redteam.yaml`.
 
 You can reduce the number of test cases by setting the specific [plugins](/docs/guides/llm-redteaming#step-3-generate-adversarial-test-cases) you want to run. For example, to only generate harmful inputs:
 
-```sh
-npx promptfoo@latest redteam generate -w --plugins harmful
-```
+<Tabs groupId="installation-method">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest redteam generate --plugins harmful
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo redteam generate --plugins harmful
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo redteam generate --plugins harmful
+    </CodeBlock>
+  </TabItem>
+</Tabs>
 
 Run `npx promptfoo@latest redteam generate --help` to see all available plugins.
 
@@ -165,15 +227,43 @@ By default we use OpenAI's `gpt-4o` model, but we support hundreds of other mode
 
 Now that we've generated the test cases, we're ready to run the adversarial evaluation.
 
-```
-npx promptfoo@latest eval
-```
+<Tabs groupId="installation-method">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest eval -c redteam.yaml
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo eval -c redteam.yaml
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo eval -c redteam.yaml
+    </CodeBlock>
+  </TabItem>
+</Tabs>
 
 ### View the results
 
-```sh
-npx promptfoo@latest view
-```
+<Tabs groupId="installation-method">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest view
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo view
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo view
+    </CodeBlock>
+  </TabItem>
+</Tabs>
 
 Promptfoo provides a detailed eval view that lets you dig into specific red team failure cases:
 
