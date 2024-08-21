@@ -112,8 +112,9 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
 
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
-    numTests: redteamConfig?.numTests ?? options.numTests,
     language: redteamConfig?.language || options.language,
+    maxConcurrency: options.maxConcurrency,
+    numTests: redteamConfig?.numTests ?? options.numTests,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
@@ -135,6 +136,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     language: config.language,
     numTests: config.numTests,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
+    maxConcurrency: config.maxConcurrency,
   } as SynthesizeOptions);
 
   const updatedRedteamConfig = {
@@ -266,6 +268,12 @@ export function generateRedteamCommand(
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')
+    .option(
+      '-j, --max-concurrency <number>',
+      'Maximum number of concurrent API calls',
+      (val) => Number.parseInt(val, 10),
+      defaultConfig.evaluateOptions?.maxConcurrency,
+    )
     .action((opts: Partial<RedteamGenerateOptions>): void => {
       try {
         let overrides: Record<string, any> = {};

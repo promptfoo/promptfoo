@@ -64,6 +64,12 @@ export const RedteamGenerateOptionsSchema = z.object({
   envFile: z.string().optional().describe('Path to the environment file'),
   injectVar: z.string().optional().describe('Variable to inject'),
   language: z.string().optional().describe('Language of tests to generate'),
+  maxConcurrency: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Maximum number of concurrent API calls'),
   numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
@@ -117,6 +123,12 @@ export const RedteamConfigSchema = z
       )
       .optional()
       .default(['default']),
+    maxConcurrency: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum number of concurrent API calls'),
   })
   .transform((data): RedteamConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();

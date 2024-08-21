@@ -4,10 +4,10 @@ import logger from '../../logger';
 import type { TestCase, TestCaseWithPlugin } from '../../types';
 import { addBase64Encoding } from './base64';
 import { addCrescendo } from './crescendo';
-import { addInjections } from './injections';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addMultilingual } from './multilingual';
+import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
 
 interface Strategy {
