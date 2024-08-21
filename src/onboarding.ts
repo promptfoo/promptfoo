@@ -228,11 +228,11 @@ Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
-  if (directory) {
-    // Make the directory if it doesn't exist
-    if (!fs.existsSync(directory)) {
-      fs.mkdirSync(directory);
-    }
+  if (
+    directory && // Make the directory if it doesn't exist
+    !fs.existsSync(directory)
+  ) {
+    fs.mkdirSync(directory);
   }
 
   if (directory) {

@@ -841,9 +841,9 @@ export async function matchesSelectBest(
   invariant(typeof resp.output === 'string', 'select-best produced malformed response');
 
   const firstDigitMatch = resp.output.trim().match(/\d/);
-  const verdict = firstDigitMatch ? parseInt(firstDigitMatch[0], 10) : NaN;
+  const verdict = firstDigitMatch ? Number.parseInt(firstDigitMatch[0], 10) : Number.NaN;
 
-  if (isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
+  if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
     return new Array(outputs.length).fill(fail(`Invalid select-best verdict: ${verdict}`));
   }
 

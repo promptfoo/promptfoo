@@ -467,13 +467,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       messages: messages,
       seed: this.config.seed || 0,
-      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
+      max_tokens:
+        this.config.max_tokens ?? Number.parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      temperature:
+        this.config.temperature ?? Number.parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      top_p: this.config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+        this.config.presence_penalty ??
+        Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+        this.config.frequency_penalty ??
+        Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       ...(this.config.functions
         ? {
             functions: maybeLoadFromExternalFile(

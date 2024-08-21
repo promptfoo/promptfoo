@@ -51,7 +51,7 @@ export function assertionFromString(expected: string): Assertion {
   if (regexMatch) {
     const [_, notPrefix, type, thresholdStr, value] = regexMatch;
     const fullType = notPrefix ? `not-${type}` : type;
-    const threshold = parseFloat(thresholdStr);
+    const threshold = Number.parseFloat(thresholdStr);
 
     if (
       type === 'contains-any' ||
@@ -127,7 +127,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     } else if (key === '__metric') {
       metric = value;
     } else if (key === '__threshold') {
-      threshold = parseFloat(value);
+      threshold = Number.parseFloat(value);
     } else {
       vars[key] = value;
     }

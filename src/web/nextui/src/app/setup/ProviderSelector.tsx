@@ -205,10 +205,10 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
   const handleProviderClick = (provider: string | ProviderOptions): void => {
     if (typeof provider === 'string') {
       alert('Cannot edit custom providers');
-    } else if (!provider.config) {
-      alert('There is no config for this provider');
-    } else {
+    } else if (provider.config) {
       setSelectedProvider(provider as ProviderOptions);
+    } else {
+      alert('There is no config for this provider');
     }
   };
 

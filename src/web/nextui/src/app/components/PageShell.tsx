@@ -80,7 +80,7 @@ export function PageShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Initialize from localStorage, fallback to system preference
     const savedMode = localStorage.getItem('darkMode');
-    setDarkMode(savedMode !== null ? savedMode === 'true' : prefersDarkMode);
+    setDarkMode(savedMode === null ? prefersDarkMode : savedMode === 'true');
   }, [prefersDarkMode]);
 
   const toggleDarkMode = useCallback(() => {

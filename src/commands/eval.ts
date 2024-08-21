@@ -57,8 +57,8 @@ export async function doEval(
     if (cmdObj.verbose) {
       setLogLevel('debug');
     }
-    const iterations = parseInt(cmdObj.repeat || '', 10);
-    const repeat = !isNaN(iterations) && iterations > 0 ? iterations : 1;
+    const iterations = Number.parseInt(cmdObj.repeat || '', 10);
+    const repeat = !Number.isNaN(iterations) && iterations > 0 ? iterations : 1;
     if (!cmdObj.cache || repeat > 1) {
       logger.info('Cache is disabled.');
       disableCache();
@@ -67,8 +67,8 @@ export async function doEval(
     ({ config, testSuite, basePath } = await resolveConfigs(cmdObj, defaultConfig));
     cliState.basePath = basePath;
 
-    let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
-    const delay = parseInt(cmdObj.delay || '', 0);
+    let maxConcurrency = Number.parseInt(cmdObj.maxConcurrency || '', 10);
+    const delay = Number.parseInt(cmdObj.delay || '', 0);
 
     if (delay > 0) {
       maxConcurrency = 1;
@@ -87,9 +87,10 @@ export async function doEval(
 
     const options: EvaluateOptions = {
       showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
-      maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
+      maxConcurrency:
+        !Number.isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
       repeat,
-      delay: !isNaN(delay) && delay > 0 ? delay : undefined,
+      delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       interactiveProviders: cmdObj.interactiveProviders,
       ...evaluateOptions,
     };
@@ -138,7 +139,7 @@ export async function doEval(
 
     if (cmdObj.table && getLogLevel() !== 'debug') {
       // Output CLI table
-      const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
+      const table = generateTable(summary, Number.parseInt(cmdObj.tableCellMaxLength || '', 10));
 
       logger.info('\n' + table.toString());
       if (summary.table.body.length > 25) {
@@ -174,9 +175,7 @@ export async function doEval(
     telemetry.maybeShowNotice();
 
     printBorder();
-    if (!cmdObj.write) {
-      logger.info(`${chalk.green('✔')} Evaluation complete`);
-    } else {
+    if (cmdObj.write) {
       if (shareableUrl) {
         logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
       } else {
@@ -191,6 +190,8 @@ export async function doEval(
           )}`,
         );
       }
+    } else {
+      logger.info(`${chalk.green('✔')} Evaluation complete`);
     }
     printBorder();
     const totalTests = summary.stats.successes + summary.stats.failures;
