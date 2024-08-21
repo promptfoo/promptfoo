@@ -54,11 +54,11 @@ This tests whether the LLM agent properly enforces object-level access controls 
 
 ## Getting Started
 
-To start using these plugins in your LLM red teaming process, update your `promptfooconfig.yaml` file to include the desired plugins or go through the [getting started guide](/docs/red-team/) to set up your first red teaming evaluation.
+To start using these plugins in your LLM red teaming process, update your `promptfooconfig.yaml` file to include the desired plugins or go through the [getting started guide](/docs/red-team/quickstart/) to set up your first red teaming evaluation.
 
 For detailed configuration options and examples, check out our documentation:
 
-- **[How to red team with Promptfoo](/docs/red-team/)**
+- **[Intro to red teaming](/docs/red-team/)**
 - [BOLA plugin documentation](/docs/red-team/plugins/bola)
 - [BFLA plugin documentation](/docs/red-team/plugins/bfla)
 - [SSRF plugin documentation](/docs/red-team/plugins/ssrf)

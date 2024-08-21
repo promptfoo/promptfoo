@@ -9,7 +9,7 @@ LLM agents capable of interacting with their environment and executing complex t
 
 This guide outlines strategies for red teaming LLM agents, with a focus on technical vulnerabilities and security implications.
 
-It includes configuration examples for Promptfoo, an open-source red teaming tool. To run your own red team, see [getting started](/docs/red-team/).
+It includes configuration examples for Promptfoo, an open-source red teaming tool. To run your own red team, see [getting started](/docs/red-team/quickstart/).
 
 ## Unauthorized Access and Privilege Escalation
 
@@ -186,6 +186,6 @@ redteam:
 
 This example use a custom policy plugin that generates test cases based on specific rules.
 
-## Conclusion
+## What's next?
 
 Promptfoo is a free open-source red teaming tool for LLM agents. If you'd like to learn more about how to set up a red team, check out the [red teaming](/docs/red-team/) introduction.

@@ -53,7 +53,7 @@ This configuration uses the `prompt-injection` strategy, which generates test ca
 - `pii:direct`: Checks if the model directly discloses personally identifiable information.
 - `rbac`: Verifies that the model adheres to role-based access control for tool use.
 
-See [setup](/docs/red-team/) for more details on how to run red teams.
+See [setup](/docs/red-team/quickstart/) for more details on how to run red teams.
 
 ## Context Injection
 
@@ -392,7 +392,7 @@ This red team will ensure that the application behaves correctly even with a bun
 
 ## What's next
 
-If you're interested in red teaming your RAG and finding potential vulnerabilities, see the [Getting Started](/docs/red-team/) guide.
+If you're interested in red teaming your RAG and finding potential vulnerabilities, see the [Getting Started](/docs/red-team/quickstart/) guide.
 
 ### Setting Up a Custom Provider for Red Team Evaluation
 
