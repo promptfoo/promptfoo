@@ -6,6 +6,8 @@ sidebar_label: Tree-based Jailbreaks
 
 The Tree-based Jailbreaks strategy is an advanced technique designed to systematically explore and potentially bypass an AI system's constraints by creating a branching structure of single-shot prompts.
 
+It's based on the [Tree of Attacks](https://arxiv.org/abs/2312.02119) paper published by Mehrotra et al in 2023.
+
 Use it like so in your promptfooconfig.yaml:
 
 ```yaml
@@ -63,8 +65,9 @@ The tree-based jailbreak strategy allows for a comprehensive exploration of pote
 
 This approach can cover a wide range of inputs and identify weaknesses that might not be apparent with manual testing methods.
 
-## Related Concepts
+## Further Reading
 
+- [Tree of Attacks: Jailbreaking Black-Box LLMs Automatically](https://arxiv.org/abs/2312.02119)
 - [Iterative Jailbreaks](iterative.md)
 - [Prompt Injections](prompt-injection.md)
 - [Multi-turn Jailbreaks](multi-turn.md)
