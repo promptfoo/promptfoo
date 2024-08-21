@@ -1078,7 +1078,7 @@ ${
     invariant(test.vars, 'context-relevance assertion type must have a vars object');
     invariant(
       typeof test.vars.query === 'string',
-      'context-relevance assertion type must have a question var',
+      'context-relevance assertion type must have a query var',
     );
     invariant(
       typeof test.vars.context === 'string',
@@ -1100,7 +1100,7 @@ ${
     invariant(test.vars, 'context-faithfulness assertion type must have a vars object');
     invariant(
       typeof test.vars.query === 'string',
-      'context-faithfulness assertion type must have a question var',
+      'context-faithfulness assertion type must have a query var',
     );
     invariant(
       typeof test.vars.context === 'string',
