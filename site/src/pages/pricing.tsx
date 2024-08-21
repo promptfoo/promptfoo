@@ -19,12 +19,18 @@ function PricingTable() {
   const plans = [
     {
       name: 'Community',
-      price: 'Free',
-      description: 'Open-source for individual developers',
+      price: 'Free Forever',
+      description: 'Our open-source tool, perfect for individual developers and small teams',
       features: [
-        'Full access to core features',
-        'Local testing and evaluation',
-        'Basic vulnerability scanning',
+        'All LLM evaluation features',
+        'All model providers and integrations',
+        'No usage limits',
+        'Custom integration with your own app',
+        //'Data visualizations',
+        //'Dataset generation',
+        //'Run locally on your machine',
+        'Run locally or self-host on your own infrastructure',
+        'Vulnerability scanning',
         'Community support',
       ],
       cta: 'Get Started',
@@ -36,9 +42,10 @@ function PricingTable() {
       description: 'For teams that need advanced features and support',
       features: [
         'All Community features',
-        'Team sharing & collaboration tools',
-        'Advanced vulnerability scanning',
-        'Centralized security/compliance overview',
+        'Team sharing & collaboration',
+        'Continuous monitoring',
+        'Centralized security/compliance dashboard',
+        'Customized red teaming plugins',
         'SSO and Access Control',
         'On-premises or private cloud deployment',
         'Priority support & SLA guarantees',
@@ -90,7 +97,12 @@ function FAQSection() {
   const faqs = [
     {
       question: `What's included in the Community version?`,
-      answer: `The Community version includes all core features for local testing, evaluation, and basic vulnerability scanning. It's perfect for individual developers and small projects.`,
+      answer: `The Community version includes all core features for local testing, evaluation, and vulnerability scanning.`,
+    },
+    {
+      question: 'Who needs the Enterprise version?',
+      answer:
+        'Larger teams and organizations that want to continuously monitor risk in development and production.',
     },
     {
       question: 'How does Enterprise pricing work?',
@@ -99,7 +111,7 @@ function FAQSection() {
     {
       question: 'Can I upgrade from Community to Enterprise?',
       answer:
-        'Yes, you can easily upgrade to Enterprise at any time to access advanced features and support.',
+        'Yes, you can easily upgrade to Enterprise at any time to access additional features and support.',
     },
   ];
 
@@ -122,7 +134,7 @@ export default function Pricing(): JSX.Element {
   return (
     <Layout
       title="Pricing"
-      description="Choose the right plan for your team. Compare our Community (free, open-source) and Enterprise offerings."
+      description="Choose the right solution for your team. Compare our Community (free, open-source) and Enterprise offerings."
     >
       <Head>
         <meta property="og:image" content="https://www.promptfoo.dev/img/meta/pricing.png" />

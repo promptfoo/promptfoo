@@ -117,7 +117,7 @@ const config = {
           },
           */
           { to: '/docs/intro/', label: 'Docs', position: 'left' },
-          { to: '/pricing/', label: 'Pricing', position: 'left' },
+          { to: '/pricing/', label: 'Enterprise', position: 'left' },
           {
             to: '/llm-vulnerability-scanner/',
             label: 'Vulnerability Scanner',
@@ -219,7 +219,7 @@ const config = {
                 href: '/blog',
               },
               {
-                label: 'Pricing',
+                label: 'Enterprise',
                 href: '/pricing/',
               },
               {
