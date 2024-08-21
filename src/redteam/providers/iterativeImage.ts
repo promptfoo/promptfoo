@@ -15,7 +15,7 @@ import { getNunjucksEngine } from '../../util/templates';
 const ATTACKER_MODEL = 'gpt-4o';
 
 const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
-  ? parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)
+  ? Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)
   : 4;
 
 // Based on: https://arxiv.org/abs/2312.02119

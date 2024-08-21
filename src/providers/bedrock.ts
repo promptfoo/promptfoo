@@ -180,7 +180,7 @@ interface IBedrockModel {
 export function parseValue(value: string | number, defaultValue: any) {
   if (typeof defaultValue === 'number') {
     if (typeof value === 'string') {
-      return Number.isNaN(parseFloat(value)) ? defaultValue : parseFloat(value);
+      return Number.isNaN(Number.parseFloat(value)) ? defaultValue : Number.parseFloat(value);
     }
     return value;
   }
@@ -196,7 +196,7 @@ export function addConfigParam(
 ) {
   if (configValue !== undefined || envValue !== undefined || defaultValue !== undefined) {
     params[key] =
-      configValue ?? (envValue !== undefined ? parseValue(envValue, defaultValue) : defaultValue);
+      configValue ?? (envValue === undefined ? defaultValue : parseValue(envValue, defaultValue));
   }
 }
 

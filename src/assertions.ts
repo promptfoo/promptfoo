@@ -784,7 +784,13 @@ export async function runAssertion({
       }
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
       let result: boolean | number | GradingResult;
-      if (typeof valueFromScript !== 'undefined') {
+      if (typeof valueFromScript === 'undefined') {
+        const functionBody = renderedValue.includes('\n')
+          ? renderedValue
+          : `return ${renderedValue}`;
+        const customFunction = new Function('output', 'context', functionBody);
+        result = await validateResult(customFunction(output, context));
+      } else {
         invariant(
           typeof valueFromScript === 'boolean' ||
             typeof valueFromScript === 'number' ||
@@ -792,12 +798,6 @@ export async function runAssertion({
           `Javascript assertion script must return a boolean, number, or object (${assertion.value})`,
         );
         result = await validateResult(valueFromScript);
-      } else {
-        const functionBody = renderedValue.includes('\n')
-          ? renderedValue
-          : `return ${renderedValue}`;
-        const customFunction = new Function('output', 'context', functionBody);
-        result = await validateResult(customFunction(output, context));
       }
       if (typeof result === 'boolean') {
         pass = result !== inverse;
@@ -835,9 +835,7 @@ ${renderedValue}`,
     invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
     try {
       let result: string | number | boolean | object | GradingResult | undefined;
-      if (typeof valueFromScript !== 'undefined') {
-        result = valueFromScript;
-      } else {
+      if (typeof valueFromScript === 'undefined') {
         const isMultiline = renderedValue.includes('\n');
         let indentStyle = '    ';
         if (isMultiline) {
@@ -861,6 +859,8 @@ ${
 }
 `;
         result = await runPythonCode(pythonScript, 'main', [output, context]);
+      } else {
+        result = valueFromScript;
       }
 
       if (
@@ -908,9 +908,9 @@ ${
           assertion,
         };
       } else {
-        score = parseFloat(String(result));
+        score = Number.parseFloat(String(result));
         pass = assertion.threshold ? score >= assertion.threshold : score > 0;
-        if (isNaN(score)) {
+        if (Number.isNaN(score)) {
           throw new Error(
             `Python assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
           );
@@ -989,10 +989,8 @@ ${
       '"llm-rubric" assertion type must have a string value',
     );
 
-    if (test.options?.rubricPrompt) {
-      if (typeof test.options.rubricPrompt === 'object') {
-        test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
-      }
+    if (test.options?.rubricPrompt && typeof test.options.rubricPrompt === 'object') {
+      test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
     }
 
     // Update the assertion value. This allows the web view to display the prompt.
@@ -1078,7 +1076,7 @@ ${
     invariant(test.vars, 'context-relevance assertion type must have a vars object');
     invariant(
       typeof test.vars.query === 'string',
-      'context-relevance assertion type must have a question var',
+      'context-relevance assertion type must have a query var',
     );
     invariant(
       typeof test.vars.context === 'string',
@@ -1100,7 +1098,7 @@ ${
     invariant(test.vars, 'context-faithfulness assertion type must have a vars object');
     invariant(
       typeof test.vars.query === 'string',
-      'context-faithfulness assertion type must have a question var',
+      'context-faithfulness assertion type must have a query var',
     );
     invariant(
       typeof test.vars.context === 'string',

@@ -270,7 +270,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
       frequency_penalty:
         this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
-      ...(this.config.seed !== undefined ? { seed: this.config.seed } : {}),
+      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
@@ -364,7 +364,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
           }
         : {}),
       ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
-      ...(this.config.seed !== undefined ? { seed: this.config.seed } : {}),
+      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
       ...(this.config.tools
         ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
         : {}),

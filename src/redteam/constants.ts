@@ -80,6 +80,7 @@ export const BASE_PLUGINS = [
   'hijacking',
   'overreliance',
   'politics',
+  'prompt-extraction',
 ] as const;
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
@@ -320,6 +321,7 @@ export const ADDITIONAL_STRATEGIES = [
   'base64',
   'leetspeak',
   'crescendo',
+  'multilingual',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
@@ -335,6 +337,7 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
   basic: 'Raw attacks without any special attack strategies',
+  multilingual: 'Translates the input into low-resource languages',
   bola: 'Broken Object Level Authorization (BOLA) tests',
   bfla: 'Broken Function Level Authorization (BFLA) tests',
   ssrf: 'Server-Side Request Forgery (SSRF) tests',

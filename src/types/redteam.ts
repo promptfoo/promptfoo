@@ -55,5 +55,5 @@ export interface SynthesizeOptions {
   prompts: [string, ...string[]];
   provider?: ApiProvider | ProviderOptions | string;
   purpose?: string;
-  strategies: { id: string }[];
+  strategies: { id: string; config?: Record<string, any> }[];
 }

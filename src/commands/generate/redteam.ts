@@ -259,7 +259,7 @@ export function generateRedteamCommand(
     .option(
       '-n, --num-tests <number>',
       'Number of test cases to generate per plugin',
-      (val) => (Number.isInteger(val) ? val : parseInt(val, 10)),
+      (val) => (Number.isInteger(val) ? val : Number.parseInt(val, 10)),
       undefined,
     )
     .option(
@@ -271,7 +271,7 @@ export function generateRedteamCommand(
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
-      (val) => parseInt(val, 10),
+      (val) => Number.parseInt(val, 10),
       defaultConfig.evaluateOptions?.maxConcurrency,
     )
     .action((opts: Partial<RedteamGenerateOptions>): void => {

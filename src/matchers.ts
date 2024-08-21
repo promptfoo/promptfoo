@@ -238,7 +238,9 @@ export async function matchesSimilarity(
   } else {
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
-  const pass = inverse ? similarity <= threshold : similarity >= threshold;
+  const pass = inverse
+    ? similarity <= threshold + Number.EPSILON
+    : similarity >= threshold - Number.EPSILON;
   const greaterThanReason = `Similarity ${similarity.toFixed(
     2,
   )} is greater than threshold ${threshold}`;
@@ -292,7 +294,7 @@ export async function matchesClassification(
     score = resp.classification[expected] || 0;
   }
 
-  if (score >= threshold) {
+  if (score >= threshold - Number.EPSILON) {
     const reason =
       expected === undefined
         ? `Maximum classification score ${score.toFixed(2)} >= ${threshold}`
@@ -606,7 +608,7 @@ export async function matchesAnswerRelevance(
   }
 
   const similarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
-  const pass = similarity >= threshold;
+  const pass = similarity >= threshold - Number.EPSILON;
   const greaterThanReason = `Relevance ${similarity.toFixed(
     2,
   )} is greater than threshold ${threshold}`;
@@ -661,7 +663,7 @@ export async function matchesContextRecall(
     0,
   );
   const score = numerator / sentences.length;
-  const pass = score >= threshold;
+  const pass = score >= threshold - Number.EPSILON;
   return {
     pass,
     score,
@@ -709,7 +711,7 @@ export async function matchesContextRelevance(
     0,
   );
   const score = numerator / sentences.length;
-  const pass = score >= threshold;
+  const pass = score >= threshold - Number.EPSILON;
   return {
     pass,
     score,
@@ -792,7 +794,7 @@ export async function matchesContextFaithfulness(
     score = (verdicts.split('verdict: no').length - 1) / statements.length;
   }
   score = 1 - score;
-  const pass = score >= threshold;
+  const pass = score >= threshold - Number.EPSILON;
   return {
     pass,
     score,
@@ -841,9 +843,9 @@ export async function matchesSelectBest(
   invariant(typeof resp.output === 'string', 'select-best produced malformed response');
 
   const firstDigitMatch = resp.output.trim().match(/\d/);
-  const verdict = firstDigitMatch ? parseInt(firstDigitMatch[0], 10) : NaN;
+  const verdict = firstDigitMatch ? Number.parseInt(firstDigitMatch[0], 10) : Number.NaN;
 
-  if (isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
+  if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
     return new Array(outputs.length).fill(fail(`Invalid select-best verdict: ${verdict}`));
   }
 

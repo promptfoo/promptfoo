@@ -143,8 +143,8 @@ export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undef
     return Math.floor(value);
   }
   if (typeof value === 'string') {
-    const parsedValue = parseInt(value, 10);
-    if (!isNaN(parsedValue)) {
+    const parsedValue = Number.parseInt(value, 10);
+    if (!Number.isNaN(parsedValue)) {
       return parsedValue;
     }
   }
@@ -165,8 +165,8 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
     return value;
   }
   if (typeof value === 'string') {
-    const parsedValue = parseFloat(value);
-    if (!isNaN(parsedValue)) {
+    const parsedValue = Number.parseFloat(value);
+    if (!Number.isNaN(parsedValue)) {
       return parsedValue;
     }
   }

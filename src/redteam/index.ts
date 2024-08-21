@@ -282,7 +282,7 @@ export async function synthesize({
     const strategy = strategies.find((s) => s.id === key);
     if (strategy) {
       logger.debug(`Generating ${key} tests`);
-      const strategyTestCases = action(testCases, injectVar);
+      const strategyTestCases = await action(testCases, injectVar, strategy.config || {});
       newTestCases.push(
         ...strategyTestCases.map((t) => ({
           ...t,

@@ -39,7 +39,10 @@ const buildFilter = (majorVersion?: number, minorVersion?: number): any => {
       },
     };
   }
-  if (minorVersion !== undefined) {
+  if (minorVersion === undefined) {
+    filter.operator = 'and';
+    filter.right = 'all';
+  } else {
     if (!filter.left) {
       filter.left = {
         prompts_versions: {
@@ -60,9 +63,6 @@ const buildFilter = (majorVersion?: number, minorVersion?: number): any => {
         },
       },
     };
-  } else {
-    filter.operator = 'and';
-    filter.right = 'all';
   }
 
   return filter;

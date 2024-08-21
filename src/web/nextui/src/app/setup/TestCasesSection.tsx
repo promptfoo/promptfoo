@@ -180,7 +180,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         open={testCaseDialogOpen}
         onAdd={handleAddTestCase}
         varsList={varsList}
-        initialValues={editingTestCaseIndex !== null ? testCases[editingTestCaseIndex] : undefined}
+        initialValues={editingTestCaseIndex === null ? undefined : testCases[editingTestCaseIndex]}
         onCancel={() => {
           setEditingTestCaseIndex(null);
           setTestCaseDialogOpen(false);

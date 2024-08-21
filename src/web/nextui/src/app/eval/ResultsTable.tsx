@@ -172,10 +172,10 @@ function ResultsTable({
           assertion: { type: 'human' as const },
         };
 
-        if (humanResultIndex !== -1) {
-          componentResults[humanResultIndex] = newResult;
-        } else {
+        if (humanResultIndex === -1) {
           componentResults.push(newResult);
+        } else {
+          componentResults[humanResultIndex] = newResult;
         }
       }
 

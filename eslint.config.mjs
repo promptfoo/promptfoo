@@ -1,6 +1,7 @@
 // @ts-check
 import eslint from '@eslint/js';
 import jest from 'eslint-plugin-jest';
+import eslintPluginUnicorn from 'eslint-plugin-unicorn';
 import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -43,6 +44,7 @@ export default [
     },
     plugins: {
       'unused-imports': unusedImports,
+      unicorn: eslintPluginUnicorn,
     },
     rules: {
       '@typescript-eslint/ban-ts-comment': 0,
@@ -67,6 +69,9 @@ export default [
       'no-unused-expressions': 'error',
       'no-useless-escape': 0,
       'prefer-const': 'error',
+      'unicorn/no-lonely-if': 'error',
+      'unicorn/no-negated-condition': 'error',
+      'unicorn/prefer-number-properties': 'error',
       'unused-imports/no-unused-imports': 'error',
     },
   },

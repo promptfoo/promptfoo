@@ -122,9 +122,10 @@ export default function Eval({
       setAuthor(preloadedData.data.author || null);
       setLoaded(true);
     } else if (fetchId) {
-      console.log('Eval init: Fetching eval from remote server', fetchId);
+      console.log('Eval init: Fetching eval', fetchId);
       const run = async () => {
-        const url = `${REMOTE_API_BASE_URL}/api/eval/${fetchId}`;
+        const host = IS_RUNNING_LOCALLY ? REMOTE_API_BASE_URL : '';
+        const url = `${host}/api/eval/${fetchId}`;
         console.log('Fetching eval from remote server', url);
         const response = await fetch(url);
         if (!response.ok) {
