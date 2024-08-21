@@ -417,12 +417,10 @@ export function evalCommand(
       if (opts.interactiveProviders) {
         logger.warn(
           chalk.yellow(dedent`
-          ${chalk.bold('Warning:')} The --interactive-providers option has been removed.
+          Warning: The --interactive-providers option has been removed.
 
-          Instead, use ${chalk.bold('-j 1')} to run evaluations with a concurrency of 1:
-
+          Instead, use -j 1 to run evaluations with a concurrency of 1:
           ${chalk.green('promptfoo eval -j 1')}
-
         `),
         );
         process.exit(2);
