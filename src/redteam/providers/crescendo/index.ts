@@ -13,7 +13,7 @@ import type {
 } from '../../../types';
 import { getNunjucksEngine } from '../../../util/templates';
 import { isBasicRefusal } from '../../util';
-import { ATTACKER_MODEL, TEMPERATURE } from '../constants';
+import { ATTACKER_MODEL_SMALL, TEMPERATURE } from '../constants';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_ROUNDS = 10;
@@ -69,13 +69,13 @@ class CrescendoProvider implements ApiProvider {
     this.config = config;
     this.maxRounds = config.maxRounds || DEFAULT_MAX_ROUNDS;
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
-    this.redTeamingChat = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
+    this.redTeamingChat = new OpenAiChatCompletionProvider(ATTACKER_MODEL_SMALL, {
       config: {
         temperature: TEMPERATURE,
         response_format: { type: 'json_object' },
       },
     });
-    this.scoringChat = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
+    this.scoringChat = new OpenAiChatCompletionProvider(ATTACKER_MODEL_SMALL, {
       config: {
         temperature: TEMPERATURE,
         response_format: { type: 'json_object' },
