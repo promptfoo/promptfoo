@@ -24,7 +24,7 @@ import {
 } from '../redteam/constants';
 import telemetry from '../telemetry';
 import type { RedteamPluginObject } from '../types';
-import { getNunjucksEngine } from '../util/templates';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../util/templates';
 import { doGenerateRedteam } from './generate/redteam';
 
 const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
@@ -115,6 +115,38 @@ def call_api(prompt, options, context):
     }
 `;
 
+async function getSystemPrompt(): Promise<string> {
+  const NOTE =
+    '(NOTE: your prompt must include an injectible variable like {{query}} as a placeholder for user input) -- REMOVE THIS LINE';
+
+  let prompt = dedent`You are a helpful concise assistant.
+
+  User query: {{query}}
+
+  ${NOTE}`;
+  prompt = await editor({
+    message: 'Enter the prompt you want to test against:',
+    default: prompt,
+  });
+  prompt = prompt.replace(NOTE, '');
+  let variables = extractVariablesFromTemplate(prompt);
+  while (variables.length === 0) {
+    logger.info(
+      chalk.red(
+        'For real though, your prompt must include at least one variable like"{{query}}" as a placeholder for user input',
+      ),
+    );
+    prompt = await editor({
+      message: 'Enter the prompt you want to test against:',
+      default: prompt,
+    });
+
+    variables = extractVariablesFromTemplate(prompt);
+  }
+
+  return prompt;
+}
+
 export async function redteamInit(directory: string | undefined) {
   telemetry.maybeShowNotice();
   telemetry.record('command_used', { name: 'redteam init - started' });
@@ -142,6 +174,7 @@ export async function redteamInit(directory: string | undefined) {
   });
 
   const prompts: string[] = [];
+  let defaultPromptUsed = false;
   let purpose: string | undefined;
 
   const useCustomProvider = redTeamChoice === 'rag' || redTeamChoice === 'agent';
@@ -167,20 +200,15 @@ export async function redteamInit(directory: string | undefined) {
 
     let prompt: string;
     if (promptChoice === 'now') {
-      prompt = await editor({
-        message: 'Enter the prompt you want to test against:',
-        default: dedent`You are a helpful concise assistant.
-
-        User query: {{query}}
-
-        (NOTE: your prompt must include "{{query}}" as a placeholder for user input)`,
-      });
+      prompt = await getSystemPrompt();
     } else {
+      defaultPromptUsed = true;
       prompt = defaultPrompt;
       deferGeneration = true;
     }
     prompts.push(prompt);
   } else {
+    defaultPromptUsed = true;
     prompts.push(
       'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}',
     );
@@ -288,15 +316,21 @@ export async function redteamInit(directory: string | undefined) {
       plugins.splice(promptExtractionIdx, 1);
     }
 
-    const systemPrompt = await input({
-      message:
-        'You selected the `prompt extraction` plugin. Please enter your system prompt, or leave empty to skip.\n(e.g. "You are a helpful news aggregator.")',
-    });
+    if (defaultPromptUsed) {
+      const systemPrompt = await getSystemPrompt();
 
-    if (systemPrompt.trim() !== '') {
+      if (systemPrompt.trim() !== '') {
+        plugins.push({
+          id: 'prompt-extraction',
+          config: { systemPrompt: systemPrompt.trim() },
+        } as RedteamPluginObject);
+
+        prompts[0] = systemPrompt;
+      }
+    } else {
       plugins.push({
         id: 'prompt-extraction',
-        config: { systemPrompt: systemPrompt.trim() },
+        config: { systemPrompt: prompts[0] },
       } as RedteamPluginObject);
     }
   }
