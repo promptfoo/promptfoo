@@ -431,7 +431,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
         aggregation_strategy: this.config.aggregation_strategy || 'simple',
       },
       options: {
-        use_cache: this.config.use_cache !== undefined ? this.config.use_cache : true,
+        use_cache: this.config.use_cache === undefined ? true : this.config.use_cache,
         wait_for_model: this.config.wait_for_model || false,
       },
     };

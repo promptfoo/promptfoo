@@ -16,7 +16,7 @@ import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } f
 // Based on: https://arxiv.org/abs/2312.02119
 
 export const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
-  ? parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)
+  ? Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)
   : 4;
 
 async function runRedteamConversation({

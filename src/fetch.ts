@@ -53,7 +53,7 @@ function isRateLimited(response: Response): boolean {
 async function handleRateLimit(response: Response): Promise<void> {
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
   if (rateLimitReset) {
-    const resetTime = new Date(parseInt(rateLimitReset) * 1000);
+    const resetTime = new Date(Number.parseInt(rateLimitReset) * 1000);
     const now = new Date();
     const waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
     await new Promise((resolve) => setTimeout(resolve, waitTime));

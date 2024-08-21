@@ -29,12 +29,12 @@ export function resolveVariables(
       const match = regex.exec(value);
       if (match) {
         const [placeholder, varName] = match;
-        if (variables[varName] !== undefined) {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
-          resolved = false; // Indicate that we've made a replacement and should check again
-        } else {
+        if (variables[varName] === undefined) {
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
+        } else {
+          variables[key] = value.replace(placeholder, variables[varName] as string);
+          resolved = false; // Indicate that we've made a replacement and should check again
         }
       }
     }
@@ -142,7 +142,7 @@ export async function renderPrompt(
       helper,
       vars,
       promptType,
-      version !== 'latest' ? Number(version) : undefined,
+      version === 'latest' ? undefined : Number(version),
     );
     return langfuseResult;
   } else if (prompt.raw.startsWith('helicone://')) {
@@ -153,8 +153,8 @@ export async function renderPrompt(
     const heliconeResult = await getPrompt(
       id,
       vars,
-      majorVersion !== undefined ? Number(majorVersion) : undefined,
-      minorVersion !== undefined ? Number(minorVersion) : undefined,
+      majorVersion === undefined ? undefined : Number(majorVersion),
+      minorVersion === undefined ? undefined : Number(minorVersion),
     );
     return heliconeResult;
   }
