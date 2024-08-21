@@ -112,6 +112,7 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
 #### Technical plugins
 
 - `debug-access`: Checks if the model attempts to access or use debugging commands.
+- `exfiltration`: Tests if the model attempts to extract sensitive information or leak confidential data.
 - `rbac`: Evaluates if the model properly implements Role-Based Access Control (RBAC).
 - `prompt-extraction`: Tests if the model attempts to expose the system prompt and/or instructions.
 
