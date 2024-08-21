@@ -1,0 +1,128 @@
+.pricingPage {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.pricingHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.pricingHeader h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.pricingHeader p {
+  font-size: 1.25rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.pricingTableContainer {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin-bottom: 4rem;
+}
+
+.pricingCard {
+  flex: 1;
+  max-width: 400px;
+  padding: 2rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  background-color: var(--ifm-background-color);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.cardContent {
+  flex-grow: 1;
+}
+
+.pricingCard:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.highlightedCard {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.pricingCard h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.price {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+.description {
+  font-size: 1rem;
+  color: var(--ifm-color-emphasis-700);
+  margin-bottom: 1.5rem;
+}
+
+.featureList {
+  list-style-type: none;
+  padding: 0;
+  margin-bottom: 2rem;
+}
+
+.featureList li {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.checkIcon {
+  color: var(--ifm-color-success);
+  margin-right: 0.5rem;
+}
+
+.ctaButton {
+  width: 100%;
+  margin-top: auto;
+}
+
+.faqSection {
+  margin-top: 4rem;
+}
+
+.faqSection h2 {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.faqGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.faqItem h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.faqItem p {
+  color: var(--ifm-color-emphasis-700);
+}
+
+@media (max-width: 768px) {
+  .pricingTableContainer {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .pricingCard {
+    width: 100%;
+  }
+}
