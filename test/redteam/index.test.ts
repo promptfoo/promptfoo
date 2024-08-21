@@ -31,7 +31,7 @@ jest.mock('process', () => ({
 jest.mock('../../src/redteam/strategies', () => ({
   ...jest.requireActual('../../src/redteam/strategies'),
   validateStrategies: jest.fn().mockImplementation((strategies) => {
-    if (strategies.some((s) => s.id === 'invalid-strategy')) {
+    if (strategies.some((s: { id: string }) => s.id === 'invalid-strategy')) {
       throw new Error('Invalid strategies');
     }
   }),
