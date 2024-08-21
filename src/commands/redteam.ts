@@ -70,9 +70,14 @@ redteam:
       {% if plugin.numTests is defined -%}
       numTests: {{plugin.numTests}}
       {% endif -%}
-      {% if plugin.config is defined and plugin.config.policy is defined -%}
+      {% if plugin.config is defined -%}
       config:
+        {% if plugin.config.systemPrompt is defined -%}
+        systemPrompt: {{plugin.config.systemPrompt | dump}}
+        {% endif -%}
+        {% if plugin.config.policy is defined -%}
         policy: {{plugin.config.policy | dump}}
+        {% endif -%}
       {% endif -%}
     {% endif -%}
     {% endfor %}
@@ -97,13 +102,13 @@ import json
 def call_api(prompt, options, context):
     parsed_url = urllib.parse.urlparse('https://example.com/api/chat)
     conn = http.client.HTTPSConnection(parsed_url.netloc)
-    
+
     headers = {'Content-Type': 'application/json'}
     payload = json.dumps({'user_chat': prompt})
-    
+
     conn.request("POST", parsed_url.path or "/", body=payload, headers=headers)
     response = conn.getresponse()
-    
+
     return {
       "output": response.read().decode()
     }
@@ -164,9 +169,9 @@ export async function redteamInit(directory: string | undefined) {
       prompt = await editor({
         message: 'Enter the prompt you want to test against:',
         default: dedent`You are a helpful concise assistant.
-        
+
         User query: {{query}}
-        
+
         (NOTE: your prompt must include "{{query}}" as a placeholder for user input)`,
       });
     } else {
@@ -270,6 +275,27 @@ export async function redteamInit(directory: string | undefined) {
       plugins.push({
         id: 'policy',
         config: { policy: policyDescription.trim() },
+      } as RedteamPluginObject);
+    }
+  }
+
+  // Handle prompt extraction plugin
+  if (plugins.includes('prompt-extraction')) {
+    // Remove the original 'system prompt' string if it exists
+    const promptExtractionIdx = plugins.indexOf('prompt-extraction');
+    if (promptExtractionIdx !== -1) {
+      plugins.splice(promptExtractionIdx, 1);
+    }
+
+    const systemPrompt = await input({
+      message:
+        'You selected the `prompt extraction` plugin. Please enter your system prompt, or leave empty to skip.\n(e.g. "You are a helpful news aggregator.")',
+    });
+
+    if (systemPrompt.trim() !== '') {
+      plugins.push({
+        id: 'prompt-extraction',
+        config: { systemPrompt: systemPrompt.trim() },
       } as RedteamPluginObject);
     }
   }
