@@ -26,19 +26,23 @@ Potential vulnerabilities include:
 Ready to run a red team? Jump to **[Quickstart](#quickstart)**.
 :::
 
-## How Promptfoo works
+## How generative AI red teaming works
 
-Promptfoo is an open-source tool for red teaming LLMs. It supports the red teaming process by:
+The process of red teaming gen AI generally requires some degree of automation for a comprehensive evaluation. This is because LLMs have such a wide attack surface.
+
+A systematic approach looks like:
 
 1. Generating a diverse set of adversarial inputs
 2. Running these inputs through your LLM application
 3. Analyzing the outputs for potential vulnerabilities or undesirable behaviors
 4. Providing actionable insights and suggested mitigations
 
-Promptfoo red teaming can be used in two primary ways:
+Once a process is set up, it can be applied in two primary ways:
 
 - **One-off runs**: Generate a comprehensive report that allows you to examine vulnerabilities and suggested mitigations.
 - **CI/CD integration**: Continuously monitor for vulnerabilities in your deployment pipeline, ensuring ongoing safety as your application evolves.
+
+Promptfoo is an open-source tool for red teaming LLMs that supports all the above.
 
 By systematically probing the LLM application, the end result is a report that quantifies the risk of misuse and provides suggestions for mitigation:
 
