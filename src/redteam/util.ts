@@ -68,7 +68,19 @@ const REFUSAL_PREFIXES = [
   'I apologize',
 ];
 
+/**
+ * Checks if a given response is a basic refusal.
+ *
+ * This function determines whether the response starts with any of the predefined
+ * refusal prefixes (e.g., "Sorry", "I'm sorry", "I apologize", etc.).
+ *
+ * @param response - The string to check for refusal.
+ * @returns {boolean} True if the response is a basic refusal, false otherwise.
+ */
 export function isBasicRefusal(response: string): boolean {
+  if (!response || typeof response !== 'string') {
+    return false;
+  }
   const lowerResponse = response.trim().toLowerCase();
   return REFUSAL_PREFIXES.some((prefix) => lowerResponse.startsWith(prefix.toLowerCase()));
 }
