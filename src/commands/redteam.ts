@@ -371,7 +371,7 @@ export async function redteamInit(directory: string | undefined) {
       '\n' +
         chalk.blue(
           'To generate test cases after editing your configuration, use the command: ' +
-            chalk.bold('promptfoo generate redteam'),
+            chalk.bold('promptfoo redteam generate'),
         ),
     );
     return;
@@ -397,7 +397,7 @@ export async function redteamInit(directory: string | undefined) {
         '\n' +
           chalk.blue(
             'To generate test cases later, use the command: ' +
-              chalk.bold('promptfoo generate redteam'),
+              chalk.bold('promptfoo redteam generate'),
           ),
       );
     }
