@@ -1,5 +1,14 @@
 {
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,
-  "cSpell.words": ["Groq", "openai", "promptfoo", "promptfooconfig", "redteam"]
+  "cSpell.words": [
+    "exfiltrate",
+    "exfiltration",
+    "Groq",
+    "openai",
+    "promptfoo",
+    "promptfooconfig",
+    "redteam",
+    "Steganography"
+  ]
 }

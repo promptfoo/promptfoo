@@ -7,6 +7,7 @@ import { CompetitorPlugin } from './competitors';
 import { ContractPlugin } from './contracts';
 import { DebugAccessPlugin } from './debugAccess';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
+import { ExfiltrationPlugin } from './exfiltration';
 import { HallucinationPlugin } from './hallucination';
 import { getHarmfulTests } from './harmful';
 import { HijackingPlugin } from './hijacking';
@@ -139,5 +140,10 @@ export const Plugins: Plugin[] = [
         injectVar,
         config as { systemPrompt: string },
       ).generateTests(n),
+  },
+  {
+    key: 'exfiltration',
+    action: (provider, purpose, injectVar, n, config) =>
+      new ExfiltrationPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
 ];

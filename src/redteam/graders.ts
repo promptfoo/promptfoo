@@ -5,6 +5,7 @@ import { CompetitorsGrader } from './plugins/competitors';
 import { ContractsGrader } from './plugins/contracts';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
+import { ExfiltrationGrader } from './plugins/exfiltration';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmfulGrader } from './plugins/harmful';
 import { HijackingGrader } from './plugins/hijacking';
@@ -24,6 +25,7 @@ const GRADERS = {
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:exfiltration': new ExfiltrationGrader(),
   'promptfoo:redteam:imitation': new ImitationGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:hijacking': new HijackingGrader(),

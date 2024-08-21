@@ -84,16 +84,17 @@ export const BASE_PLUGINS = [
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
-  'bola',
   'bfla',
+  'bola',
   'competitors',
   'debug-access',
+  'exfiltration',
   'imitation',
-  'rbac',
   'prompt-extraction',
-  'ssrf',
+  'rbac',
   'shell-injection',
   'sql-injection',
+  'ssrf',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -335,6 +336,7 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
+  exfiltration: 'Exfiltration tests',
   basic: 'Raw attacks without any special attack strategies',
   multilingual: 'Translates the input into low-resource languages',
   bola: 'Broken Object Level Authorization (BOLA) tests',
