@@ -7,17 +7,22 @@ import { addCrescendo } from './crescendo';
 import { addInjections } from './injections';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
+import { addMultilingual } from './multilingual';
 import { addRot13 } from './rot13';
 
 interface Strategy {
   key: string;
-  action: (testCases: TestCaseWithPlugin[], injectVar: string) => TestCase[];
+  action: (
+    testCases: TestCaseWithPlugin[],
+    injectVar: string,
+    config: Record<string, any>,
+  ) => Promise<TestCase[]>;
 }
 
 export const Strategies: Strategy[] = [
   {
     key: 'jailbreak',
-    action: (testCases, injectVar) => {
+    action: async (testCases, injectVar) => {
       logger.debug('Adding experimental jailbreaks to all test cases');
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative');
       logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
@@ -26,7 +31,7 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'prompt-injection',
-    action: (testCases, injectVar) => {
+    action: async (testCases, injectVar) => {
       const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
       logger.debug('Adding prompt injections to `harmful` plugin test cases');
       const newTestCases = addInjections(harmfulPrompts, injectVar);
@@ -36,7 +41,7 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'jailbreak:tree',
-    action: (testCases, injectVar) => {
+    action: async (testCases, injectVar) => {
       logger.debug('Adding experimental tree jailbreaks to all test cases');
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree');
       logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
@@ -45,7 +50,7 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'rot13',
-    action: (testCases, injectVar) => {
+    action: async (testCases, injectVar) => {
       logger.debug('Adding ROT13 encoding to all test cases');
       const newTestCases = addRot13(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
@@ -54,7 +59,7 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'leetspeak',
-    action: (testCases, injectVar) => {
+    action: async (testCases, injectVar) => {
       logger.debug('Adding leetspeak encoding to all test cases');
       const newTestCases = addLeetspeak(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} leetspeak encoded test cases`);
@@ -63,7 +68,7 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'base64',
-    action: (testCases, injectVar) => {
+    action: async (testCases, injectVar) => {
       logger.debug('Adding Base64 encoding to all test cases');
       const newTestCases = addBase64Encoding(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
@@ -72,10 +77,19 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'crescendo',
-    action: (testCases, injectVar) => {
+    action: async (testCases, injectVar) => {
       logger.debug('Adding Crescendo to all test cases');
       const newTestCases = addCrescendo(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'multilingual',
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding multilingual test cases');
+      const newTestCases = await addMultilingual(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} multilingual test cases`);
       return newTestCases;
     },
   },
