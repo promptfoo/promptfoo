@@ -679,28 +679,28 @@
         "evaluateOptions": {
           "type": "object",
           "properties": {
-            "maxConcurrency": {
-              "type": "number"
-            },
-            "showProgressBar": {
+            "cache": {
               "type": "boolean"
-            },
-            "generateSuggestions": {
-              "type": "boolean"
-            },
-            "repeat": {
-              "type": "number"
             },
             "delay": {
               "type": "number"
             },
-            "cache": {
-              "type": "boolean"
-            },
             "eventSource": {
               "type": "string"
             },
+            "generateSuggestions": {
+              "type": "boolean"
+            },
             "interactiveProviders": {
+              "type": "boolean"
+            },
+            "maxConcurrency": {
+              "type": "number"
+            },
+            "repeat": {
+              "type": "number"
+            },
+            "showProgressBar": {
               "type": "boolean"
             }
           },
@@ -782,9 +782,6 @@
               "type": "boolean"
             },
             "watch": {
-              "type": "boolean"
-            },
-            "interactiveProviders": {
               "type": "boolean"
             },
             "filterFailing": {

@@ -91,7 +91,6 @@ export async function doEval(
         !Number.isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
-      interactiveProviders: cmdObj.interactiveProviders,
       ...evaluateOptions,
     };
 
@@ -388,11 +387,6 @@ export function evalCommand(
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('-w, --watch', 'Watch for changes in config and re-run')
     .option('--env-file <path>', 'Path to .env file')
-    .option(
-      '--interactive-providers',
-      'Run providers interactively, one at a time',
-      defaultConfig?.evaluateOptions?.interactiveProviders,
-    )
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')
     .option(
       '--filter-pattern <pattern>',
@@ -414,7 +408,24 @@ export function evalCommand(
       {},
     )
     .option('--description <description>', 'Description of the eval run')
+    .option(
+      '--interactive-providers',
+      'Run providers interactively, one at a time',
+      defaultConfig?.evaluateOptions?.interactiveProviders,
+    )
     .action((opts) => {
+      if (opts.interactiveProviders) {
+        logger.warn(
+          chalk.yellow(dedent`
+          Warning: The --interactive-providers option has been removed.
+
+          Instead, use -j 1 to run evaluations with a concurrency of 1:
+          ${chalk.green('promptfoo eval -j 1')}
+        `),
+        );
+        process.exit(2);
+      }
+
       for (const maybeFilePath of opts.output ?? []) {
         const { data: extension } = OutputFileExtension.safeParse(
           maybeFilePath.split('.').pop()?.toLowerCase(),

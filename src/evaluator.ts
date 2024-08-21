@@ -481,7 +481,7 @@ class Evaluator {
     }
 
     // Set up eval cases
-    let runEvalOptions: RunEvalOptions[] = [];
+    const runEvalOptions: RunEvalOptions[] = [];
     let rowIndex = 0;
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
@@ -748,66 +748,10 @@ class Evaluator {
     };
 
     // Run the evals
-    if (this.options.interactiveProviders) {
-      runEvalOptions = runEvalOptions.sort((a, b) =>
-        a.provider.id().localeCompare(b.provider.id()),
-      );
-      logger.warn('Providers are running in serial with user input.');
-
-      // Group evalOptions by provider
-      const groupedEvalOptions = runEvalOptions.reduce<Record<string, RunEvalOptions[]>>(
-        (acc, evalOption) => {
-          const providerId = evalOption.provider.id();
-          if (!acc[providerId]) {
-            acc[providerId] = [];
-          }
-          acc[providerId].push(evalOption);
-          return acc;
-        },
-        {},
-      );
-
-      // Process each group
-      for (const [providerId, providerEvalOptions] of Object.entries(groupedEvalOptions)) {
-        logger.info(
-          `Running ${providerEvalOptions.length} evaluations for provider ${providerId} with concurrency=${concurrency}...`,
-        );
-
-        if (this.options.showProgressBar) {
-          await createMultiBars(providerEvalOptions);
-        }
-        await async.forEachOfLimit(providerEvalOptions, concurrency, processEvalStep);
-        if (multibar) {
-          multibar.stop();
-        }
-
-        // Prompt to continue to the next provider unless it's the last one
-        if (
-          Object.keys(groupedEvalOptions).indexOf(providerId) <
-          Object.keys(groupedEvalOptions).length - 1
-        ) {
-          await new Promise((resolve) => {
-            const rl = readline.createInterface({
-              input: process.stdin,
-              output: process.stdout,
-            });
-            rl.question(`\nReady to continue to the next provider? (Y/n) `, (answer) => {
-              rl.close();
-              if (answer.toLowerCase() === 'n') {
-                logger.info('Aborting evaluation.');
-                process.exit(1);
-              }
-              resolve(true);
-            });
-          });
-        }
-      }
-    } else {
-      if (this.options.showProgressBar) {
-        await createMultiBars(runEvalOptions);
-      }
-      await async.forEachOfLimit(runEvalOptions, concurrency, processEvalStep);
+    if (this.options.showProgressBar) {
+      await createMultiBars(runEvalOptions);
     }
+    await async.forEachOfLimit(runEvalOptions, concurrency, processEvalStep);
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = table.body.reduce(
