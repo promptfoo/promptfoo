@@ -12,7 +12,11 @@ import { addRot13 } from './rot13';
 
 interface Strategy {
   key: string;
-  action: (testCases: TestCaseWithPlugin[], injectVar: string) => Promise<TestCase[]>;
+  action: (
+    testCases: TestCaseWithPlugin[],
+    injectVar: string,
+    config: Record<string, any>,
+  ) => Promise<TestCase[]>;
 }
 
 export const Strategies: Strategy[] = [
@@ -82,9 +86,9 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'multilingual',
-    action: async (testCases, injectVar) => {
+    action: async (testCases, injectVar, config) => {
       logger.debug('Adding multilingual test cases');
-      const newTestCases = await addMultilingual(testCases, injectVar);
+      const newTestCases = await addMultilingual(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} multilingual test cases`);
       return newTestCases;
     },

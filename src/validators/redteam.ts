@@ -49,6 +49,7 @@ export const RedteamStrategySchema = z.union([
   z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
   z.object({
     id: z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
+    config: z.record(z.unknown()).optional().describe('Strategy-specific configuration'),
   }),
 ]);
 

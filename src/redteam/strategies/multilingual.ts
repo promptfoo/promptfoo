@@ -1,9 +1,10 @@
 import dedent from 'dedent';
+import invariant from 'tiny-invariant';
 import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import type { TestCase } from '../../types';
 import { ATTACKER_MODEL, TEMPERATURE } from '../providers/constants';
 
-const languages = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
+const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
 export async function translate(text: string, lang: string): Promise<string> {
   const redteamProvider = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
@@ -26,7 +27,14 @@ export async function translate(text: string, lang: string): Promise<string> {
 export async function addMultilingual(
   testCases: TestCase[],
   injectVar: string,
+  config: Record<string, any>,
 ): Promise<TestCase[]> {
+  const languages = config.languages || DEFAULT_LANGUAGES;
+  invariant(
+    Array.isArray(languages),
+    'multilingual strategy: `languages` must be an array of strings',
+  );
+
   const translatedTestCases: TestCase[] = [];
 
   for (const testCase of testCases) {
