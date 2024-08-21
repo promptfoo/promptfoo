@@ -70,5 +70,5 @@ const REFUSAL_PREFIXES = [
 
 export function isBasicRefusal(response: string): boolean {
   const lowerResponse = response.trim().toLowerCase();
-  return REFUSAL_PREFIXES.some((prefix) => lowerResponse.startsWith(prefix));
+  return REFUSAL_PREFIXES.some((prefix) => lowerResponse.startsWith(prefix.toLowerCase()));
 }

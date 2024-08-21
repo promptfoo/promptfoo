@@ -6,7 +6,7 @@ import type { ApiProvider, Assertion, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
-import { retryWithDeduplication, sampleArray } from '../util';
+import { isBasicRefusal, retryWithDeduplication, sampleArray } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -68,7 +68,10 @@ export abstract class PluginBase {
       const finalTemplate = this.appendModifiers(renderedTemplate);
 
       const { output: generatedPrompts } = await this.provider.callApi(finalTemplate);
-
+      if (isBasicRefusal(generatedPrompts)) {
+        logger.warn(`${this.constructor.name} generated refusal prompt: ${generatedPrompts}`);
+        return [];
+      }
       invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
       return generatedPrompts
         .split('\n')
