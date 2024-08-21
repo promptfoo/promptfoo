@@ -2,19 +2,19 @@
 date: 2024-08-21
 ---
 
-# Promptfoo for your Enterprise
+# Promptfoo for Enterprise
 
-Today we're announcing new features for teams developing and securing LLM applications in Enterprise settings.
+Today we're announcing new Enterprise features for teams developing and securing LLM applications.
 
-Promptfoo has been open-source from the start and focused on focused on helping developers secure and improve their LLM applications. Over the past few months, this has included support for latest adversarial ML research, new integrations with popular LLM providers, and features for evaluating complex RAG and agent architectures.
+Over the past few months, Promptfoo has launched open-source support for the latest adversarial ML research techniques, new integrations with popular LLM providers, and features for evaluating complex RAG and agent architectures.
 
 We're now expanding to support developers in larger teams. We've developed new capabilities for companies that recognize the importance of LLM security, seek tools for collaboration across development and security teams, and want higher visibility into the security of their LLM applications.
 
 <!-- truncate -->
 
-Enterprise customers also have unique needs beyond individual developers and small teams - they require additional oversight, reporting, and compliance measures.
+Enterprise customers have unique needs beyond individual developers and small teams - they require additional oversight, reporting, and compliance measures.
 
-To meet all these needs and more, Promptfoo Enterprise offers:
+To meet the needs of larger teams, Promptfoo Enterprise offers:
 
 ### Reports & Continuous Monitoring
 
