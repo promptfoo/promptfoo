@@ -408,7 +408,26 @@ export function evalCommand(
       {},
     )
     .option('--description <description>', 'Description of the eval run')
+    .option(
+      '--interactive-providers',
+      'Run providers interactively, one at a time',
+      defaultConfig?.evaluateOptions?.interactiveProviders,
+    )
     .action((opts) => {
+      if (opts.interactiveProviders) {
+        logger.warn(
+          chalk.yellow(dedent`
+          ${chalk.bold('Warning:')} The --interactive-providers option has been removed.
+
+          Instead, use ${chalk.bold('-j 1')} to run evaluations with a concurrency of 1:
+
+          ${chalk.green('promptfoo eval -j 1')}
+
+        `),
+        );
+        process.exit(2);
+      }
+
       for (const maybeFilePath of opts.output ?? []) {
         const { data: extension } = OutputFileExtension.safeParse(
           maybeFilePath.split('.').pop()?.toLowerCase(),

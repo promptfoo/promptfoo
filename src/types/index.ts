@@ -124,16 +124,22 @@ export interface RunEvalOptions {
 }
 
 const EvaluateOptionsSchema = z.object({
+  cache: z.boolean().optional(),
+  delay: z.number().optional(),
+  eventSource: z.string().optional(),
+  generateSuggestions: z.boolean().optional(),
+  /**
+   * @deprecated This option has been removed as of 2024-08-21.
+   * @description Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.
+   * @author mldangelo
+   */
+  interactiveProviders: z.boolean().optional(),
   maxConcurrency: z.number().optional(),
-  showProgressBar: z.boolean().optional(),
   progressCallback: z
     .function(z.tuple([z.number(), z.number(), z.number(), z.custom<RunEvalOptions>()]), z.void())
     .optional(),
-  generateSuggestions: z.boolean().optional(),
   repeat: z.number().optional(),
-  delay: z.number().optional(),
-  cache: z.boolean().optional(),
-  eventSource: z.string().optional(),
+  showProgressBar: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema>;
 
