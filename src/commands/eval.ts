@@ -90,7 +90,6 @@ export async function doEval(
       maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
       repeat,
       delay: !isNaN(delay) && delay > 0 ? delay : undefined,
-      interactiveProviders: cmdObj.interactiveProviders,
       ...evaluateOptions,
     };
 
@@ -387,11 +386,6 @@ export function evalCommand(
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('-w, --watch', 'Watch for changes in config and re-run')
     .option('--env-file <path>', 'Path to .env file')
-    .option(
-      '--interactive-providers',
-      'Run providers interactively, one at a time',
-      defaultConfig?.evaluateOptions?.interactiveProviders,
-    )
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')
     .option(
       '--filter-pattern <pattern>',

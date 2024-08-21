@@ -57,7 +57,6 @@ async function main() {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
     evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
     evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
-    evaluateOptions.interactiveProviders = defaultConfig.evaluateOptions.interactiveProviders;
   }
 
   cacheCommand(program);

@@ -699,9 +699,6 @@
             },
             "eventSource": {
               "type": "string"
-            },
-            "interactiveProviders": {
-              "type": "boolean"
             }
           },
           "additionalProperties": false
@@ -782,9 +779,6 @@
               "type": "boolean"
             },
             "watch": {
-              "type": "boolean"
-            },
-            "interactiveProviders": {
               "type": "boolean"
             },
             "filterFailing": {

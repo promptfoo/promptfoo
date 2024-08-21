@@ -46,7 +46,6 @@ export const CommandLineOptionsSchema = z.object({
   share: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
-  interactiveProviders: z.boolean().optional(),
   filterFailing: z.string().optional(),
   filterFirstN: z.string().optional(),
   filterPattern: z.string().optional(),
@@ -135,7 +134,6 @@ const EvaluateOptionsSchema = z.object({
   delay: z.number().optional(),
   cache: z.boolean().optional(),
   eventSource: z.string().optional(),
-  interactiveProviders: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema>;
 
