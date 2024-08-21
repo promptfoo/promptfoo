@@ -28,7 +28,7 @@ To meet the needs of larger teams, Promptfoo Enterprise offers:
 ### Issue Tracking & Guided Remediation
 
 - Track the progress of your remediation efforts
-- Suggested stepss for each issue
+- Suggested steps for each issue
 
 ![Remediation Dashboard](/img/riskreport-2@2x.png)
 
