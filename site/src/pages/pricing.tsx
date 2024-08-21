@@ -50,8 +50,8 @@ function PricingTable() {
         'On-premises or private cloud deployment',
         'Priority support & SLA guarantees',
       ],
-      cta: 'Contact Us',
-      ctaLink: '/contact/',
+      cta: 'Schedule Demo',
+      ctaLink: 'https://cal.com/team/promptfoo/intro2',
       highlighted: true,
     },
   ];
