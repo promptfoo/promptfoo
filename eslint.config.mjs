@@ -4,6 +4,7 @@ import jest from 'eslint-plugin-jest';
 import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import eslintPluginUnicorn from 'eslint-plugin-unicorn';
 
 export default [
   ...tseslint.config(eslint.configs.recommended, ...tseslint.configs.recommended),
@@ -43,6 +44,7 @@ export default [
     },
     plugins: {
       'unused-imports': unusedImports,
+      unicorn: eslintPluginUnicorn,
     },
     rules: {
       '@typescript-eslint/ban-ts-comment': 0,
@@ -68,6 +70,7 @@ export default [
       'no-useless-escape': 0,
       'prefer-const': 'error',
       'unused-imports/no-unused-imports': 'error',
+      'unicorn/no-lonely-if': 'error',
     },
   },
   {

@@ -989,11 +989,9 @@ ${
       '"llm-rubric" assertion type must have a string value',
     );
 
-    if (test.options?.rubricPrompt) {
-      if (typeof test.options.rubricPrompt === 'object') {
+    if (test.options?.rubricPrompt && typeof test.options.rubricPrompt === 'object') {
         test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
       }
-    }
 
     // Update the assertion value. This allows the web view to display the prompt.
     assertion.value = assertion.value || test.options?.rubricPrompt;
