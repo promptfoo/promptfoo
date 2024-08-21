@@ -7,6 +7,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import yaml from 'js-yaml';
 import { useStore as useResultsViewStore } from './store';
@@ -95,9 +96,65 @@ function DownloadMenu() {
     handleClose();
   };
 
+  const downloadHumanEvalTestCases = () => {
+    if (!table) {
+      alert('No table data');
+      return;
+    }
+
+    const humanEvalCases = table.body
+      .filter((row): row is (typeof table.body)[number] =>
+        row.outputs.some((output) => output.pass !== null),
+      )
+      .map((row) => ({
+        vars: {
+          ...row.test.vars,
+          output: row.outputs[0].text,
+        },
+        assert: {
+          type: 'javascript',
+          value: `${row.outputs[0].pass ? '' : '!'}JSON.parse(output).pass`,
+        },
+      }));
+
+    const yamlContent = yaml.dump(humanEvalCases);
+    const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
+    openDownloadDialog(blob, `${evalId}-human-eval-cases.yaml`);
+    handleClose();
+  };
+
   const handleOpen = () => {
     setOpen(true);
   };
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (open && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        switch (event.key) {
+          case '1':
+            downloadConfig();
+            break;
+          case '2':
+            downloadCsv();
+            break;
+          case '3':
+            downloadTable();
+            break;
+          case '4':
+            downloadDpoJson();
+            break;
+          case '5':
+            downloadHumanEvalTestCases();
+            break;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
 
   return (
     <>
@@ -114,33 +171,46 @@ function DownloadMenu() {
               onClick={downloadConfig}
               startIcon={<DownloadIcon />}
               fullWidth
-              sx={{ justifyContent: 'flex-start' }}
+              sx={{ justifyContent: 'space-between' }}
             >
-              Download YAML Config
+              <span>Download YAML Config</span>
+              <Typography variant="caption">(1)</Typography>
             </Button>
             <Button
               onClick={downloadCsv}
               startIcon={<DownloadIcon />}
               fullWidth
-              sx={{ justifyContent: 'flex-start' }}
+              sx={{ justifyContent: 'space-between' }}
             >
-              Download Table CSV
+              <span>Download Table CSV</span>
+              <Typography variant="caption">(2)</Typography>
             </Button>
             <Button
               onClick={downloadTable}
               startIcon={<DownloadIcon />}
               fullWidth
-              sx={{ justifyContent: 'flex-start' }}
+              sx={{ justifyContent: 'space-between' }}
             >
-              Download Table JSON
+              <span>Download Table JSON</span>
+              <Typography variant="caption">(3)</Typography>
             </Button>
             <Button
               onClick={downloadDpoJson}
               startIcon={<DownloadIcon />}
               fullWidth
-              sx={{ justifyContent: 'flex-start' }}
+              sx={{ justifyContent: 'space-between' }}
             >
-              Download DPO JSON
+              <span>Download DPO JSON</span>
+              <Typography variant="caption">(4)</Typography>
+            </Button>
+            <Button
+              onClick={downloadHumanEvalTestCases}
+              startIcon={<DownloadIcon />}
+              fullWidth
+              sx={{ justifyContent: 'space-between' }}
+            >
+              <span>Download Human Eval Test YAML</span>
+              <Typography variant="caption">(5)</Typography>
             </Button>
           </Stack>
         </DialogContent>
