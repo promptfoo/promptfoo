@@ -24,7 +24,7 @@ import {
 } from '../redteam/constants';
 import telemetry from '../telemetry';
 import type { RedteamPluginObject } from '../types';
-import { getNunjucksEngine } from '../util/templates';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../util/templates';
 import { doGenerateRedteam } from './generate/redteam';
 
 const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
@@ -116,7 +116,7 @@ def call_api(prompt, options, context):
 
 async function getSystemPrompt(): Promise<string> {
   const NOTE =
-    '(NOTE: your prompt must include {{query}} as a placeholder for user input) -- REMOVE THIS LINE';
+    '(NOTE: your prompt must include an injectible variable like {{query}} as a placeholder for user input) -- REMOVE THIS LINE';
 
   let prompt = dedent`You are a helpful concise assistant.
 
@@ -128,11 +128,11 @@ async function getSystemPrompt(): Promise<string> {
     default: prompt,
   });
   prompt = prompt.replace(NOTE, '');
-
-  while (!prompt.includes('{{query}}')) {
+  let variables = extractVariablesFromTemplate(prompt);
+  while (variables.length === 0) {
     logger.info(
       chalk.red(
-        'For real though, your prompt must include "{{query}}" as a placeholder for user input',
+        'For real though, your prompt must include at least one variable like"{{query}}" as a placeholder for user input',
       ),
     );
     prompt = await editor({
@@ -140,13 +140,7 @@ async function getSystemPrompt(): Promise<string> {
       default: prompt,
     });
 
-    if (!prompt.includes('{{query}}')) {
-      logger.info(
-        chalk.red(
-          'For real though, your prompt must include "{{query}}" as a placeholder for user input',
-        ),
-      );
-    }
+    variables = extractVariablesFromTemplate(prompt);
   }
 
   return prompt;
