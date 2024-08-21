@@ -136,10 +136,6 @@ export default function Pricing(): JSX.Element {
       title="Pricing"
       description="Choose the right solution for your team. Compare our Community (free, open-source) and Enterprise offerings."
     >
-      <Head>
-        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/pricing.png" />
-        <meta name="twitter:card" content="summary_large_image" />
-      </Head>
       <main className={styles.pricingPage}>
         <PricingHeader />
         <PricingTable />
