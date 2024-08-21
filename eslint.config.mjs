@@ -1,10 +1,10 @@
 // @ts-check
 import eslint from '@eslint/js';
 import jest from 'eslint-plugin-jest';
+import eslintPluginUnicorn from 'eslint-plugin-unicorn';
 import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import eslintPluginUnicorn from 'eslint-plugin-unicorn';
 
 export default [
   ...tseslint.config(eslint.configs.recommended, ...tseslint.configs.recommended),
@@ -69,8 +69,10 @@ export default [
       'no-unused-expressions': 'error',
       'no-useless-escape': 0,
       'prefer-const': 'error',
-      'unused-imports/no-unused-imports': 'error',
       'unicorn/no-lonely-if': 'error',
+      'unicorn/no-negated-condition': 'error',
+      'unicorn/prefer-number-properties': 'error',
+      'unused-imports/no-unused-imports': 'error',
     },
   },
   {

@@ -161,13 +161,13 @@ const PromptsSection: React.FC = () => {
       </TableContainer>
       <PromptDialog
         open={promptDialogOpen}
-        prompt={editingPromptIndex !== null ? prompts[editingPromptIndex] : ''}
-        index={editingPromptIndex !== null ? editingPromptIndex : 0}
+        prompt={editingPromptIndex === null ? '' : prompts[editingPromptIndex]}
+        index={editingPromptIndex === null ? 0 : editingPromptIndex}
         onAdd={(newPrompt) => {
-          if (editingPromptIndex !== null) {
-            handleChangePrompt(editingPromptIndex, newPrompt);
-          } else {
+          if (editingPromptIndex === null) {
             setPrompts([...prompts, newPrompt]);
+          } else {
+            handleChangePrompt(editingPromptIndex, newPrompt);
           }
           setEditingPromptIndex(null);
         }}

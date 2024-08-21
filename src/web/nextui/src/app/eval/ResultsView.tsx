@@ -415,7 +415,7 @@ export default function ResultsView({
             />
           </>
         )}
-        <Tooltip title={!author ? 'Set eval author with `promptfoo config set email`' : ''}>
+        <Tooltip title={author ? '' : 'Set eval author with `promptfoo config set email`'}>
           <Chip
             size="small"
             label={

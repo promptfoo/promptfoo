@@ -217,8 +217,8 @@ function EvalOutputCell({
   const handleSetScore = React.useCallback(() => {
     const score = prompt('Set test score (0.0 - 1.0):', String(output.score));
     if (score !== null) {
-      const parsedScore = parseFloat(score);
-      if (!isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
+      const parsedScore = Number.parseFloat(score);
+      if (!Number.isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
         onRating(undefined, parsedScore, output.gradingResult?.comment);
       } else {
         alert('Invalid score. Please enter a value between 0.0 and 1.0.');

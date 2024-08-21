@@ -22,8 +22,8 @@ class CustomApiProvider {
           content: prompt,
         },
       ],
-      max_tokens: parseInt(this.config?.max_tokens, 10) || 1024,
-      temperature: parseFloat(this.config?.temperature) || 0,
+      max_tokens: Number.parseInt(this.config?.max_tokens, 10) || 1024,
+      temperature: Number.parseFloat(this.config?.temperature) || 0,
     };
 
     // Fetch the data from the API using promptfoo's cache. You can use your own fetch implementation if preferred.
