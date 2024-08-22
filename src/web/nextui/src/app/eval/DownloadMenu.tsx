@@ -155,7 +155,7 @@ function DownloadMenu() {
         }
       }
     },
-    [open],
+    [open], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   React.useEffect(() => {
