@@ -11,7 +11,7 @@ promptfoo eval
 Or
 
 ```
-promptfoo eval -c config_with_connectors.yaml
+promptfoo eval -c complex_config.yaml
 ```
 
 Afterwards, you can view the results by running `promptfoo view`
