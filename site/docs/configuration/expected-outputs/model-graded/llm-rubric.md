@@ -77,13 +77,13 @@ By default, `llm-rubric` uses GPT-4 for grading. You can override this in severa
 
    ```yaml
    defaultTest:
-   options:
-   provider: openai:gpt-3.5-turbo
-   tests:
-     - description: Evaluate output using LLM
-       assert:
-         - type: llm-rubric
-           value: Is written in a professional tone
+     options:
+       provider: openai:gpt-3.5-turbo
+     assert:
+       - description: Evaluate output using LLM
+         assert:
+           - type: llm-rubric
+             value: Is written in a professional tone
    ```
 
 3. Using `assertion.provider`:
@@ -103,18 +103,18 @@ For more control over the `llm-rubric` evaluation, you can set a custom prompt u
 
 ```yaml
 defaultTest:
-options:
-rubricPrompt: >
-  [
-      {
-          "role": "system",
-          "content": "Evaluate the following output based on these criteria:\n1. Clarity of explanation\n2. Accuracy of information\n3. Relevance to the topic\n\nProvide a score out of 10 for each criterion and an overall assessment."
-      },
-      {
-          "role": "user",
-          "content": "Output to evaluate: {{output}}\n\nRubric: {{rubric}}"
-      }
-  ]
+  options:
+  rubricPrompt: >
+    [
+        {
+            "role": "system",
+            "content": "Evaluate the following output based on these criteria:\n1. Clarity of explanation\n2. Accuracy of information\n3. Relevance to the topic\n\nProvide a score out of 10 for each criterion and an overall assessment."
+        },
+        {
+            "role": "user",
+            "content": "Output to evaluate: {{output}}\n\nRubric: {{rubric}}"
+        }
+    ]
 ```
 
 # Further reading
