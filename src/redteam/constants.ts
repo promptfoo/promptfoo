@@ -80,7 +80,6 @@ export const BASE_PLUGINS = [
   'hijacking',
   'overreliance',
   'politics',
-  'prompt-extraction',
 ] as const;
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
