@@ -1,7 +1,14 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import type {
+  ApiProvider,
+  EnvOverrides,
+  ProviderResponse,
+  TokenUsage,
+  ApiEmbeddingProvider,
+  ProviderEmbeddingResponse,
+} from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface CohereChatOptions {
@@ -168,5 +175,86 @@ export class CohereChatCompletionProvider implements ApiProvider {
       logger.error(`API call error: ${error}`);
       return { error: `API call error: ${error}` };
     }
+  }
+}
+
+export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
+  modelName: string;
+  config: any;
+  env?: any;
+
+  constructor(modelName: string, config: any = {}, env?: any) {
+    this.modelName = modelName;
+    this.config = config;
+    this.env = env;
+  }
+
+  id() {
+    return `cohere:${this.modelName}`;
+  }
+
+  getApiKey(): string | undefined {
+    return (
+      this.config.apiKey ||
+      (this.config?.apiKeyEnvar
+        ? process.env[this.config.apiKeyEnvar] || this.env?.[this.config.apiKeyEnvar as keyof any]
+        : undefined) ||
+      this.env?.COHERE_API_KEY ||
+      getEnvString('COHERE_API_KEY')
+    );
+  }
+
+  getApiUrl(): string {
+    return this.config.apiBaseUrl || 'https://api.cohere.com/v1';
+  }
+
+  async callApi(): Promise<ProviderResponse> {
+    throw new Error('Cohere API does not provide text inference.');
+  }
+
+  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+    if (!this.getApiKey()) {
+      throw new Error('Cohere API key must be set for embedding');
+    }
+
+    const body = {
+      model: this.modelName,
+      texts: [input],
+      input_type: 'classification',
+      truncate: this.config.truncate || 'NONE',
+    };
+
+    let data;
+    try {
+      ({ data } = (await fetchWithCache(
+        `${this.getApiUrl()}/embed`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      )) as unknown as any);
+    } catch (err) {
+      logger.error(`API call error: ${err}`);
+      throw err;
+    }
+    logger.debug(`\tCohere embeddings API response: ${JSON.stringify(data)}`);
+
+    const embedding = data?.embeddings?.[0];
+    if (!embedding) {
+      throw new Error('No embedding found in Cohere embeddings API response');
+    }
+    return {
+      embedding,
+      tokenUsage: {
+        prompt: data.meta?.billed_units?.input_tokens || 0,
+        total: data.meta?.billed_units?.input_tokens || 0,
+      },
+    };
   }
 }

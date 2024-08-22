@@ -14,7 +14,7 @@ import {
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
-import { CohereChatCompletionProvider } from './providers/cohere';
+import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
 import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
 import {
@@ -336,8 +336,21 @@ export async function loadApiProvider(
     const modelName = providerPath.split(':')[1];
     ret = new MistralChatCompletionProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('cohere:')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new CohereChatCompletionProvider(modelName, providerOptions);
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits.slice(2).join(':');
+
+    if (modelType === 'embedding' || modelType === 'embeddings') {
+      ret = new CohereEmbeddingProvider(modelName, providerOptions);
+    } else if (modelType === 'chat' || modelType === undefined) {
+      ret = new CohereChatCompletionProvider(modelName || modelType, providerOptions);
+    } else {
+      // Default to chat provider for any other model type
+      ret = new CohereChatCompletionProvider(
+        providerPath.substring('cohere:'.length),
+        providerOptions,
+      );
+    }
   } else if (providerPath.startsWith('localai:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
