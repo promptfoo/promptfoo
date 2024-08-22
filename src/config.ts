@@ -435,18 +435,23 @@ export async function resolveConfigs(
   // Parse testCases for each scenario
   if (fileConfig.scenarios) {
     fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
+  }
+  if (Array.isArray(fileConfig.scenarios)) {
     for (const scenario of fileConfig.scenarios) {
-      if (scenario.tests) {
+      if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
-      const parsedScenarioTests: TestCase[] = await readTests(
-        scenario.tests,
-        cmdObj.tests ? undefined : basePath,
-      );
-      scenario.tests = parsedScenarioTests;
+      if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
+        const parsedScenarioTests: TestCase[] = await readTests(
+          scenario.tests,
+          cmdObj.tests ? undefined : basePath,
+        );
+        scenario.tests = parsedScenarioTests;
+      }
+      invariant(typeof scenario === 'object', 'scenario must be an object');
       const filteredTests = await filterTests(
         {
-          ...scenario,
+          ...(scenario ?? {}),
           providers: parsedProviders,
           prompts: parsedPrompts,
         },
@@ -461,6 +466,7 @@ export async function resolveConfigs(
     }
   }
 
+  
   const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
 
   if (parsedPrompts.length === 0) {
@@ -486,7 +492,7 @@ export async function resolveConfigs(
     providers: parsedProviders,
     providerPromptMap: parsedProviderPromptMap,
     tests: parsedTests,
-    scenarios: config.scenarios,
+    scenarios: config.scenarios as Scenario[],
     defaultTest,
     derivedMetrics: config.derivedMetrics,
     nunjucksFilters: await readFilters(

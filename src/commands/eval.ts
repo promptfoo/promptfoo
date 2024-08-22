@@ -42,6 +42,7 @@ export async function doEval(
   setupEnv(cmdObj.envFile);
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
+  let basePath: string | undefined = undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();

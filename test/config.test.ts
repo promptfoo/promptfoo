@@ -1,8 +1,11 @@
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
-import { dereferenceConfig, readConfigs } from '../src/config';
+import cliState from '../src/cliState';
+import { dereferenceConfig, readConfigs, resolveConfigs } from '../src/config';
 import type { UnifiedConfig } from '../src/types';
+import { maybeLoadFromExternalFile } from '../src/util';
+import { readTests } from '../src/testCases';
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
@@ -23,6 +26,27 @@ jest.mock('fs', () => ({
   readdirSync: jest.fn(),
   existsSync: jest.fn(),
   mkdirSync: jest.fn(),
+}));
+
+jest.mock('../src/util', () => ({
+  ...jest.requireActual('../src/util'),
+  maybeLoadFromExternalFile: jest.fn(),
+}));
+
+jest.mock('../src/esm', () => ({
+  importModule: jest.fn().mockResolvedValue(
+    class CustomApiProvider {
+      options: any;
+      constructor(options: any) {
+        this.options = options;
+      }
+    },
+  ),
+}));
+
+jest.mock('../src/testCases', () => ({
+  readTests: jest.fn().mockResolvedValue([]),
+  readTest: jest.fn().mockResolvedValue({}),
 }));
 
 describe('readConfigs', () => {
@@ -576,5 +600,90 @@ describe('dereferenceConfig', () => {
     };
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     expect(dereferencedConfig).toEqual(rawConfig);
+  });
+});
+
+describe('resolveConfigs', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should set cliState.basePath', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['prompt1'],
+        providers: ['provider1'],
+      }),
+    );
+
+    await resolveConfigs(cmdObj, defaultConfig);
+
+    expect(cliState.basePath).toBe(path.dirname('config.json'));
+  });
+
+  it('should load scenarios from external file', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const externalScenarios = [
+      { description: 'Scenario 1', tests: ['test1.json'] },
+      { description: 'Scenario 2', tests: ['test2.json'] },
+    ];
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['prompt1'],
+        providers: ['provider1'],
+        scenarios: 'scenarios.json',
+      }),
+    );
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(externalScenarios);
+    
+    // Mock readTests to return an empty array for each scenario
+    jest.mocked(readTests).mockResolvedValue([]);
+
+    const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
+
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['scenarios.json']);
+    expect(testSuite.scenarios).toEqual(externalScenarios);
+  });
+
+  it('should load scenario tests from external file', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const scenarios = [
+      { description: 'Scenario 1', tests: 'tests1.json' },
+      { description: 'Scenario 2', tests: 'tests2.json' },
+    ];
+    const externalTests1 = [{ vars: { var1: 'value1' } }];
+    const externalTests2 = [{ vars: { var2: 'value2' } }];
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['prompt1'],
+        providers: ['provider1'],
+        scenarios,
+      }),
+    );
+    jest
+      .mocked(maybeLoadFromExternalFile)
+      .mockResolvedValueOnce(scenarios);
+    
+    // Mock readTests to return the external tests
+    jest.mocked(readTests)
+      .mockResolvedValueOnce(externalTests1)
+      .mockResolvedValueOnce(externalTests2);
+
+    const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
+
+    expect(readTests).toHaveBeenCalledWith('tests1.json', expect.anything());
+    expect(readTests).toHaveBeenCalledWith('tests2.json', expect.anything());
+    expect(testSuite.scenarios?.[0].tests).toEqual(externalTests1);
+    expect(testSuite.scenarios?.[1].tests).toEqual(externalTests2);
   });
 });
