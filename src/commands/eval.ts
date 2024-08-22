@@ -5,7 +5,6 @@ import dedent from 'dedent';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
-import cliState from '../cliState';
 import { resolveConfigs } from '../config';
 import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
@@ -43,7 +42,6 @@ export async function doEval(
   setupEnv(cmdObj.envFile);
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
-  let basePath: string | undefined = undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -65,7 +63,6 @@ export async function doEval(
     }
 
     ({ config, testSuite, basePath } = await resolveConfigs(cmdObj, defaultConfig));
-    cliState.basePath = basePath;
 
     let maxConcurrency = Number.parseInt(cmdObj.maxConcurrency || '', 10);
     const delay = Number.parseInt(cmdObj.delay || '', 0);

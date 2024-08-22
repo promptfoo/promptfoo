@@ -7,7 +7,6 @@ import path from 'path';
 import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { disableCache } from '../../cache';
-import cliState from '../../cliState';
 import { resolveConfigs } from '../../config';
 import logger from '../../logger';
 import { synthesize } from '../../redteam';
@@ -43,7 +42,6 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
       },
       options.defaultConfig,
     );
-    cliState.basePath = resolved.basePath;
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
   } else if (options.purpose) {

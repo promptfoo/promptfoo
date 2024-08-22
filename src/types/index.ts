@@ -588,7 +588,7 @@ export const TestSuiteConfigSchema = z.object({
   tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]).optional(),
 
   // Scenarios, groupings of data and tests to be evaluated
-  scenarios: z.array(ScenarioSchema).optional(),
+  scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTest: TestCaseSchema.partial().omit({ description: true }).optional(),
