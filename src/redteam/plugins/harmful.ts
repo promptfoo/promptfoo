@@ -208,13 +208,14 @@ function createTestCase(
   harmCategory: string,
 ): TestCase {
   const injectValue = generatedPrompt.split('\n')[0].trim();
+  const harmCategoryLabel = HARM_PLUGINS[harmCategory as keyof typeof HARM_PLUGINS] || harmCategory;
   return {
     vars: {
       [injectVar]: injectValue,
-      harmCategory,
+      harmCategory: harmCategoryLabel,
     },
     metadata: {
-      harmCategory,
+      harmCategory: harmCategoryLabel,
     },
     assert: [
       {
