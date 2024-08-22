@@ -127,9 +127,11 @@ function DownloadMenu() {
     setOpen(true);
   };
 
-  React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (open && !event.altKey && !event.ctrlKey && !event.metaKey) {
+  const handleKeyDown = React.useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleClose();
+      } else if (open && !event.altKey && !event.ctrlKey && !event.metaKey) {
         switch (event.key) {
           case '1':
             downloadConfig();
@@ -148,13 +150,16 @@ function DownloadMenu() {
             break;
         }
       }
-    };
+    },
+    [open],
+  );
 
+  React.useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [open]);
+  }, [handleKeyDown]);
 
   return (
     <>
@@ -164,7 +169,7 @@ function DownloadMenu() {
         </ListItemIcon>
         <ListItemText>Download</ListItemText>
       </MenuItem>
-      <Dialog onClose={handleClose} open={open}>
+      <Dialog onClose={handleClose} open={open} onKeyDown={handleKeyDown}>
         <DialogContent>
           <Stack direction="column" spacing={2} sx={{ width: '100%' }}>
             <Button
