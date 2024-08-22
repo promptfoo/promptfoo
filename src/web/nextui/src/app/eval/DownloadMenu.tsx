@@ -235,7 +235,7 @@ function DownloadMenu() {
               </Button>
             </Tooltip>
 
-            <Tooltip title="Download Human Evaluation Test Cases in YAML format">
+            <Tooltip title="Download Evaluation Test Cases in YAML format">
               <Button
                 onClick={downloadHumanEvalTestCases}
                 startIcon={<DownloadIcon />}
