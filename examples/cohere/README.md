@@ -5,7 +5,13 @@ Next, edit promptfooconfig.yaml.
 Then run:
 
 ```
-promptfoo eval -c simple_config.yaml
+promptfoo eval
+```
+
+Or
+
+```
+promptfoo eval -c complex_config.yaml
 ```
 
 Afterwards, you can view the results by running `promptfoo view`

@@ -29,9 +29,9 @@ if __name__ == "__main__":
     method_name = sys.argv[2]
     json_path = sys.argv[3]
     output_path = sys.argv[4]
-    with open(json_path, "r") as fp:
+    with open(json_path, "r", encoding="utf-8") as fp:
         data = json.load(fp)
 
     result = call_method(script_path, method_name, *data)
-    with open(output_path, "w") as fp:
+    with open(output_path, "w", encoding="utf-8") as fp:
         fp.write(json.dumps({"type": "final_result", "data": result}))

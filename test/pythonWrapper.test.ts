@@ -47,6 +47,7 @@ describe('Python Wrapper', () => {
       expect(fs.writeFile).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo-python-input-json'),
         expect.any(String),
+        'utf-8',
       );
       expect(fs.readFile).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo-python-output-json'),
