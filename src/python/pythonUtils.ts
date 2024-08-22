@@ -30,7 +30,7 @@ export async function runPython(
   };
 
   try {
-    await fs.writeFile(tempJsonPath, safeJsonStringify(args));
+    await fs.writeFile(tempJsonPath, safeJsonStringify(args), 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
     await PythonShell.run('wrapper.py', pythonOptions);
     const output = await fs.readFile(outputPath, 'utf-8');
