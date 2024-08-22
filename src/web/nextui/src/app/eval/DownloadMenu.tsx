@@ -3,10 +3,13 @@ import DownloadIcon from '@mui/icons-material/Download';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Divider from '@mui/material/Divider';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import yaml from 'js-yaml';
@@ -115,6 +118,7 @@ function DownloadMenu() {
           type: 'javascript',
           value: `${row.outputs[0].pass ? '' : '!'}JSON.parse(output).pass`,
         },
+        metadata: row.test.metadata,
       }));
 
     const yamlContent = yaml.dump(humanEvalCases);
@@ -170,53 +174,72 @@ function DownloadMenu() {
         <ListItemText>Download</ListItemText>
       </MenuItem>
       <Dialog onClose={handleClose} open={open} onKeyDown={handleKeyDown}>
+        <DialogTitle>Download Options</DialogTitle>
         <DialogContent>
           <Stack direction="column" spacing={2} sx={{ width: '100%' }}>
-            <Button
-              onClick={downloadConfig}
-              startIcon={<DownloadIcon />}
-              fullWidth
-              sx={{ justifyContent: 'space-between' }}
-            >
-              <span>Download YAML Config</span>
-              <Typography variant="caption">(1)</Typography>
-            </Button>
-            <Button
-              onClick={downloadCsv}
-              startIcon={<DownloadIcon />}
-              fullWidth
-              sx={{ justifyContent: 'space-between' }}
-            >
-              <span>Download Table CSV</span>
-              <Typography variant="caption">(2)</Typography>
-            </Button>
-            <Button
-              onClick={downloadTable}
-              startIcon={<DownloadIcon />}
-              fullWidth
-              sx={{ justifyContent: 'space-between' }}
-            >
-              <span>Download Table JSON</span>
-              <Typography variant="caption">(3)</Typography>
-            </Button>
-            <Button
-              onClick={downloadDpoJson}
-              startIcon={<DownloadIcon />}
-              fullWidth
-              sx={{ justifyContent: 'space-between' }}
-            >
-              <span>Download DPO JSON</span>
-              <Typography variant="caption">(4)</Typography>
-            </Button>
-            <Button
-              onClick={downloadHumanEvalTestCases}
-              startIcon={<DownloadIcon />}
-              fullWidth
-              sx={{ justifyContent: 'space-between' }}
-            >
-              <span>Download Human Eval Test YAML</span>
-              <Typography variant="caption">(5)</Typography>
-            </Button>
+            <Tooltip title="Download the YAML configuration file">
+              <Button
+                onClick={downloadConfig}
+                startIcon={<DownloadIcon />}
+                variant="contained"
+                color="primary"
+                fullWidth
+              >
+                Download YAML Config
+              </Button>
+            </Tooltip>
+
+            <Divider />
+            <Typography variant="subtitle1">Table Data</Typography>
+
+            <Tooltip title="Download table data in CSV format">
+              <Button
+                onClick={downloadCsv}
+                startIcon={<DownloadIcon />}
+                variant="outlined"
+                fullWidth
+              >
+                Download Table CSV
+              </Button>
+            </Tooltip>
+
+            <Tooltip title="Download table data in JSON format">
+              <Button
+                onClick={downloadTable}
+                startIcon={<DownloadIcon />}
+                variant="outlined"
+                fullWidth
+              >
+                Download Table JSON
+              </Button>
+            </Tooltip>
+
+            <Divider />
+            <Typography variant="subtitle1">Advanced Options</Typography>
+
+            <Tooltip title="Download Direct Preference Optimization JSON">
+              <Button
+                onClick={downloadDpoJson}
+                startIcon={<DownloadIcon />}
+                variant="outlined"
+                color="secondary"
+                fullWidth
+              >
+                Download DPO JSON
+              </Button>
+            </Tooltip>
+
+            <Tooltip title="Download Human Evaluation Test Cases in YAML format">
+              <Button
+                onClick={downloadHumanEvalTestCases}
+                startIcon={<DownloadIcon />}
+                variant="outlined"
+                color="secondary"
+                fullWidth
+              >
+                Download Human Eval Test YAML
+              </Button>
+            </Tooltip>
           </Stack>
         </DialogContent>
       </Dialog>
