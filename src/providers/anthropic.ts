@@ -72,6 +72,7 @@ interface AnthropicMessageOptions {
     | Anthropic.MessageCreateParams.ToolChoiceAny
     | Anthropic.MessageCreateParams.ToolChoiceAuto
     | Anthropic.MessageCreateParams.ToolChoiceTool;
+  headers?: Record<string, string>;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -112,6 +113,7 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
 interface AnthropicMessageInput {
   role: 'user' | 'assistant' | 'system';
   content: string | Array<Anthropic.ImageBlockParam | Anthropic.TextBlockParam>;
+  cache_control?: { type: 'ephemeral' };
 }
 
 export function parseMessages(messages: string) {
@@ -124,7 +126,10 @@ export function parseMessages(messages: string) {
   ]);
   // Convert from OpenAI to Anthropic format
   const systemMessage = chats.find((m) => m.role === 'system')?.content;
-  const system = typeof systemMessage === 'string' ? systemMessage : undefined;
+  const system =
+    typeof systemMessage === 'string'
+      ? [{ type: 'text' as const, text: systemMessage }]
+      : systemMessage;
   const extractedMessages: Anthropic.MessageParam[] = chats
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .map((m) => {
@@ -241,7 +246,9 @@ export class AnthropicMessagesProvider implements ApiProvider {
     }
 
     try {
-      const response = await this.anthropic.messages.create(params);
+      const response = await this.anthropic.messages.create(params, {
+        headers: this.config.headers,
+      });
 
       logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
 
