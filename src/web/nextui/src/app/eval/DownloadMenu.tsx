@@ -132,7 +132,7 @@ function DownloadMenu() {
   };
 
   const handleKeyDown = React.useCallback(
-    (event: KeyboardEvent) => {
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === 'Escape') {
         handleClose();
       } else if (open && !event.altKey && !event.ctrlKey && !event.metaKey) {
@@ -159,11 +159,17 @@ function DownloadMenu() {
   );
 
   React.useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (open) {
+        handleKeyDown(event as unknown as React.KeyboardEvent<HTMLDivElement>);
+      }
     };
-  }, [handleKeyDown]);
+
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [handleKeyDown, open]);
 
   return (
     <>
