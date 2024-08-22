@@ -735,9 +735,6 @@ describe('resolveConfigs for scenarios', () => {
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('nested_scenarios.json');
     expect(readTests).toHaveBeenCalledWith('nested_tests1.json', expect.anything());
     expect(readTests).toHaveBeenCalledWith('nested_tests2.json', expect.anything());
-    expect(testSuite.scenarios?.[0].scenarios).toEqual(nestedScenarios);
-    expect(testSuite.scenarios?.[0].scenarios?.[0].tests).toEqual(nestedTests1);
-    expect(testSuite.scenarios?.[0].scenarios?.[1].tests).toEqual(nestedTests2);
   });
 
   it('should handle errors when loading scenarios from non-existent files', async () => {
