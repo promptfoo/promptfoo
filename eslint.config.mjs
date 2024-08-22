@@ -1,4 +1,5 @@
 // @ts-check
+import reactHooks from 'eslint-plugin-react-hooks';
 import eslint from '@eslint/js';
 import jest from 'eslint-plugin-jest';
 import eslintPluginUnicorn from 'eslint-plugin-unicorn';
@@ -43,6 +44,7 @@ export default [
       globals: globals.node,
     },
     plugins: {
+      'react-hooks': reactHooks,
       'unused-imports': unusedImports,
       unicorn: eslintPluginUnicorn,
     },
