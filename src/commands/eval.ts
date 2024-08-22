@@ -42,7 +42,7 @@ export async function doEval(
   setupEnv(cmdObj.envFile);
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
-  let basePath: string | undefined = undefined;
+  let _basePath: string | undefined = undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -63,7 +63,7 @@ export async function doEval(
       disableCache();
     }
 
-    ({ config, testSuite, basePath } = await resolveConfigs(cmdObj, defaultConfig));
+    ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
     let maxConcurrency = Number.parseInt(cmdObj.maxConcurrency || '', 10);
     const delay = Number.parseInt(cmdObj.delay || '', 0);

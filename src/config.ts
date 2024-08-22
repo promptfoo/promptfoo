@@ -466,7 +466,6 @@ export async function resolveConfigs(
     }
   }
 
-  
   const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
 
   if (parsedPrompts.length === 0) {

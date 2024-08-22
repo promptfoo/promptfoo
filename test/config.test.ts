@@ -2,10 +2,11 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
 import cliState from '../src/cliState';
+import { filterTests } from '../src/commands/eval/filterTests';
 import { dereferenceConfig, readConfigs, resolveConfigs } from '../src/config';
-import type { UnifiedConfig } from '../src/types';
-import { maybeLoadFromExternalFile } from '../src/util';
 import { readTests } from '../src/testCases';
+import type { UnifiedConfig, TestSuite } from '../src/types';
+import { maybeLoadFromExternalFile } from '../src/util';
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
@@ -48,6 +49,14 @@ jest.mock('../src/testCases', () => ({
   readTests: jest.fn().mockResolvedValue([]),
   readTest: jest.fn().mockResolvedValue({}),
 }));
+
+jest.mock('../src/commands/eval/filterTests', () => {
+  const actual = jest.requireActual('../src/commands/eval/filterTests');
+  return {
+    ...actual,
+    filterTests: jest.fn(actual.filterTests),
+  };
+});
 
 describe('readConfigs', () => {
   beforeEach(() => {
@@ -642,11 +651,11 @@ describe('resolveConfigs', () => {
       }),
     );
     jest.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(externalScenarios);
-    
+
     // Mock readTests to return an empty array for each scenario
     jest.mocked(readTests).mockResolvedValue([]);
 
-    const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
+    const { testSuite } = (await resolveConfigs(cmdObj, defaultConfig)) as { testSuite: TestSuite };
 
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['scenarios.json']);
     expect(testSuite.scenarios).toEqual(externalScenarios);
@@ -670,20 +679,147 @@ describe('resolveConfigs', () => {
         scenarios,
       }),
     );
-    jest
-      .mocked(maybeLoadFromExternalFile)
-      .mockResolvedValueOnce(scenarios);
-    
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(scenarios);
+
     // Mock readTests to return the external tests
-    jest.mocked(readTests)
+    jest
+      .mocked(readTests)
       .mockResolvedValueOnce(externalTests1)
       .mockResolvedValueOnce(externalTests2);
 
-    const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
+    const { testSuite } = (await resolveConfigs(cmdObj, defaultConfig)) as { testSuite: TestSuite };
 
     expect(readTests).toHaveBeenCalledWith('tests1.json', expect.anything());
     expect(readTests).toHaveBeenCalledWith('tests2.json', expect.anything());
     expect(testSuite.scenarios?.[0].tests).toEqual(externalTests1);
     expect(testSuite.scenarios?.[1].tests).toEqual(externalTests2);
+  });
+});
+
+describe('resolveConfigs for scenarios', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(filterTests).mockImplementation(async (scenario) => scenario.tests);
+  });
+
+  it('should load nested scenarios from external files', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const mainScenarios = [{ description: 'Main Scenario', scenarios: 'nested_scenarios.json' }];
+    const nestedScenarios = [
+      { description: 'Nested Scenario 1', tests: 'nested_tests1.json' },
+      { description: 'Nested Scenario 2', tests: 'nested_tests2.json' },
+    ];
+    const nestedTests1 = [{ vars: { var1: 'value1' } }];
+    const nestedTests2 = [{ vars: { var2: 'value2' } }];
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['prompt1'],
+        providers: ['provider1'],
+        scenarios: mainScenarios,
+      }),
+    );
+    jest
+      .mocked(maybeLoadFromExternalFile)
+      .mockResolvedValueOnce(mainScenarios)
+      .mockResolvedValueOnce(nestedScenarios)
+      .mockResolvedValueOnce(nestedTests1)
+      .mockResolvedValueOnce(nestedTests2);
+
+    jest.mocked(readTests).mockResolvedValueOnce(nestedTests1).mockResolvedValueOnce(nestedTests2);
+
+    const { testSuite } = (await resolveConfigs(cmdObj, defaultConfig)) as { testSuite: TestSuite };
+
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('nested_scenarios.json');
+    expect(readTests).toHaveBeenCalledWith('nested_tests1.json', expect.anything());
+    expect(readTests).toHaveBeenCalledWith('nested_tests2.json', expect.anything());
+    expect(testSuite.scenarios?.[0].scenarios).toEqual(nestedScenarios);
+    expect(testSuite.scenarios?.[0].scenarios?.[0].tests).toEqual(nestedTests1);
+    expect(testSuite.scenarios?.[0].scenarios?.[1].tests).toEqual(nestedTests2);
+  });
+
+  it('should handle errors when loading scenarios from non-existent files', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const scenarios = [{ description: 'Scenario 1', tests: 'non_existent_tests.json' }];
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['prompt1'],
+        providers: ['provider1'],
+        scenarios,
+      }),
+    );
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(scenarios);
+    jest.mocked(readTests).mockRejectedValueOnce(new Error('File not found'));
+
+    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow('File not found');
+  });
+
+  it('should apply filters to scenario tests', async () => {
+    const cmdObj = { config: ['config.json'], filterPattern: 'test' };
+    const defaultConfig = {};
+    const scenarios = [
+      {
+        description: 'Scenario 1',
+        tests: [{ vars: { var1: 'value1' } }, { vars: { var2: 'value2' } }],
+      },
+    ];
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['prompt1'],
+        providers: ['provider1'],
+        scenarios,
+      }),
+    );
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(scenarios);
+    jest.mocked(filterTests).mockResolvedValueOnce([{ vars: { var1: 'value1' } }]);
+
+    const { testSuite } = (await resolveConfigs(cmdObj, defaultConfig)) as { testSuite: TestSuite };
+
+    expect(filterTests).toHaveBeenCalledWith(
+      {
+        description: "Scenario 1",
+        prompts: [{"config": undefined, "label": "prompt1", "raw": "prompt1"}],
+        providers: [{"delay": undefined, "label": undefined, "options": {}, "transform": undefined}],
+        tests: [{"vars": {"var1": "value1"}}, {"vars": {"var2": "value2"}}],
+      },
+      {
+        failing: undefined,
+        firstN: undefined,
+        pattern: "test",
+      }
+    );
+    expect(testSuite.scenarios?.[0].tests).toEqual([{ vars: { var1: 'value1' } }]);
+  });
+
+  it('should handle scenarios with a mix of inline and external tests', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const scenarios = [
+      { description: 'Scenario 1', tests: [{ vars: { var1: 'inline' } }, 'external_tests.json'] },
+    ];
+    const externalTests = [{ vars: { var2: 'external' } }];
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['prompt1'],
+        providers: ['provider1'],
+        scenarios,
+      }),
+    );
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(scenarios);
+    jest.mocked(readTests).mockResolvedValueOnce(externalTests);
+
+    const { testSuite } = (await resolveConfigs(cmdObj, defaultConfig)) as { testSuite: TestSuite };
+
+    expect(readTests).toHaveBeenCalledWith('external_tests.json', expect.anything());
+    expect(testSuite.scenarios?.[0].tests).toEqual([
+      { vars: { var1: 'inline' } },
+      { vars: { var2: 'external' } },
+    ]);
   });
 });
