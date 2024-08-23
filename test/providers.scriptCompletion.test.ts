@@ -1,7 +1,7 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
-import { getCache, isCacheEnabled } from '../src/cache';
+import * as cacheModule from '../src/cache';
 import {
   parseScriptParts,
   getFileHashes,
@@ -12,6 +12,7 @@ jest.mock('fs');
 jest.mock('crypto');
 jest.mock('child_process');
 jest.mock('../src/cache');
+jest.mock('../src/logger');
 
 describe('parseScriptParts', () => {
   it('should parse script parts correctly', () => {
@@ -96,8 +97,8 @@ describe('ScriptCompletionProvider', () => {
   beforeEach(() => {
     provider = new ScriptCompletionProvider('node script.js');
     jest.clearAllMocks();
-    jest.mocked(getCache).mockReset();
-    jest.mocked(isCacheEnabled).mockReset();
+    jest.mocked(cacheModule.getCache).mockReset();
+    jest.mocked(cacheModule.isCacheEnabled).mockReset();
   });
 
   it('should return the correct id', () => {
@@ -107,7 +108,11 @@ describe('ScriptCompletionProvider', () => {
   it('should handle UTF-8 characters in script output', async () => {
     const utf8Output = 'Hello, 世界!';
     jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
-      callback(null, Buffer.from(utf8Output), '');
+      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+        null,
+        Buffer.from(utf8Output),
+        '',
+      );
       return {} as any;
     });
 
@@ -118,7 +123,9 @@ describe('ScriptCompletionProvider', () => {
   it('should handle UTF-8 characters in error output', async () => {
     const utf8Error = 'エラー発生';
     jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
-      callback(null, '', Buffer.from(utf8Error));
+      if (typeof callback === 'function') {
+        callback(null, '', Buffer.from(utf8Error));
+      }
       return {} as any;
     });
 
@@ -131,8 +138,8 @@ describe('ScriptCompletionProvider', () => {
       get: jest.fn().mockResolvedValue(JSON.stringify(cachedResult)),
       set: jest.fn(),
     };
-    jest.mocked(getCache).mockResolvedValue(mockCache);
-    jest.mocked(isCacheEnabled).mockReturnValue(true);
+    jest.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+    jest.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
 
     // Mock fs.existsSync to return true for at least one file
     jest.mocked(fs.existsSync).mockReturnValue(true);
@@ -147,14 +154,18 @@ describe('ScriptCompletionProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result).toEqual(cachedResult);
-    expect(mockCache.get).toHaveBeenCalledWith('exec:node script.js:mock hash:mock hash:test prompt:undefined');
+    expect(mockCache.get).toHaveBeenCalledWith(
+      'exec:node script.js:mock hash:mock hash:test prompt:undefined',
+    );
     expect(execFile).not.toHaveBeenCalled();
   });
 
   it('should handle script execution errors', async () => {
     const errorMessage = 'Script execution failed';
     jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
-      callback(new Error(errorMessage), '', '');
+      if (typeof callback === 'function') {
+        callback(new Error(errorMessage), '', '');
+      }
       return {} as any;
     });
 
@@ -164,7 +175,9 @@ describe('ScriptCompletionProvider', () => {
   it('should handle empty standard output with error output', async () => {
     const errorOutput = 'Warning: Something went wrong';
     jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
-      callback(null, '', Buffer.from(errorOutput));
+      if (typeof callback === 'function') {
+        callback(null, '', Buffer.from(errorOutput));
+      }
       return {} as any;
     });
 
@@ -175,7 +188,9 @@ describe('ScriptCompletionProvider', () => {
     const ansiOutput = '\x1b[31mColored\x1b[0m \x1b[1mBold\x1b[0m';
     const strippedOutput = 'Colored Bold';
     jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
-      callback(null, Buffer.from(ansiOutput), '');
+      if (typeof callback === 'function') {
+        callback(null, Buffer.from(ansiOutput), '');
+      }
       return {} as any;
     });
 
