@@ -25,6 +25,8 @@ export function cacheCommand(program: Command) {
         'Clearing browser history...',
         'Purging expired entries...',
         'Resetting cache counters...',
+        'Pruning the neural net...',
+        'Removing overfitting...',
         'Invalidating cached queries...',
         'Refreshing data structures...',
       ];
