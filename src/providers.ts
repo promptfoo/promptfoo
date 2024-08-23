@@ -62,7 +62,7 @@ import RedteamCrescendoProvider from './redteam/providers/crescendo';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
-import type { TestSuiteConfig } from './types';
+import type { RedteamConfig, TestSuiteConfig } from './types';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -74,12 +74,13 @@ import type {
 export async function loadApiProvider(
   providerPath: string,
   context: {
+    redteamProvider?: RedteamConfig['provider'];
     options?: ProviderOptions;
     basePath?: string;
     env?: EnvOverrides;
   } = {},
 ): Promise<ApiProvider> {
-  const { options = {}, basePath, env } = context;
+  const { options = {}, basePath, env, redteamProvider } = context;
   const providerOptions: ProviderOptions = {
     id: options.id,
     config: {
@@ -368,14 +369,22 @@ export async function loadApiProvider(
     }
   } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
     ret = new HttpProvider(providerPath, providerOptions);
-  } else if (providerPath === 'promptfoo:redteam:iterative') {
-    ret = new RedteamIterativeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
-    ret = new RedteamIterativeTreeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
-    ret = new RedteamImageIterativeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:crescendo') {
-    ret = new RedteamCrescendoProvider(providerOptions.config);
+  } else if (providerPath.startsWith('promptfoo:redteam')) {
+    const redteamConfig = {
+      ...providerOptions.config,
+      redteamProvider,
+    };
+    if (providerPath === 'promptfoo:redteam:iterative') {
+      ret = new RedteamIterativeProvider(redteamConfig);
+    } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
+      ret = new RedteamIterativeTreeProvider(redteamConfig);
+    } else if (providerPath === 'promptfoo:redteam:iterative:image') {
+      ret = new RedteamImageIterativeProvider(redteamConfig);
+    } else if (providerPath === 'promptfoo:redteam:crescendo') {
+      ret = new RedteamCrescendoProvider(redteamConfig);
+    } else {
+      throw new Error(`Unknown redteam provider: ${providerPath}`);
+    }
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
   } else if (providerPath.startsWith('groq:')) {
@@ -405,13 +414,13 @@ export async function loadApiProvider(
 export async function loadApiProviders(
   providerPaths: TestSuiteConfig['providers'],
   options: {
+    redteamProvider?: RedteamConfig['provider'];
     basePath?: string;
     env?: EnvOverrides;
   } = {},
 ): Promise<ApiProvider[]> {
-  const { basePath, env } = options;
   if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths, { basePath, env })];
+    return [await loadApiProvider(providerPaths, options)];
   } else if (typeof providerPaths === 'function') {
     return [
       {
@@ -423,7 +432,7 @@ export async function loadApiProviders(
     return Promise.all(
       providerPaths.map((provider, idx) => {
         if (typeof provider === 'string') {
-          return loadApiProvider(provider, { basePath, env });
+          return loadApiProvider(provider, options);
         } else if (typeof provider === 'function') {
           return {
             id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
@@ -432,16 +441,18 @@ export async function loadApiProviders(
         } else if (provider.id) {
           // List of ProviderConfig objects
           return loadApiProvider((provider as ProviderOptions).id!, {
+            ...options,
             options: provider,
-            basePath,
-            env,
           });
         } else {
           // List of { id: string, config: ProviderConfig } objects
           const id = Object.keys(provider)[0];
           const providerObject = (provider as ProviderOptionsMap)[id];
           const context = { ...providerObject, id: providerObject.id || id };
-          return loadApiProvider(id, { options: context, basePath, env });
+          return loadApiProvider(id, {
+            ...options,
+            options: context,
+          });
         }
       }),
     );
