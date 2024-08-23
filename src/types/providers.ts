@@ -106,6 +106,8 @@ export type EnvOverrides = {
   ANTHROPIC_API_KEY?: string;
   BAM_API_KEY?: string;
   BAM_API_HOST?: string;
+  AI21_API_BASE_URL?: string;
+  AI21_API_KEY?: string;
   AZURE_OPENAI_API_HOST?: string;
   AZURE_OPENAI_API_KEY?: string;
   AZURE_OPENAI_API_BASE_URL?: string;
