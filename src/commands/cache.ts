@@ -23,7 +23,6 @@ export function cacheCommand(program: Command) {
         'Defragmenting memory...',
         'Flushing temporary files...',
         'Tuning hyperparameters...',
-        'Clearing browser history...',
         'Purging expired entries...',
         'Resetting cache counters...',
         'Pruning the neural net...',
@@ -37,7 +36,7 @@ export function cacheCommand(program: Command) {
       const interval = setInterval(() => {
         logger.info(cuteMessages[messageIndex % cuteMessages.length]);
         messageIndex++;
-      }, 10000);
+      }, 8000);
 
       try {
         await clearCache();
