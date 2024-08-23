@@ -1,8 +1,6 @@
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
-import { loadApiProvider, loadApiProviders } from '../../providers';
-import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -10,11 +8,8 @@ import {
   type Prompt,
   type NunjucksFilterMap,
   type RedteamConfig,
-  isApiProvider,
-  isProviderOptions,
 } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
-import { ATTACKER_MODEL, TEMPERATURE } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { loadRedteamProvider } from './shared';
 
