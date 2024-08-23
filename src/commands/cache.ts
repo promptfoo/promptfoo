@@ -16,8 +16,35 @@ export function cacheCommand(program: Command) {
       setupEnv(cmdObj.envFile);
       telemetry.maybeShowNotice();
       logger.info('Clearing cache...');
-      await clearCache();
-      cleanupOldFileResults(0);
+
+      const cuteMessages = [
+        'Scrubbing bits...',
+        'Sweeping stale data...',
+        'Defragmenting memory...',
+        'Flushing temporary files...',
+        'Tuning hyperparameters...',
+        'Purging expired entries...',
+        'Resetting cache counters...',
+        'Pruning the neural net...',
+        'Removing overfitting...',
+        'Invalidating cached queries...',
+        'Aligning embeddings...',
+        'Refreshing data structures...',
+      ];
+
+      let messageIndex = 0;
+      const interval = setInterval(() => {
+        logger.info(cuteMessages[messageIndex % cuteMessages.length]);
+        messageIndex++;
+      }, 8000);
+
+      try {
+        await clearCache();
+        cleanupOldFileResults(0);
+      } finally {
+        clearInterval(interval);
+      }
+
       telemetry.record('command_used', {
         name: 'cache_clear',
       });
