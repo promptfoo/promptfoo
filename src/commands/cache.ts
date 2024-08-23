@@ -28,6 +28,7 @@ export function cacheCommand(program: Command) {
         'Pruning the neural net...',
         'Removing overfitting...',
         'Invalidating cached queries...',
+        'Aligning embeddings...',
         'Refreshing data structures...',
       ];
 
