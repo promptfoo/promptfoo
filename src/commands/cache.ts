@@ -22,6 +22,7 @@ export function cacheCommand(program: Command) {
         'Sweeping stale data...',
         'Defragmenting memory...',
         'Flushing temporary files...',
+        'Tuning hyperparameters...',
         'Clearing browser history...',
         'Purging expired entries...',
         'Resetting cache counters...',
