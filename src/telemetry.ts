@@ -5,14 +5,14 @@ import { fetchWithTimeout } from './fetch';
 import { maybeRecordFirstRun } from './globalConfig';
 import logger from './logger';
 
-type EventValue = string | number | boolean | string[];
+export type EventValue = string | number | boolean | string[];
 type TelemetryEvent = {
   event: string;
   packageVersion: string;
   properties: Record<string, EventValue>;
 };
 
-type TelemetryEventTypes = 'eval_ran' | 'assertion_used' | 'command_used';
+type TelemetryEventTypes = 'eval_ran' | 'assertion_used' | 'command_used' | 'funnel';
 
 const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
@@ -34,6 +34,14 @@ export class Telemetry {
         properties,
       });
     }
+  }
+
+  async recordAndSend(
+    eventName: TelemetryEventTypes,
+    properties: Record<string, EventValue>,
+  ): Promise<void> {
+    this.record(eventName, properties);
+    await this.send();
   }
 
   maybeShowNotice(): void {

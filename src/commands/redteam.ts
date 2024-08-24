@@ -22,7 +22,7 @@ import {
   DEFAULT_STRATEGIES,
   subCategoryDescriptions,
 } from '../redteam/constants';
-import telemetry from '../telemetry';
+import telemetry, { type EventValue } from '../telemetry';
 import type { RedteamPluginObject } from '../types';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../util/templates';
 import { doGenerateRedteam } from './generate/redteam';
@@ -115,6 +115,14 @@ def call_api(prompt, options, context):
     }
 `;
 
+function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+  telemetry.recordAndSend('funnel', {
+    type: 'redteam onboarding',
+    step,
+    ...properties,
+  });
+}
+
 async function getSystemPrompt(): Promise<string> {
   const NOTE =
     '(NOTE: your prompt must include an injectible variable like {{query}} as a placeholder for user input) -- REMOVE THIS LINE';
@@ -150,7 +158,7 @@ async function getSystemPrompt(): Promise<string> {
 export async function redteamInit(directory: string | undefined) {
   telemetry.maybeShowNotice();
   telemetry.record('command_used', { name: 'redteam init - started' });
-  await telemetry.send();
+  recordOnboardingStep('start');
 
   const projectDir = directory || '.';
   if (projectDir !== '.' && !fs.existsSync(projectDir)) {
@@ -173,6 +181,8 @@ export async function redteamInit(directory: string | undefined) {
     pageSize: process.stdout.rows - 6,
   });
 
+  recordOnboardingStep('choose app type', { value: redTeamChoice });
+
   const prompts: string[] = [];
   let defaultPromptUsed = false;
   let purpose: string | undefined;
@@ -189,6 +199,8 @@ export async function redteamInit(directory: string | undefined) {
         (e.g. "${defaultPurpose}")\n`,
       })) || defaultPurpose;
     prompts.push(`{{query}}`);
+
+    recordOnboardingStep('choose purpose', { value: purpose });
   } else if (redTeamChoice === 'prompt_model_chatbot') {
     const promptChoice = await select({
       message: 'Do you want to enter a prompt now or later?',
@@ -197,6 +209,8 @@ export async function redteamInit(directory: string | undefined) {
         { name: 'Enter prompt later', value: 'later' },
       ],
     });
+
+    recordOnboardingStep('choose prompt', { value: promptChoice });
 
     let prompt: string;
     if (promptChoice === 'now') {
@@ -239,6 +253,9 @@ export async function redteamInit(directory: string | undefined) {
       choices: providerChoices,
       pageSize: process.stdout.rows - 6,
     });
+
+    recordOnboardingStep('choose provider', { value: selectedProvider });
+
     if (selectedProvider === 'Other') {
       providers = ['openai:gpt-4o-mini'];
     } else {
@@ -247,6 +264,8 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   if (!getEnvString('OPENAI_API_KEY')) {
+    recordOnboardingStep('missing api key');
+
     console.clear();
     logger.info(chalk.bold('OpenAI API Configuration\n'));
 
@@ -257,6 +276,8 @@ export async function redteamInit(directory: string | undefined) {
         { name: 'Set it later', value: 'later' },
       ],
     });
+
+    recordOnboardingStep('choose api key', { value: apiKeyChoice });
 
     if (apiKeyChoice === 'enter') {
       const apiKey = await input({ message: 'Enter your OpenAI API key:' });
@@ -269,6 +290,9 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   console.clear();
+
+  recordOnboardingStep('begin plugin & strategy selection');
+
   logger.info(chalk.bold('Plugin Configuration\n'));
 
   const pluginChoices = Array.from(ALL_PLUGINS)
@@ -287,6 +311,10 @@ export async function redteamInit(directory: string | undefined) {
     validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
   });
 
+  recordOnboardingStep('choose plugins', {
+    value: plugins.map((p) => (typeof p === 'string' ? p : p.id)),
+  });
+
   // Handle policy plugin
   if (plugins.includes('policy')) {
     // Remove the original 'policy' string if it exists
@@ -295,10 +323,12 @@ export async function redteamInit(directory: string | undefined) {
       plugins.splice(policyIndex, 1);
     }
 
+    recordOnboardingStep('collect policy');
     const policyDescription = await input({
       message:
         'You selected the `policy` plugin. Please enter your custom policy description, or leave empty to skip.\n(e.g. "Never talk about the weather")',
     });
+    recordOnboardingStep('choose policy', { value: policyDescription.length });
 
     if (policyDescription.trim() !== '') {
       plugins.push({
@@ -317,7 +347,9 @@ export async function redteamInit(directory: string | undefined) {
     }
 
     if (defaultPromptUsed) {
+      recordOnboardingStep('collect system prompt');
       const systemPrompt = await getSystemPrompt();
+      recordOnboardingStep('choose system prompt', { value: systemPrompt.length });
 
       if (systemPrompt.trim() !== '') {
         plugins.push({
@@ -359,10 +391,15 @@ export async function redteamInit(directory: string | undefined) {
     loop: false,
   });
 
+  recordOnboardingStep('choose strategies', {
+    value: strategies,
+  });
+
   const hasHarmfulPlugin = plugins.some(
     (plugin) => typeof plugin === 'string' && plugin.startsWith('harmful'),
   );
   if (hasHarmfulPlugin) {
+    recordOnboardingStep('collect email');
     const { hasHarmfulRedteamConsent } = readGlobalConfig();
     if (!hasHarmfulRedteamConsent) {
       logger.info(chalk.yellow('\nImportant Notice:'));
@@ -425,6 +462,7 @@ export async function redteamInit(directory: string | undefined) {
   logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
 
   telemetry.record('command_used', { name: 'redteam init' });
+  recordOnboardingStep('finish');
   await telemetry.send();
 
   if (deferGeneration) {
@@ -437,10 +475,12 @@ export async function redteamInit(directory: string | undefined) {
     );
     return;
   } else {
+    recordOnboardingStep('offer generate');
     const readyToGenerate = await confirm({
       message: 'Are you ready to generate adversarial test cases?',
       default: true,
     });
+    recordOnboardingStep('choose generate', { value: readyToGenerate });
 
     if (readyToGenerate) {
       await doGenerateRedteam({
