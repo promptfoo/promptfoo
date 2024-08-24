@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
-import { removeAsterisks } from '../util';
+import { removePrefix } from '../util';
 import { PluginBase, RedteamModelGrader } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:indirect-prompt-injection';
@@ -74,15 +74,14 @@ export class IndirectPromptInjectionPlugin extends PluginBase {
     const results: { systemPromptInjection: string; prompt: string }[] = [];
     let currentItem: Partial<{ systemPromptInjection: string; prompt: string }> = {};
     for (let line of lines) {
-      line = removeAsterisks(line);
       if (line.includes('SystemPromptInjection:')) {
         if (currentItem.systemPromptInjection) {
           results.push(currentItem as { systemPromptInjection: string; prompt: string });
           currentItem = {};
         }
-        currentItem.systemPromptInjection = line.substring('SystemPromptInjection:'.length).trim();
+        currentItem.systemPromptInjection = removePrefix(line, 'SystemPromptInjection');
       } else if (line.includes('Prompt:')) {
-        currentItem.prompt = line.substring('Prompt:'.length).trim();
+        currentItem.prompt = removePrefix(line, 'Prompt');
         if (currentItem.systemPromptInjection && currentItem.prompt) {
           results.push(currentItem as { systemPromptInjection: string; prompt: string });
           currentItem = {};

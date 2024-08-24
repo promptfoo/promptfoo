@@ -6,7 +6,7 @@ import type { ApiProvider, Assertion, AssertionValue, TestCase } from '../../typ
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
-import { removeAsterisks, retryWithDeduplication, sampleArray } from '../util';
+import { removePrefix, retryWithDeduplication, sampleArray } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -93,10 +93,8 @@ export abstract class PluginBase {
       .split('\n')
       .filter((line: string) => line.includes('Prompt:'))
       .map((line: string) => {
-        line = removeAsterisks(line);
-        const promptStart = line.indexOf('Prompt:') + 'Prompt:'.length;
-        let prompt = line.substring(promptStart).trim();
-        return { prompt };
+        line = removePrefix(line, 'Prompt');
+        return { prompt: line };
       });
   }
 
