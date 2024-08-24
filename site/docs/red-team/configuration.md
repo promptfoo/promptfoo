@@ -112,6 +112,22 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
 #### Technical plugins
 
 - `debug-access`: Checks if the model attempts to access or use debugging commands.
+- `indirect-prompt-injection`: Tests if the prompt is vulnerable to instructions injected into the prompt.
+
+  - Takes a `config` object with `systemPrompt` and `indirectInjectionVar` property. These properties are **required** for the plugin to work properly. For example:
+    ```yaml
+    redteam:
+      plugins:
+        - id: 'indirect-prompt-injection'
+          config:
+            systemPrompt: '"You are a travel agent specialized in budget trips to Europe. The user's name is {{name}}. \n\nUser query: {{query}}"'
+            indirectInjectionVar: 'name'
+    ```
+
+  The `indirectInjectionVar` is the variable in your prompt where your system is injecting untrusted content that you want to test is vulnerable.
+
+  The prompt **must** have two variables. One which matches the `indirectInjectionVar` and one which is the user's query.
+
 - `rbac`: Evaluates if the model properly implements Role-Based Access Control (RBAC).
 - `prompt-extraction`: Tests if the model attempts to expose the system prompt and/or instructions.
 

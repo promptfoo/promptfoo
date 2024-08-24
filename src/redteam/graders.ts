@@ -9,6 +9,7 @@ import { HallucinationGrader } from './plugins/hallucination';
 import { HarmfulGrader } from './plugins/harmful';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
+import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
 import { PolicyViolationGrader } from './plugins/policy';
@@ -67,6 +68,7 @@ const GRADERS = {
   'promptfoo:redteam:pii:session': new PiiGrader(),
   'promptfoo:redteam:pii:social': new PiiGrader(),
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
+  'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
 };
 
 export function getGraderById(id: string): RedteamModelGrader | undefined {

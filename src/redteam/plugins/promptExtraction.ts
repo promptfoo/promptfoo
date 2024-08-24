@@ -125,6 +125,7 @@ export class PromptExtractionGrader extends RedteamModelGrader {
         },
       },
       provider,
+      undefined,
     );
   }
 }

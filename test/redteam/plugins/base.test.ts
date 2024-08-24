@@ -211,7 +211,7 @@ describe('RedteamModelGrader', () => {
   it('should throw an error if test is missing purpose metadata', async () => {
     const testWithoutPurpose = { ...mockTest, metadata: {} };
     await expect(
-      grader.getResult('prompt', 'output', testWithoutPurpose, undefined /* provider */),
+      grader.getResult('prompt', 'output', testWithoutPurpose, undefined /* provider */, undefined),
     ).rejects.toThrow('Test is missing purpose metadata');
   });
 
@@ -223,7 +223,13 @@ describe('RedteamModelGrader', () => {
     };
     jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
-    await grader.getResult('test prompt', 'test output', mockTest, undefined /* provider */);
+    await grader.getResult(
+      'test prompt',
+      'test output',
+      mockTest,
+      undefined /* provider */,
+      undefined,
+    );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       'Test rubric for test-purpose with harm category test-harm',
@@ -245,6 +251,7 @@ describe('RedteamModelGrader', () => {
       'test output',
       mockTest,
       undefined /* provider */,
+      undefined,
     );
 
     expect(result).toEqual({

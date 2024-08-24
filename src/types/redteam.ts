@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 export type RedteamPluginObject = {
@@ -41,6 +42,7 @@ export type RedteamConfig = {
   provider?: string | ProviderOptions | ApiProvider;
   purpose?: string;
   strategies: RedteamStrategyObject[];
+  generationSchema?: z.AnyZodObject;
 };
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
@@ -56,4 +58,5 @@ export interface SynthesizeOptions {
   provider?: ApiProvider | ProviderOptions | string;
   purpose?: string;
   strategies: { id: string; config?: Record<string, any> }[];
+  generationSchema?: z.AnyZodObject;
 }

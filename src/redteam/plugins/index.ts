@@ -11,6 +11,7 @@ import { HallucinationPlugin } from './hallucination';
 import { getHarmfulTests } from './harmful';
 import { HijackingPlugin } from './hijacking';
 import { ImitationPlugin } from './imitation';
+import { IndirectPromptInjectionPlugin } from './indirectPromptInjection';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PolicyPlugin } from './policy';
@@ -138,6 +139,16 @@ export const Plugins: Plugin[] = [
         purpose,
         injectVar,
         config as { systemPrompt: string },
+      ).generateTests(n),
+  },
+  {
+    key: 'indirect-prompt-injection',
+    action: (provider, purpose, injectVar, n, config) =>
+      new IndirectPromptInjectionPlugin(
+        provider,
+        purpose,
+        injectVar,
+        config as { systemPrompt: string; indirectInjectionVar: string },
       ).generateTests(n),
   },
 ];

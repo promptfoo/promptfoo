@@ -15,7 +15,8 @@ export async function retryWithDeduplication<T>(
   operation: (currentItems: T[]) => Promise<T[]>,
   targetCount: number,
   maxConsecutiveRetries: number = 2,
-  dedupFn: (items: T[]) => T[] = (items) => Array.from(new Set(items)),
+  dedupFn: (items: T[]) => T[] = (items) =>
+    Array.from(new Set(items.map((item) => JSON.stringify(item)))).map((item) => JSON.parse(item)),
 ): Promise<T[]> {
   const allItems: T[] = [];
   let consecutiveRetries = 0;
@@ -71,4 +72,8 @@ const REFUSAL_PREFIXES = [
 export function isBasicRefusal(response: string): boolean {
   const lowerResponse = response.trim().toLowerCase();
   return REFUSAL_PREFIXES.some((prefix) => lowerResponse.startsWith(prefix));
+}
+
+export function removeAsterisks(str: string) {
+  return str.replace(/^\*\*(.+?)\*\*:?\s*/, '$1');
 }

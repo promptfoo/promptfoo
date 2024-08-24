@@ -109,6 +109,7 @@ export class PolicyViolationGrader extends RedteamModelGrader {
         },
       },
       provider,
+      undefined,
     );
   }
 }

@@ -168,12 +168,13 @@ export async function synthesize({
     const parsedVars = extractVariablesFromTemplates(prompts);
     if (parsedVars.length > 1) {
       logger.warn(
-        `Multiple variables found in prompts: ${parsedVars.join(', ')}. Using the first one.`,
+        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}".`,
       );
     } else if (parsedVars.length === 0) {
       logger.warn('No variables found in prompts. Using "query" as the inject variable.');
     }
-    injectVar = parsedVars[0] || 'query';
+    // Odds are that the last variable is the user input since the user input usually goes at the end of the prompt
+    injectVar = parsedVars[parsedVars.length - 1] || 'query';
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
