@@ -11,7 +11,9 @@ export async function loadRedteamProvider({
 }: {
   provider?: RedteamConfig['provider'];
   preferSmallModel?: boolean;
-}) {
+} = {}) {
+  // FIXME(ian): This approach only works on CLI, it doesn't work when running via node module.
+  // That's ok for now because we only officially support redteams from CLI.
   let ret;
   const redteamProvider = provider || cliState.config?.redteam?.provider;
   if (isApiProvider(redteamProvider)) {

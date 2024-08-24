@@ -2,7 +2,6 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,8 +12,6 @@ import type {
 } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import { loadRedteamProvider } from './shared';
-
-const ATTACKER_MODEL = 'gpt-4o';
 
 const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
   ? Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)

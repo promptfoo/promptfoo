@@ -1,11 +1,13 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
+import { loadRedteamProvider } from '../providers/shared';
 import { retryWithDeduplication, sampleArray } from '../util';
 
 /**
@@ -147,7 +149,11 @@ export abstract class RedteamModelGrader {
         Variables: ${JSON.stringify(vars, null, 2)}
       `);
     }
-    const grade = await matchesLlmRubric(finalRubric, llmOutput, {});
+    const grade = await matchesLlmRubric(finalRubric, llmOutput, {
+      ...test.options,
+      // Always use the redteam provider
+      provider: loadRedteamProvider(),
+    });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
     return { grade, rubric: finalRubric };
   }
