@@ -74,7 +74,5 @@ By incorporating the Unrestricted Access plugin in your LLM red teaming strategy
 
 - [BOLA (Broken Object Level Authorization)](bola.md)
 - [RBAC (Role-Based Access Control)](rbac.md)
-- [Rate Limiting](../llm-vulnerability-types.md#rate-limiting)
-- [Business Logic Vulnerabilities](../llm-vulnerability-types.md#business-logic-vulnerabilities)
 
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) page.

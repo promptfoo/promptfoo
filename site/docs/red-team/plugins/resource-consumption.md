@@ -71,10 +71,6 @@ Testing for Resource Consumption vulnerabilities is critical for:
 
 By incorporating the Resource Consumption plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's resource management mechanisms.
 
-## Related Concepts
+## Further reading
 
-- [Denial of Service (DoS)](../llm-vulnerability-types.md#denial-of-service)
-- [Rate Limiting](../llm-vulnerability-types.md#rate-limiting)
-- [Scalability](../llm-vulnerability-types.md#scalability)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) page.

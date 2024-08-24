@@ -6,7 +6,7 @@ sidebar_label: Object Property-Level Authorization
 
 The BOPLA (Broken Object Property Level Authorization) red teaming plugin is designed to test an AI system's vulnerability to attacks that attempt to access or modify sensitive object properties that should be restricted.
 
-This plugin helps identify potential security breaches where an attacker might exploit the system to gain unauthorized access to or modify sensitive object properties. It is particularly useful for AI agents with access to tools/APIs that handle complex data structures.
+This plugin helps identify potential security breaches where an attacker might exploit the system to gain unauthorized access to or modify sensitive object properties. It's useful for AI agents with access to tools/APIs that handle complex data structures.
 
 ## Purpose
 
@@ -74,6 +74,5 @@ By incorporating the BOPLA plugin in your LLM red teaming strategy, you can iden
 - [BOLA (Broken Object Level Authorization)](bola.md)
 - [RBAC (Role-Based Access Control)](rbac.md)
 - [BFLA (Broken Function Level Authorization)](bfla.md)
-- [Information Disclosure](../llm-vulnerability-types.md#privacy-and-security)
 
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) page.
