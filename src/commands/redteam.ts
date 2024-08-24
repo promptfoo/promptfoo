@@ -462,8 +462,7 @@ export async function redteamInit(directory: string | undefined) {
   logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
 
   telemetry.record('command_used', { name: 'redteam init' });
-  recordOnboardingStep('finish');
-  await telemetry.send();
+  await recordOnboardingStep('finish');
 
   if (deferGeneration) {
     logger.info(
@@ -525,6 +524,7 @@ export function initRedteamCommand(program: Command) {
             chalk.blue('For help or feedback, visit ') +
               chalk.green('https://www.promptfoo.dev/contact/'),
           );
+          await recordOnboardingStep('early exit');
           process.exit(130);
         } else {
           throw err;
