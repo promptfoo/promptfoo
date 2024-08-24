@@ -23,9 +23,6 @@ export async function filterTests(testSuite: TestSuite, args: Args): Promise<Tes
   const { firstN, pattern, failing } = args;
   let newTests: NonNullable<Tests>;
 
-  console.error(`tests: ${JSON.stringify(tests)}`);
-  console.error(`args: ${JSON.stringify(args)}`);
-
   if (failing) {
     newTests = await filterFailingTests(testSuite, failing);
   } else {
