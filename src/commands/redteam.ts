@@ -481,7 +481,7 @@ export async function redteamInit(directory: string | undefined) {
   const numTests = 5;
 
   const nunjucks = getNunjucksEngine();
-  logger.info({ purpose, numTests, plugins, strategies, prompts, providers });
+
   const redteamConfig = nunjucks.renderString(REDTEAM_CONFIG_TEMPLATE, {
     purpose,
     numTests,
