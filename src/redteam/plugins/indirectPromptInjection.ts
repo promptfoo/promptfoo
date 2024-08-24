@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import logger from '../../logger';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import { removePrefix } from '../util';
 import { PluginBase, RedteamModelGrader } from './base';
