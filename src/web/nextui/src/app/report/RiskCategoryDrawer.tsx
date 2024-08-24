@@ -100,20 +100,25 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           View All Logs
         </Button>
         {failures.length > 0 ? (
-          <List>
-            {failures.slice(0, 5).map((failure, index) => (
-              <ListItem key={index} className="failure-item">
-                <Box>
-                  <Typography variant="subtitle1" className="prompt">
-                    {getPromptDisplayString(failure.prompt)}
-                  </Typography>
-                  <Typography variant="body2" className="output">
-                    {failure.output}
-                  </Typography>
-                </Box>
-              </ListItem>
-            ))}
-          </List>
+          <>
+            <Typography variant="h6" className="failed-tests-header">
+              Failed Tests
+            </Typography>
+            <List>
+              {failures.slice(0, 5).map((failure, index) => (
+                <ListItem key={index} className="failure-item">
+                  <Box>
+                    <Typography variant="subtitle1" className="prompt">
+                      {getPromptDisplayString(failure.prompt)}
+                    </Typography>
+                    <Typography variant="body2" className="output">
+                      {failure.output}
+                    </Typography>
+                  </Box>
+                </ListItem>
+              ))}
+            </List>
+          </>
         ) : (
           <Box sx={{ mt: 2, textAlign: 'center' }}>
             <Typography variant="body1">All tests passed successfully</Typography>
