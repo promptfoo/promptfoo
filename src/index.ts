@@ -13,6 +13,7 @@ import type {
   EvaluateTestSuite,
   ProviderOptions,
   PromptFunction,
+  Scenario,
 } from './types';
 import {
   readFilters,
@@ -29,6 +30,7 @@ export { generateTable } from './table';
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   const constructedTestSuite: TestSuite = {
     ...testSuite,
+    scenarios: testSuite.scenarios as Scenario[],
     providers: await loadApiProviders(testSuite.providers, {
       env: testSuite.env,
     }),

@@ -1,8 +1,11 @@
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
-import { dereferenceConfig, readConfigs } from '../src/config';
+import cliState from '../src/cliState';
+import { dereferenceConfig, readConfigs, resolveConfigs } from '../src/config';
+import { readTests } from '../src/testCases';
 import type { UnifiedConfig } from '../src/types';
+import { maybeLoadFromExternalFile } from '../src/util';
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
@@ -24,6 +27,33 @@ jest.mock('fs', () => ({
   existsSync: jest.fn(),
   mkdirSync: jest.fn(),
 }));
+
+jest.mock('../src/util', () => {
+  const originalModule = jest.requireActual('../src/util');
+  return {
+    ...originalModule,
+    maybeLoadFromExternalFile: jest.fn(originalModule.maybeLoadFromExternalFile),
+  };
+});
+
+jest.mock('../src/esm', () => ({
+  importModule: jest.fn().mockResolvedValue(
+    class CustomApiProvider {
+      options: any;
+      constructor(options: any) {
+        this.options = options;
+      }
+    },
+  ),
+}));
+
+jest.mock('../src/testCases', () => {
+  const originalModule = jest.requireActual('../src/testCases');
+  return {
+    ...originalModule,
+    readTests: jest.fn(originalModule.readTests),
+  };
+});
 
 describe('readConfigs', () => {
   beforeEach(() => {
@@ -576,5 +606,93 @@ describe('dereferenceConfig', () => {
     };
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     expect(dereferencedConfig).toEqual(rawConfig);
+  });
+});
+
+describe('resolveConfigs', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should set cliState.basePath', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['prompt1'],
+        providers: ['provider1'],
+      }),
+    );
+
+    await resolveConfigs(cmdObj, defaultConfig);
+
+    expect(cliState.basePath).toBe(path.dirname('config.json'));
+  });
+
+  it('should load scenarios and tests from external files', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const scenarios = [{ description: 'Scenario', tests: 'file://tests.yaml' }];
+    const externalTests = [
+      { vars: { testPrompt: 'What services do you offer?' } },
+      { vars: { testPrompt: 'How can I confirm an order?' } },
+    ];
+
+    const prompt =
+      'You are a helpful assistant. You are given a prompt and you must answer it. {{testPrompt}}';
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: [prompt],
+        providers: ['openai:gpt-4'],
+        scenarios: 'file://scenarios.yaml',
+      }),
+    );
+
+    // Mock maybeLoadFromExternalFile to return scenarios and tests
+    jest
+      .mocked(maybeLoadFromExternalFile)
+      .mockResolvedValueOnce(scenarios) // For scenarios.yaml
+      .mockResolvedValueOnce(externalTests); // For tests.yaml
+
+    // Mock readTests to return the external tests
+    jest.mocked(readTests).mockResolvedValue(externalTests);
+
+    jest.mocked(globSync).mockReturnValue(['config.json']);
+
+    const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
+
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios.yaml']);
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
+    expect(testSuite).toEqual(
+      expect.objectContaining({
+        prompts: [
+          {
+            raw: prompt,
+            label: prompt,
+            config: undefined,
+          },
+        ],
+        providers: expect.arrayContaining([
+          expect.objectContaining({
+            modelName: 'gpt-4',
+          }),
+        ]),
+        scenarios: ['file://scenarios.yaml'],
+        tests: externalTests,
+        defaultTest: {
+          assert: [],
+          metadata: {},
+          options: {},
+          vars: {},
+        },
+        derivedMetrics: undefined,
+        extensions: [],
+        nunjucksFilters: {},
+        providerPromptMap: {},
+      }),
+    );
   });
 });
