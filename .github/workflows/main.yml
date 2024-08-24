@@ -23,7 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['18.x', '20.x', '22.x']
+        # Temporarily disabled 22.x due to github runner compatibility issues
+        # TODO(Michael): Re-enable once issues are resolved, 2024-08-23
+        node: ['18.x', '20.x']
         python: ['3.9']
         os: [ubuntu-latest, windows-latest, macOS-latest]
         exclude:
