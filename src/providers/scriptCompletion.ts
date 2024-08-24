@@ -107,8 +107,8 @@ export class ScriptCompletionProvider implements ApiProvider {
           reject(error);
           return;
         }
-        const standardOutput = stripText(String(stdout).trim());
-        const errorOutput = stripText(String(stderr).trim());
+        const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
+        const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
         if (errorOutput) {
           logger.debug(`Error output from script ${this.scriptPath}: ${errorOutput}`);
           if (!standardOutput) {
