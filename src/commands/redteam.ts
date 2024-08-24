@@ -16,10 +16,12 @@ import { getEnvString } from '../envars';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../globalConfig';
 import logger from '../logger';
 import {
+  type Plugin,
   ADDITIONAL_STRATEGIES,
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
+  type Strategy,
   subCategoryDescriptions,
 } from '../redteam/constants';
 import telemetry, { type EventValue } from '../telemetry';
@@ -293,27 +295,50 @@ export async function redteamInit(directory: string | undefined) {
 
   recordOnboardingStep('begin plugin & strategy selection');
 
-  logger.info(chalk.bold('Plugin Configuration\n'));
+  logger.info(chalk.bold('Plugin Configuration'));
+  logger.info('Plugins generate adversarial inputs.\n');
 
-  const pluginChoices = Array.from(ALL_PLUGINS)
-    .sort()
-    .map((plugin) => ({
-      name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description'}`,
-      value: plugin,
-      checked: DEFAULT_PLUGINS.has(plugin),
-    }));
-
-  const plugins: (string | RedteamPluginObject)[] = await checkbox({
-    message: `Plugins generate adversarial inputs. Select the ones you want to use. Don't worry, you can change this later:`,
-    choices: pluginChoices,
-    pageSize: process.stdout.rows - 6,
-    loop: false,
-    validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
+  const pluginConfigChoice = await select({
+    message: 'How would you like to configure plugins?',
+    choices: [
+      { name: 'Use the defaults (configure later)', value: 'default' },
+      { name: 'Manually select', value: 'manual' },
+    ],
   });
 
-  recordOnboardingStep('choose plugins', {
-    value: plugins.map((p) => (typeof p === 'string' ? p : p.id)),
-  });
+  recordOnboardingStep('choose plugin config method', { value: pluginConfigChoice });
+
+  let plugins: (Plugin | RedteamPluginObject)[];
+
+  if (pluginConfigChoice === 'default') {
+    if (redTeamChoice === 'rag') {
+      plugins = Array.from(DEFAULT_PLUGINS);
+    } else if (redTeamChoice === 'agent') {
+      plugins = [...DEFAULT_PLUGINS, 'rbac', 'bola', 'bfla', 'ssrf'];
+    } else {
+      plugins = Array.from(DEFAULT_PLUGINS);
+    }
+  } else {
+    const pluginChoices = Array.from(ALL_PLUGINS)
+      .sort()
+      .map((plugin) => ({
+        name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description'}`,
+        value: plugin,
+        checked: DEFAULT_PLUGINS.has(plugin),
+      }));
+
+    plugins = await checkbox({
+      message: `Select the plugins you want to use. Don't worry, you can change this later:`,
+      choices: pluginChoices,
+      pageSize: process.stdout.rows - 6,
+      loop: false,
+      validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
+    });
+
+    recordOnboardingStep('choose plugins', {
+      value: plugins.map((p) => (typeof p === 'string' ? p : p.id)),
+    });
+  }
 
   // Handle policy plugin
   if (plugins.includes('policy')) {
@@ -368,28 +393,53 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   console.clear();
-  logger.info(chalk.bold('Strategy Configuration\n'));
 
-  const strategyChoices = [
-    ...Array.from(DEFAULT_STRATEGIES).sort(),
-    new Separator(),
-    ...Array.from(ADDITIONAL_STRATEGIES).sort(),
-  ].map((strategy) =>
-    typeof strategy === 'string'
-      ? {
-          name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description'}`,
-          value: strategy,
-          checked: DEFAULT_STRATEGIES.includes(strategy as any),
-        }
-      : strategy,
-  );
+  logger.info(chalk.bold('Strategy Configuration'));
+  logger.info('Strategies are attack methods.\n');
 
-  const strategies = await checkbox({
-    message: `Strategies are attack methods. Select the ones you want to use. Don't worry, you can change this later:`,
-    choices: strategyChoices,
-    pageSize: process.stdout.rows - 6,
-    loop: false,
+  const strategyConfigChoice = await select({
+    message: 'How would you like to configure strategies?',
+    choices: [
+      { name: 'Use the defaults (configure later)', value: 'default' },
+      { name: 'Manually select', value: 'manual' },
+    ],
   });
+
+  recordOnboardingStep('choose strategy config method', { value: strategyConfigChoice });
+
+  let strategies: Strategy[];
+
+  if (strategyConfigChoice === 'default') {
+    // TODO(ian): Differentiate strategies
+    if (redTeamChoice === 'rag') {
+      strategies = Array.from(DEFAULT_STRATEGIES);
+    } else if (redTeamChoice === 'agent') {
+      strategies = Array.from(DEFAULT_STRATEGIES);
+    } else {
+      strategies = Array.from(DEFAULT_STRATEGIES);
+    }
+  } else {
+    const strategyChoices = [
+      ...Array.from(DEFAULT_STRATEGIES).sort(),
+      new Separator(),
+      ...Array.from(ADDITIONAL_STRATEGIES).sort(),
+    ].map((strategy) =>
+      typeof strategy === 'string'
+        ? {
+            name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description'}`,
+            value: strategy,
+            checked: DEFAULT_STRATEGIES.includes(strategy as any),
+          }
+        : strategy,
+    );
+
+    strategies = await checkbox({
+      message: `Select the ones you want to use. Don't worry, you can change this later:`,
+      choices: strategyChoices,
+      pageSize: process.stdout.rows - 6,
+      loop: false,
+    });
+  }
 
   recordOnboardingStep('choose strategies', {
     value: strategies,
@@ -462,8 +512,7 @@ export async function redteamInit(directory: string | undefined) {
   logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
 
   telemetry.record('command_used', { name: 'redteam init' });
-  recordOnboardingStep('finish');
-  await telemetry.send();
+  await recordOnboardingStep('finish');
 
   if (deferGeneration) {
     logger.info(
@@ -525,6 +574,7 @@ export function initRedteamCommand(program: Command) {
             chalk.blue('For help or feedback, visit ') +
               chalk.green('https://www.promptfoo.dev/contact/'),
           );
+          await recordOnboardingStep('early exit');
           process.exit(130);
         } else {
           throw err;
