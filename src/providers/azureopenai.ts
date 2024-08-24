@@ -64,6 +64,7 @@ interface AzureOpenAiCompletionOptions {
   response_format?: { type: 'json_object' };
   stop?: string[];
   seed?: number;
+
   passthrough?: object;
 }
 
