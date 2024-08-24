@@ -5,7 +5,7 @@ import Drawer from '@mui/material/Drawer';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import Typography from '@mui/material/Typography';
-import { categoryAliases } from './constants';
+import { categoryAliases, displayNameOverrides } from './constants';
 import './RiskCategoryDrawer.css';
 
 interface RiskCategoryDrawerProps {
@@ -61,6 +61,9 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
     return null;
   }
 
+  const displayName =
+    displayNameOverrides[category as keyof typeof displayNameOverrides] || categoryName;
+
   const totalTests = numPassed + numFailed;
   const passPercentage = totalTests > 0 ? Math.round((numPassed / totalTests) * 100) : 0;
 
@@ -69,7 +72,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
       <Drawer anchor="right" open={open} onClose={onClose}>
         <Box sx={{ width: 500, p: 2 }} className="risk-category-drawer">
           <Typography variant="h6" gutterBottom>
-            {categoryName}
+            {displayName}
           </Typography>
           <Typography variant="body1" sx={{ mt: 2, textAlign: 'center' }}>
             No tests have been run for this category.
@@ -83,7 +86,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box sx={{ width: 500, p: 2 }} className="risk-category-drawer">
         <Typography variant="h6" gutterBottom>
-          {categoryName}
+          {displayName}
         </Typography>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Box sx={{ textAlign: 'center', flex: 1 }}>
