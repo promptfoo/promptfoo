@@ -1,5 +1,4 @@
 import fs from 'fs';
-import cliState from '../../../src/cliState';
 import { doGenerateRedteam } from '../../../src/commands/generate/redteam';
 import * as configModule from '../../../src/config';
 import logger from '../../../src/logger';
@@ -203,38 +202,5 @@ describe('doGenerateRedteam', () => {
       }),
       'redteam.yaml',
     );
-  });
-
-  it('should update cliState with basePath', async () => {
-    const options: RedteamGenerateOptions = {
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      write: true,
-    };
-
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/base/path',
-      testSuite: {
-        prompts: [],
-        providers: [],
-      },
-      config: {
-        redteam: {
-          plugins: [],
-          strategies: [],
-        },
-      },
-    });
-
-    jest.mocked(synthesize).mockResolvedValue({
-      testCases: [],
-      purpose: 'Test purpose',
-      entities: [],
-    });
-
-    await doGenerateRedteam(options);
-
-    expect(cliState.basePath).toBe('/mock/base/path');
   });
 });

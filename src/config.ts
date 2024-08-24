@@ -6,6 +6,7 @@ import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { readAssertions } from './assertions';
 import { validateAssertions } from './assertions/validateAssertions';
+import cliState from './cliState';
 import { filterTests } from './commands/eval/filterTests';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -17,11 +18,12 @@ import type {
   CommandLineOptions,
   Prompt,
   ProviderOptions,
+  Scenario,
   TestCase,
   TestSuite,
   UnifiedConfig,
 } from './types';
-import { isJavascriptFile, readFilters } from './util';
+import { isJavascriptFile, maybeLoadFromExternalFile, readFilters } from './util';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
@@ -384,8 +386,10 @@ export async function resolveConfigs(
     });
   }
 
-  // Use basepath in cases where path was supplied in the config file
+  // Use base path in cases where path was supplied in the config file
   const basePath = configPaths ? path.dirname(configPaths[0]) : '';
+
+  cliState.basePath = basePath;
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
@@ -430,15 +434,25 @@ export async function resolveConfigs(
 
   // Parse testCases for each scenario
   if (fileConfig.scenarios) {
+    fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
+  }
+  if (Array.isArray(fileConfig.scenarios)) {
     for (const scenario of fileConfig.scenarios) {
-      const parsedScenarioTests: TestCase[] = await readTests(
-        scenario.tests,
-        cmdObj.tests ? undefined : basePath,
-      );
-      scenario.tests = parsedScenarioTests;
+      if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
+        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
+      }
+      if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
+        const parsedScenarioTests: TestCase[] = await readTests(
+          scenario.tests,
+          cmdObj.tests ? undefined : basePath,
+        );
+        scenario.tests = parsedScenarioTests;
+      }
+      invariant(typeof scenario === 'object', 'scenario must be an object');
+      console.error(`scenario: ${JSON.stringify(scenario)}`);
       const filteredTests = await filterTests(
         {
-          ...scenario,
+          ...(scenario ?? {}),
           providers: parsedProviders,
           prompts: parsedPrompts,
         },
@@ -478,7 +492,7 @@ export async function resolveConfigs(
     providers: parsedProviders,
     providerPromptMap: parsedProviderPromptMap,
     tests: parsedTests,
-    scenarios: config.scenarios,
+    scenarios: config.scenarios as Scenario[],
     defaultTest,
     derivedMetrics: config.derivedMetrics,
     nunjucksFilters: await readFilters(
