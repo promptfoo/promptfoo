@@ -66,8 +66,8 @@ ARG BSQL3_VERSION=v11.1.2
 RUN apk update && apk add --no-cache python3 build-base git && \
     mkdir -p /tmp/build/ && \
     cd /tmp/build/ && \
-    git clone https://github.com/WiseLibs/better-sqlite3.git && \
-    cd better-sqlite3 && git checkout $BSQL3_VERSION && \
+    git clone --depth 1 --branch $BSQL3_VERSION https://github.com/WiseLibs/better-sqlite3.git && \
+    cd better-sqlite3 && \
     cd /app && \
     cp -r /tmp/build/better-sqlite3/* /app/node_modules/better-sqlite3/ && \
     cd node_modules/better-sqlite3 && \
@@ -84,9 +84,12 @@ RUN chown -R nextjs:nodejs /app /root/.promptfoo /app/src/web/nextui
 
 # Install Python, pip, and other necessary packages
 RUN apk add --no-cache python3 py3-pip curl sqlite-dev && \
-    python3 -m ensurepip && \
-    pip3 install --no-cache --upgrade pip setuptools && \
+    python3 -m venv /app/venv && \
+    /app/venv/bin/pip install --no-cache-dir --upgrade pip setuptools && \
     ln -sf python3 /usr/bin/python
+
+# Update PATH to use the virtual environment
+ENV PATH="/app/venv/bin:$PATH"
 
 # Create entrypoint script
 RUN echo -e '#!/bin/sh\n\
