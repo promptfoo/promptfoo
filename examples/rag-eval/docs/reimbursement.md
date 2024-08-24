@@ -1,4 +1,4 @@
-**Acme Inc. - Reimbursement Policy (reimbursement.md)**
+**Acme Inc. - Reimbursement Policy**
 
 At Acme Inc., we appreciate the efforts our team members put into conducting business on our behalf. We recognize that this often involves various expenses. To streamline the management and reimbursement of these expenses, we adhere to the following policy:
 

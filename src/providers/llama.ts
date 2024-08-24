@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
+import type { ApiProvider, ProviderResponse } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
-
-import type { ApiProvider, ProviderResponse } from '../types.js';
 
 interface LlamaCompletionOptions {
   n_predict?: number;
@@ -67,7 +67,7 @@ export class LlamaProvider implements ApiProvider {
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.LLAMA_BASE_URL || 'http://localhost:8080'}/completion`,
+        `${getEnvString('LLAMA_BASE_URL') || 'http://localhost:8080'}/completion`,
         {
           method: 'POST',
           headers: {

@@ -1,0 +1,79 @@
+.risk-card-container {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+.risk-card-title {
+  font-weight: bold;
+}
+
+.risk-card-progress {
+  margin-bottom: 1rem;
+}
+
+.risk-card-issues {
+  color: red;
+}
+
+.risk-card-list-item {
+  padding: 0;
+  transition:
+    background-color 0.3s,
+    box-shadow 0.3s;
+}
+
+.risk-card-list-item:hover {
+  background-color: #f0f8ff;
+  box-shadow: 0 0 0 1px #add8e6;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .risk-card-list-item:hover {
+  background-color: #2a2a2a;
+  box-shadow: 0 0 0 1px #555555;
+  border-radius: 4px;
+}
+
+.risk-card-icon-passed {
+  color: green;
+  font-size: 16px;
+}
+
+.risk-card-icon-failed {
+  color: red;
+  font-size: 16px;
+}
+
+.risk-card-icon-no-tests {
+  color: #888888;
+  font-size: 16px;
+}
+
+.risk-card-percentage {
+  margin-left: 8px;
+  font-weight: bold;
+}
+
+.risk-card-percentage-high {
+  color: #4caf50;
+}
+
+.risk-card-percentage-medium {
+  color: #ff9800;
+}
+
+.risk-card-percentage-low {
+  color: #f44336;
+}
+
+[data-theme='dark'] .risk-card-percentage-high {
+  color: #81c784;
+}
+
+[data-theme='dark'] .risk-card-percentage-medium {
+  color: #ffb74d;
+}
+
+[data-theme='dark'] .risk-card-percentage-low {
+  color: #e57373;
+}

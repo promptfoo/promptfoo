@@ -1,0 +1,69 @@
+prompts:
+  - 'What is the weather like in {{city}}?'
+
+providers:
+  - id: openai:chat:gpt-4o-mini
+    config:
+      tools:
+        [
+          {
+            'type': 'function',
+            'function':
+              {
+                'name': 'get_current_weather',
+                'description': 'Get the current weather in a given location',
+                'parameters':
+                  {
+                    'type': 'object',
+                    'properties':
+                      {
+                        'location':
+                          {
+                            'type': 'string',
+                            'description': 'The city and state, e.g. San Francisco, CA',
+                          },
+                        'unit': { 'type': 'string', 'enum': ['celsius', 'fahrenheit'] },
+                      },
+                    'required': ['location'],
+                  },
+              },
+          },
+        ]
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-json
+      - type: is-valid-openai-tools-call
+      - type: javascript
+        value: output[0].function.name === 'get_current_weather'
+      - type: javascript
+        value: JSON.parse(output[0].function.arguments).location === 'Boston, MA'
+
+  - vars:
+      city: New York
+    options:
+      # Transform is a cleaner way to pick out specific properties.
+      # This transform returns only the 'name' property
+      transform: output[0].function.name
+    assert:
+      - type: equals
+        value: get_current_weather
+
+  - vars:
+      city: Paris
+    assert:
+      - type: equals
+        value: get_current_weather
+        # Transform is a cleaner way to pick out specific properties.
+        # This transform returns only the 'name' property
+        transform: output[0].function.name
+      - type: similar
+        value: Paris, France
+        threshold: 0.5
+        # This transform returns only the parsed location argument.
+        transform: JSON.parse(output[0].function.arguments).location
+
+  - vars:
+      city: Mars

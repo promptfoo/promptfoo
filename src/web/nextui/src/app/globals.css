@@ -12,7 +12,7 @@
   -webkit-text-size-adjust: 100%;
 
   /* Light mode colors */
-  --background-color: #ffffff;
+  --background-color: #f5f5f5;
   --text-color: #404040;
   --link-color: #2e6585;
   --border-color: lightgray;
@@ -20,6 +20,8 @@
   --pass-color: green;
   --fail-color: #ad0000;
   --success-background-color: #d1ffd7;
+  --fail-background-color: #ffd1d1;
+  --neutral-background-color: #eee;
   --variable-background-color: #f7f7f7;
   --header-background-color: #fffdf7;
   --insert-highlight-color: #d4fcbc;
@@ -27,6 +29,8 @@
   --prompt-highlight-color: linen;
   --textarea-background-color: #ffffff;
   --textarea-color: #404040;
+  --search-highlight-color: #ffff00;
+  --search-text-color: inherit;
 }
 
 /* Dark mode colors */
@@ -37,9 +41,11 @@
   --link-color: #6fcaff;
   --border-color: #444444;
   --table-border-color: #444444;
-  --pass-color: #4caf50;
-  --fail-color: #f44336;
+  --pass-color: #b1e9b3;
+  --fail-color: #ee726a;
   --success-background-color: #216d2b;
+  --fail-background-color: #6d2121;
+  --neutral-background-color: #424242;
   --variable-background-color: #333;
   --header-background-color: #333;
   --insert-highlight-color: #4f8a34;
@@ -47,6 +53,8 @@
   --prompt-highlight-color: #67605a;
   --textarea-background-color: #2d2d2d;
   --textarea-color: #fff;
+  --search-highlight-color: #ffff00;
+  --search-text-color: #404040;
 }
 
 html {

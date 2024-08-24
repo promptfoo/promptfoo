@@ -1,0 +1,34 @@
+# This config is used for testing markdown rendering in development.
+description: 'Markdown test'
+
+prompts:
+  - '{{markdown}}'
+
+providers:
+  # Just repeats the markdown back to us
+  - echo
+
+tests:
+  - description: 'Multiple images'
+    vars:
+      markdown: |
+        ![Placeholder Image 1](https://via.placeholder.com/150) ![Placeholder Image 2](https://via.placeholder.com/300)
+  - description: 'Multiple images separated by text'
+    vars:
+      markdown: |
+        blah blah blah....
+        ![Placeholder Image 1](https://via.placeholder.com/150)
+        blah blah blah....
+        ![Placeholder Image 2](https://via.placeholder.com/300)
+        blah blah blah....
+  - description: 'Failed markdown with multiple images'
+    vars:
+      markdown: |
+        blah blah blah....
+        ![Placeholder Image 1](https://via.placeholder.com/150)
+        blah blah blah....
+        ![Placeholder Image 2](https://via.placeholder.com/300)
+        blah blah blah....
+    assert:
+      - type: javascript
+        value: 'false'

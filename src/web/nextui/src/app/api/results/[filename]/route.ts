@@ -1,25 +1,17 @@
-/*
-import path from 'path';
-
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { NextResponse } from 'next/server';
+import { readResult } from '../../../../../../../util';
 
-import { readResult, listPreviousResults } from '../../../../../../../util';
+export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function GET(request: Request, { params }: { params: { filename: string } }) {
-  const { filename } = params;
-  const safeFilename = path.basename(filename);
-  if (safeFilename !== filename || !listPreviousResults().includes(safeFilename)) {
-    return NextResponse.json({ error: 'Invalid filename' }, { status: 400 });
+  if (USE_SUPABASE || IS_RUNNING_LOCALLY) {
+    return NextResponse.json({ error: 'Not implemented' });
   }
-  const result = readResult(safeFilename);
-  if (!result) {
+  const { filename: evalId } = params;
+  const match = await readResult(evalId);
+  if (!match) {
     return NextResponse.json({ error: 'Result not found' }, { status: 404 });
   }
-  return NextResponse.json({ data: result });
-}
-*/
-
-import { NextResponse } from 'next/server';
-export async function POST() {
-  return NextResponse.json({ data: 'NYI' });
+  return NextResponse.json({ data: match.result });
 }

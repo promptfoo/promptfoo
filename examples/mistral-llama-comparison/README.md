@@ -1,4 +1,4 @@
-To get started, set your HF_API_TOKEN and REPLICATE_API_KEY environment variables.
+To get started, set your OPENROUTER_API_KEY environment variable.
 
 Next, change a few of the text files in prompts/ and edit promptfooconfig.yaml.
 

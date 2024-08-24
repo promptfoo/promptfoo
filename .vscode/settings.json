@@ -1,0 +1,14 @@
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "cSpell.words": [
+    "cybercrime",
+    "Groq",
+    "openai",
+    "overreliance",
+    "OWASP",
+    "promptfoo",
+    "promptfooconfig",
+    "redteam"
+  ]
+}

@@ -1,0 +1,20 @@
+prompts:
+  - 'Tell me about {{topic}} in three words'
+
+providers:
+  - openai:gpt-4-1106-preview
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://assert.js
+
+tests:
+  - vars:
+      topic: yellow fruits
+  - vars:
+      topic: fruits high in potassium
+  - vars:
+      topic: fruits that are long and skinny
+  - vars:
+      topic: fruits that smell bad

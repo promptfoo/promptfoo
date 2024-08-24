@@ -1,15 +1,23 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button, CircularProgress } from '@mui/material';
-
+import { NEXTJS_BASE_URL, USE_SUPABASE } from '@/constants';
 import { useStore } from '@/state/evalConfig';
-import { IS_RUNNING_LOCALLY, NEXTJS_BASE_URL } from '@/constants';
+import { Button, CircularProgress } from '@mui/material';
+import { useRouter } from 'next/navigation';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
-  const { env, description, providers, prompts, testCases } = useStore();
+  const {
+    defaultTest,
+    description,
+    env,
+    evaluateOptions,
+    prompts,
+    providers,
+    scenarios,
+    testCases,
+  } = useStore();
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
@@ -17,15 +25,18 @@ const RunTestSuiteButton: React.FC = () => {
     setIsRunning(true);
 
     const testSuite = {
-      env,
+      defaultTest,
       description,
-      providers,
+      env,
+      evaluateOptions,
       prompts,
+      providers,
+      scenarios,
       tests: testCases,
     };
 
     try {
-      const response = await fetch(`${NEXTJS_BASE_URL}/api/eval/`, {
+      const response = await fetch(`${NEXTJS_BASE_URL}/api/eval/job/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -40,7 +51,7 @@ const RunTestSuiteButton: React.FC = () => {
       const job = await response.json();
 
       const intervalId = setInterval(async () => {
-        const progressResponse = await fetch(`${NEXTJS_BASE_URL}/api/eval/${job.id}/`);
+        const progressResponse = await fetch(`${NEXTJS_BASE_URL}/api/eval/job/${job.id}/`);
 
         if (!progressResponse.ok) {
           clearInterval(intervalId);
@@ -52,10 +63,11 @@ const RunTestSuiteButton: React.FC = () => {
         if (progressData.status === 'complete') {
           clearInterval(intervalId);
           setIsRunning(false);
-          if (IS_RUNNING_LOCALLY) {
-            router.push('/eval');
-          } else {
+          if (USE_SUPABASE) {
             router.push(`/eval/remote:${encodeURIComponent(job.id)}`);
+          } else {
+            // TODO(ian): This just redirects to the eval page, which shows the most recent eval.  Redirect to this specific eval to avoid race.
+            router.push('/eval');
           }
         } else if (progressData.status === 'failed') {
           clearInterval(intervalId);

@@ -1,0 +1,14 @@
+prompts:
+  - 'Who discovered {{topic}}?'
+
+providers:
+  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:pplx-70b-online
+    config:
+      apiBaseUrl: https://api.perplexity.ai
+      apiKeyEnvar: PERPLEXITY_API_KEY
+      frequency_penalty: 0.1
+
+tests:
+  - vars:
+      topic: gravity

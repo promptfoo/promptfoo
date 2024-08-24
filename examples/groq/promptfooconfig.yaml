@@ -1,0 +1,29 @@
+description: 'Groq Provider Demo'
+
+prompts:
+  - 'Answer this question as concisely as possible: {{calculation}}'
+  - 'Calculate the following and provide a brief explanation: {{calculation}}'
+
+providers:
+  - id: groq:gemma2-9b-it
+  - id: groq:llama3-groq-8b-8192-tool-use-preview
+    config:
+      tools:
+        - type: function
+          function:
+            name: calculate
+            description: 'Evaluate a mathematical expression'
+            parameters:
+              type: object
+              properties:
+                expression:
+                  type: string
+                  description: 'The mathematical expression to evaluate'
+              required: ['expression']
+      tool_choice: auto
+
+tests:
+  - vars:
+      calculation: 25 * 4 + 10
+  - vars:
+      calculation: (8 + 2) * 5

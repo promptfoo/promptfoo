@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
+import type { Assertion, TestCase } from '@/../../../types';
 import { Button, Box, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
-
-import VarsForm from './VarsForm';
 import AssertsForm from './AssertsForm';
-import type { TestCase } from '@/../../../types';
+import VarsForm from './VarsForm';
 
 interface TestCaseFormProps {
   open: boolean;
@@ -77,7 +76,11 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
           <AssertsForm
             key={assertsFormKey}
             onAdd={(asserts) => setAsserts(asserts)}
-            initialValues={initialValues?.assert || []}
+            initialValues={
+              ((initialValues?.assert || []).filter(
+                (item) => item.type !== 'assert-set',
+              ) as Assertion[]) || []
+            }
           />
         </Box>
       </DialogContent>

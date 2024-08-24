@@ -1,10 +1,89 @@
 import React from 'react';
+import type { ProviderOptions } from '@/../../../types';
 import { Autocomplete, Box, Chip, TextField } from '@mui/material';
 import ProviderConfigDialog from './ProviderConfigDialog';
 
-import type { ProviderOptions } from '@/../../../types';
-
 const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: string })[])
+  .concat(
+    [
+      'openai:gpt-4o',
+      'openai:gpt-4o-2024-05-13',
+      'openai:gpt-4o-mini',
+      'openai:gpt-4o-mini-2024-07-18',
+      'openai:gpt-4-turbo',
+      'openai:gpt-4',
+      'openai:gpt-3.5-turbo',
+    ].map((id) => ({
+      id,
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+        function_call: undefined,
+        functions: undefined,
+        stop: undefined,
+      },
+    })),
+  )
+  .concat(
+    [
+      'anthropic:messages:claude-3-5-sonnet-20240620',
+      'anthropic:messages:claude-3-haiku-20240307',
+      'anthropic:messages:claude-3-sonnet-20240229',
+      'anthropic:messages:claude-3-opus-20240229',
+    ].map((id) => ({ id, config: { max_tokens: 1024, temperature: 0.5 } })),
+  )
+  .concat(
+    [
+      'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+      'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
+      'bedrock:anthropic.claude-3-opus-20240307-v1:0',
+    ].map((id) => ({ id, config: { max_tokens_to_sample: 256, temperature: 0.5 } })),
+  )
+  .concat(
+    [
+      'azureopenai:gpt-4o-2024-05-13',
+      'azureopenai:gpt-4-turbo-2024-04-09',
+      'azureopenai:gpt-4-32k-0613',
+      'azureopenai:gpt-4-0613',
+      'azureopenai:gpt-35-turbo-0125',
+    ].map((id) => ({
+      id,
+      config: {
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+        function_call: undefined,
+        functions: undefined,
+        stop: undefined,
+      },
+    })),
+  )
+  .concat(
+    [
+      'vertex:chat-bison@001',
+      'vertex:chat-bison',
+      'vertex:chat-bison-32k',
+      'vertex:chat-bison-32k@001',
+    ].map((id) => ({
+      id,
+      config: {
+        context: undefined,
+        examples: undefined,
+        temperature: 0,
+        maxOutputTokens: 1024,
+        topP: 0.95,
+        topK: 40,
+        safetySettings: undefined,
+        stopSequence: undefined,
+      },
+    })),
+  )
   .concat(
     [
       'replicate:replicate/flan-t5-small:69716ad8c34274043bf4a135b7315c7c569ec931d8f23d6826e249e1c142a264',
@@ -60,96 +139,26 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
         top_k: 250,
         max_new_tokens: 500,
         min_new_tokens: -1,
-        repetition_penality: 1.0,
+        repetition_penalty: 1.0,
         system_prompt: '',
       },
     })),
   )
   .concat(
     [
-      'anthropic:claude-1',
-      'anthropic:claude-1-100k',
-      'anthropic:claude-instant-1',
-      'anthropic:claude-instant-1-100k',
-    ].map((id) => ({ id, config: { max_tokens_to_sample: 256, temperature: 0.5 } })),
-  )
-  .concat(
-    [
-      'bedrock:anthropic.claude-instant-v1',
-      'bedrock:anthropic.claude-v1',
-      'bedrock:anthropic.claude-v2',
-    ].map((id) => ({ id, config: { max_tokens_to_sample: 256, temperature: 0.5 } })),
-  )
-  .concat(
-    [
-      'openai:gpt-3.5-turbo',
-      'openai:gpt-3.5-turbo-0301',
-      'openai:gpt-3.5-turbo-0613',
-      'openai:gpt-3.5-turbo-16k',
-      'openai:gpt-3.5-turbo-16k-0613',
-      'openai:gpt-4',
-      'openai:gpt-4-0314',
-      'openai:gpt-4-0613',
-      'openai:gpt-4-32k',
-      'openai:gpt-4-32k-0314',
+      'replicate:mistralai/mistral-7b-v0.1',
+      'replicate:mistralai/mistral-7b-instruct-v0.2',
+      'replicate:mistralai/mixtral-8x7b-instruct-v0.1',
     ].map((id) => ({
       id,
       config: {
-        organization: '',
-        temperature: 0.5,
-        max_tokens: 1024,
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-        function_call: undefined,
-        functions: undefined,
-        stop: undefined,
-      },
-    })),
-  )
-  .concat(
-    [
-      'azureopenai:gpt-3.5-turbo',
-      'azureopenai:gpt-3.5-turbo-0301',
-      'azureopenai:gpt-3.5-turbo-0613',
-      'azureopenai:gpt-3.5-turbo-16k',
-      'azureopenai:gpt-3.5-turbo-16k-0613',
-      'azureopenai:gpt-4',
-      'azureopenai:gpt-4-0314',
-      'azureopenai:gpt-4-0613',
-      'azureopenai:gpt-4-32k',
-      'azureopenai:gpt-4-32k-0314',
-    ].map((id) => ({
-      id,
-      config: {
-        temperature: 0.5,
-        max_tokens: 1024,
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-        function_call: undefined,
-        functions: undefined,
-        stop: undefined,
-      },
-    })),
-  )
-  .concat(
-    [
-      'vertex:chat-bison@001',
-      'vertex:chat-bison',
-      'vertex:chat-bison-32k',
-      'vertex:chat-bison-32k@001',
-    ].map((id) => ({
-      id,
-      config: {
-        context: undefined,
-        examples: undefined,
-        temperature: 0,
-        maxOutputTokens: 1024,
-        topP: 0.95,
-        topK: 40,
-        safetySettings: undefined,
-        stopSequence: undefined,
+        temperature: 0.7,
+        top_p: 0.9,
+        top_k: -1,
+        max_new_tokens: 128,
+        min_new_tokens: -1,
+        repetition_penalty: 1.15,
+        prompt_template: '{prompt}',
       },
     })),
   )
@@ -179,31 +188,31 @@ interface ProviderSelectorProps {
 const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
 
-  const getProviderLabel = (provider: string | ProviderOptions) => {
+  const getProviderLabel = (provider: string | ProviderOptions): string => {
     if (typeof provider === 'string') {
       return provider;
     }
     return provider.id || 'Unknown provider';
   };
 
-  const getProviderKey = (provider: string | ProviderOptions, index: number) => {
+  const getProviderKey = (provider: string | ProviderOptions, index: number): string | number => {
     if (typeof provider === 'string') {
       return provider;
     }
     return provider.id || index;
   };
 
-  const handleProviderClick = (provider: string | ProviderOptions) => {
+  const handleProviderClick = (provider: string | ProviderOptions): void => {
     if (typeof provider === 'string') {
       alert('Cannot edit custom providers');
-    } else if (!provider.config) {
-      alert('There is no config for this provider');
-    } else {
+    } else if (provider.config) {
       setSelectedProvider(provider as ProviderOptions);
+    } else {
+      alert('There is no config for this provider');
     }
   };
 
-  const handleSave = (config: ProviderOptions['config']) => {
+  const handleSave = (config: ProviderOptions['config']): void => {
     if (selectedProvider) {
       const updatedProviders = providers.map((provider) =>
         provider.id === selectedProvider.id ? { ...provider, config } : provider,
@@ -241,7 +250,12 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           }
           const splits = optionString.split(':');
           if (splits.length > 1) {
-            return splits[1];
+            // account for Anthropic messages ID format having the descriptive text in the third split
+            if (splits.length > 2 && splits[0] === 'anthropic') {
+              return splits[2];
+            } else {
+              return splits[1];
+            }
           }
           return 'Unknown provider';
         }}

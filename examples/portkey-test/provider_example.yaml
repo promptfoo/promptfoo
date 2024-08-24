@@ -1,0 +1,13 @@
+description: 'Portkey.ai provider integration'
+
+prompts:
+  - 'Write a short tweet about {{topic}}'
+
+providers:
+  - id: portkey:gpt-4o-mini
+    config:
+      portkeyProvider: openai
+
+tests:
+  - vars:
+      topic: bananas

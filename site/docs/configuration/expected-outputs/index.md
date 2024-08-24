@@ -3,7 +3,7 @@ sidebar_position: 5
 sidebar_label: Overview
 ---
 
-# Test assertions
+# Assertions & metrics
 
 Assertions are used to compare the LLM output against expected values or conditions. While assertions are not required to run an eval, they are a useful way to automate your analysis.
 
@@ -29,303 +29,123 @@ tests:
 
 ## Assertion properties
 
-| Property     | Type   | Required | Description                                                                                          |
-| ------------ | ------ | -------- | ---------------------------------------------------------------------------------------------------- |
-| type         | string | Yes      | Type of assertion                                                                                    |
-| value        | string | No       | The expected value, if applicable                                                                    |
-| threshold    | number | No       | The threshold value, only applicable for similarity                                                  |
-| weight       | string | No       | How heavily to weigh the assertion. Defaults to 1.0                                                  |
-| provider     | string | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers) |
-| rubricPrompt | string | No       | LLM rubric grading prompt                                                                            |
+| Property     | Type               | Required | Description                                                                                             |
+| ------------ | ------------------ | -------- | ------------------------------------------------------------------------------------------------------- |
+| type         | string             | Yes      | Type of assertion                                                                                       |
+| value        | string             | No       | The expected value, if applicable                                                                       |
+| threshold    | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python` |
+| weight       | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                     |
+| provider     | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)    |
+| rubricPrompt | string \| string[] | No       | Model-graded LLM prompt                                                                                 |
+
+## Grouping assertions via Assertion Sets
+
+Assertions can be grouped together using an `assert-set`.
+
+Example:
+
+```yaml
+tests:
+  - description: 'Test that the output is cheap and fast'
+    vars:
+      example: 'Hello, World!'
+    assert:
+      - type: assert-set
+        assert:
+          - type: cost
+            threshold: 0.001
+          - type: latency
+            threshold: 200
+```
+
+In the above example if all assertions of the `assert-set` pass the entire `assert-set` passes.
+
+There are cases where you may only need a certain number of assertions to pass. Here you can use `threshold`.
+
+Example - if one of two assertions need to pass or 50%:
+
+```yaml
+tests:
+  - description: 'Test that the output is cheap or fast'
+    vars:
+      example: 'Hello, World!'
+    assert:
+      - type: assert-set
+        threshold: 0.5
+        assert:
+          - type: cost
+            threshold: 0.001
+          - type: latency
+            threshold: 200
+```
+
+## Assertion Set properties
+
+| Property  | Type             | Required | Description                                                                                                          |
+| --------- | ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| type      | string           | Yes      | Must be assert-set                                                                                                   |
+| assert    | array of asserts | Yes      | Assertions to be run for the set                                                                                     |
+| threshold | number           | No       | Success threshold for the assert-set. Ex. 1 out of 4 equal weights assertions need to pass. Threshold should be 0.25 |
+| weight    | number           | No       | How heavily to weigh the assertion set within test assertions. Defaults to 1.0                                       |
+| metric    | string           | No       | Metric name for this assertion set within the test                                                                   |
 
 ## Assertion types
 
-Deterministic eval metrics
+### Deterministic eval metrics
 
-| Assertion Type                                                  | Returns true if...                                               |
-| --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| [equals](#equality)                                             | output matches exactly                                           |
-| [contains](#contains)                                           | output contains substring                                        |
-| [icontains](#contains)                                          | output contains substring, case insensitive                      |
-| [regex](#regex)                                                 | output matches regex                                             |
-| [starts-with](#starts-with)                                     | output starts with string                                        |
-| [contains-any](#contains-any)                                   | output contains any of the listed substrings                     |
-| [contains-all](#contains-all)                                   | output contains all list of substrings                           |
-| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive   |
-| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive         |
-| [is-json](#is-json)                                             | output is valid json (optional json schema validation)           |
-| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)     |
-| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                |
-| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                    |
-| [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                          |
-| rouge-n                                                         | Rouge-N score is above a given threshold                         |
-| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
-| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema |
+These metrics are programmatic tests that are run on LLM output. [See all details](/docs/configuration/expected-outputs/deterministic)
 
-Model-assisted eval metrics
-
-| Assertion Type                                                             | Method                                                                          |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [similar](/docs/configuration/expected-outputs/similar)                    | embeddings and cosine similarity are above a threshold                          |
-| [classifier](/docs/configuration/expected-outputs/classifier)              | Run LLM output through a classifier                                             |
-| [llm-rubric](/docs/configuration/expected-outputs/model-graded)            | LLM output matches a given rubric, using a Language Model to grade output       |
-| [factuality](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
-| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded) | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
-| [answer-relevance](/docs/configuration/expected-outputs/model-graded)      | Ensure that LLM output is related to original query                             |
-| [context-recall](/docs/configuration/expected-outputs/model-graded)        | Ensure that ground truth appears in context                                     |
-| [context-relevance](/docs/configuration/expected-outputs/model-graded)     | Ensure that context is relevant to original query                               |
-| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)  | Ensure that LLM output uses the context                                         |
+| Assertion Type                                                                                                     | Returns true if...                                               |
+| ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| [contains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                   | output contains all list of substrings                           |
+| [contains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                   | output contains any of the listed substrings                     |
+| [contains-json](/docs/configuration/expected-outputs/deterministic/#contains-json)                                 | output contains valid json (optional json schema validation)     |
+| [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output contains valid sql                                        |
+| [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml                                        |
+| [contains](/docs/configuration/expected-outputs/deterministic/#contains)                                           | output contains substring                                        |
+| [cost](/docs/configuration/expected-outputs/deterministic/#cost)                                                   | Inference cost is below a threshold                              |
+| [equals](/docs/configuration/expected-outputs/deterministic/#equality)                                             | output matches exactly                                           |
+| [icontains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                  | output contains all list of substrings, case insensitive         |
+| [icontains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                  | output contains any of the listed substrings, case insensitive   |
+| [icontains](/docs/configuration/expected-outputs/deterministic/#contains)                                          | output contains substring, case insensitive                      |
+| [is-json](/docs/configuration/expected-outputs/deterministic/#is-json)                                             | output is valid json (optional json schema validation)           |
+| [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is valid sql                                              |
+| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is valid xml                                              |
+| [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema |
+| [is-valid-openai-tools-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                |
+| [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                |
+| [latency](/docs/configuration/expected-outputs/deterministic/#latency)                                             | Latency is below a threshold (milliseconds)                      |
+| [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
+| [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                  |
+| [perplexity-score](/docs/configuration/expected-outputs/deterministic/#perplexity-score)                           | Normalized perplexity                                            |
+| [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                    |
+| [regex](/docs/configuration/expected-outputs/deterministic/#regex)                                                 | output matches regex                                             |
+| [starts-with](/docs/configuration/expected-outputs/deterministic/#starts-with)                                     | output starts with string                                        |
+| [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | provided webhook returns \{pass: true\}                          |
+| rouge-n                                                                                                            | Rouge-N score is above a given threshold                         |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 :::
 
-### Equality
-
-The `equals` assertion checks if the LLM output is equal to the expected value.
-
-Example:
-
-```yaml
-assert:
-  - type: equals
-    value: 'The expected output'
-```
-
-Here are the new additions to the "Assertion Types" section:
-
-### Contains
-
-The `contains` assertion checks if the LLM output contains the expected value.
-
-Example:
-
-```yaml
-assert:
-  - type: contains
-    value: 'The expected substring'
-```
-
-The `icontains` is the same, except it ignores case:
-
-```yaml
-assert:
-  - type: icontains
-    value: 'The expected substring'
-```
-
-### Regex
-
-The `regex` assertion checks if the LLM output matches the provided regular expression.
-
-Example:
-
-```yaml
-assert:
-  - type: regex
-    value: "\\d{4}" # Matches a 4-digit number
-```
-
-### Starts-With
-
-The `starts-with` assertion checks if the LLM output begins with the specified string.
-
-This example checks if the output starts with "Yes":
-
-```yaml
-assert:
-  - type: starts-with
-    value: 'Yes'
-```
-
-### Contains-Any
-
-The `contains-any` assertion checks if the LLM output contains at least one of the specified values.
-
-Example:
-
-```yaml
-assert:
-  - type: contains-any
-    value:
-      - 'Value 1'
-      - 'Value 2'
-      - 'Value 3'
-```
-
-For case insensitive matching, use `icontains-any`.
-
-### Contains-All
-
-The `contains-all` assertion checks if the LLM output contains all of the specified values.
-
-Example:
-
-```yaml
-assert:
-  - type: contains-all
-    value:
-      - 'Value 1'
-      - 'Value 2'
-      - 'Value 3'
-```
-
-For case insensitive matching, use `icontains-all`.
-
-### Is-JSON
-
-The `is-json` assertion checks if the LLM output is a valid JSON string.
-
-Example:
-
-```yaml
-assert:
-  - type: is-json
-```
-
-You may optionally set a `value` as a JSON schema. If set, the output will be validated against this schema:
-
-```yaml
-assert:
-  - type: is-json
-    value:
-      required: [latitude, longitude]
-      type: object
-      properties:
-        latitude:
-          minimum: -90
-          type: number
-          maximum: 90
-        longitude:
-          minimum: -180
-          type: number
-          maximum: 180
-```
-
-JSON is valid YAML, so you can also just copy in any JSON schema directly:
-
-```yaml
-assert:
-  - type: is-json
-    value:
-      {
-        'required': ['latitude', 'longitude'],
-        'type': 'object',
-        'properties':
-          {
-            'latitude': { 'type': 'number', 'minimum': -90, 'maximum': 90 },
-            'longitude': { 'type': 'number', 'minimum': -180, 'maximum': 180 },
-          },
-      }
-```
-
-If your JSON schema is large, import it from a file:
-
-```yaml
-assert:
-  - type: is-json
-    value: file://./path/to/schema.json
-```
-
-### Contains-JSON
-
-The `contains-json` assertion checks if the LLM output contains a valid JSON structure.
-
-Example:
-
-```yaml
-assert:
-  - type: contains-json
-```
-
-Just like `is-json` above, you may optionally set a `value` as a JSON schema in order to validate the JSON contents.
-
-### Javascript
-
-See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
-
-### Python
-
-See [Python assertions](/docs/configuration/expected-outputs/python).
-
-### Webhook
-
-The `webhook` assertion sends the LLM output to a specified webhook URL for custom validation. The webhook should return a JSON object with a `pass` property set to `true` or `false`.
-
-Example:
-
-```yaml
-assert:
-  - type: webhook
-    value: 'https://example.com/webhook'
-```
-
-The webhook will receive a POST request with a JSON payload containing the LLM output and the context (test case variables). For example, if the LLM output is "Hello, World!" and the test case has a variable `example` set to "Example text", the payload will look like:
-
-```json
-{
-  "output": "Hello, World!",
-  "context": {
-    "prompt": "Greet the user",
-    "vars": {
-      "example": "Example text"
-    }
-  }
-}
-```
-
-The webhook should process the request and return a JSON response with a `pass` property set to `true` or `false`, indicating whether the LLM output meets the custom validation criteria. Optionally, the webhook can also provide a `reason` property to describe why the output passed or failed the assertion.
-
-Example response:
-
-```json
-{
-  "pass": true,
-  "reason": "The output meets the custom validation criteria"
-}
-```
-
-If the webhook returns a `pass` value of `true`, the assertion will be considered successful. If it returns `false`, the assertion will fail, and the provided `reason` will be used to describe the failure.
-
-You may also return a score:
-
-```json
-{
-  "pass": true,
-  "score": 0.5,
-  "reason": "The output meets the custom validation criteria"
-}
-```
-
-### Similarity
-
-See [Similarity assertions](/docs/configuration/expected-outputs/similar.
-
-### Levenshtein distance
-
-The `levenshtein` assertion checks if the LLM output is within a given edit distance from an expected value.
-
-Example:
-
-```yaml
-assert:
-  # Ensure Levenshtein distance from "hello world" is <= 5
-  - type: levenshtein
-    threshold: 5
-    value: hello world
-```
-
-### is-valid-openai-function-call
-
-This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider.  Learn more about the [OpenAI provider](/docs/providers/openai/#Using-functions).
-
-### Model-graded evals
-
-See [Model-graded evals](/docs/configuration/expected-outputs/model-graded).
-
-### Classifier
-
-See [classifier](/docs/configuration/expected-outputs/classifier) grading documentation.
+### Model-assisted eval metrics
+
+These metrics are model-assisted, and rely on LLMs or other machine learning models.
+
+See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [classification](/docs/configuration/expected-outputs/classifier), and [similarity](/docs/configuration/expected-outputs/similar) docs for more information.
+
+| Assertion Type                                                                        | Method                                                                          |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [similar](/docs/configuration/expected-outputs/similar)                               | Embeddings and cosine similarity are above a threshold                          |
+| [classifier](/docs/configuration/expected-outputs/classifier)                         | Run LLM output through a classifier                                             |
+| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                       | LLM output matches a given rubric, using a Language Model to grade output       |
+| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                 | Ensure that LLM output is related to original query                             |
+| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)             | Ensure that LLM output uses the context                                         |
+| [context-recall](/docs/configuration/expected-outputs/model-graded)                   | Ensure that ground truth appears in context                                     |
+| [context-relevance](/docs/configuration/expected-outputs/model-graded)                | Ensure that context is relevant to original query                               |
+| [factuality](/docs/configuration/expected-outputs/model-graded)                       | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
+| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
+| [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | Compare multiple outputs for a test case and pick the best one                  |
 
 ## Weighted assertions
 
@@ -437,13 +257,13 @@ import json
 output = sys.argv[1]
 context = json.loads(sys.argv[2])
 
-print(f'Received {output} with variables {context}')
+# Use `output` and `context['vars']` to determine result ...
 
-return {
-  'pass': True,
+print(json.dumps({
+  'pass': False,
   'score': 0.5,
   'reason': 'Some custom reason',
-}
+}))
 ```
 
 ## Load assertions from CSV
@@ -464,13 +284,16 @@ All assertion types can be used in `__expected`. The column supports exactly one
 
 - `is-json` and `contains-json` are supported directly, and do not require any value
 - `fn` indicates `javascript` type. For example: `fn:output.includes('foo')`
+- `python` indicates `python` type. For example: `python:file://custom_assertion.py`
 - `similar` takes a threshold value. For example: `similar(0.8):hello world`
 - `grade` indicates `llm-rubric`. For example: `grade: does not mention being an AI`
 - By default, `__expected` will use type `equals`
 
 When the `__expected` field is provided, the success and failure statistics in the evaluation summary will be based on whether the expected criteria are met.
 
-For more advanced test cases, we recommend using a testing framework like [Jest](/docs/integrations/jest) or [Mocha](/docs/integrations/mocha-chai) and using promptfoo [as a library](/docs/usage/node-package).
+To run multiple assertions, use column names `__expected1`, `__expected2`, `__expected3`, etc.
+
+For more advanced test cases, we recommend using a testing framework like [Jest or Vitest](/docs/integrations/jest) or [Mocha](/docs/integrations/mocha-chai) and using promptfoo [as a library](/docs/usage/node-package).
 
 ## Reusing assertions with templates
 
@@ -485,7 +308,7 @@ assertionTemplates:
 // highlight-end
 
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-4o-mini, localai:chat:vicuna]
 tests:
   - vars:
       input: Tell me about the benefits of exercise.
@@ -501,9 +324,9 @@ tests:
 
 In this example, the `containsMentalHealth` assertion template is defined at the top of the configuration file and then reused in two test cases. This approach helps maintain consistency and reduces duplication in your configuration.
 
-## Labeling assertions
+## Defining named metrics
 
-Each assertion supports a `metrics` field that allows you to tag the result however you like.  Use this feature to combine related assertions into aggregate metrics. 
+Each assertion supports a `metric` field that allows you to tag the result however you like. Use this feature to combine related assertions into aggregate metrics.
 
 For example, these asserts will aggregate results into two metrics, `Tone` and `Consistency`.
 
@@ -541,3 +364,88 @@ tests:
 These metrics will be shown in the UI:
 
 ![llm eval metrics](/img/docs/named-metrics.png)
+
+See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/named-metrics).
+
+## Creating derived metrics
+
+Derived metrics, also known as composite or calculated metrics, are computed at runtime based on other metrics. They are aggregated and displayed as named metrics (see above).
+
+Derived metrics are calculated after all individual test evaluations are completed. They can be defined using mathematical expressions or custom functions that aggregate or transform the named scores collected during the tests.
+
+### Configuring derived metrics
+
+To configure derived metrics in your test suite, you add a `derivedMetrics` array to the `TestSuite` object. Each entry in this array is an object that specifies the name of the metric and the formula or function used to calculate it.
+
+#### Usage
+
+Each derived metric has the following properties:
+
+- **name**: The name of the metric. This is used as the identifier in the output results.
+- **value**: The calculation method for the metric. This can be a string representing a mathematical expression or a function that takes the current scores and the evaluation context as arguments and returns a numeric value.
+
+#### Example
+
+Here's an example of how to define derived metrics in a test suite configuration:
+
+```yaml
+derivedMetrics:
+  - name: 'EfficiencyAdjustedPerformance'
+    value: '(PerformanceScore / InferenceTime) * EfficiencyFactor'
+  # - ...
+```
+
+In this example, `EfficiencyAdjustedPerformance` is calculated using a simple mathematical expression that uses existing named scores.
+
+:::info
+Good to know:
+
+- Derived metrics are calculated in the order they are provided. You can reference previous derived metrics.
+- In order to reference a basic metric, you must name it (see named scores above).
+- In order to be used in a mathematical expression, named scores must not have any spaces or special characters in them.
+  :::
+
+## Running assertions directly on outputs
+
+If you already have LLM outputs and want to run assertions on them, the `eval` command supports standalone assertion files.
+
+Put your outputs in a JSON string array, like this `output.json`:
+
+```json
+["Hello world", "Greetings, planet", "Salutations, Earth"]
+```
+
+And create a list of assertions (`asserts.yaml`):
+
+```yaml
+- type: icontains
+  value: hello
+
+- type: javascript
+  value: 1 / (output.length + 1) # prefer shorter outputs
+
+- type: model-graded-closedqa
+  value: ensure that the output contains a greeting
+```
+
+Then run the eval command:
+
+```
+promptfoo eval --assertions asserts.yaml --model-outputs outputs.json
+```
+
+### Tagging outputs
+
+Promptfoo accepts a slightly more complex JSON structure that includes an `output` field for the model's output and a `tags` field for the associated tags. These tags are shown in the web UI as a comma-separated list. It's useful if you want to keep track of certain output attributes:
+
+```json
+[
+  { "output": "Hello world", "tags": ["foo", "bar"] },
+  { "output": "Greetings, planet", "tags": ["baz", "abc"] },
+  { "output": "Salutations, Earth", "tags": ["def", "ghi"] }
+]
+```
+
+### Processing and formatting outputs
+
+If you need to do any processing/formatting of outputs, use a [Javascript provider](/docs/providers/custom-api/), [Python provider](https://promptfoo.dev/docs/providers/python/), or [custom script](/docs/providers/custom-script/).

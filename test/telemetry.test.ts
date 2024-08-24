@@ -1,11 +1,11 @@
-import { Telemetry } from '../src/telemetry';
 import packageJson from '../package.json';
 import { fetchWithTimeout } from '../src/fetch';
+import { Telemetry } from '../src/telemetry';
 
 jest.mock('../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
-jest.mock('../src/util', () => ({
+jest.mock('../src/globalConfig', () => ({
   maybeRecordFirstRun: jest.fn(),
 }));
 
@@ -19,7 +19,7 @@ describe('Telemetry', () => {
   beforeEach(() => {
     originalEnv = process.env;
     process.env = { ...originalEnv };
-    (fetchWithTimeout as jest.Mock).mockClear();
+    jest.mocked(fetchWithTimeout).mockClear();
   });
 
   afterEach(() => {
@@ -34,6 +34,7 @@ describe('Telemetry', () => {
   });
 
   it('should record events when telemetry is enabled', () => {
+    delete process.env.PROMPTFOO_DISABLE_TELEMETRY;
     const telemetry = new Telemetry();
     telemetry.record('eval_ran', { foo: 'bar' });
     expect(telemetry['events']).toHaveLength(1);
@@ -45,7 +46,8 @@ describe('Telemetry', () => {
   });
 
   it('should send events and clear events array when telemetry is enabled and send is called', async () => {
-    (fetchWithTimeout as jest.Mock).mockResolvedValue({ ok: true });
+    delete process.env.PROMPTFOO_DISABLE_TELEMETRY;
+    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
 
     const telemetry = new Telemetry();
     telemetry.record('eval_ran', { foo: 'bar' });

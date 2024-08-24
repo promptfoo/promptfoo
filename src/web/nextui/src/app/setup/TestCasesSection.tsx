@@ -1,8 +1,12 @@
 import React from 'react';
-import Button from '@mui/material/Button';
+import { testCaseFromCsvRow } from '@/../../../../dist/src/csv';
+import type { CsvRow, TestCase } from '@/../../../types';
+import { useStore } from '@/state/evalConfig';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';
+import Publish from '@mui/icons-material/Publish';
+import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
@@ -11,12 +15,9 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-
 import TestCaseDialog from './TestCaseDialog';
-import { useStore } from '@/state/evalConfig';
-
-import type { TestCase } from '@/../../../types';
 
 interface TestCasesSectionProps {
   varsList: string[];
@@ -43,6 +44,26 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     }
   };
 
+  const handleAddTestCaseFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const text = e.target?.result?.toString();
+        if (text) {
+          const { parse: parseCsv } = await import('csv-parse/sync');
+          const rows: CsvRow[] = parseCsv(text, { columns: true });
+          const newTestCases: TestCase[] = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
+          setTestCases([...testCases, ...newTestCases]);
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
   const handleRemoveTestCase = (event: React.MouseEvent, index: number) => {
     event.stopPropagation();
 
@@ -59,11 +80,29 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
 
   return (
     <>
-      <Stack direction="row" spacing={2} justifyContent="space-between">
+      <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
         <Typography variant="h5">Test Cases</Typography>
-        <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
-          Add Test Case
-        </Button>
+        <div>
+          <label htmlFor={`file-input-add-test-case`}>
+            <Tooltip title="Upload test cases from csv">
+              <span>
+                <IconButton component="span">
+                  <Publish />
+                </IconButton>
+                <input
+                  id={`file-input-add-test-case`}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleAddTestCaseFromFile}
+                  style={{ display: 'none' }}
+                />
+              </span>
+            </Tooltip>
+          </label>
+          <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
+            Add Test Case
+          </Button>
+        </div>
       </Stack>
       <TableContainer>
         <Table>
@@ -141,7 +180,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         open={testCaseDialogOpen}
         onAdd={handleAddTestCase}
         varsList={varsList}
-        initialValues={editingTestCaseIndex !== null ? testCases[editingTestCaseIndex] : undefined}
+        initialValues={editingTestCaseIndex === null ? undefined : testCases[editingTestCaseIndex]}
         onCancel={() => {
           setEditingTestCaseIndex(null);
           setTestCaseDialogOpen(false);

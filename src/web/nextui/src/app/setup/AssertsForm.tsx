@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
+import type { Assertion, AssertionType } from '@/../../../types';
+import Delete from '@mui/icons-material/Delete';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Delete from '@mui/icons-material/Delete';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-
-import type { Assertion, AssertionType } from '@/../../../types';
 
 interface AssertsFormProps {
   onAdd: (asserts: Assertion[]) => void;
@@ -25,12 +24,14 @@ const assertTypes: AssertionType[] = [
   'regex',
   'is-json',
   'contains-json',
+  'is-sql',
+  'contains-sql',
   //'javascript',
   //'python',
   'similar',
   'llm-rubric',
   'model-graded-closedqa',
-  'model-graded-factuality',
+  'factuality',
   'webhook',
   'rouge-n',
   'rouge-s',
@@ -51,6 +52,18 @@ const assertTypes: AssertionType[] = [
   'not-rouge-n',
   'not-rouge-s',
   'not-rouge-l',
+  'is-valid-openai-function-call',
+  'is-valid-openai-tools-call',
+  'latency',
+  'perplexity',
+  'perplexity-score',
+  'cost',
+  'answer-relevance',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'select-best',
+  'moderation',
 ];
 
 const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {

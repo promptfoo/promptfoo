@@ -1,4 +1,6 @@
 import React from 'react';
+import type { PromptWithMetadata } from '@/../../../types';
+import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -10,10 +12,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
 import Link from 'next/link';
-
-import type { PromptWithMetadata } from '@/../../../types';
 
 interface PromptDialogProps {
   openDialog: boolean;
@@ -62,16 +61,14 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                 return (
                   <TableRow key={`eval-${evalData.id}`}>
                     <TableCell>
-                      <Link href={`/eval/?file=${evalData.filePath}`}>
-                        {evalData.id.slice(0, 6)}
-                      </Link>
+                      <Link href={`/eval/?evalId=${evalData.id}`}>{evalData.id}</Link>
                     </TableCell>
                     <TableCell>
                       <Link href={`/datasets/?id=${evalData.datasetId}`}>
                         {evalData.datasetId.slice(0, 6)}
                       </Link>
                     </TableCell>
-                    <TableCell>{evalData.metrics?.score.toFixed(2) ?? '-'}</TableCell>
+                    <TableCell>{evalData.metrics?.score?.toFixed(2) ?? '-'}</TableCell>
                     <TableCell>{passRate}</TableCell>
                     <TableCell>{passCount}</TableCell>
                     <TableCell>{failCount}</TableCell>

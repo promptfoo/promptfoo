@@ -1,19 +1,21 @@
 import chalk from 'chalk';
-
 import packageJson from '../package.json';
-import logger from './logger';
+import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
-import { maybeRecordFirstRun } from './util';
+import { maybeRecordFirstRun } from './globalConfig';
+import logger from './logger';
 
+type EventValue = string | number | boolean | string[];
 type TelemetryEvent = {
   event: string;
   packageVersion: string;
-  properties: Record<string, string | number>;
+  properties: Record<string, EventValue>;
 };
 
 type TelemetryEventTypes = 'eval_ran' | 'assertion_used' | 'command_used';
 
 const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
+const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 
 const TELEMETRY_TIMEOUT_MS = 1000;
 
@@ -21,10 +23,10 @@ export class Telemetry {
   private events: TelemetryEvent[] = [];
 
   get disabled() {
-    return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
   }
 
-  record(eventName: TelemetryEventTypes, properties: Record<string, string | number>): void {
+  record(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {
     if (!this.disabled) {
       this.events.push({
         event: eventName,
@@ -35,7 +37,7 @@ export class Telemetry {
   }
 
   maybeShowNotice(): void {
-    if (maybeRecordFirstRun()) {
+    if (!this.disabled && maybeRecordFirstRun()) {
       logger.info(
         chalk.gray(
           'Anonymous telemetry is enabled. For more info, see https://www.promptfoo.dev/docs/configuration/telemetry',
@@ -63,6 +65,33 @@ export class Telemetry {
           this.events = [];
         }
       } catch (err) {}
+    }
+  }
+
+  /**
+   * This is a separate endpoint to save consent used only for redteam data synthesis for "harmful" plugins.
+   */
+  async saveConsent(email: string): Promise<void> {
+    if (!this.disabled) {
+      try {
+        const response = await fetchWithTimeout(
+          CONSENT_ENDPOINT,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email }),
+          },
+          TELEMETRY_TIMEOUT_MS,
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to save consent: ${response.statusText}`);
+        }
+      } catch (err) {
+        logger.error(`Error saving consent: ${(err as Error).message}`);
+      }
     }
   }
 }

@@ -1,0 +1,18 @@
+prompts:
+  - What is the capital of the {{country}}?
+
+providers:
+  - cloudflare-ai:completion:@cf/meta/llama-3-8b-instruct
+  - cloudflare-ai:chat:@cf/meta/llama-3-8b-instruct
+
+tests:
+  - vars:
+      country: United States
+    assert:
+      - type: icontains
+        value: Washington, D.C.
+  - vars:
+      country: England
+    assert:
+      - type: icontains
+        value: London

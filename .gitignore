@@ -1,3 +1,5 @@
+.env
+
 scratch
 *.sw[op]
 *.log
@@ -5,3 +7,9 @@ scratch
 node_modules
 dist
 .aider*
+
+__pycache__
+
+# jest
+.coverage
+.ruff_cache

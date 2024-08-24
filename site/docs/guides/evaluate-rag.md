@@ -1,5 +1,5 @@
 ---
-sidebar_position: 1
+sidebar_position: 2
 ---
 
 # Evaluating RAG pipelines
@@ -26,6 +26,8 @@ There are several criteria used to evaluate RAG applications:
 
 This guide shows how to use promptfoo to evaluate your RAG app. If you're new to promptfoo, head to [Getting Started](/docs/getting-started).
 
+You can also jump to the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub.
+
 ## Evaluating document retrieval
 
 Document retrieval is the first step of a RAG. It is possible to eval the retrieval step in isolation, in order to ensure that you are fetching the best documents.
@@ -33,12 +35,25 @@ Document retrieval is the first step of a RAG. It is possible to eval the retrie
 Suppose we have a simple file `retrieve.py`, which takes a query and outputs a list of documents and their contents:
 
 ```py title=retrieve.py
-import sys
 import vectorstore
 
-query = sys.argv[1]
-for doc in vectorstore.query(query):
-  print(f'{doc.name}: {doc.content}')
+def call_api(query, options, context):
+    # Fetch relevant documents and join them into a string result.
+    documents = vectorstore.query(query)
+    output = "\n".join(f'{doc.name}: {doc.content}' for doc in documents)
+
+    result = {
+        "output": output,
+    }
+
+    # Include error handling and token usage reporting as needed
+    # if some_error_condition:
+    #     result['error'] = "An error occurred during processing"
+    #
+    # if token_usage_calculated:
+    #     result['tokenUsage'] = {"total": token_count, "prompt": prompt_token_count, "completion": completion_token_count}
+
+    return result
 ```
 
 In practice, your retrieval logic is probably more complicated than the above (e.g. query transformations and fanout). Substitute `retrieval.py` with a script of your own that prepares the query and talks to your database.
@@ -53,7 +68,7 @@ First, create `promptfooconfig.yaml`. We'll use a placeholder prompt with a sing
 
 ```yaml
 prompts: ['{{ query }}']
-providers: ['exec: python retrieve.py']
+providers: ['python: retrieve.py']
 tests:
   - vars:
       query: What is our reimbursement policy?
@@ -67,7 +82,7 @@ tests:
         value: ['parental-leave.md', 'hr-policies.html', 'Maternity Leave']
 ```
 
-In the above example, the `contains-all` assertion ensures that the output from `retrive.py` contains all the listed substrings. The `context-recall` assertions use an LLM model to ensure that the retrieval performs well.
+In the above example, the `contains-all` assertion ensures that the output from `retrieve.py` contains all the listed substrings. The `context-recall` assertions use an LLM model to ensure that the retrieval performs well.
 
 **You will get the most value out of this eval if you set up your own evaluation test cases.** View other [assertion types](/docs/configuration/expected-outputs) that you can use.
 
@@ -77,9 +92,9 @@ In order to compare multiple vector databases in your evaluation, create retriev
 
 ```yaml
 providers:
-  - 'exec: python retrieve_pinecone.py'
-  - 'exec: python retrieve_milvus.py'
-  - 'exec: python retrieve_pgvector.py'
+  - 'python: retrieve_pinecone.py'
+  - 'python: retrieve_milvus.py'
+  - 'python: retrieve_pgvector.py'
 ```
 
 Running the eval with `promptfoo eval` will create a comparison view between Pinecone, Milvus, and PGVector:
@@ -94,7 +109,7 @@ Once you are confident that your retrieval step is performing well, it's time to
 
 In this step, we are focused on evaluating whether the LLM output is correct given a query and a set of documents.
 
-Instead of using an external script provider, we'll use the built-in functionality for calling LLM APIs. If your LLM output logic is complicated, you can use an `exec` provider as shown above.
+Instead of using an external script provider, we'll use the built-in functionality for calling LLM APIs. If your LLM output logic is complicated, you can use a [`python` provider](/docs/providers/python) as shown above.
 
 First, let's set up our prompt by creating a `prompt1.txt` file:
 
@@ -118,7 +133,7 @@ Now that we've constructed a prompt, let's set up some test cases. In this examp
 
 ```yaml title=promptfooconfig.yaml
 prompts: [prompt1.txt]
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -147,6 +162,49 @@ In this config, we've assumed the existence of some test fixtures `docs/reimburs
 The `factuality` and `answer-relevance` assertions use OpenAI's model-grading prompt to evaluate the accuracy of the output using an LLM. If you prefer deterministic grading, you may use some of the other supported string or regex based assertion types ([docs](/docs/configuration/expected-outputs)).
 
 The `similar` assertion uses embeddings to evaluate the relevancy of the RAG output to the expected result.
+
+### Using dynamic context
+
+You can define a Python script that fetches `context` based on other variables in the test case. This is useful if you want to retrieve specific docs for each test case.
+
+Here's how you can modify the `promptfooconfig.yaml` and create a `load_context.py` script to achieve this:
+
+1. Update the `promptfooconfig.yaml` file:
+
+```yaml
+# ...
+
+tests:
+  - vars:
+      question: 'What is the parental leave policy?'
+      context: file://./load_context.py
+```
+
+2. Create the `load_context.py` script:
+
+```python
+def retrieve_documents(question: str) -> str:
+    # Calculate embeddings, search vector db...
+    return f'<Documents similar to {question}>'
+
+def get_var(var_name, prompt, other_vars):
+    question = other_vars['question']
+
+    context = retrieve_documents(question)
+    return {
+        'output': context
+    }
+
+    # In case of error:
+    # return {
+    #     'error': 'Error message'
+    # }
+```
+
+The `load_context.py` script defines two functions:
+
+- `get_var(var_name, prompt, other_vars)`: This is a special function that promptfoo looks for when loading dynamic variables.
+- `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
 
 ### Run the eval
 
@@ -190,10 +248,10 @@ In the above example, both prompts perform well. So we might go with prompt 1, w
 
 ### Comparing models
 
-Imagine we're exploring budget and want to compare the performance of GPT-4 vs GPT-3.5 vs Llama-2. Update the `providers` config to list each of the models:
+Imagine we're exploring budget and want to compare the performance of GPT-4 vs Llama. Update the `providers` config to list each of the models:
 
 ```yaml
-providers: [openai:gpt-3.5-turbo, openai:gpt-4, ollama:llama2]
+providers: [openai:gpt-4o-mini, openai:gpt-4o, ollama:llama3.1]
 ```
 
 Let's also add a heuristic that prefers shorter outputs. Using the `defaultTest` directive, we apply this to all RAG tests:
@@ -201,19 +259,19 @@ Let's also add a heuristic that prefers shorter outputs. Using the `defaultTest`
 ```yaml
 defaultTest:
   assert:
-    - type: javascript
-      value: Math.max(0, Math.min(1, 1 - (output.length - 100) / 900))
+    - type: python
+      value: max(0, min(1, 1 - (len(output) - 100) / 900))
 ```
 
 Here's the final config:
 
 ```yaml title=promptfooconfig.yaml
 prompts: [prompt1.txt]
-providers: [openai:gpt-3.5-turbo, openai:gpt-4, ollama:llama2]
+providers: [openai:gpt-4o-mini, openai:gpt-4o, ollama:llama3.1]
 defaultTest:
   assert:
-    - type: javascript
-      value: Math.max(0, Math.min(1, 1 - (output.length - 100) / 900))
+    - type: python
+      value: max(0, min(1, 1 - (len(output) - 100) / 900))
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -255,11 +313,13 @@ prompts: [prompt1.txt, prompt2.txt]
 
 # Test different retrieval and generation methods to find the best
 providers:
-  - exec: python retrieve_and_generate_v1.py
-  - exec: python retrieve_and_generate_v2.py
+  - python: retrieve_and_generate_v1.py
+  - python: retrieve_and_generate_v2.py
 
 tests:
   # ...
 ```
 
 By following this approach and setting up tests on [expected outputs](/docs/configuration/expected-outputs), you can ensure that the quality of your RAG pipeline is improving, and prevent regressions.
+
+See the [RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub for a fully functioning end-to-end example.

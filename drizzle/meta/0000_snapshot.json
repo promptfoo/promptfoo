@@ -1,0 +1,243 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "tables": {
+    "datasets": {
+      "name": "datasets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "test_case_id": {
+          "name": "test_case_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "evals": {
+      "name": "evals",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "results": {
+          "name": "results",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "config": {
+          "name": "config",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "evals_to_datasets": {
+      "name": "evals_to_datasets",
+      "columns": {
+        "eval_id": {
+          "name": "eval_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dataset_id": {
+          "name": "dataset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "evals_to_datasets_eval_id_evals_id_fk": {
+          "name": "evals_to_datasets_eval_id_evals_id_fk",
+          "tableFrom": "evals_to_datasets",
+          "columnsFrom": [
+            "eval_id"
+          ],
+          "tableTo": "evals",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "evals_to_datasets_dataset_id_datasets_id_fk": {
+          "name": "evals_to_datasets_dataset_id_datasets_id_fk",
+          "tableFrom": "evals_to_datasets",
+          "columnsFrom": [
+            "dataset_id"
+          ],
+          "tableTo": "datasets",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "evals_to_datasets_eval_id_dataset_id_pk": {
+          "columns": [
+            "dataset_id",
+            "eval_id"
+          ],
+          "name": "evals_to_datasets_eval_id_dataset_id_pk"
+        }
+      },
+      "uniqueConstraints": {}
+    },
+    "evals_to_prompts": {
+      "name": "evals_to_prompts",
+      "columns": {
+        "eval_id": {
+          "name": "eval_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prompt_id": {
+          "name": "prompt_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "evals_to_prompts_eval_id_evals_id_fk": {
+          "name": "evals_to_prompts_eval_id_evals_id_fk",
+          "tableFrom": "evals_to_prompts",
+          "columnsFrom": [
+            "eval_id"
+          ],
+          "tableTo": "evals",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "evals_to_prompts_prompt_id_prompts_id_fk": {
+          "name": "evals_to_prompts_prompt_id_prompts_id_fk",
+          "tableFrom": "evals_to_prompts",
+          "columnsFrom": [
+            "prompt_id"
+          ],
+          "tableTo": "prompts",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "evals_to_prompts_eval_id_prompt_id_pk": {
+          "columns": [
+            "eval_id",
+            "prompt_id"
+          ],
+          "name": "evals_to_prompts_eval_id_prompt_id_pk"
+        }
+      },
+      "uniqueConstraints": {}
+    },
+    "prompts": {
+      "name": "prompts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "prompt": {
+          "name": "prompt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "hash": {
+          "name": "hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {},
+  "_meta": {
+    "tables": {},
+    "columns": {}
+  },
+  "id": "8b53403f-5b6f-436a-862e-9fd17a52204e",
+  "prevId": "00000000-0000-0000-0000-000000000000"
+}

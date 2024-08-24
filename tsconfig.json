@@ -12,6 +12,12 @@
     "strict": true,
     "resolveJsonModule": true
   },
-  "include": ["src/", "typings/**/*"],
-  "exclude": ["node_modules", "dist", "src/web/client/**/*", "src/web/nextui/**/*"]
+  "include": ["src/", "typings/**/*", "test/"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/web/client/**/*",
+    "src/web/nextui/**/*",
+    "src/workers/**/*"
+  ]
 }

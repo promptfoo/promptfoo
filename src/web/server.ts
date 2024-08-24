@@ -1,36 +1,41 @@
-import fs, { Stats } from 'fs';
-import path from 'node:path';
-import readline from 'node:readline';
-import http from 'node:http';
-import invariant from 'tiny-invariant';
-import { v4 as uuidv4 } from 'uuid';
-
+import compression from 'compression';
+import cors from 'cors';
 import debounce from 'debounce';
 import express from 'express';
-import cors from 'cors';
-import compression from 'compression';
+import type { Stats } from 'fs';
+import fs from 'fs';
+import http from 'node:http';
+import path from 'node:path';
+import readline from 'node:readline';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
-import promptfoo, { EvaluateSummary, EvaluateTestSuite, PromptWithMetadata } from '../index';
-
-import logger from '../logger';
+import invariant from 'tiny-invariant';
+import { v4 as uuidv4 } from 'uuid';
+import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
+import type {
+  EvaluateTestSuiteWithEvaluateOptions,
+  Job,
+  Prompt,
+  PromptWithMetadata,
+  TestCase,
+  TestSuite,
+} from '../index';
+import promptfoo from '../index';
+import logger from '../logger';
+import { synthesizeFromTestSuite } from '../testCases';
 import {
-  getLatestResultsPath,
   getPrompts,
   getPromptsForTestCasesHash,
   listPreviousResults,
   readResult,
-  filenameToDate,
   getTestCases,
+  updateResult,
+  getLatestEval,
+  migrateResultsFromFileSystemToDatabase,
+  getStandaloneEvals,
+  deleteEval,
 } from '../util';
-
-interface Job {
-  status: 'in-progress' | 'complete';
-  progress: number;
-  total: number;
-  result: EvaluateSummary | null;
-}
 
 // Running jobs
 const evalJobs = new Map<string, Job>();
@@ -38,14 +43,26 @@ const evalJobs = new Map<string, Job>();
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
-export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = false) {
+export enum BrowserBehavior {
+  ASK = 0,
+  OPEN = 1,
+  SKIP = 2,
+}
+
+export async function startServer(
+  port = 15500,
+  apiBaseUrl = '',
+  browserBehavior = BrowserBehavior.ASK,
+  filterDescription?: string,
+) {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
 
   app.use(cors());
   app.use(compression());
-  app.use(express.json());
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
@@ -54,41 +71,40 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     },
   });
 
-  const latestJsonPath = getLatestResultsPath();
-  const readLatestJson = () => {
-    const data = fs.readFileSync(latestJsonPath, 'utf8');
-    return JSON.parse(data);
-  };
+  await migrateResultsFromFileSystemToDatabase();
 
-  io.on('connection', (socket) => {
-    // Send the initial table data when a client connects
-    socket.emit('init', readLatestJson());
+  const watchFilePath = getDbSignalPath();
+  const watcher = debounce(async (curr: Stats, prev: Stats) => {
+    if (curr.mtime !== prev.mtime) {
+      io.emit('update', await getLatestEval(filterDescription));
+      allPrompts = null;
+    }
+  }, 250);
+  fs.watchFile(watchFilePath, watcher);
 
-    // Watch for changes to latest.json and emit the update event
-    const watcher = debounce((curr: Stats, prev: Stats) => {
-      if (curr.mtime !== prev.mtime) {
-        socket.emit('update', readLatestJson());
-        allPrompts = null;
-      }
-    }, 250);
-    fs.watchFile(latestJsonPath, watcher);
-
-    // Stop watching the file when the socket connection is closed
-    socket.on('disconnect', () => {
-      fs.unwatchFile(latestJsonPath, watcher);
-    });
+  io.on('connection', async (socket) => {
+    socket.emit('init', await getLatestEval(filterDescription));
   });
 
-  app.get('/results', (req, res) => {
-    const previousResults = listPreviousResults();
-    previousResults.reverse();
+  app.get('/api/results', (req, res) => {
+    const datasetId = req.query.datasetId as string | undefined;
+    const previousResults = listPreviousResults(
+      undefined /* limit */,
+      filterDescription,
+      datasetId,
+    );
     res.json({
-      data: previousResults.map((filename) => ({ id: filename, label: filenameToDate(filename) })),
+      data: previousResults.map((meta) => {
+        return {
+          ...meta,
+          label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
+        };
+      }),
     });
   });
 
-  app.post('/api/eval', (req, res) => {
-    const testSuite = req.body as EvaluateTestSuite;
+  app.post('/api/eval/job', (req, res) => {
+    const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
     const id = uuidv4();
     evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
 
@@ -98,15 +114,16 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
           writeLatestResults: true,
           sharing: testSuite.sharing ?? true,
         }),
-        {
-          progressCallback: (progress, total) => {
+        Object.assign({}, evaluateOptions, {
+          eventSource: 'web',
+          progressCallback: (progress: number, total: number) => {
             const job = evalJobs.get(id);
             invariant(job, 'Job not found');
             job.progress = progress;
             job.total = total;
             console.log(`[${id}] ${progress}/${total}`);
           },
-        },
+        }),
       )
       .then((result) => {
         const job = evalJobs.get(id);
@@ -119,7 +136,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     res.json({ id });
   });
 
-  app.get('/api/eval/:id', (req, res) => {
+  app.get('/api/eval/job/:id', (req, res) => {
     const id = req.params.id;
     const job = evalJobs.get(id);
     if (!job) {
@@ -133,14 +150,36 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     }
   });
 
-  app.get('/results/:filename', (req, res) => {
-    const filename = req.params.filename;
-    const safeFilename = path.basename(filename);
-    if (safeFilename !== filename || !listPreviousResults().includes(safeFilename)) {
-      res.status(400).send('Invalid filename');
+  app.patch('/api/eval/:id', (req, res) => {
+    const id = req.params.id;
+    const { table, config } = req.body;
+
+    if (!id) {
+      res.status(400).json({ error: 'Missing id' });
       return;
     }
-    const file = readResult(safeFilename);
+
+    try {
+      updateResult(id, config, table);
+      res.json({ message: 'Eval updated successfully' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update eval table' });
+    }
+  });
+
+  app.delete('/api/eval/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      await deleteEval(id);
+      res.json({ message: 'Eval deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete eval' });
+    }
+  });
+
+  app.get('/api/results/:id', async (req, res) => {
+    const { id } = req.params;
+    const file = await readResult(id);
     if (!file) {
       res.status(404).send('Result not found');
       return;
@@ -148,21 +187,28 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     res.json({ data: file.result });
   });
 
-  app.get('/api/prompts', (req, res) => {
+  app.get('/api/prompts', async (req, res) => {
     if (allPrompts == null) {
-      allPrompts = getPrompts();
+      allPrompts = await getPrompts();
     }
     res.json({ data: allPrompts });
   });
 
-  app.get('/api/prompts/:sha256hash', (req, res) => {
+  app.get('/api/progress', async (req, res) => {
+    const results = await getStandaloneEvals();
+    res.json({
+      data: results,
+    });
+  });
+
+  app.get('/api/prompts/:sha256hash', async (req, res) => {
     const sha256hash = req.params.sha256hash;
-    const prompts = getPromptsForTestCasesHash(sha256hash);
+    const prompts = await getPromptsForTestCasesHash(sha256hash);
     res.json({ data: prompts });
   });
 
-  app.get('/api/datasets', (req, res) => {
-    res.json({ data: getTestCases() });
+  app.get('/api/datasets', async (req, res) => {
+    res.json({ data: await getTestCases() });
   });
 
   app.get('/api/config', (req, res) => {
@@ -171,37 +217,61 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     });
   });
 
+  app.post('/api/dataset/generate', async (req, res) => {
+    const testSuite: TestSuite = {
+      prompts: req.body.prompts as Prompt[],
+      tests: req.body.tests as TestCase[],
+      providers: [],
+    };
+
+    const results = await synthesizeFromTestSuite(testSuite, {});
+    return {
+      results,
+    };
+  });
+
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
   app.use(express.static(staticDir));
 
-  httpServer.listen(port, () => {
-    const url = `http://localhost:${port}`;
-    logger.info(`Server listening at ${url}`);
+  httpServer
+    .listen(port, () => {
+      const url = `http://localhost:${port}`;
+      logger.info(`Server running at ${url} and monitoring for new evals.`);
 
-    const openUrl = async () => {
-      try {
-        logger.info('Press Ctrl+C to stop the server');
-        await opener(url);
-      } catch (err) {
-        logger.error(`Failed to open browser: ${String(err)}`);
-      }
-    };
-
-    if (skipConfirmation) {
-      openUrl();
-    } else {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-      rl.question('Do you want to open the browser to the URL? (y/N): ', async (answer) => {
-        if (answer.toLowerCase().startsWith('y')) {
-          openUrl();
+      const openUrl = async () => {
+        try {
+          logger.info('Press Ctrl+C to stop the server');
+          await opener(url);
+        } catch (err) {
+          logger.error(`Failed to open browser: ${String(err)}`);
         }
-        rl.close();
-        logger.info('Press Ctrl+C to stop the server');
-      });
-    }
-  });
+      };
+
+      if (browserBehavior === BrowserBehavior.OPEN) {
+        openUrl();
+      } else if (browserBehavior === BrowserBehavior.ASK) {
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+        rl.question('Open URL in browser? (y/N): ', async (answer) => {
+          if (answer.toLowerCase().startsWith('y')) {
+            openUrl();
+          }
+          rl.close();
+        });
+      }
+    })
+    .on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        logger.error(
+          `Unable to start server on port ${port}. It's currently in use. Check for existing promptfoo instances.`,
+        );
+        process.exit(1);
+      } else {
+        logger.error(`Failed to start server: ${error.message}`);
+        process.exit(1);
+      }
+    });
 }

@@ -2,16 +2,17 @@
   display: flex;
   font-family: monospace, monospace;
   font-size: 0.8rem;
+  font-weight: bold;
   align-items: center;
   gap: 8px;
-  background-color: #f0f0f0;
+  background-color: #333;
+  border-color: #444;
   padding: 0 2rem 0 0;
   border-radius: 0.5rem;
 }
 
 [data-theme='dark'] .logo {
-  background-color: #333;
-  border-color: #444;
+  background-color: #121212;
 }
 
 .logo img {
@@ -19,14 +20,6 @@
   margin-top: 2px;
 }
 
-[data-theme='dark'] .logo img {
-  filter: invert(1);
-}
-
 .logo span {
-  color: var(--text-color);
-}
-
-[data-theme='dark'] .logo span {
   color: #f0f0f0;
 }

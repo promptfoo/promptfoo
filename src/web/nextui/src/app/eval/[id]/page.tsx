@@ -1,15 +1,18 @@
 import React from 'react';
-import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import { cookies } from 'next/headers';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-
+import type {
+  EvaluateSummary,
+  ResultLightweightWithLabel,
+  SharedResults,
+  UnifiedConfig,
+} from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
-import { EvaluateSummary, EvaluateTestSuite, SharedResults } from '@/../../../types';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
+import { notFound } from 'next/navigation';
 import Eval from '../Eval';
-
 import './page.css';
 
 export const metadata: Metadata = {
@@ -27,15 +30,15 @@ export async function generateStaticParams() {
 
 export default async function Page({ params }: { params: { id: string } }) {
   let sharedResults: SharedResults;
-  let recentEvals: { id: string; label: string }[] = [];
+  let recentEvals: ResultLightweightWithLabel[] = [];
   let defaultEvalId: string | undefined;
   const decodedId = decodeURIComponent(params.id);
   if (decodedId.startsWith('local:')) {
     // Load local file and list of recent files in parallel
     const apiBaseUrl = await getApiBaseUrl();
     const [response, response2] = await Promise.all([
-      fetch(`${apiBaseUrl}/results/${decodedId.slice(6)}`),
-      fetch(`${apiBaseUrl}/results`),
+      fetch(`${apiBaseUrl}/api/results/${decodedId.slice(6)}`),
+      fetch(`${apiBaseUrl}/api/results`),
     ]);
 
     if (!response.ok) {
@@ -58,8 +61,9 @@ export default async function Page({ params }: { params: { id: string } }) {
       data: {
         version: result.version,
         createdAt: result.createdAt,
+        author: 'Remote User',
         results: result.results as unknown as EvaluateSummary,
-        config: result.config as unknown as EvaluateTestSuite,
+        config: result.config as unknown as UnifiedConfig,
       },
     };
 
@@ -68,14 +72,21 @@ export default async function Page({ params }: { params: { id: string } }) {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('EvaluationResult')
         .select('id, createdAt')
         .eq('user_id', user.id)
         .order('createdAt', { ascending: false })
         .limit(100);
       if (data) {
-        recentEvals = data.map((row) => ({ id: row.id, label: row.createdAt }));
+        recentEvals = data.map((row) => ({
+          evalId: row.id,
+          datasetId: null,
+          label: row.createdAt,
+          createdAt: row.createdAt,
+          description: 'None',
+          numTests: 0,
+        }));
       }
     }
   } else {

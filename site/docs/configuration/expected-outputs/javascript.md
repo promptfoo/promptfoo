@@ -25,6 +25,7 @@ If you want to return a custom score, your function should return a number. For 
 assert:
   - type: javascript
     value: Math.log(output.length) * 10
+    threshold: 0.5 # any value above 0.5 will pass
 ```
 
 In the example above, the longer the output, the higher the score.
@@ -34,7 +35,25 @@ If your function throws an error, the assertion will fail and the error message 
 ```yaml
 assert:
   - type: javascript
-    value: "throw new Error('This is an error')"
+    value: |
+      if (errorCase) {
+        throw new Error('This is an error');
+      }
+      return {
+        pass: false,
+        score: 0,
+        reason: 'Assertion failed',
+      };
+```
+
+## Handling objects
+
+If the LLM outputs a JSON object (such as in the case of tool/function calls), then `output` will already be parsed as an object:
+
+```yaml
+assert:
+  - type: javascript
+    value: output[0].function.name === 'get_current_weather'
 ```
 
 ## Return type
@@ -163,6 +182,59 @@ async function main(output, context) {
 
 module.exports = main;
 ```
+
+You can also return complete [`GradingResult`](/docs/configuration/reference/#gradingresult) objects. For example:
+
+```js
+module.exports = (output, context) => {
+  console.log('Prompt:', context.prompt);
+  console.log('Vars', context.vars.topic);
+
+  // You can return a bool...
+  // return output.toLowerCase().includes('bananas');
+
+  // A score (where 0 = Fail)...
+  // return 0.5;
+
+  // Or an entire grading result, which can be simple...
+  let result = {
+    pass: output.toLowerCase().includes('bananas'),
+    score: 0.5,
+    reason: 'Contains banana',
+  };
+
+  // Or include nested assertions...
+  result = {
+    pass: true,
+    score: 0.75,
+    reason: 'Looks good to me',
+    componentResults: [
+      {
+        pass: output.toLowerCase().includes('bananas'),
+        score: 0.5,
+        reason: 'Contains banana',
+        namedScores: {
+          'Uses banana': 1.0,
+        },
+      },
+      {
+        pass: output.toLowerCase().includes('yellow'),
+        score: 0.5,
+        reason: 'Contains yellow',
+        namedScores: {
+          Yellowish: 0.66,
+        },
+      },
+    ],
+  };
+
+  return result;
+};
+```
+
+### ES modules
+
+ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
 
 ## Other assertion types
 

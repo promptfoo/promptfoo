@@ -1,0 +1,23 @@
+# This configuration compares LLM output of 2 prompts x 2 GPT models across 3 test cases.
+# Learn more: https://promptfoo.dev/docs/configuration/guide
+description: 'My first eval'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4
+
+tests:
+  - vars:
+      topic: bananas
+
+  - vars:
+      topic: avocado toast
+    assert:
+      # For more information on assertions, see https://promptfoo.dev/docs/configuration/expected-outputs
+      - type: icontains
+        value: avocado
+      - type: javascript
+        value: 1 / (output.length + 1) # prefer shorter outputs

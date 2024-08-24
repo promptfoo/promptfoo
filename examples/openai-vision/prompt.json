@@ -1,0 +1,17 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "{{question}}"
+      },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "{{url}}"
+        }
+      }
+    ]
+  }
+]

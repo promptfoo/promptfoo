@@ -5,17 +5,17 @@ sidebar_label: Guide
 
 # Configuration
 
-The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assert").
+The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assertions").
 
-Asserts are _optional_. Many people get value out of reviewing outputs manually, and the web UI helps facilitate this.
+Assertions are _optional_. Many people get value out of reviewing outputs manually, and the web UI helps facilitate this.
 
-## Examples
+## Example
 
-Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-3.5 and Vicuna, substituting three variables:
+Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-3.5 and Gemini, substituting `language` and `input` variables:
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -31,15 +31,15 @@ For more information on setting up a prompt file, see [input and output files](/
 
 :::
 
-Running `promptfoo eval` over this config will result in a _matrix view_ that you can use to evaluate GPT vs Vicuna.
+Running `promptfoo eval` over this config will result in a _matrix view_ that you can use to evaluate GPT vs Gemini.
 
-### Use assertions to validate output
+## Use assertions to validate output
 
 Next, let's add an assertion. This automatically rejects any outputs that don't contain JSON:
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -59,7 +59,7 @@ In this example, the `javascript` assertion runs Javascript against the LLM outp
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -82,93 +82,35 @@ tests:
 ```
 
 :::tip
-
 To learn more about assertions, see docs on configuring [expected outputs](/docs/configuration/expected-outputs).
-
 :::
 
-### Avoiding repetition
+## Import providers from separate files
 
-#### Default test cases
-
-Use `defaultTest` to set properties for all tests.
-
-In this example, we use a `model-graded-closedqa` assertion to ensure that the LLM does not refer to itself as an AI. This check applies to all test cases:
+The `providers` config property can point to a list of files. For example:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
-// highlight-start
-defaultTest:
-  assert:
-    - type: model-graded-closedqa
-      value: does not describe self as an AI, model, or chatbot
-// highlight-end
-tests:
-  - vars:
-      language: French
-      input: Hello world
-    assert:
-      - type: contains-json
-      - type: javascript
-        value: output.toLowerCase().includes('bonjour')
-  - vars:
-      language: German
-      input: How's it going?
-    assert:
-      - type: similar
-        value: was geht
-        threshold: 0.6
+providers:
+  - file://path/to/provider1.yaml
+  - file://path/to/provider2.json
 ```
 
-You can also use `defaultTest` to override the model used for each test. This can be useful for [model-graded evals](/docs/configuration/expected-outputs/model-graded):
+Where the provider file looks like this:
 
 ```yaml
-defaultTest:
-  options:
-    provider: openai:gpt-3.5-turbo-0613
+id: openai:gpt-4o-mini
+label: Foo bar
+config:
+  temperature: 0.9
 ```
 
-#### YAML references
+## Import tests from separate files
 
-promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.
-
-Use the `$ref` key to re-use assertions without having to fully define them more than once. Here's an example:
-
-```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
-tests:
-  - vars:
-      language: French
-      input: Hello world
-    assert:
-      - $ref: '#assertionTemplates/startsUpperCase'
-  - vars:
-      language: German
-      input: How's it going?
-    assert:
-      - $ref: '#assertionTemplates/noAIreference'
-      - $ref: '#assertionTemplates/startsUpperCase'
-
-// highlight-start
-assertionTemplates:
-    noAIreference:
-      - type: model-graded-closedqa
-        value: does not describe self as an AI, model, or chatbot
-    startsUpperCase:
-      - type: javascript
-        value: output[0] === output[0].toUpperCase()
-// highlight-end
-```
-
-#### Import tests from separate files
-
-The `tests` config attribute takes a list of paths to files or directories. For example:
+The `tests` config property takes a list of paths to files or directories. For example:
 
 ```yaml
 prompts: prompts.txt
-providers: openai:gpt-3.5-turbo
+providers: openai:gpt-4o-mini
 
 # Load & runs all test cases matching these filepaths
 tests:
@@ -196,9 +138,13 @@ Or a list of paths:
 tests: ['tests/accuracy', 'tests/creativity', 'tests/hallucination']
 ```
 
-#### Import vars from separate files
+:::tip
+We also support CSV datasets from [local file](/docs/configuration/parameters/#import-from-csv) and [Google Sheets](/docs/integrations/google-sheets).
+:::
 
-The `vars` attribute can point to a file or directory. For example:
+## Import vars from separate files
+
+The `vars` property can point to a file or directory. For example:
 
 ```yaml
 tests:
@@ -215,7 +161,152 @@ tests:
       var3: file://path/to/var3.txt
 ```
 
-### Multiple variables in a single test case
+Javascript and Python variable files are supported. For example:
+
+```yaml
+tests:
+  - vars:
+      context: file://fetch_from_vector_database.py
+```
+
+This is useful when testing vector databases like Pinecone, Chroma, Milvus, etc.
+
+### Javascript variables
+
+To dynamically load a variable from a JavaScript file, use the `file://` prefix in your YAML configuration, pointing to a JavaScript file that exports a function.
+
+```yaml
+tests:
+  - vars:
+      context: file://path/to/dynamicVarGenerator.js
+```
+
+`dynamicVarGenerator.js` receives `varName`, `prompt`, and `otherVars` as arguments, which you can use to query a database or anything else based on test context:
+
+```js
+module.exports = function (varName, prompt, otherVars) {
+  // Example logic to return a value based on the varName
+  if (varName === 'context') {
+    return {
+      output: `Processed ${otherVars.input} for prompt: ${prompt}`,
+    };
+  }
+  return {
+    output: 'default value',
+  };
+
+  // Handle potential errors
+  // return { error: 'Error message' }
+};
+```
+
+This JavaScript file processes input variables and returns a dynamic value based on the provided context.
+
+### Python variables
+
+For Python, the approach is similar. Define a Python script that includes a `get_var` function to generate your variable's value. The function should accept `var_name`, `prompt`, and `other_vars`.
+
+```yaml
+tests:
+  - vars:
+      context: file://fetch_dynamic_context.py
+```
+
+fetch_dynamic_context.py:
+
+```python
+def get_var(var_name, prompt, other_vars):
+    # Example logic to dynamically generate variable content
+    if var_name == 'context':
+        return {
+            'output': f"Context for {other_vars['input']} in prompt: {prompt}"
+        }
+    return {'output': 'default context'}
+
+    # Handle potential errors
+    # return { 'error': 'Error message' }
+```
+
+## Avoiding repetition
+
+### Default test cases
+
+Use `defaultTest` to set properties for all tests.
+
+In this example, we use a `llm-rubric` assertion to ensure that the LLM does not refer to itself as an AI. This check applies to all test cases:
+
+```yaml
+prompts: [prompt1.txt, prompt2.txt]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+// highlight-start
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: does not describe self as an AI, model, or chatbot
+// highlight-end
+tests:
+  - vars:
+      language: French
+      input: Hello world
+    assert:
+      - type: contains-json
+      - type: javascript
+        value: output.toLowerCase().includes('bonjour')
+  - vars:
+      language: German
+      input: How's it going?
+    assert:
+      - type: similar
+        value: was geht
+        threshold: 0.6
+```
+
+You can also use `defaultTest` to override the model used for each test. This can be useful for [model-graded evals](/docs/configuration/expected-outputs/model-graded):
+
+```yaml
+defaultTest:
+  options:
+    provider: openai:gpt-4o-mini-0613
+```
+
+### YAML references
+
+promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.
+
+Use the `$ref` key to re-use assertions without having to fully define them more than once. Here's an example:
+
+```yaml
+prompts: [prompt1.txt, prompt2.txt]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+tests:
+  - vars:
+      language: French
+      input: Hello world
+    assert:
+      - $ref: '#/assertionTemplates/startsUpperCase'
+  - vars:
+      language: German
+      input: How's it going?
+    assert:
+      - $ref: '#/assertionTemplates/noAIreference'
+      - $ref: '#/assertionTemplates/startsUpperCase'
+
+// highlight-start
+assertionTemplates:
+    noAIreference:
+      type: llm-rubric
+      value: does not describe self as an AI, model, or chatbot
+    startsUpperCase:
+      type: javascript
+      value: output[0] === output[0].toUpperCase()
+// highlight-end
+```
+
+:::info
+`tools` and `functions` values in providers config are _not_ dereferenced. This is because they are standalone JSON schemas that may contain their own internal references.
+:::
+
+## Multiple variables in a single test case
 
 The `vars` map in the test also supports array values. If values are an array, the test case will run each combination of values.
 
@@ -223,7 +314,7 @@ For example:
 
 ```yaml
 prompts: prompts.txt
-providers: [openai:gpt-3.5-turbo, openai:gpt-4]
+providers: [openai:gpt-4o-mini, openai:gpt-4]
 tests:
   - vars:
       // highlight-start
@@ -240,11 +331,54 @@ Evaluates each `language` x `input` combination:
 
 <img alt="Multiple combinations of var inputs" src="https://user-images.githubusercontent.com/310310/243108917-dab27ca5-689b-4843-bb52-de8d459d783b.png" />
 
-### Using nunjucks templates
+Vars can also be imported from globbed filepaths. They are automatically expanded into an array. For example:
 
-In the above examples, `vars` values are strings. But `vars` can be any JSON or YAML entity, including nested objects. You can manipulate these objects in the prompt, which are [nunjucks](https://mozilla.github.io/nunjucks/) templates.
+```yaml
+  - vars:
+      language: [French, German, Spanish]
+      // highlight-start
+      input: file://path/to/inputs/*.txt
+      // highlight-end
+```
 
-For example, consider this test case, which lists a handful of user and assistant messages in an OpenAI-compatible format:
+## Using nunjucks templates
+
+Use Nunjucks templates to exert additional control over your prompt templates, including loops, conditionals, and more.
+
+### Manipulating objects
+
+In the above examples, `vars` values are strings. But `vars` can be any JSON or YAML entity, including nested objects. You can manipulate these objects in the prompt, which are [nunjucks](https://mozilla.github.io/nunjucks/) templates:
+
+promptfooconfig.yaml:
+
+```yaml
+tests:
+  - vars:
+      user_profile:
+        name: John Doe
+        interests:
+          - reading
+          - gaming
+          - hiking
+      recent_activity:
+        type: reading
+        details:
+          title: 'The Great Gatsby'
+          author: 'F. Scott Fitzgerald'
+```
+
+prompt.txt:
+
+```liquid
+User Profile:
+- Name: {{ user_profile.name }}
+- Interests: {{ user_profile.interests | join(', ') }}
+- Recent Activity: {{ recent_activity.type }} on "{{ recent_activity.details.title }}" by {{ recent_activity.details.author }}
+
+Based on the above user profile, generate a personalized reading recommendation list that includes books similar to "{{ recent_activity.details.title }}" and aligns with the user's interests.
+```
+
+Here's another example. Consider this test case, which lists a handful of user and assistant messages in an OpenAI-compatible format:
 
 ```yaml
 tests:
@@ -258,10 +392,10 @@ tests:
           content: great, thanks
 ```
 
-The corresponding `prompt.txt` file simply passes through the `previous_messages` object using the [dump](https://mozilla.github.io/nunjucks/templating.html#dump) and [safe](https://mozilla.github.io/nunjucks/templating.html#safe) filters to convert the object to a JSON string:
+The corresponding `prompt.txt` file simply passes through the `previous_messages` object using the [dump](https://mozilla.github.io/nunjucks/templating.html#dump) filter to convert the object to a JSON string:
 
 ```nunjucks
-{{ previous_messages | dump | safe }}
+{{ previous_messages | dump }}
 ```
 
 Running `promptfoo eval -p prompt.txt -c path_to.yaml` will call the Chat Completion API with the following prompt:
@@ -283,26 +417,82 @@ Running `promptfoo eval -p prompt.txt -c path_to.yaml` will call the Chat Comple
 ]
 ```
 
-Use Nunjucks templates to exert additional control over your prompt templates, including loops, conditionals, and more.
+### Escaping JSON strings
 
-### Other capabilities
+If the prompt is valid JSON, nunjucks variables are automatically escaped when they are included in strings:
 
-#### Functions
-
-promptfoo supports OpenAI functions and other provider-specific configurations like temperature, number of tokens, and so on.
-
-To use, override the `config` key of the provider. See example [here](/docs/providers/openai#using-functions).
-
-#### Postprocessing
-
-The `TestCase.options.postprocess` field is a Javascript snippet that modifies the LLM output. Postprocessing occurs before any assertions are run.
-
-Postprocess is a function that takes a string output and a context object:
-
+```yaml
+tests:
+  - vars:
+      system_message: >
+        This multiline "system message" with quotes...
+        Is automatically escaped in JSON prompts!
 ```
-postprocessFn: (output: string, context: {
-  vars: Record<string, any>
-})
+
+```json
+{
+  "role": "system",
+  "content": "{{ system_message }}"
+}
+```
+
+You can also manually escape the string using the nunjucks [dump](https://mozilla.github.io/nunjucks/templating.html#dump) filter. This is necessary if your prompt is not valid JSON, for example if you are using nunjucks syntax:
+
+```liquid
+{
+  "role": {% if 'admin' in message %} "system" {% else %} "user" {% endif %},
+  "content": {{ message | dump }}
+}
+```
+
+### Variable composition
+
+Variables can reference other variables:
+
+```yaml
+prompts:
+  - 'Write a {{item}}'
+
+tests:
+  - vars:
+      item: 'tweet about {{topic}}'
+      topic: 'bananas'
+
+  - vars:
+      item: 'instagram about {{topic}}'
+      topic: 'theoretical quantum physics in alternate dimensions'
+```
+
+## Tools and Functions
+
+promptfoo supports tool use and function calling with OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
+
+## Transforming outputs
+
+Transforms can be applied at both the provider level and in test cases. The order of application is:
+
+1. Provider transforms (always applied first)
+2. Default test transforms (if specified in `defaultTest`)
+3. Individual test case transforms (overrides `defaultTest` transform if present)
+
+Note that only one transform is applied at the test case level - either from `defaultTest` or the individual test case, not both.
+
+The `TestCase.options.transform` field is a Javascript snippet that modifies the LLM output before it is run through the test assertions.
+
+It is a function that takes a string output and a context object:
+
+```typescript
+transformFn: (output: string, context: {
+  prompt: {
+    // ID of the prompt, if assigned
+    id?: string;
+    // Raw prompt as provided in the test case, without {{variable}} substitution.
+    raw?: string;
+    // Prompt as sent to the LLM API and assertions.
+    display?: string;
+  };
+  vars?: Record<string, any>;
+}) => void;
 ```
 
 This is useful if you need to somehow transform or clean LLM output before running an eval.
@@ -317,7 +507,7 @@ tests:
       body: Hello world
     options:
       // highlight-start
-      postprocess: output.toUpperCase()
+      transform: output.toUpperCase()
       // highlight-end
     # ...
 ```
@@ -332,7 +522,7 @@ tests:
       body: Hello world
     options:
       // highlight-start
-      postprocess: |
+      transform: |
         output = output.replace(context.vars.language, 'foo');
         const words = output.split(' ').filter(x => !!x);
         return JSON.stringify(words);
@@ -340,11 +530,90 @@ tests:
     # ...
 ```
 
-Tip: use `defaultTest` apply a postprocessing option to every test case in your test suite.
+It also works in assertions, which is useful for picking values out of JSON:
 
-## Configuration structure
+```yaml
+tests:
+  - vars:
+      # ...
+    assert:
+      - type: equals
+        value: 'foo'
+        transform: output.category # Select the 'category' key from output json
+```
+
+:::tip
+Use `defaultTest` apply a transform option to every test case in your test suite.
+:::
+
+### Transforms from separate files
+
+Transform functions can be executed from external JavaScript or Python files. You can optionally specify a function name to use.
+
+For JavaScript:
+
+```yaml
+defaultTest:
+  options:
+    transform: file://transform.js:customTransform
+```
+
+```js
+module.exports = {
+  customTransform: (output, context) => {
+    // context.vars, context.prompt
+    return output.toUpperCase();
+  },
+};
+```
+
+For Python:
+
+```yaml
+defaultTest:
+  options:
+    transform: file://transform.py
+```
+
+```python
+def get_transform(output, context):
+    # context['vars'], context['prompt']
+    return output.upper()
+```
+
+If no function name is specified for Python files, it defaults to `get_transform`. To use a custom Python function, specify it in the file path:
+
+```yaml
+transform: file://transform.py:custom_python_transform
+```
+
+## Config structure and organization
 
 For detailed information on the config structure, see [Configuration Reference](/docs/configuration/reference).
+
+If you have multiple sets of tests, it helps to split them into multiple config files. Use the `--config` or `-c` parameter to run each individual config:
+
+```
+promptfoo eval -c usecase1.yaml
+```
+
+and
+
+```
+promptfoo eval -c usecase2.yaml
+```
+
+You can run multiple configs at the same time, which will combine them into a single eval. For example:
+
+```
+promptfoo eval -c my_configs/*
+```
+
+or
+
+```
+promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
+```
 
 ## Loading tests from CSV
 
@@ -352,18 +621,20 @@ YAML is nice, but some organizations maintain their LLM tests in spreadsheets fo
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 // highlight-next-line
 tests: tests.csv
 ```
 
-promptfoo also has built-in ability to pull test cases from a Google Sheet. The sheet must be visible to "anyone with the link". For example:
+promptfoo also has built-in ability to pull test cases from a Google Sheet. The easiest way to get started is to set the sheet visible to "anyone with the link". For example:
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```
 
-Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-sheets). See also: **[import tests from another file](#loading-tests-from-file)**.
+Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-sheets).
+
+See [Google Sheets integration](/docs/integrations/google-sheets) for details on how to set up promptfoo to access a private spreadsheet.
