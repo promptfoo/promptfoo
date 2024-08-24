@@ -73,7 +73,7 @@ export class IndirectPromptInjectionPlugin extends PluginBase {
     const lines = output.split('\n');
     const results: { systemPromptInjection: string; prompt: string }[] = [];
     let currentItem: Partial<{ systemPromptInjection: string; prompt: string }> = {};
-    for (let line of lines) {
+    for (const line of lines) {
       if (line.includes('SystemPromptInjection:')) {
         if (currentItem.systemPromptInjection) {
           results.push(currentItem as { systemPromptInjection: string; prompt: string });
