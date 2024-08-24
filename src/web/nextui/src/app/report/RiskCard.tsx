@@ -156,15 +156,17 @@ const RiskCard: React.FC<{
             </List>
           </Grid>
         </Grid>
-        <RiskCategoryDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          category={selectedCategory}
-          failures={failuresByPlugin[selectedCategory] || []}
-          evalId={evalId}
-          numPassed={testTypes.find((t) => t.name === selectedCategory)?.numPassed || 0}
-          numFailed={testTypes.find((t) => t.name === selectedCategory)?.numFailed || 0}
-        />
+        {selectedCategory && (
+          <RiskCategoryDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            category={selectedCategory}
+            failures={failuresByPlugin[selectedCategory] || []}
+            evalId={evalId}
+            numPassed={testTypes.find((t) => t.name === selectedCategory)?.numPassed || 0}
+            numFailed={testTypes.find((t) => t.name === selectedCategory)?.numFailed || 0}
+          />
+        )}
       </CardContent>
     </Card>
   );

@@ -4,7 +4,6 @@ import Button from '@mui/material/Button';
 import Drawer from '@mui/material/Drawer';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
-import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import { categoryAliases } from './constants';
 import './RiskCategoryDrawer.css';
@@ -25,11 +24,26 @@ function getPromptDisplayString(prompt: string): string {
     if (Array.isArray(parsedPrompt)) {
       const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
       if (lastPrompt.content) {
-        return lastPrompt.content;
+        return lastPrompt.content || '-';
       }
     }
   } catch (e) {}
   return prompt;
+}
+
+function getOutputDisplayString(output: string | object): string {
+  if (typeof output === 'string') {
+    return output;
+  }
+  if (Array.isArray(output)) {
+    const items = output.filter((item) => item.type === 'function');
+    if (items.length > 0) {
+      return items
+        .map((item) => `${item.function?.name}: (${item.function?.arguments})`)
+        .join('\n');
+    }
+  }
+  return JSON.stringify(output);
 }
 
 const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
@@ -41,6 +55,12 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   numPassed,
   numFailed,
 }) => {
+  const categoryName = categoryAliases[category as keyof typeof categoryAliases];
+  if (!categoryName) {
+    console.error('[RiskCategoryDrawer] Could not load category', category);
+    return null;
+  }
+
   const totalTests = numPassed + numFailed;
   const passPercentage = totalTests > 0 ? Math.round((numPassed / totalTests) * 100) : 0;
 
@@ -49,7 +69,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
       <Drawer anchor="right" open={open} onClose={onClose}>
         <Box sx={{ width: 500, p: 2 }} className="risk-category-drawer">
           <Typography variant="h6" gutterBottom>
-            {categoryAliases[category as keyof typeof categoryAliases]}
+            {categoryName}
           </Typography>
           <Typography variant="body1" sx={{ mt: 2, textAlign: 'center' }}>
             No tests have been run for this category.
@@ -63,7 +83,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box sx={{ width: 500, p: 2 }} className="risk-category-drawer">
         <Typography variant="h6" gutterBottom>
-          {categoryAliases[category as keyof typeof categoryAliases]}
+          {categoryName}
         </Typography>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Box sx={{ textAlign: 'center', flex: 1 }}>
@@ -88,8 +108,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           color="inherit"
           fullWidth
           onClick={(event) => {
-            const descriptiveName = categoryAliases[category as keyof typeof categoryAliases];
-            const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${descriptiveName}|metric=${descriptiveName})`)}`;
+            const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${categoryName}|metric=${categoryName})`)}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {
@@ -112,7 +131,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
                       {getPromptDisplayString(failure.prompt)}
                     </Typography>
                     <Typography variant="body2" className="output">
-                      {failure.output}
+                      {getOutputDisplayString(failure.output)}
                     </Typography>
                   </Box>
                 </ListItem>

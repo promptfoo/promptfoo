@@ -31,8 +31,8 @@
 }
 
 .risk-category-drawer .failed-tests-header {
-  margin-top: 24px;
-  margin-bottom: 16px;
+  margin-top: 8px;
+  margin-bottom: 8px;
   font-weight: 500;
   border-top: 2px solid #e0e0e0;
   padding-top: 1.5rem;

@@ -31,9 +31,10 @@ const App: React.FC = () => {
   const categoryFailures = React.useMemo(() => {
     const failures: Record<string, { prompt: string; output: string }[]> = {};
     evalData?.results.results.forEach((result) => {
+      // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
       const pluginId =
-        result.metadata?.pluginId ||
-        categoryAliasesReverse[result.vars['harmCategory'] as keyof typeof categoryAliases];
+        categoryAliasesReverse[result.vars['harmCategory'] as keyof typeof categoryAliases] ||
+        categoryAliasesReverse[Object.keys(result.namedScores)[0]];
       if (!pluginId) {
         console.warn(`Could not get failures for plugin ${pluginId}`);
         return;
@@ -43,7 +44,8 @@ const App: React.FC = () => {
           failures[pluginId] = [];
         }
         failures[pluginId].push({
-          prompt: result.prompt.raw,
+          // FIXME(ian): Use injectVar (and contextVar), not hardcoded query
+          prompt: result.vars.query?.toString() || result.prompt.raw,
           output: result.response?.output,
         });
       }
