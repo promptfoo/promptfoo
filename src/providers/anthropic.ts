@@ -126,10 +126,7 @@ export function parseMessages(messages: string) {
   ]);
   // Convert from OpenAI to Anthropic format
   const systemMessage = chats.find((m) => m.role === 'system')?.content;
-  const system =
-    typeof systemMessage === 'string'
-      ? [{ type: 'text' as const, text: systemMessage }]
-      : systemMessage;
+  const system = typeof systemMessage === 'string' ? systemMessage : undefined;
   const extractedMessages: Anthropic.MessageParam[] = chats
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .map((m) => {
@@ -247,7 +244,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
 
     try {
       const response = await this.anthropic.messages.create(params, {
-        headers: this.config.headers,
+        ...(this.config.headers ? { headers: this.config.headers } : {}),
       });
 
       logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
