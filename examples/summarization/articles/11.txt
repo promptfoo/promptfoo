@@ -1,0 +1,56 @@
+Text-Only Version Go To Full Site
+
+NPR > Climate
+
+How hot is too hot? New weather forecasting tool can help figure that out
+By Alejandra Borunda
+
+Monday, April 22, 2024 • 8:10 PM EDT
+
+This summer, people across the U.S. will have a new way to keep track of dangerous heat headed their way through a new heat warning system called HeatRisk. The tool, developed by the Centers for Disease Control (CDC) and the National Oceanic and Atmospheric Administration (NOAA), will be used by National Weather Service offices across the country to give people an understanding of when heat goes from uncomfortable to dangerous.
+
+HeatRisk incorporates a host of factors that make heat dangerous to human health, beyond just temperature. It considers elements like humidity, which reduces people's ability to cool by sweating, and whether a 90-degree day comes in April versus July — hot weather is more dangerous early in the season before people's bodies have adjusted.
+
+"For the first time, we'll be able to know how hot is too hot for health, and not just today, but for the coming weeks," says Dr. Aaron Bernstein, director of the National Center for Environmental Health and a pediatrician.
+
+Hopefully, he says, the new tool will be easy to understand. It uses a color-coded scale from zero (green) to five (magenta). At zero, the heat conditions are likely not risky for most people. At 2, or yellow, risks are growing for those who are sensitive to heat—like children, or people with medical conditions that make them heat-sensitive. Four, or bright magenta, signals the heat could hurt nearly anyone. That threshold can be crossed when temperatures go above historical highs, or when extreme conditions stretch for several days in a row.
+
+The National Weather Service (NWS) will be able to issue HeatRisk warnings a full week ahead of dangerous heat. Climate change, driven primarily by human burning of fossil fuels, has increased the intensity, duration, and danger of heat waves across North America.
+
+That extra planning time "will be a game-changer," says John Balbus, director of the Office of Climate Change and Health Equity, an office within the Department of Health and Human Services. It will allow crucial extra time for cities to ramp up their emergency response plans and for individuals to think about how to protect themselves, he says.
+
+Why is a heat warning useful?
+
+When it gets hot, people end up in the emergency room—or even die. Last summer, the hottest ever recorded in many parts of the U.S., nearly 120,000 people went to the emergency room for heat-related concerns—nearly twice as many as in the previous two decades, on average.
+
+High temperatures are a major factor, but only part of the puzzle, says Ambarish Vaidyanathan, a researcher at the CDC who helped develop HeatRisk. Humidity matters too: when the air is saturated with water, people still sweat—but sweat droplets can't evaporate, so people can't cool down.
+
+Unusually high overnight temperatures prevent people from getting relief from the heat. People's past exposure to heat matters, too. The body can adjust to high heat up to a point, but that acclimatization takes time. So a 100-degree day in April poses more health risks than the same temperature in July because most people haven't had the time to adjust.
+
+Where people live, and what heat conditions they're used to, also play a role in their vulnerability to heat. "90 degrees in Miami is not the same as 90 degrees in Portland, Maine," says Dr. Mandy Cohen, director of the CDC.
+
+HeatRisk takes all of these factors into account. A town in Michigan, for example, might get a red, or level-3 warning, when the mercury reads 85 degrees Fahrenheit, but a town in Florida with similar conditions might only get a risk warning of yellow, or 1.
+
+Paul Charlton is an emergency medicine physician who works with rural communities in New Mexico. He thinks HeatRisk could be useful to his patients, emergency managers, and clinicians.
+
+"A lot of emergency departments would know how to care for one person that came in with heat stroke," he says. "But a lot of emergency departments would not be as well prepared to take care of ten or 50 or 100 or a thousand people that might be coming in." That could—and did—happen during really extreme heat, like the 2021 heat dome in the Pacific Northwest. Charlton says having a better risk forecast would give people like him invaluable time to plan and prepare for potentially catastrophic heat.
+
+Where did HeatRisk come from?
+
+Scientists at the National Weather Service and the CDC developed the tool. It was conceptualized a decade ago after some local weather bureaus in the western U.S. realized they needed a better way to warn people about upcoming heat waves.
+
+HeatRisk has been tested and refined over the years across the West since its inception in 2013. Now, school systems in California use it to decide when outdoor activities are safe. Maricopa County, which includes the Phoenix metro, has incorporated its use into its heat management plans.
+
+NWS and CDC scientists looked at heat-related deaths around the country and analyzed the weather conditions when people died. That allowed them to find links between people's risk of dying and heat-related factors like temperature, humidity, and how long heatwaves lasted for hundreds of places across the U.S. They used those relationships to predict how different hot-weather conditions will impact people's health in different parts of the country, at different times of year.
+
+In Phoenix, a recent analysis showed that about two-thirds of heat-related deaths happened on red or purple HeatRisk days, says Michael Staudenmaier, chief of science for the NWS's Western Regional Headquarters. But more than 30% of the heat-related deaths occurred in the yellow and orange categories when heat conditions were bad but not anywhere near record-breaking extremes, he says. It shows there is a "wide range of temperatures where heat-related impacts can occur," even in places well-accustomed to it.
+
+It shows that people can be vulnerable to heat illness or even death at levels much lower than they might think, Staudenmaier says.
+
+Topics
+
+News
+Culture
+Music
+Contact Us Terms of Use Permissions Privacy Policy
+© NPR

@@ -20,7 +20,7 @@ Promptfoo is a command-line tool that can help you run benchmarks across differe
 
 First, we'll initialize the project directory for the eval.
 
-```bash
+```sh
 npx promptfoo@latest init replicate-lifeboat-eval
 ```
 
@@ -41,7 +41,7 @@ providers:
   - id: openai:chat:meta/llama-2-70b-chat
     config:
       apiKey: 'your_replicate_api_key'
-      apiBaseUrl: https://openai-proxy.replicate.com
+      apiBaseUrl: https://openai-proxy.replicate.com/v1
       temperature: 0.01 # Llama requires non-zero temperature
       max_tokens: 512
 
@@ -93,13 +93,13 @@ Learn more about how to set up [assertions](/docs/configuration/expected-outputs
 
 Execute the comparison using the `promptfoo eval` command, which will run your test cases against each model and produce results.
 
-```bash
+```
 npx promptfoo@latest eval
 ```
 
 Then view the results in the web interface:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 
@@ -109,7 +109,7 @@ Which produces a nice browser side-by-side view like this:
 
 Or export them to a file:
 
-```bash
+```
 npx promptfoo@latest eval -o results.csv
 ```
 

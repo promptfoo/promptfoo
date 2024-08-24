@@ -1,12 +1,13 @@
-import { maybeEmitAzureOpenAiWarning } from '../src/providers/azureopenaiUtil';
 import { AzureOpenAiCompletionProvider } from '../src/providers/azureopenai';
-import { OpenAiCompletionProvider } from '../src/providers/openai';
-
-import type { TestSuite, TestCase } from '../src/types';
+import { maybeEmitAzureOpenAiWarning } from '../src/providers/azureopenaiUtil';
 import { HuggingfaceTextGenerationProvider } from '../src/providers/huggingface';
+import { OpenAiCompletionProvider } from '../src/providers/openai';
+import type { TestSuite, TestCase } from '../src/types';
+
+jest.mock('../src/logger');
 
 describe('maybeEmitAzureOpenAiWarning', () => {
-  test('should not emit warning when no Azure providers are used', () => {
+  it('should not emit warning when no Azure providers are used', () => {
     const testSuite: TestSuite = {
       providers: [new OpenAiCompletionProvider('foo')],
       defaultTest: {},
@@ -21,7 +22,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
     expect(result).toBe(false);
   });
 
-  test('should not emit warning when Azure provider is used alone, but no model graded eval', () => {
+  it('should not emit warning when Azure provider is used alone, but no model graded eval', () => {
     const testSuite: TestSuite = {
       providers: [new AzureOpenAiCompletionProvider('foo')],
       defaultTest: {},
@@ -36,7 +37,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
     expect(result).toBe(false);
   });
 
-  test('should emit warning when Azure provider is used alone, but with model graded eval', () => {
+  it('should emit warning when Azure provider is used alone, but with model graded eval', () => {
     const testSuite: TestSuite = {
       providers: [new AzureOpenAiCompletionProvider('foo')],
       defaultTest: {},
@@ -51,7 +52,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
     expect(result).toBe(true);
   });
 
-  test('should emit warning when Azure provider used with non-OpenAI provider', () => {
+  it('should emit warning when Azure provider used with non-OpenAI provider', () => {
     const testSuite: TestSuite = {
       providers: [
         new AzureOpenAiCompletionProvider('foo'),
@@ -69,7 +70,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
     expect(result).toBe(true);
   });
 
-  test('should not emit warning when Azure providers are used with a default provider set', () => {
+  it('should not emit warning when Azure providers are used with a default provider set', () => {
     const testSuite: TestSuite = {
       providers: [new AzureOpenAiCompletionProvider('foo')],
       defaultTest: { options: { provider: 'azureopenai:....' } },
@@ -84,7 +85,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
     expect(result).toBe(false);
   });
 
-  test('should not emit warning when both Azure and OpenAI providers are used', () => {
+  it('should not emit warning when both Azure and OpenAI providers are used', () => {
     const testSuite: TestSuite = {
       providers: [new AzureOpenAiCompletionProvider('foo'), new OpenAiCompletionProvider('bar')],
       defaultTest: {},

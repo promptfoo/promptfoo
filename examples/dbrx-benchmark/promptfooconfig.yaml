@@ -1,0 +1,46 @@
+prompts:
+  - 'Think deeply and answer concisely: {{query}}'
+
+providers:
+  - id: openrouter:databricks/dbrx-instruct
+    config:
+      temperature: 0
+  - id: openrouter:mistralai/mixtral-8x7b-instruct
+    config:
+      temperature: 0
+  - id: openai:gpt-3.5-turbo-0125
+    config:
+      temperature: 0
+
+tests:
+  - vars:
+      query: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'
+  - vars:
+      query: 'Explain the theory of relativity.'
+    assert:
+      - type: contains
+        value: 'Einstein'
+  - vars:
+      query: 'Write a poem about the sea.'
+    assert:
+      - type: llm-rubric
+        value: 'The poem should evoke imagery such as waves or the ocean.'
+  - vars:
+      query: 'What are the health benefits of eating apples?'
+    assert:
+      - type: contains
+        value: 'vitamin'
+  - vars:
+      query: "Translate 'Hello, how are you?' into Spanish."
+    assert:
+      - type: similar
+        value: 'Hola, ¿cómo estás?'
+  - vars:
+      query: 'Output a JSON list of colors'
+    assert:
+      - type: is-json
+      - type: latency
+        threshold: 5000

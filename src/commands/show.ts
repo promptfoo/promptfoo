@@ -1,48 +1,62 @@
 import chalk from 'chalk';
-import { Command } from 'commander';
-
-import { getEvalFromHash, getPromptFromHash, getDatasetFromHash, printBorder } from '../util';
-import { generateTable, wrapTable } from '../table';
+import type { Command } from 'commander';
 import logger from '../logger';
+import { generateTable, wrapTable } from '../table';
 import telemetry from '../telemetry';
+import {
+  getEvalFromId,
+  getPromptFromHash,
+  getDatasetFromHash,
+  printBorder,
+  setupEnv,
+} from '../util';
 
-export function showCommand(program: Command) {
-  const showCommand = program
-    .command('show <id>')
-    .description('Show details of a specific resource')
-    .action(async (id: string) => {
-      const evl = getEvalFromHash(id);
-      if (evl) {
-        return handleEval(id);
-      }
+async function handlePrompt(id: string) {
+  telemetry.maybeShowNotice();
+  telemetry.record('command_used', {
+    name: 'show prompt',
+  });
+  await telemetry.send();
 
-      const prompt = getPromptFromHash(id);
-      if (prompt) {
-        return handlePrompt(id);
-      }
+  const prompt = await getPromptFromHash(id);
+  if (!prompt) {
+    logger.error(`Prompt with ID ${id} not found.`);
+    return;
+  }
 
-      const dataset = getDatasetFromHash(id);
-      if (dataset) {
-        return handleDataset(id);
-      }
+  printBorder();
+  logger.info(chalk.cyan(prompt.prompt.raw));
+  printBorder();
+  logger.info(chalk.bold(`Prompt ${id}`));
+  printBorder();
 
-      logger.error(`No resource found with ID ${id}`);
+  logger.info(`This prompt is used in the following evals:`);
+  const table = [];
+  for (const evl of prompt.evals.sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10)) {
+    table.push({
+      'Eval ID': evl.id.slice(0, 6),
+      'Dataset ID': evl.datasetId.slice(0, 6),
+      'Raw score': evl.metrics?.score?.toFixed(2) || '-',
+      'Pass rate':
+        evl.metrics && evl.metrics.testPassCount + evl.metrics.testFailCount > 0
+          ? `${(
+              (evl.metrics.testPassCount /
+                (evl.metrics.testPassCount + evl.metrics.testFailCount)) *
+              100
+            ).toFixed(2)}%`
+          : '-',
+      'Pass count': evl.metrics?.testPassCount || '-',
+      'Fail count': evl.metrics?.testFailCount || '-',
     });
-
-  showCommand
-    .command('eval <id>')
-    .description('Show details of a specific evaluation')
-    .action(handleEval);
-
-  showCommand
-    .command('prompt <id>')
-    .description('Show details of a specific prompt')
-    .action(handlePrompt);
-
-  showCommand
-    .command('dataset <id>')
-    .description('Show details of a specific dataset')
-    .action(handleDataset);
+  }
+  logger.info(wrapTable(table));
+  printBorder();
+  logger.info(
+    `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
+  );
+  logger.info(
+    `Run ${chalk.green('promptfoo show dataset <id>')} to see details of a specific dataset.`,
+  );
 }
 
 async function handleEval(id: string) {
@@ -52,7 +66,7 @@ async function handleEval(id: string) {
   });
   await telemetry.send();
 
-  const evl = getEvalFromHash(id);
+  const evl = await getEvalFromId(id);
   if (!evl) {
     logger.error(`No evaluation found with ID ${id}`);
     return;
@@ -77,54 +91,6 @@ async function handleEval(id: string) {
   );
 }
 
-async function handlePrompt(id: string) {
-  telemetry.maybeShowNotice();
-  telemetry.record('command_used', {
-    name: 'show prompt',
-  });
-  await telemetry.send();
-
-  const prompt = getPromptFromHash(id);
-  if (!prompt) {
-    logger.error(`Prompt with ID ${id} not found.`);
-    return;
-  }
-
-  printBorder();
-  logger.info(chalk.cyan(prompt.prompt.raw));
-  printBorder();
-  logger.info(chalk.bold(`Prompt ${id}`));
-  printBorder();
-
-  logger.info(`This prompt is used in the following evals:`);
-  const table = [];
-  for (const evl of prompt.evals.sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10)) {
-    table.push({
-      'Eval ID': evl.id.slice(0, 6),
-      'Dataset ID': evl.datasetId.slice(0, 6),
-      'Raw score': evl.metrics?.score.toFixed(2) || '-',
-      'Pass rate':
-        evl.metrics && evl.metrics.testPassCount + evl.metrics.testFailCount > 0
-          ? `${(
-              (evl.metrics.testPassCount /
-                (evl.metrics.testPassCount + evl.metrics.testFailCount)) *
-              100
-            ).toFixed(2)}%`
-          : '-',
-      'Pass count': evl.metrics?.testPassCount || '-',
-      'Fail count': evl.metrics?.testFailCount || '-',
-    });
-  }
-  logger.info(wrapTable(table));
-  printBorder();
-  logger.info(
-    `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
-  );
-  logger.info(
-    `Run ${chalk.green('promptfoo show dataset <id>')} to see details of a specific dataset.`,
-  );
-}
-
 async function handleDataset(id: string) {
   telemetry.maybeShowNotice();
   telemetry.record('command_used', {
@@ -132,7 +98,7 @@ async function handleDataset(id: string) {
   });
   await telemetry.send();
 
-  const dataset = getDatasetFromHash(id);
+  const dataset = await getDatasetFromHash(id);
   if (!dataset) {
     logger.error(`Dataset with ID ${id} not found.`);
     return;
@@ -150,7 +116,7 @@ async function handleDataset(id: string) {
     table.push({
       'Eval ID': prompt.evalId.slice(0, 6),
       'Prompt ID': prompt.id.slice(0, 6),
-      'Raw score': prompt.prompt.metrics?.score.toFixed(2) || '-',
+      'Raw score': prompt.prompt.metrics?.score?.toFixed(2) || '-',
       'Pass rate':
         prompt.prompt.metrics &&
         prompt.prompt.metrics.testPassCount + prompt.prompt.metrics.testFailCount > 0
@@ -172,4 +138,51 @@ async function handleDataset(id: string) {
   logger.info(
     `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
   );
+}
+
+export async function showCommand(program: Command) {
+  const showCommand = program
+    .command('show <id>')
+    .description('Show details of a specific resource')
+    .option('--env-path <path>', 'Path to the environment file')
+    .action(async (id: string, cmdObj: { envPath?: string }) => {
+      setupEnv(cmdObj.envPath);
+      telemetry.maybeShowNotice();
+      telemetry.record('command_used', {
+        name: 'show',
+      });
+
+      await telemetry.send();
+      const evl = await getEvalFromId(id);
+      if (evl) {
+        return handleEval(id);
+      }
+
+      const prompt = await getPromptFromHash(id);
+      if (prompt) {
+        return handlePrompt(id);
+      }
+
+      const dataset = await getDatasetFromHash(id);
+      if (dataset) {
+        return handleDataset(id);
+      }
+
+      logger.error(`No resource found with ID ${id}`);
+    });
+
+  showCommand
+    .command('eval <id>')
+    .description('Show details of a specific evaluation')
+    .action(handleEval);
+
+  showCommand
+    .command('prompt <id>')
+    .description('Show details of a specific prompt')
+    .action(handlePrompt);
+
+  showCommand
+    .command('dataset <id>')
+    .description('Show details of a specific dataset')
+    .action(handleDataset);
 }

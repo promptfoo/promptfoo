@@ -10,15 +10,21 @@ import TabItem from '@theme/TabItem';
 
 To get started, run this command:
 
-<Tabs>
+<Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
       npx promptfoo@latest init
     </CodeBlock>
   </TabItem>
-  <TabItem value="npm" label="npm" default>
+  <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
       {`npm install -g promptfoo
+promptfoo init`}
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      {`brew install promptfoo
 promptfoo init`}
     </CodeBlock>
   </TabItem>
@@ -40,17 +46,18 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    ```yaml
    providers:
-     - openai:gpt-3.5-turbo
+     - openai:gpt-4o-mini
      - openai:gpt-4
    ```
 
    - **OpenAI**: if testing with an OpenAI model, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
 
-     ```bash
+     ```sh
      export OPENAI_API_KEY=sk-abc123
      ```
 
-   - **Others**: See setup instructions for [Azure](/docs/providers/azure), [Replicate](/docs/providers/replicate), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
+   - **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
+   - **APIs**: See setup instructions for [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
 
 1. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
 
@@ -72,17 +79,43 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
 1. **Run the evaluation**: This tests every prompt, model, and test case:
 
-   ```
-   npx promptfoo@latest eval
-   ```
+   <Tabs groupId="promptfoo-command">
+     <TabItem value="npx" label="npx" default>
+       <CodeBlock language="bash">
+         npx promptfoo@latest eval
+       </CodeBlock>
+     </TabItem>
+     <TabItem value="npm" label="npm">
+       <CodeBlock language="bash">
+         promptfoo eval
+       </CodeBlock>
+     </TabItem>
+     <TabItem value="brew" label="brew">
+       <CodeBlock language="bash">
+         promptfoo eval
+       </CodeBlock>
+     </TabItem>
+   </Tabs>
 
 1. After the evaluation is complete, open the web viewer to review the outputs:
 
-   ```
-   npx promptfoo@latest view
-   ```
-
-   [&raquo; More information on using the web viewer](/docs/usage/web-ui)
+   <Tabs groupId="promptfoo-command">
+     <TabItem value="npx" label="npx" default>
+       <CodeBlock language="bash">
+         npx promptfoo@latest view
+       </CodeBlock>
+     </TabItem>
+     <TabItem value="npm" label="npm">
+       <CodeBlock language="bash">
+         promptfoo view
+       </CodeBlock>
+     </TabItem>
+     <TabItem value="brew" label="brew">
+       <CodeBlock language="bash">
+         promptfoo view
+       </CodeBlock>
+     </TabItem>
+   </Tabs>
 
 ### Configuration
 
@@ -99,7 +132,7 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 
 ```yaml
 prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 tests:
   - description: First test case - automatic review
     vars:
@@ -128,7 +161,7 @@ tests:
       - type: contains-json
       - type: similar
         value: ensures that output is semantically similar to this text
-      - type: model-graded-closedqa
+      - type: llm-rubric
         value: must contain a reference to X
 ```
 
@@ -156,8 +189,8 @@ defaultTest:
     - type: not-contains
       value: AI language model
 
-    # Verify that the output doesn't apologize, using model-graded eval
-    - type: model-graded-closedqa
+    # Verify that the output doesn't apologize
+    - type: llm-rubric
       value: must not contain an apology
 
     # Prefer shorter outputs using a scoring function
@@ -188,46 +221,72 @@ A simple `npx promptfoo@latest eval` will run this example from the command line
 
 ![promptfoo command line](https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif)
 
-This command will evaluate the prompts, substituing variable values, and output the results in your terminal.
+This command will evaluate the prompts, substituting variable values, and output the results in your terminal.
 
 Have a look at the setup and full output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading).
 
-You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/typpo/promptfoo/blob/main/examples/simple-cli/output.json), YAML, or an HTML file:
+You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-cli/output.json), YAML, or an HTML file:
 
-```bash
-npx promptfoo@latest eval -o output.html
-```
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest eval -o output.html
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo eval -o output.html
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo eval -o output.html
+    </CodeBlock>
+  </TabItem>
+</Tabs>
 
 ![Table output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
 
 ### Model quality
 
-In [this next example](https://github.com/typpo/promptfoo/tree/main/examples/gpt-3.5-vs-4), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-vs-4), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
 
 ```yaml title=promptfooconfig.yaml
 prompts: [prompt1.txt, prompt2.txt]
 
 # Set the LLMs we want to test
-providers:
-  - openai:gpt-3.5-turbo
-  - openai:gpt-4
+providers: [openai:gpt-4o-mini, openai:gpt-4]
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
 
-```bash
-npx promptfoo@latest eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4 -o output.html
-```
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+    </CodeBlock>
+  </TabItem>
+</Tabs>
 
 Produces this HTML table:
 
 ![Side-by-side evaluation of LLM model quality, gpt3 vs gpt4, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
-Full setup and output [here](https://github.com/typpo/promptfoo/tree/main/examples/gpt-3.5-vs-4).
+Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-vs-4).
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
-- Compare same models with different temperatures (see [GPT 3.5 temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-temperature-comparison))
+- Compare same models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-temperature-comparison))
 - Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
 - Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](https://promptfoo.dev/docs/configuration/testing-llm-chains))
 

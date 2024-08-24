@@ -1,39 +1,203 @@
 name: CI
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   OPENAI_API_KEY: xxx
-  AZURE_OPENAI_API_HOST: xxx
   ANTHROPIC_API_KEY: xxx
+  AZURE_OPENAI_API_HOST: xxx
+  NEXT_TELEMETRY_DISABLED: 1
 jobs:
   build:
-    name: Build, lint, and test on Node ${{ matrix.node }} and ${{ matrix.os }}
-
+    name: Build and test on Node ${{ matrix.node }} and ${{ matrix.os }}
+    timeout-minutes: 12
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        node: ['16.x', '18.x', '20.x']
-        python: ['3.7']
+        # Temporarily disabled 22.x due to github runner compatibility issues
+        # TODO(Michael): Re-enable once issues are resolved, 2024-08-23
+        node: ['18.x', '20.x']
+        python: ['3.9']
         os: [ubuntu-latest, windows-latest, macOS-latest]
+        exclude:
+          # Remove when https://github.com/nodejs/node/issues/51766 is resolved
+          - node: '22.x'
+            os: windows-latest
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+          cache: 'npm'
 
       - name: Use Python ${{ matrix.python }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Install deps and build (with cache)
-        uses: bahmutov/npm-install@v1
+      - name: Install Dependencies
+        run: |
+          npm ci
 
       - name: Test
         run: npm run test --ci --coverage --maxWorkers=2
 
       - name: Build
         run: npm run build
+
+  style-check:
+    name: Style Check
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Lint Project
+        run: |
+          npm run lint
+
+      - name: Lint UI
+        working-directory: src/web/nextui
+        run: |
+          npm run lint
+
+      - name: Run Style Check
+        run: |
+          npm run format:check
+
+      - name: Check Dependency Versions
+        run: |
+          npm exec check-dependency-version-consistency
+
+      - name: Check for circular dependencies
+        run: npx madge $(git ls-files '*.ts') --circular
+
+  assets:
+    name: Generate Assets
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Generate JSON Schema
+        run: npm run jsonSchema:generate
+
+      - name: Check for changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Changes detected after generating assets:"
+            git status --porcelain
+            exit 1
+          else
+            echo "No changes detected."
+          fi
+
+  python:
+    name: Check Python
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.12]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Dependencies
+        run: |
+          pip install ruff
+
+      - name: Check Formatting
+        run: |
+          ruff check --select I --fix
+          ruff format
+          git diff --exit-code || (echo "Files were modified by ruff. Please commit these changes." && exit 1)
+
+      - name: Run Tests
+        run: |
+          python -m unittest discover -s src/python -p '*_test.py'
+
+  docs:
+    name: Build Docs
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        working-directory: site
+        run: npm install
+
+      - name: Type Check
+        working-directory: site
+        run: npm run typecheck
+
+      - name: Build Documentation
+        working-directory: site
+        run: npm run build
+
+  webui:
+    name: webui tests
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Vitest
+        run: npm run test:webui

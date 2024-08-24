@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import winston from 'winston';
+import { getEnvString } from './envars';
 
 export const LOG_LEVELS = {
   error: 0,
@@ -26,7 +27,7 @@ const logger = winston.createLogger({
   format: winston.format.combine(winston.format.simple(), customFormatter),
   transports: [
     new winston.transports.Console({
-      level: process.env.LOG_LEVEL || 'info',
+      level: getEnvString('LOG_LEVEL', 'info'),
     }),
   ],
 });
@@ -36,7 +37,7 @@ export function getLogLevel() {
 }
 
 export function setLogLevel(level: keyof typeof LOG_LEVELS) {
-  if (LOG_LEVELS.hasOwnProperty(level)) {
+  if (level in LOG_LEVELS) {
     logger.transports[0].level = level;
   } else {
     throw new Error(`Invalid log level: ${level}`);

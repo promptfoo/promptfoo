@@ -3,7 +3,7 @@ body {
   color: var(--text-color);
 }
 
-.loading {
+.notice {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;

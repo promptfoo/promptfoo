@@ -2,7 +2,7 @@
 - type: icontains
   value: hello
 - type: javascript
-  value: 1 / (output.length + 1)  # prefer shorter outputs
+  value: 1 / (output.length + 1) # prefer shorter outputs
 
 # For more information on model-graded evals, see https://promptfoo.dev/docs/configuration/expected-outputs/model-graded
 - type: model-graded-closedqa

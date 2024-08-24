@@ -1,0 +1,11 @@
+description: 'Portkey.ai prompt integration'
+
+prompts:
+  - 'portkey://pp-test-promp-669f48'
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  - vars:
+      topic: bananas

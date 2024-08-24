@@ -9,6 +9,9 @@ primary_region = "sjc"
 [env]
   NODE_ENV = "production"
 
+[build.args]
+  NEXT_PUBLIC_PROMPTFOO_USE_SUPABASE = "1"
+
 [build]
 
 [http_service]

@@ -1,10 +1,8 @@
 import invariant from 'tiny-invariant';
 import logger from './logger';
-import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
-import { getNunjucksEngine } from './util';
-import { loadApiProvider } from './providers';
 import {
   ANSWER_RELEVANCY_GENERATE,
+  SELECT_BEST_PROMPT,
   CONTEXT_FAITHFULNESS_LONGFORM,
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
@@ -15,17 +13,23 @@ import {
   OPENAI_CLOSED_QA_PROMPT,
   OPENAI_FACTUALITY_PROMPT,
 } from './prompts';
-
+import { loadApiProvider } from './providers';
+import { getDefaultProviders } from './providers/defaults';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
   ApiProvider,
+  ApiSimilarityProvider,
   GradingConfig,
   GradingResult,
   ProviderOptions,
   ProviderTypeMap,
   TokenUsage,
+  ProviderType,
+  ApiModerationProvider,
 } from './types';
+import { extractJsonObjects } from './util';
+import { getNunjucksEngine } from './util/templates';
 
 const nunjucks = getNunjucksEngine();
 
@@ -49,7 +53,7 @@ function fromVars(vars?: Record<string, string | object>) {
     if (typeof value === 'object') {
       ret[key] = JSON.stringify(value);
     } else {
-      ret[key] = value;
+      ret[key] = JSON.stringify(value).slice(1, -1);
     }
   }
 
@@ -71,7 +75,7 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
 }
 
 export async function getGradingProvider(
-  type: 'embedding' | 'classification' | 'text',
+  type: ProviderType,
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider | null,
 ): Promise<ApiProvider | null> {
@@ -90,9 +94,21 @@ export async function getGradingProvider(
     } else if ((provider as ProviderOptions).id) {
       // Defined as ProviderOptions
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
+    } else if (Array.isArray(provider)) {
+      throw new Error(
+        `Provider must be an object or string, but received an array.\n\nCheck that the provider ${JSON.stringify(
+          provider[0],
+          null,
+          2,
+        )} is not nested in an array.`,
+      );
     } else {
       throw new Error(
-        `Invalid provider definition for output type '${type}': ${JSON.stringify(provider, null, 2)}`,
+        `Invalid provider definition for output type '${type}': ${JSON.stringify(
+          provider,
+          null,
+          2,
+        )}`,
       );
     }
   } else {
@@ -102,41 +118,45 @@ export async function getGradingProvider(
 }
 
 export async function getAndCheckProvider(
-  type: 'embedding' | 'classification' | 'text',
+  type: ProviderType,
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider | null,
   checkName: string,
 ): Promise<ApiProvider> {
-  let finalProvider = await getGradingProvider(type, provider, defaultProvider);
-
-  let requiredMethod = 'callApi';
-  if (type === 'embedding') {
-    requiredMethod = 'callEmbeddingApi';
-  } else if (type === 'classification') {
-    requiredMethod = 'callClassificationApi';
+  const matchedProvider = await getGradingProvider(type, provider, defaultProvider);
+  if (!matchedProvider) {
+    if (defaultProvider) {
+      logger.warn(`No provider of type ${type} found for '${checkName}', falling back to default`);
+      return defaultProvider;
+    } else {
+      throw new Error(`No provider of type ${type} found for '${checkName}'`);
+    }
   }
 
-  invariant(finalProvider, `No provider found for '${checkName}'`);
-  if (typeof (finalProvider as any)[requiredMethod] !== 'function') {
+  let isValidProviderType = true;
+  if (type === 'embedding') {
+    isValidProviderType =
+      'callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider;
+  } else if (type === 'classification') {
+    isValidProviderType = 'callClassificationApi' in matchedProvider;
+  } else if (type === 'moderation') {
+    isValidProviderType = 'callModerationApi' in matchedProvider;
+  }
+
+  if (!isValidProviderType) {
     if (defaultProvider) {
-      console.warn(
-        `Provider ${finalProvider.id()} does not implement ${requiredMethod} for '${checkName}', falling back to default`,
+      logger.warn(
+        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}', falling back to default`,
       );
       return defaultProvider;
     } else {
       throw new Error(
-        `Provider ${finalProvider.id()} must implement ${requiredMethod} for '${checkName}'`,
+        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
       );
     }
   }
 
-  invariant(finalProvider, `No provider found for ${checkName}`);
-  invariant(
-    typeof (finalProvider as any)[requiredMethod] === 'function',
-    `Provider ${finalProvider.id()} must implement ${requiredMethod} for '${checkName}'`,
-  );
-
-  return finalProvider;
+  return matchedProvider;
 }
 
 function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingResult, 'assertion'> {
@@ -148,6 +168,7 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
       total: tokensUsed?.total || 0,
       prompt: tokensUsed?.prompt || 0,
       completion: tokensUsed?.completion || 0,
+      cached: tokensUsed?.cached || 0,
     },
   };
 }
@@ -159,37 +180,67 @@ export async function matchesSimilarity(
   inverse: boolean = false,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let finalProvider = (await getAndCheckProvider(
+  const finalProvider = (await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    DefaultEmbeddingProvider,
+    (await getDefaultProviders()).embeddingProvider,
     'similarity check',
-  )) as ApiEmbeddingProvider;
+  )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
-  const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
-  const outputEmbedding = await finalProvider.callEmbeddingApi(output);
-
-  const tokensUsed = {
-    total: (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0),
-    prompt: (expectedEmbedding.tokenUsage?.prompt || 0) + (outputEmbedding.tokenUsage?.prompt || 0),
-    completion:
-      (expectedEmbedding.tokenUsage?.completion || 0) +
-      (outputEmbedding.tokenUsage?.completion || 0),
+  let similarity: number;
+  let tokensUsed: TokenUsage = {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    cached: 0,
   };
 
-  if (expectedEmbedding.error || outputEmbedding.error) {
-    return fail(
-      expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
-      tokensUsed,
-    );
-  }
+  if ('callSimilarityApi' in finalProvider) {
+    const similarityResp = await finalProvider.callSimilarityApi(expected, output);
+    tokensUsed = {
+      ...tokensUsed,
+      ...similarityResp.tokenUsage,
+    };
+    if (similarityResp.error) {
+      return fail(similarityResp.error, tokensUsed);
+    }
+    if (similarityResp.similarity == null) {
+      return fail('Unknown error fetching similarity', tokensUsed);
+    }
+    similarity = similarityResp.similarity;
+  } else if ('callEmbeddingApi' in finalProvider) {
+    const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
+    const outputEmbedding = await finalProvider.callEmbeddingApi(output);
 
-  if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
-    return fail('Embedding not found', tokensUsed);
-  }
+    tokensUsed = {
+      total: (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0),
+      prompt:
+        (expectedEmbedding.tokenUsage?.prompt || 0) + (outputEmbedding.tokenUsage?.prompt || 0),
+      completion:
+        (expectedEmbedding.tokenUsage?.completion || 0) +
+        (outputEmbedding.tokenUsage?.completion || 0),
+      cached:
+        (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0),
+    };
 
-  const similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
-  const pass = inverse ? similarity <= threshold : similarity >= threshold;
+    if (expectedEmbedding.error || outputEmbedding.error) {
+      return fail(
+        expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
+        tokensUsed,
+      );
+    }
+
+    if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
+      return fail('Embedding not found', tokensUsed);
+    }
+
+    similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+  } else {
+    throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
+  }
+  const pass = inverse
+    ? similarity <= threshold + Number.EPSILON
+    : similarity >= threshold - Number.EPSILON;
   const greaterThanReason = `Similarity ${similarity.toFixed(
     2,
   )} is greater than threshold ${threshold}`;
@@ -210,13 +261,21 @@ export async function matchesSimilarity(
   };
 }
 
+/**
+ *
+ * @param expected Expected classification. If undefined, matches any classification.
+ * @param output Text to classify.
+ * @param threshold Value between 0 and 1. If the expected classification is undefined, the threshold is the minimum score for any classification. If the expected classification is defined, the threshold is the minimum score for that classification.
+ * @param grading
+ * @returns Pass if the output matches the classification with a score greater than or equal to the threshold.
+ */
 export async function matchesClassification(
-  expected: string,
+  expected: string | undefined,
   output: string,
   threshold: number,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let finalProvider = (await getAndCheckProvider(
+  const finalProvider = (await getAndCheckProvider(
     'classification',
     grading?.provider,
     null,
@@ -228,25 +287,34 @@ export async function matchesClassification(
   if (!resp.classification) {
     return fail(resp.error || 'Unknown error fetching classification');
   }
+  let score;
+  if (expected === undefined) {
+    score = Math.max(...Object.values(resp.classification));
+  } else {
+    score = resp.classification[expected] || 0;
+  }
 
-  const score = resp.classification[expected] || 0;
-  if (score >= threshold) {
+  if (score >= threshold - Number.EPSILON) {
+    const reason =
+      expected === undefined
+        ? `Maximum classification score ${score.toFixed(2)} >= ${threshold}`
+        : `Classification ${expected} has score ${score.toFixed(2)} >= ${threshold}`;
     return {
       pass: true,
       score,
-      reason: `Classification ${expected} has score ${score} >= ${threshold}`,
+      reason,
     };
   }
   return {
     pass: false,
     score,
-    reason: `Classification ${expected} has score ${score} < ${threshold}`,
+    reason: `Classification ${expected} has score ${score.toFixed(2)} < ${threshold}`,
   };
 }
 
 export async function matchesLlmRubric(
-  expected: string,
-  output: string,
+  rubric: string,
+  llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
@@ -256,16 +324,21 @@ export async function matchesLlmRubric(
     );
   }
 
-  const prompt = nunjucks.renderString(grading.rubricPrompt || DEFAULT_GRADING_PROMPT, {
-    output: JSON.stringify(output).slice(1, -1),
-    rubric: JSON.stringify(expected).slice(1, -1),
+  const rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
+  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const prompt = nunjucks.renderString(rubricPrompt, {
+    output: JSON.stringify(llmOutput).slice(1, -1),
+    rubric: JSON.stringify(rubric).slice(1, -1),
     ...fromVars(vars),
   });
 
-  let finalProvider = await getAndCheckProvider(
+  const defaultProviders = await getDefaultProviders();
+  const defaultProvider =
+    defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
+  const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    DefaultGradingProvider,
+    defaultProvider,
     'llm-rubric check',
   );
   const resp = await finalProvider.callApi(prompt);
@@ -275,7 +348,11 @@ export async function matchesLlmRubric(
 
   invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
   try {
-    const parsed = JSON.parse(resp.output) as Partial<GradingResult>;
+    const jsonObjects = extractJsonObjects(resp.output);
+    if (jsonObjects.length === 0) {
+      return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
+    }
+    const parsed = jsonObjects[0] as Partial<GradingResult>;
     const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
     return {
       pass,
@@ -285,10 +362,14 @@ export async function matchesLlmRubric(
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        cached: resp.tokenUsage?.cached || 0,
       },
     };
   } catch (err) {
-    return fail(`llm-rubric produced malformed response: ${resp.output}`, resp.tokenUsage);
+    return fail(
+      `llm-rubric produced malformed response: ${err}\n\n${resp.output}`,
+      resp.tokenUsage,
+    );
   }
 }
 
@@ -305,17 +386,19 @@ export async function matchesFactuality(
     );
   }
 
-  const prompt = nunjucks.renderString(grading.rubricPrompt || OPENAI_FACTUALITY_PROMPT, {
+  const rubricPrompt = grading?.rubricPrompt || OPENAI_FACTUALITY_PROMPT;
+  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const prompt = nunjucks.renderString(rubricPrompt, {
     input: JSON.stringify(input).slice(1, -1),
     ideal: JSON.stringify(expected).slice(1, -1),
     completion: JSON.stringify(output).slice(1, -1),
     ...fromVars(vars),
   });
 
-  let finalProvider = await getAndCheckProvider(
+  const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    DefaultGradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'factuality check',
   );
   const resp = await finalProvider.callApi(prompt);
@@ -325,7 +408,17 @@ export async function matchesFactuality(
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
   try {
-    const option = resp.output.trim().charAt(1); // Extract the option character
+    const output = resp.output;
+    // The preferred output starts like "(A)...", but we also support leading whitespace, lowercase letters, and omitting the first parenthesis.
+    const answerMatch = output.match(/\s*\(?([a-eA-E])\)/);
+    if (!answerMatch) {
+      return fail(
+        `Factuality checker output did not match expected format: ${output}`,
+        resp.tokenUsage,
+      );
+    }
+    const option = answerMatch[1].toUpperCase();
+
     let reason = '';
 
     const scoreLookup: Record<string, number> = {
@@ -352,7 +445,7 @@ export async function matchesFactuality(
       reason = optionReasons[option];
     } else {
       pass = false;
-      reason = `Invalid option: ${option}`;
+      reason = `Invalid option: ${option}. Full response from factuality checker: ${resp.output}`;
     }
 
     let score = pass ? 1 : 0;
@@ -368,6 +461,7 @@ export async function matchesFactuality(
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        cached: resp.tokenUsage?.cached || 0,
       },
     };
   } catch (err) {
@@ -388,17 +482,19 @@ export async function matchesClosedQa(
     );
   }
 
-  const prompt = nunjucks.renderString(grading.rubricPrompt || OPENAI_CLOSED_QA_PROMPT, {
+  const rubricPrompt = grading?.rubricPrompt || OPENAI_CLOSED_QA_PROMPT;
+  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const prompt = nunjucks.renderString(rubricPrompt, {
     input: JSON.stringify(input).slice(1, -1),
     criteria: JSON.stringify(expected).slice(1, -1),
     completion: JSON.stringify(output).slice(1, -1),
     ...fromVars(vars),
   });
 
-  let finalProvider = await getAndCheckProvider(
+  const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    DefaultGradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'model-graded-closedqa check',
   );
   const resp = await finalProvider.callApi(prompt);
@@ -408,11 +504,11 @@ export async function matchesClosedQa(
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
   try {
-    const pass = resp.output.endsWith('Y');
+    const pass = resp.output.trimEnd().endsWith('Y');
     let reason;
     if (pass) {
       reason = 'The submission meets the criterion';
-    } else if (resp.output.endsWith('N')) {
+    } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
       reason = `Model grader produced a malformed response:\n${resp.output}`;
@@ -425,6 +521,7 @@ export async function matchesClosedQa(
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        cached: resp.tokenUsage?.cached || 0,
       },
     };
   } catch (err) {
@@ -438,16 +535,16 @@ export async function matchesAnswerRelevance(
   threshold: number,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let embeddingProvider = await getAndCheckProvider(
+  const embeddingProvider = await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    DefaultEmbeddingProvider,
+    (await getDefaultProviders()).embeddingProvider,
     'answer relevancy check',
   );
-  let textProvider = await getAndCheckProvider(
+  const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    DefaultGradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'answer relevancy check',
   );
 
@@ -455,24 +552,23 @@ export async function matchesAnswerRelevance(
     total: 0,
     prompt: 0,
     completion: 0,
+    cached: 0,
   };
 
   const candidateQuestions: string[] = [];
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
-    const resp = await textProvider.callApi(
-      JSON.stringify([
-        ANSWER_RELEVANCY_GENERATE,
-        {
-          role: 'user',
-          content: output,
-        },
-      ]),
-    );
+    const rubricPrompt = grading?.rubricPrompt || ANSWER_RELEVANCY_GENERATE;
+    invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+    const promptText = nunjucks.renderString(rubricPrompt, {
+      answer: JSON.stringify(output).slice(1, -1),
+    });
+    const resp = await textProvider.callApi(promptText);
     if (resp.error || !resp.output) {
       tokensUsed.total += resp.tokenUsage?.total || 0;
       tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
       tokensUsed.completion += resp.tokenUsage?.completion || 0;
+      tokensUsed.cached += resp.tokenUsage?.cached || 0;
       return fail(resp.error || 'No output', tokensUsed);
     }
 
@@ -493,6 +589,7 @@ export async function matchesAnswerRelevance(
     tokensUsed.total += inputEmbeddingResp.tokenUsage?.total || 0;
     tokensUsed.prompt += inputEmbeddingResp.tokenUsage?.prompt || 0;
     tokensUsed.completion += inputEmbeddingResp.tokenUsage?.completion || 0;
+    tokensUsed.cached += inputEmbeddingResp.tokenUsage?.cached || 0;
     return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
   const inputEmbedding = inputEmbeddingResp.embedding;
@@ -503,6 +600,7 @@ export async function matchesAnswerRelevance(
     tokensUsed.total += resp.tokenUsage?.total || 0;
     tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
     tokensUsed.completion += resp.tokenUsage?.completion || 0;
+    tokensUsed.cached += resp.tokenUsage?.cached || 0;
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
     }
@@ -510,7 +608,7 @@ export async function matchesAnswerRelevance(
   }
 
   const similarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
-  const pass = similarity >= threshold;
+  const pass = similarity >= threshold - Number.EPSILON;
   const greaterThanReason = `Relevance ${similarity.toFixed(
     2,
   )} is greater than threshold ${threshold}`;
@@ -538,14 +636,16 @@ export async function matchesContextRecall(
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let textProvider = await getAndCheckProvider(
+  const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    DefaultGradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'context recall check',
   );
 
-  const promptText = nunjucks.renderString(CONTEXT_RECALL, {
+  const rubricPrompt = grading?.rubricPrompt || CONTEXT_RECALL;
+  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const promptText = nunjucks.renderString(rubricPrompt, {
     context: JSON.stringify(context).slice(1, -1),
     groundTruth: JSON.stringify(groundTruth).slice(1, -1),
     ...fromVars(vars),
@@ -563,7 +663,7 @@ export async function matchesContextRecall(
     0,
   );
   const score = numerator / sentences.length;
-  const pass = score >= threshold;
+  const pass = score >= threshold - Number.EPSILON;
   return {
     pass,
     score,
@@ -574,6 +674,7 @@ export async function matchesContextRecall(
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
     },
   };
 }
@@ -584,16 +685,18 @@ export async function matchesContextRelevance(
   threshold: number,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let textProvider = await getAndCheckProvider(
+  const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    DefaultGradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'context relevance check',
   );
 
-  const promptText = nunjucks.renderString(CONTEXT_RELEVANCE, {
+  const rubricPrompt = grading?.rubricPrompt || CONTEXT_RELEVANCE;
+  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const promptText = nunjucks.renderString(rubricPrompt, {
     context: JSON.stringify(context).slice(1, -1),
-    question: JSON.stringify(question).slice(1, -1),
+    query: JSON.stringify(question).slice(1, -1),
   });
 
   const resp = await textProvider.callApi(promptText);
@@ -608,7 +711,7 @@ export async function matchesContextRelevance(
     0,
   );
   const score = numerator / sentences.length;
-  const pass = score >= threshold;
+  const pass = score >= threshold - Number.EPSILON;
   return {
     pass,
     score,
@@ -619,6 +722,7 @@ export async function matchesContextRelevance(
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
     },
   };
 }
@@ -631,14 +735,26 @@ export async function matchesContextFaithfulness(
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let textProvider = await getAndCheckProvider(
+  const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    DefaultGradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'faithfulness check',
   );
 
-  let promptText = nunjucks.renderString(CONTEXT_FAITHFULNESS_LONGFORM, {
+  if (grading?.rubricPrompt) {
+    invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
+  }
+  const longformPrompt: string =
+    (typeof grading?.rubricPrompt?.[0] === 'string'
+      ? grading?.rubricPrompt?.[0]
+      : grading?.rubricPrompt?.[0].content) || CONTEXT_FAITHFULNESS_LONGFORM;
+  const nliPrompt: string =
+    (typeof grading?.rubricPrompt?.[1] === 'string'
+      ? grading?.rubricPrompt?.[1]
+      : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
+
+  let promptText = nunjucks.renderString(longformPrompt, {
     question: JSON.stringify(query).slice(1, -1),
     answer: JSON.stringify(output).slice(1, -1),
     ...fromVars(vars),
@@ -651,8 +767,8 @@ export async function matchesContextFaithfulness(
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
-  let statements = resp.output.split('\n');
-  promptText = nunjucks.renderString(CONTEXT_FAITHFULNESS_NLI_STATEMENTS, {
+  const statements = resp.output.split('\n');
+  promptText = nunjucks.renderString(nliPrompt, {
     context: JSON.stringify(context).slice(1, -1),
     statements: JSON.stringify(statements.join('\n')).slice(1, -1),
     ...fromVars(vars),
@@ -678,7 +794,7 @@ export async function matchesContextFaithfulness(
     score = (verdicts.split('verdict: no').length - 1) / statements.length;
   }
   score = 1 - score;
-  let pass = score >= threshold;
+  const pass = score >= threshold - Number.EPSILON;
   return {
     pass,
     score,
@@ -689,6 +805,126 @@ export async function matchesContextFaithfulness(
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
     },
+  };
+}
+
+export async function matchesSelectBest(
+  criteria: string,
+  outputs: string[],
+  grading?: GradingConfig,
+  vars?: Record<string, string | object>,
+): Promise<Omit<GradingResult, 'assertion'>[]> {
+  invariant(
+    outputs.length >= 2,
+    'select-best assertion must have at least two outputs to compare between',
+  );
+  const textProvider = await getAndCheckProvider(
+    'text',
+    grading?.provider,
+    (await getDefaultProviders()).gradingProvider,
+    'select-best check',
+  );
+
+  const rubricPrompt = grading?.rubricPrompt || SELECT_BEST_PROMPT;
+  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const promptText = nunjucks.renderString(rubricPrompt, {
+    criteria: JSON.stringify(criteria).slice(1, -1),
+    outputs: outputs.map((output) => JSON.stringify(output).slice(1, -1)),
+    ...fromVars(vars),
+  });
+
+  const resp = await textProvider.callApi(promptText);
+  if (resp.error || !resp.output) {
+    return new Array(outputs.length).fill(fail(resp.error || 'No output', resp.tokenUsage));
+  }
+
+  invariant(typeof resp.output === 'string', 'select-best produced malformed response');
+
+  const firstDigitMatch = resp.output.trim().match(/\d/);
+  const verdict = firstDigitMatch ? Number.parseInt(firstDigitMatch[0], 10) : Number.NaN;
+
+  if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
+    return new Array(outputs.length).fill(fail(`Invalid select-best verdict: ${verdict}`));
+  }
+
+  const tokensUsed = {
+    total: resp.tokenUsage?.total || 0,
+    prompt: resp.tokenUsage?.prompt || 0,
+    completion: resp.tokenUsage?.completion || 0,
+    cached: resp.tokenUsage?.cached || 0,
+  };
+  return outputs.map((output, index) => {
+    if (index === verdict) {
+      return {
+        pass: true,
+        score: 1,
+        reason: `Output selected as the best: ${criteria}`,
+        tokensUsed,
+      };
+    } else {
+      return {
+        pass: false,
+        score: 0,
+        reason: `Output not selected: ${criteria}`,
+        tokensUsed,
+      };
+    }
+  });
+}
+
+interface ModerationMatchOptions {
+  userPrompt: string;
+  assistantResponse: string;
+  categories?: string[];
+}
+
+export async function matchesModeration(
+  { userPrompt, assistantResponse, categories = [] }: ModerationMatchOptions,
+  grading?: GradingConfig,
+) {
+  const moderationProvider = (await getAndCheckProvider(
+    'moderation',
+    grading?.provider,
+    (await getDefaultProviders()).moderationProvider,
+    'moderation check',
+  )) as ApiModerationProvider;
+
+  invariant(moderationProvider, 'Moderation provider must be defined');
+
+  const resp = await moderationProvider.callModerationApi(userPrompt, assistantResponse);
+  if (resp.error) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Moderation API error: ${resp.error}`,
+    };
+  }
+
+  const { flags } = resp;
+  if (!flags || flags.length === 0) {
+    return {
+      pass: true,
+      score: 1,
+      reason: 'No moderation flags detected',
+    };
+  }
+  const filteredFlags =
+    categories.length === 0 ? flags : flags.filter((flag) => categories.includes(flag.code));
+  if (filteredFlags.length > 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Moderation flags detected: ${filteredFlags
+        .map((flag) => flag.description)
+        .join(', ')}`,
+    };
+  }
+
+  return {
+    pass: true,
+    score: 1,
+    reason: 'No relevant moderation flags detected',
   };
 }

@@ -1,16 +1,14 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import { useRouter } from 'next/navigation';
-
 import { supabase } from '@/supabase-client';
-
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import type { User } from '@supabase/auth-helpers-nextjs';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function Login() {
   const router = useRouter();
@@ -22,7 +20,7 @@ export default function Login() {
   const [user, setUser] = React.useState<User | null>(null);
 
   const fetchUser = React.useCallback(async () => {
-    const { data, error } = await supabase.auth.refreshSession();
+    const { data } = await supabase.auth.refreshSession();
     if (data) {
       setUser(data.user);
     }
@@ -39,7 +37,7 @@ export default function Login() {
     event.preventDefault();
 
     if (!user) {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {

@@ -4,23 +4,21 @@ sidebar_position: 1
 
 # OpenAI
 
-To use the OpenAI API, set the `OPENAI_API_KEY` environment variable,
-specify via `apiKey` field in the configuration file,
-or pass the API key as an argument to the constructor.
+To use the OpenAI API, set the `OPENAI_API_KEY` environment variable, specify via `apiKey` field in the configuration file or pass the API key as an argument to the constructor.
 
 Example:
 
-```bash
+```sh
 export OPENAI_API_KEY=your_api_key_here
 ```
 
 The OpenAI provider supports the following model formats:
 
-- `openai:chat` - defaults to `gpt-3.5-turbo`
+- `openai:chat` - defaults to `gpt-4o-mini`
 - `openai:completion` - defaults to `text-davinci-003`
 - `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
 - `openai:chat:<model name>` - uses any model name against the `/v1/chat/completions` endpoint
-- `openai:chat:ft:gpt-3.5-turbo-0613:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:chat:ft:gpt-4o-mini:company-name:ID` - example of a fine-tuned chat completion model
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:assistant:<assistant id>` - use an assistant
@@ -34,7 +32,7 @@ The OpenAI provider supports a handful of [configuration options](https://github
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: openai:gpt-3.5-turbo
+  - id: openai:gpt-4o-mini
     config:
       temperature: 0
       max_tokens: 1024
@@ -42,23 +40,7 @@ providers:
 
 ## Formatting chat messages
 
-The [prompt file](/docs/configuration/parameters#prompt-files) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
-
-```json
-[
-  { "role": "system", "content": "You are a helpful assistant." },
-  { "role": "user", "content": "Who won the world series in {{ year }}?" }
-]
-```
-
-Equivalent yaml is also supported:
-
-```yaml
-- role: system
-  content: You are a helpful assistant.
-- role: user
-  content: Who won the world series in {{ year }}?
-```
+For information on setting up chat conversation, see [chat threads](/docs/configuration/chat).
 
 ## Configuring parameters
 
@@ -66,7 +48,7 @@ The `providers` list takes a `config` key that allows you to set parameters like
 
 ```yaml
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     config:
       temperature: 0
       max_tokens: 128
@@ -91,10 +73,12 @@ Supported parameters include:
 | `stop`              | Defines a list of tokens that signal the end of the output.                                                                                                     |
 | `response_format`   | Response format restrictions.                                                                                                                                   |
 | `seed`              | Seed used for deterministic output. Defaults to 0                                                                                                               |
-| `apiKey`            | Your OpenAI API key.                                                                                                                                            |
+| `apiKey`            | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                        |
+| `apiKeyEnvar`       | An environment variable that contains the API key                                                                                                               |
 | `apiHost`           | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
-| `apiBaseUrl`        | The base URL of the OpenAI API, please also read `OPENAI_API_BASE_URL` below.                                                                                   |
+| `apiBaseUrl`        | The base URL of the OpenAI API, please also read `OPENAI_BASE_URL` below.                                                                                       |
 | `organization`      | Your OpenAI organization key.                                                                                                                                   |
+| `headers`           | Additional headers to include in the request.                                                                                                                   |
 
 Here are the type declarations of `config` parameters:
 
@@ -107,262 +91,105 @@ interface OpenAiConfig {
   frequency_penalty?: number;
   presence_penalty?: number;
   best_of?: number;
-  functions?: {
-    name: string;
-    description?: string;
-    parameters: any;
-  }[];
+  functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: {
-    type: string;
-    function: {
-      name: string;
-      description?: string;
-      parameters: any;
-    };
-  }[];
-  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
+  tools?: OpenAiTool[];
+  tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
+  response_format?: { type: 'json_object' | 'json_schema'; json_schema?: object };
   stop?: string[];
-  response_format?: { type: string };
   seed?: number;
+  passthrough?: object;
+
+  // Function tool callbacks
+  functionToolCallbacks?: Record<
+    OpenAI.FunctionDefinition['name'],
+    (arg: string) => Promise<string>
+  >;
 
   // General OpenAI parameters
   apiKey?: string;
+  apiKeyEnvar?: string;
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+  headers?: { [key: string]: string };
 }
 ```
 
-## Chat conversations
+## Images
 
-The OpenAI provider supports full "multishot" chat conversations, including multiple assistant, user, and system prompts.
+### Sending images in prompts
 
-The most straightforward way to do this is by creating a list of `{role, content}` objects. Here's an example:
+You can include images in the prompt by using content blocks. For example, here's an example config:
 
 ```yaml
-prompts: [prompt.json]
+prompts:
+  - prompt.json
 
-providers: [openai:gpt-3.5-turbo]
+providers:
+  - openai:gpt-4o
 
 tests:
   - vars:
-      messages:
-        - role: system
-          content: Respond as a pirate
-        - role: user
-          content: Who founded Facebook?
-        - role: assistant
-          content: Mark Zuckerberg
-        - role: user
-          content: Did he found any other companies?
+      question: 'What do you see?'
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
+  # ...
 ```
 
-Then the prompt itself is just a JSON dump of `messages`:
+And an example `prompt.json`:
 
-```liquid title=prompt.json
-{{ messages | dump }}
-```
-
-### Simplified chat markup
-
-Alternatively, you may prefer to specify a list of `role: message`, like this:
-
-```yaml
-tests:
-  - vars:
-      messages:
-        - user: Who founded Facebook?
-        - assistant: Mark Zuckerberg
-        - user: Did he found any other companies?
-```
-
-This simplifies the config, but we need to work some magic in the prompt template:
-
-```liquid title=prompt.json
+```json
 [
-{% for message in messages %}
-  {% set outer_loop = loop %}
-  {% for role, content in message %}
   {
-    "role": "{{ role }}",
-    "content": "{{ content }}"
-  }{% if not (loop.last and outer_loop.last) %},{% endif %}
-  {% endfor %}
-{% endfor %}
-]
-```
-
-### Creating a conversation history fixture
-
-Using nunjucks templates, we can combine multiple chat messages. Here's an example in which the previous conversation is a fixture for _all_ tests. Each case tests a different follow-up message:
-
-```yaml
-# Set up the conversation history
-defaultTest:
-  vars:
-    messages:
-      - user: Who founded Facebook?
-      - assistant: Mark Zuckerberg
-      - user: What's his favorite food?
-      - assistant: Pizza
-
-# Test multiple follow-ups
-tests:
-  - vars:
-      question: Did he create any other companies?
-  - vars:
-      question: What is his role at Internet.org?
-  - vars:
-      question: Will he let me borrow $5?
-```
-
-In the prompt template, we construct the conversation history followed by a user message containing the `question`:
-
-```liquid title=prompt.json
-[
-  {% for message in messages %}
-    {% for role, content in message %}
+    "role": "user",
+    "content": [
       {
-        "role": "{{ role }}",
-        "content": "{{ content }}"
+        "type": "text",
+        "text": "{{question}}"
       },
-    {% endfor %}
-  {% endfor %}
-  {
-    "role": "user",
-    "content": "{{ question }}"
-  }
-]
-```
-
-### Using the `_conversation` variable
-
-A built-in `_conversation` variable contains the full prompt and previous turns of a conversation. Use it to reference previous outputs and test an ongoing chat conversation.
-
-The `_conversation` variable has the following type signature:
-
-```ts
-type Completion = {
-  prompt: string | object;
-  input: string;
-  output: string;
-};
-
-type Conversation = Completion[];
-```
-
-In most cases, you'll loop through the `_conversation` variable and use each `Completion` object.
-
-Use `completion.prompt` to reference the previous conversation. For example, to get the number of messages in a chat-formatted prompt:
-
-```
-{{ completion.prompt.length }}
-```
-
-Or to get the first message in the conversation:
-
-```
-{{ completion.prompt[0] }}
-```
-
-Use `completion.input` as a shortcut to get the last user message. In a chat-formatted prompt, `input` is set to the last user message, equivalent to `completion.prompt[completion.prompt.length - 1].content`.
-
-Here's an example test config. Note how each question assumes context from the previous output:
-
-```yaml
-tests:
-  - vars:
-      question: Who founded Facebook?
-  - vars:
-      question: Where does he live?
-  - vars:
-      question: Which state is that in?
-```
-
-Here is the corresponding prompt:
-
-```json
-[
-  // highlight-start
-  {% for completion in _conversation %}
-    {
-      "role": "user",
-      "content": "{{ completion.input }}"
-    },
-    {
-      "role": "assistant",
-      "content": "{{ completion.output }}"
-    },
-  {% endfor %}
-  // highlight-end
-  {
-    "role": "user",
-    "content": "{{ question }}"
-  }
-]
-```
-
-The prompt inserts the previous conversation into the test case, creating a full turn-by-turn conversation:
-
-![multiple turn conversation eval](https://github.com/promptfoo/promptfoo/assets/310310/70048ae5-34ce-46f0-bd28-42d3aa96f03e)
-
-Try it yourself by using the [full example config](https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-turn-conversation).
-
-:::info
-When the `_conversation` variable is present, the eval will run single-threaded (concurrency of 1).
-:::
-
-### Including JSON in prompt content
-
-In some cases, you may want to send JSON _within_ the OpenAI `content` field. In order to do this, you must ensure that the JSON is properly escaped.
-
-Here's an example that prompts OpenAI with a JSON object of the structure `{query: string, history: {reply: string}[]}`. It first constructs this JSON object as the `input` variable. Then, it includes `input` in the prompt with proper JSON escaping:
-
-```json
-{% set input %}
-{
-    "query": "{{ query }}",
-    "history": [
-      {% for completion in _conversation %}
-        {"reply": "{{ completion.output }}"} {% if not loop.last %},{% endif %}
-      {% endfor %}
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "{{url}}"
+        }
+      }
     ]
-}
-{% endset %}
-
-[{
-  "role": "user",
-  "content": {{ input | trim | dump }}
-}]
-```
-
-Here's the associated config:
-
-```yaml
-prompts: [prompt.json]
-providers: [openai:gpt-3.5-turbo-0613]
-tests:
-  - vars:
-      query: how you doing
-  - vars:
-      query: need help with my passport
-```
-
-This has the effect of including the conversation history _within_ the prompt content. Here's what's sent to OpenAI for the second test case:
-
-```json
-[
-  {
-    "role": "user",
-    "content": "{\n    \"query\": \"how you doing\",\n    \"history\": [\n      \n    ]\n}"
   }
 ]
 ```
+
+See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision).
+
+### Generating images
+
+OpenAI supports Dall-E generations via `openai:image:dalle-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+
+```yaml
+prompts:
+  - 'In the style of Van Gogh: {{subject}}'
+  - 'In the style of Dali: {{subject}}'
+
+providers:
+  - openai:image:dall-e-3
+
+tests:
+  - vars:
+      subject: bananas
+  - vars:
+      subject: new york city
+```
+
+To display images in the web viewer, wrap vars or outputs in markdown image tags like so:
+
+```markdown
+![](/path/to/myimage.png)
+```
+
+Then, enable 'Render markdown' under Table Settings.
 
 ## Using tools and functions
 
-OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/typpo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/typpo/promptfoo/tree/main/examples/openai-function-call).
+OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
 
 ### Using tools
 
@@ -371,7 +198,7 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. Add your 
 ```yaml
 prompts: [prompt.txt]
 providers:
-  - 'openai:chat:gpt-3.5-turbo-0613':
+  - id: openai:chat:gpt-4o-mini
     // highlight-start
     config:
       tools: [
@@ -416,9 +243,9 @@ tests:
 # ...
 ```
 
-Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) or [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-tools-call) assertions to enforce an exact schema match between tools and the function definition.
+Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) or [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call) assertions to enforce an exact schema match between tools and the function definition.
 
-To further test `tools` definitions, you can use the `javascript` assertion and/or `postprocess` directives. For example:
+To further test `tools` definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
 ```yaml
 tests:
@@ -434,24 +261,61 @@ tests:
 
   - vars:
       city: New York
-      # postprocess returns only the 'name' property
-    postprocess: output[0].function.name
+      # transform returns only the 'name' property
+    transform: output[0].function.name
     assert:
       - type: is-json
       - type: similar
         value: NYC
 ```
 
+:::tip
+Functions can use variables from test cases:
+
+```js
+{
+  type: "function",
+  function: {
+    description: "Get temperature in {{city}}"
+    // ...
+  }
+}
+```
+
+They can also include functions that dynamically reference vars:
+
+```js
+{
+  type: "function",
+  function: {
+    name: "get_temperature",
+    parameters: {
+      type: "object",
+        properties: {
+          unit: {
+            type: "string",
+            // highlight-start
+            enum: (vars) => vars.units,
+            // highlight-end
+          }
+        },
+    }
+  }
+}
+```
+
+:::
+
 ### Using functions
 
 > `functions` and `function_call` is deprecated in favor of `tools` and `tool_choice`, see detail in [OpenAI API reference](https://platform.openai.com/docs/api-reference/chat/create#chat-create-function_call).
 
-In addition, you can use `functions` to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
+Use the `functions` config to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
 ```yaml
 prompts: [prompt.txt]
 providers:
-  - id: openai:chat:gpt-3.5-turbo-0613
+  - id: openai:chat:gpt-4o-mini
     // highlight-start
     config:
       functions:
@@ -487,9 +351,9 @@ tests:
   # ...
 ```
 
-Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) assertions to enforce an exact schema match between function calls and the function definition.
+Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/deterministic#is-valid-openai-function-call) assertions to enforce an exact schema match between function calls and the function definition.
 
-To further test function call definitions, you can use the `javascript` assertion and/or `postprocess` directives. For example:
+To further test function call definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
 ```yaml
 tests:
@@ -504,29 +368,108 @@ tests:
 
   - vars:
       city: New York
-    # postprocess returns only the 'name' property for this testcase
-    postprocess: output.name
+    # transform returns only the 'name' property for this test case
+    transform: output.name
     assert:
       - type: is-json
       - type: similar
         value: NYC
 ```
 
+### Loading tools/functions from a file
+
+Instead of duplicating function definitions across multiple configurations, you can reference an external YAML (or JSON) file that contains your functions. This allows you to maintain a single source of truth for your functions, which is particularly useful if you have multiple versions or regular changes to definitions.
+
+To load your functions from a file, specify the file path in your provider configuration like so:
+
+```yaml
+providers:
+  - file://./path/to/provider_with_function.yaml
+```
+
+You can also use a pattern to load multiple files:
+
+```yaml
+providers:
+  - file://./path/to/provider_*.yaml
+```
+
+Here's an example of how your `provider_with_function.yaml` might look:
+
+```yaml
+id: openai:chat:gpt-4o-mini
+config:
+  functions:
+    - name: get_current_weather
+      description: Get the current weather in a given location
+      parameters:
+        type: object
+        properties:
+          location:
+            type: string
+            description: The city and state, e.g. San Francisco, CA
+          unit:
+            type: string
+            enum:
+              - celsius
+              - fahrenheit
+            description: The unit in which to return the temperature
+        required:
+          - location
+```
+
+## Using `response_format`
+
+Promptfoo supports the `response_format` parameter, which allows you to specify the expected output format.
+
+`response_format` can be included in the provider config, or in the prompt config.
+
+#### Prompt config example
+
+```yaml
+prompts:
+  - label: 'Prompt #1'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
+
+#### Provider config example
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4o-mini
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
+
+#### External file references
+
+To make it easier to manage large JSON schemas, external file references are supported:
+
+```yaml
+config:
+  response_format: file://./path/to/response_format.json
+```
+
 ## Supported environment variables
 
 These OpenAI-related environment variables are supported:
 
-| Variable                         | Description                                                                                                                                      |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENAI_TEMPERATURE`             | Temperature model parameter, defaults to 0.                                                                                                      |
-| `OPENAI_MAX_TOKENS`              | Max_tokens model parameter, defaults to 1024.                                                                                                    |
-| `OPENAI_API_HOST`                | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_API_BASE_URL`.                                            |
-| `OPENAI_API_BASE_URL`            | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.                                          |
-| `OPENAI_API_KEY`                 | OpenAI API key.                                                                                                                                  |
-| `OPENAI_ORGANIZATION`            | The OpenAI organization key to use.                                                                                                              |
-| `PROMPTFOO_REQUIRE_JSON_PROMPTS` | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior. |
-| `PROMPTFOO_DELAY_MS`             | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0).                                 |
-| `PROMPTFOO_REQUEST_BACKOFF_MS`   | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                                                          |
+| Variable                       | Description                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0.                                                                      |
+| `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024.                                                                    |
+| `OPENAI_API_HOST`              | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                |
+| `OPENAI_BASE_URL`              | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.          |
+| `OPENAI_API_KEY`               | OpenAI API key.                                                                                                  |
+| `OPENAI_ORGANIZATION`          | The OpenAI organization key to use.                                                                              |
+| `PROMPTFOO_DELAY_MS`           | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0). |
+| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                          |
 
 ## Evaluating assistants
 
@@ -555,6 +498,9 @@ The following properties can be overwritten in provider config:
 - `instructions` - System prompt
 - `tools` - Enabled [tools](https://platform.openai.com/docs/api-reference/runs/createRun)
 - `thread.messages` - A list of message objects that the thread is created with.
+- `temperature` - Temperature for the model
+- `toolChoice` - Controls whether the AI should use a tool
+- `attachments` - File attachments to include in messages - see [Assistant v2 attachments](https://platform.openai.com/docs/assistants/migration)
 
 Here's an example of a more detailed config:
 
@@ -567,9 +513,12 @@ providers:
     config:
       model: gpt-4-1106-preview
       instructions: "You always speak like a pirate"
+      temperature: 0.2
+      toolChoice:
+        type: file_search
       tools:
         - type: code_interpreter
-        - type: retrieval
+        - type: file_search
       thread:
         messages:
           - role: user
@@ -581,6 +530,62 @@ tests:
   - vars:
       topic: bananas
   # ...
+```
+
+### Automatically handling function tool calls
+
+You can specify JavaScript callbacks that are automatically called to create
+the output of a function tool call.
+
+This requires defining your config in a JavaScript file instead of YAML.
+
+```js
+module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
+  prompts: 'Please add the following numbers together: {{a}} and {{b}}',
+  providers: [
+    {
+      id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
+      config:
+        /** @type {InstanceType<import('promptfoo')["providers"]["OpenAiAssistantProvider"]>["config"]} */ ({
+          model: 'gpt-4-1106-preview',
+          instructions: 'You can add two numbers together using the `addNumbers` tool',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'addNumbers',
+                description: 'Add two numbers together',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    a: { type: 'number' },
+                    b: { type: 'number' },
+                  },
+                  required: ['a', 'b'],
+                },
+              },
+            },
+          ],
+          /**
+           * Map of function tool names to function callback.
+           */
+          functionToolCallbacks: {
+            // this function should accept a string, and return a string
+            // or a `Promise<string>`.
+            addNumbers: (parametersJsonString) => {
+              const { a, b } = JSON.parse(parametersJsonString);
+              return JSON.stringify(a + b);
+            },
+          },
+        }),
+    },
+  ],
+  tests: [
+    {
+      vars: { a: 5, b: 6 },
+    },
+  ],
+});
 ```
 
 ## Troubleshooting
@@ -597,4 +602,4 @@ There are a few things you can do if you encounter OpenAI rate limits (most comm
 
 ### OpenAI flakiness
 
-To retry HTTP requests than are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.
+To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.

@@ -1,4 +1,16 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
+import CloseIcon from '@mui/icons-material/Close';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControl from '@mui/material/FormControl';
+import IconButton from '@mui/material/IconButton';
+import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
+import Select from '@mui/material/Select';
+import { useTheme } from '@mui/material/styles';
+import type { VisibilityState } from '@tanstack/table-core';
 import {
   Chart,
   BarController,
@@ -11,22 +23,9 @@ import {
   PointElement,
   Tooltip,
   Colors,
+  type TooltipItem,
 } from 'chart.js';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import { useTheme } from '@mui/material/styles';
-import Paper from '@mui/material/Paper';
-import IconButton from '@mui/material/IconButton';
-import CloseIcon from '@mui/icons-material/Close';
-import { ErrorBoundary } from 'react-error-boundary';
-
 import { useStore } from './store';
-
-import type { VisibilityState } from '@tanstack/table-core';
 import type { EvaluateTable } from './types';
 
 interface ResultsChartsProps {
@@ -82,7 +81,7 @@ function HistogramChart({ table }: ChartProps) {
     const range = Math.ceil(maxScore) - Math.floor(minScore); // Adjust the range to be between whole numbers
     const binSize = range / 10; // Define the size of each bin
     const bins = Array.from({ length: 11 }, (_, i) =>
-      parseFloat((Math.floor(minScore) + i * binSize).toFixed(2)),
+      Number.parseFloat((Math.floor(minScore) + i * binSize).toFixed(2)),
     );
 
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
@@ -91,7 +90,7 @@ function HistogramChart({ table }: ChartProps) {
         (bin) => scores.filter((score) => score >= bin && score < bin + binSize).length,
       );
       return {
-        label: `Prompt ${promptIdx + 1}`,
+        label: `Column ${promptIdx + 1}`,
         data: counts,
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
@@ -117,7 +116,7 @@ function HistogramChart({ table }: ChartProps) {
             callbacks: {
               title: function (context) {
                 const datasetIndex = context[0].datasetIndex;
-                return `Prompt ${datasetIndex + 1}`;
+                return `Column ${datasetIndex + 1}`;
               },
               label: function (context) {
                 const labelIndex = context.dataIndex;
@@ -156,7 +155,7 @@ function PassRateChart({ table }: ChartProps) {
       const passCount = outputs.filter((output) => output.pass).length;
       const passRate = (passCount / outputs.length) * 100;
       return {
-        label: `Prompt ${promptIdx + 1}`,
+        label: `Column ${promptIdx + 1}`,
         data: [passRate],
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
@@ -255,7 +254,7 @@ function ScatterChart({ table }: ChartProps) {
           },
           tooltip: {
             callbacks: {
-              label: function (tooltipItem) {
+              label: function (tooltipItem: TooltipItem<'scatter'>) {
                 const row = table.body[tooltipItem.dataIndex];
                 let prompt1Text = row.outputs[0].text;
                 let prompt2Text = row.outputs[1].text;
@@ -276,11 +275,29 @@ function ScatterChart({ table }: ChartProps) {
               display: true,
               text: `Prompt ${xAxisPrompt + 1} Score`,
             },
+            ticks: {
+              callback: function (value: string | number, index: number, values: any[]) {
+                let ret = String(Math.round(Number(value) * 100));
+                if (index === values.length - 1) {
+                  ret += '%';
+                }
+                return ret;
+              },
+            },
           },
           y: {
             title: {
               display: true,
               text: `Prompt ${yAxisPrompt + 1} Score`,
+            },
+            ticks: {
+              callback: function (value: string | number, index: number, values: any[]) {
+                let ret = String(Math.round(Number(value) * 100));
+                if (index === values.length - 1) {
+                  ret += '%';
+                }
+                return ret;
+              },
             },
           },
         },
@@ -322,7 +339,83 @@ function ScatterChart({ table }: ChartProps) {
   );
 }
 
-export default function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
+function MetricChart({ table }: ChartProps) {
+  const metricCanvasRef = useRef(null);
+  const metricChartInstance = useRef<Chart | null>(null);
+
+  useEffect(() => {
+    if (!metricCanvasRef.current) {
+      return;
+    }
+
+    if (metricChartInstance.current) {
+      metricChartInstance.current.destroy();
+    }
+
+    const namedScoreKeys = Object.keys(table.head.prompts[0].metrics?.namedScores || {});
+    const labels = namedScoreKeys;
+    const datasets = table.head.prompts.map((prompt, promptIdx) => {
+      const data = namedScoreKeys.map((key) => {
+        const value = prompt.metrics?.namedScores[key] || 0;
+        const maxValue = Math.max(
+          ...table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0),
+        );
+        return value / maxValue;
+      });
+      return {
+        label: `${table.head.prompts[promptIdx].provider}`,
+        data,
+        backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
+      };
+    });
+
+    const config = {
+      type: 'bar' as const,
+      data: {
+        labels,
+        datasets,
+      },
+      options: {
+        scales: {
+          x: {
+            grid: {
+              display: false,
+            },
+          },
+          y: {
+            ticks: {
+              callback: function (value: string | number, index: number, values: any[]) {
+                let ret = String(Math.round(Number(value) * 100));
+                if (index === values.length - 1) {
+                  ret += '%';
+                }
+                return ret;
+              },
+            },
+          },
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              title: function (tooltipItem: TooltipItem<'bar'>[]) {
+                return tooltipItem[0].dataset.label;
+              },
+              label: function (tooltipItem: TooltipItem<'bar'>) {
+                const value = tooltipItem.parsed.y;
+                return `${labels[tooltipItem.dataIndex]}: ${(value * 100).toFixed(2)}% pass rate`;
+              },
+            },
+          },
+        },
+      },
+    };
+    metricChartInstance.current = new Chart(metricCanvasRef.current, config);
+  }, [table]);
+
+  return <canvas ref={metricCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
+}
+
+function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [showCharts, setShowCharts] = useState(true);
@@ -333,14 +426,15 @@ export default function ResultsCharts({ columnVisibility }: ResultsChartsProps) 
   }
 
   const scores = table.body.flatMap((row) => row.outputs.map((output) => output.score));
-  if (new Set(scores).size === 1) {
+  const scoreSet = new Set(scores);
+  if (scoreSet.size === 1) {
     // All scores are the same, charts not useful.
     return null;
   }
 
   return (
     <ErrorBoundary fallback={null}>
-      <Paper style={{ position: 'relative', padding: theme.spacing(3) }}>
+      <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
         <IconButton
           style={{ position: 'absolute', right: 0, top: 0 }}
           onClick={() => setShowCharts(false)}
@@ -352,7 +446,12 @@ export default function ResultsCharts({ columnVisibility }: ResultsChartsProps) 
             <PassRateChart table={table} />
           </div>
           <div style={{ width: '33%' }}>
-            <HistogramChart table={table} />
+            {scoreSet.size <= 3 &&
+            Object.keys(table.head.prompts[0].metrics?.namedScores || {}).length > 1 ? (
+              <MetricChart table={table} />
+            ) : (
+              <HistogramChart table={table} />
+            )}
           </div>
           <div style={{ width: '33%' }}>
             <ScatterChart table={table} />
@@ -362,3 +461,5 @@ export default function ResultsCharts({ columnVisibility }: ResultsChartsProps) 
     </ErrorBoundary>
   );
 }
+
+export default React.memo(ResultsCharts);

@@ -1,0 +1,23 @@
+description: Image Classification Example of Fashion MNIST dataset
+providers:
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
+    label: claude-3.5-sonnet
+prompts:
+  - id: file://prompt.js
+    label: Image Classification
+tests: fashion_mnist_sample_base64.csv
+defaultTest:
+  assert:
+    - type: contains-xml
+      value:
+        requiredElements:
+          - analysis.classification
+          - analysis.color
+          - analysis.confidence
+          - analysis.features
+          - analysis.reasoning
+          - analysis.style
+    - type: is-xml
+      value: 'analysis.classification,analysis.color,analysis.features,analysis.style,analysis.confidence,analysis.reasoning'
+    - type: contains
+      value: '<classification>{{label}}</classification>'

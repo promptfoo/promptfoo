@@ -1,25 +1,117 @@
+import type { Cache } from 'cache-manager';
 import OpenAI from 'openai';
-
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
-import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-import { OpenAiFunction, OpenAiTool } from './openaiUtil';
-
 import type {
+  ApiModerationProvider,
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   EnvOverrides,
+  ModerationFlag,
   ProviderEmbeddingResponse,
+  ProviderModerationResponse,
   ProviderResponse,
-} from '../types.js';
+  TokenUsage,
+} from '../types';
+import { renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile } from '../util';
+import { safeJsonStringify } from '../util/json';
+import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
+
+// see https://platform.openai.com/docs/models
+const OPENAI_CHAT_MODELS = [
+  ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1000000,
+      output: 15 / 1000000,
+    },
+  })),
+  ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+    },
+  })),
+  ...['gpt-4', 'gpt-4-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 30 / 1000000,
+      output: 60 / 1000000,
+    },
+  })),
+  ...[
+    'gpt-4-turbo',
+    'gpt-4-turbo-2024-04-09',
+    'gpt-4-turbo-preview',
+    'gpt-4-0125-preview',
+    'gpt-4-1106-preview',
+  ].map((model) => ({
+    id: model,
+    cost: {
+      input: 10 / 1000000,
+      output: 30 / 1000000,
+    },
+  })),
+  {
+    id: 'gpt-3.5-turbo',
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-3.5-turbo-0125',
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-3.5-turbo-1106',
+    cost: {
+      input: 1 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+  ...['gpt-3.5-turbo-instruct'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.5 / 1000000,
+      output: 2 / 1000000,
+    },
+  })),
+];
+
+// See https://platform.openai.com/docs/models/model-endpoint-compatibility
+const OPENAI_COMPLETION_MODELS = [
+  {
+    id: 'gpt-3.5-turbo-instruct',
+    cost: {
+      input: 1.5 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+  {
+    id: 'text-davinci-002',
+  },
+  {
+    id: 'text-babbage-002',
+  },
+];
 
 interface OpenAiSharedOptions {
   apiKey?: string;
+  apiKeyEnvar?: string;
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
   cost?: number;
+  headers?: { [key: string]: string };
 }
 
 type OpenAiCompletionOptions = OpenAiSharedOptions & {
@@ -32,11 +124,20 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
   tools?: OpenAiTool[];
-  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
+  tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
   response_format?: { type: 'json_object' };
   stop?: string[];
   seed?: number;
   passthrough?: object;
+
+  /**
+   * If set, automatically call these functions when the assistant activates
+   * these function tools.
+   */
+  functionToolCallbacks?: Record<
+    OpenAI.FunctionDefinition['name'],
+    (arg: string) => Promise<string>
+  >;
 };
 
 function failApiCall(err: any) {
@@ -48,6 +149,21 @@ function failApiCall(err: any) {
   return {
     error: `API error: ${String(err)}`,
   };
+}
+
+function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+  if (data.usage) {
+    if (cached) {
+      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
+    } else {
+      return {
+        total: data.usage.total_tokens,
+        prompt: data.usage.prompt_tokens || 0,
+        completion: data.usage.completion_tokens || 0,
+      };
+    }
+  }
+  return {};
 }
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -68,7 +184,9 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   id(): string {
-    return `openai:${this.modelName}`;
+    return this.config.apiHost || this.config.apiBaseUrl
+      ? this.modelName
+      : `openai:${this.modelName}`;
   }
 
   toString(): string {
@@ -77,25 +195,42 @@ export class OpenAiGenericProvider implements ApiProvider {
 
   getOrganization(): string | undefined {
     return (
-      this.config.organization || this.env?.OPENAI_ORGANIZATION || process.env.OPENAI_ORGANIZATION
+      this.config.organization ||
+      this.env?.OPENAI_ORGANIZATION ||
+      getEnvString('OPENAI_ORGANIZATION')
     );
   }
 
+  getApiUrlDefault(): string {
+    return 'https://api.openai.com/v1';
+  }
+
   getApiUrl(): string {
-    const apiHost = this.config.apiHost || this.env?.OPENAI_API_HOST || process.env.OPENAI_API_HOST;
+    const apiHost =
+      this.config.apiHost || this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
     if (apiHost) {
-      return `https://${apiHost}`;
+      return `https://${apiHost}/v1`;
     }
     return (
       this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
-      process.env.OPENAI_API_BASE_URL ||
-      'https://api.openai.com'
+      this.env?.OPENAI_BASE_URL ||
+      getEnvString('OPENAI_API_BASE_URL') ||
+      getEnvString('OPENAI_BASE_URL') ||
+      this.getApiUrlDefault()
     );
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    return (
+      this.config.apiKey ||
+      (this.config?.apiKeyEnvar
+        ? process.env[this.config.apiKeyEnvar] ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.OPENAI_API_KEY ||
+      getEnvString('OPENAI_API_KEY')
+    );
   }
 
   // @ts-ignore: Params are not used in this implementation
@@ -122,13 +257,14 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/v1/embeddings`,
+        `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
@@ -147,16 +283,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       }
       return {
         embedding,
-        tokenUsage: cached
-          ? {
-              cached: data.usage.total_tokens,
-              total: data.usage.total_tokens,
-            }
-          : {
-              total: data.usage.total_tokens,
-              prompt: data.usage.prompt_tokens,
-              completion: data.usage.completion_tokens,
-            },
+        tokenUsage: getTokenUsage(data, cached),
       };
     } catch (err) {
       logger.error(data.error.message);
@@ -165,42 +292,46 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   }
 }
 
-export class OpenAiCompletionProvider extends OpenAiGenericProvider {
-  static OPENAI_COMPLETION_MODELS = [
-    {
-      id: 'gpt-3.5-turbo-instruct',
-      cost: {
-        input: 0.0015 / 1000,
-        output: 0.002 / 1000,
-      },
-    },
-    {
-      id: 'gpt-3.5-turbo-instruct-0914',
-      cost: {
-        input: 0.0015 / 1000,
-        output: 0.002 / 1000,
-      },
-    },
-    {
-      id: 'text-davinci-003',
-    },
-    {
-      id: 'text-davinci-002',
-    },
-    {
-      id: 'text-curie-001',
-    },
-    {
-      id: 'text-babbage-001',
-    },
-    {
-      id: 'text-ada-001',
-    },
-  ];
+function formatOpenAiError(data: {
+  error: { message: string; type?: string; code?: string };
+}): string {
+  let errorMessage = `API error: ${data.error.message}`;
+  if (data.error.type) {
+    errorMessage += `, Type: ${data.error.type}`;
+  }
+  if (data.error.code) {
+    errorMessage += `, Code: ${data.error.code}`;
+  }
+  errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
+  return errorMessage;
+}
 
-  static OPENAI_COMPLETION_MODEL_NAMES = OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.map(
-    (model) => model.id,
+function calculateCost(
+  modelName: string,
+  config: OpenAiSharedOptions,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  if (!promptTokens || !completionTokens) {
+    return undefined;
+  }
+
+  const model = [...OPENAI_CHAT_MODELS, ...OPENAI_COMPLETION_MODELS].find(
+    (m) => m.id === modelName,
   );
+  if (!model || !model.cost) {
+    return undefined;
+  }
+
+  const inputCost = config.cost ?? model.cost.input;
+  const outputCost = config.cost ?? model.cost.output;
+  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+}
+
+export class OpenAiCompletionProvider extends OpenAiGenericProvider {
+  static OPENAI_COMPLETION_MODELS = OPENAI_COMPLETION_MODELS;
+
+  static OPENAI_COMPLETION_MODEL_NAMES = OPENAI_COMPLETION_MODELS.map((model) => model.id);
 
   config: OpenAiCompletionOptions;
 
@@ -208,11 +339,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelName)) {
-      logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
-    }
     super(modelName, options);
     this.config = options.config || {};
+    if (
+      !OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelName) &&
+      this.getApiUrl() === this.getApiUrlDefault()
+    ) {
+      logger.warn(`FYI: Using unknown OpenAI completion model: ${modelName}`);
+    }
   }
 
   async callApi(
@@ -228,8 +362,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
     let stop: string;
     try {
-      stop = process.env.OPENAI_STOP
-        ? JSON.parse(process.env.OPENAI_STOP)
+      stop = getEnvString('OPENAI_STOP')
+        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
         : this.config?.stop || ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
@@ -238,14 +372,13 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       prompt,
       seed: this.config.seed || 0,
-      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
-      presence_penalty:
-        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+      top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
+      presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty:
-        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
+        this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
+      best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
@@ -255,13 +388,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/v1/completions`,
+        `${this.getApiUrl()}/completions`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
@@ -273,69 +407,35 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
     logger.debug(`\tOpenAI completions API response: ${JSON.stringify(data)}`);
+    if (data.error) {
+      return {
+        error: formatOpenAiError(data),
+      };
+    }
     try {
       return {
         output: data.choices[0].text,
-        tokenUsage: cached
-          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
-          : {
-              total: data.usage.total_tokens,
-              prompt: data.usage.prompt_tokens,
-              completion: data.usage.completion_tokens,
-            },
+        tokenUsage: getTokenUsage(data, cached),
         cached,
-        cost: calculateCost(this.modelName, this.config, data.usage.prompt_tokens, data.usage.completion_tokens),
+        cost: calculateCost(
+          this.modelName,
+          this.config,
+          data.usage?.prompt_tokens,
+          data.usage?.completion_tokens,
+        ),
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
   }
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
-  static OPENAI_CHAT_MODELS = [
-    ...['gpt-4', 'gpt-4-0314', 'gpt-4-0613'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.03 / 1000,
-        output: 0.06 / 1000,
-      },
-    })),
-    ...['gpt-4-1106-preview', 'gpt-4-1106-vision-preview'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.01 / 1000,
-        output: 0.03 / 1000,
-      },
-    })),
-    ...['gpt-4-32k', 'gpt-4-32k-0314'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.06 / 1000,
-        output: 0.12 / 1000,
-      },
-    })),
-    ...[
-      'gpt-3.5-turbo',
-      'gpt-3.5-turbo-0301',
-      'gpt-3.5-turbo-0613',
-      'gpt-3.5-turbo-1106',
-      'gpt-3.5-turbo-16k',
-      'gpt-3.5-turbo-16k-0613',
-    ].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.001 / 1000,
-        output: 0.002 / 1000,
-      },
-    })),
-  ];
+  static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
 
-  static OPENAI_CHAT_MODEL_NAMES = OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.map(
-    (model) => model.id,
-  );
+  static OPENAI_CHAT_MODEL_NAMES = OPENAI_CHAT_MODELS.map((model) => model.id);
 
   config: OpenAiCompletionOptions;
 
@@ -344,7 +444,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelName)) {
-      logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
+      logger.debug(`Using unknown OpenAI chat model: ${modelName}`);
     }
     super(modelName, options);
     this.config = options.config || {};
@@ -363,47 +463,52 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    let stop: string;
-    try {
-      stop = process.env.OPENAI_STOP
-        ? JSON.parse(process.env.OPENAI_STOP)
-        : this.config?.stop || [];
-    } catch (err) {
-      throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
-    }
     const body = {
       model: this.modelName,
       messages: messages,
       seed: this.config.seed || 0,
-      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
+      max_tokens:
+        this.config.max_tokens ?? Number.parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      temperature:
+        this.config.temperature ?? Number.parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      top_p: this.config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+        this.config.presence_penalty ??
+        Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      ...(this.config.functions ? { functions: this.config.functions } : {}),
+        this.config.frequency_penalty ??
+        Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+      ...(this.config.functions
+        ? {
+            functions: maybeLoadFromExternalFile(
+              renderVarsInObject(this.config.functions, context?.vars),
+            ),
+          }
+        : {}),
       ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
-      ...(this.config.tools ? { tools: this.config.tools } : {}),
+      ...(this.config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+        : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(this.config.stop ? { stop: this.config.stop } : {}),
       ...(this.config.passthrough || {}),
     };
-    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
+    //logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
     let data,
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/v1/chat/completions`,
+        `${this.getApiUrl()}/chat/completions`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
@@ -415,78 +520,92 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
+    //logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
+    if (data.error) {
+      return {
+        error: formatOpenAiError(data),
+      };
+    }
     try {
       const message = data.choices[0].message;
-      const output =
-        message.content === null ? message.function_call || message.tool_calls : message.content;
+      let output = '';
+      if (message.content && (message.function_call || message.tool_calls)) {
+        output = message;
+      } else if (message.content === null) {
+        output = message.function_call || message.tool_calls;
+      } else {
+        output = message.content;
+      }
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
 
+      // Handle function tool callbacks
+      const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
+      if (functionCalls && this.config.functionToolCallbacks) {
+        for (const functionCall of functionCalls) {
+          const functionName = functionCall.name;
+          if (this.config.functionToolCallbacks[functionName]) {
+            const functionResult = await this.config.functionToolCallbacks[functionName](
+              message.function_call.arguments,
+            );
+            return {
+              output: functionResult,
+              tokenUsage: getTokenUsage(data, cached),
+              cached,
+              logProbs,
+              cost: calculateCost(
+                this.modelName,
+                this.config,
+                data.usage?.prompt_tokens,
+                data.usage?.completion_tokens,
+              ),
+            };
+          }
+        }
+      }
+
       return {
         output,
-        tokenUsage: cached
-          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
-          : {
-              total: data.usage.total_tokens,
-              prompt: data.usage.prompt_tokens,
-              completion: data.usage.completion_tokens,
-            },
+        tokenUsage: getTokenUsage(data, cached),
         cached,
         logProbs,
-        cost: calculateCost(this.modelName, this.config, data.usage.prompt_tokens, data.usage.completion_tokens),
+        cost: calculateCost(
+          this.modelName,
+          this.config,
+          data.usage?.prompt_tokens,
+          data.usage?.completion_tokens,
+        ),
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
   }
-}
-
-function calculateCost(
-  modelName: string,
-  config: OpenAiSharedOptions,
-  promptTokens: number,
-  completionTokens: number,
-): number | undefined {
-  const model = [
-    ...OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS,
-    ...OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS,
-  ].find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return (inputCost * promptTokens + outputCost * completionTokens) || undefined;
-}
-
-interface AssistantMessagesResponseDataContent {
-  type: string;
-  text?: {
-    value: string;
-  };
-}
-
-interface AssistantMessagesResponseData {
-  data: {
-    role: string;
-    content?: AssistantMessagesResponseDataContent[];
-  }[];
 }
 
 type OpenAiAssistantOptions = OpenAiSharedOptions & {
   modelName?: string;
   instructions?: string;
   tools?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tools'];
+  /**
+   * If set, automatically call these functions when the assistant activates
+   * these function tools.
+   */
+  functionToolCallbacks?: Record<
+    OpenAI.FunctionDefinition['name'],
+    (arg: string) => Promise<string>
+  >;
   metadata?: object[];
+  temperature?: number;
+  toolChoice?:
+    | 'none'
+    | 'auto'
+    | { type: 'function'; function?: { name: string } }
+    | { type: 'file_search' };
+  attachments?: OpenAI.Beta.Threads.Message.Attachment[];
 };
-
-function toTitleCase(str: string) {
-  return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
-}
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   assistantId: string;
@@ -501,7 +620,11 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     this.assistantId = assistantId;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -511,21 +634,31 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     const openai = new OpenAI({
       apiKey: this.getApiKey(),
       organization: this.getOrganization(),
-      // Unfortunate, but the OpenAI SDK's implementation of base URL is different from how we treat base URL elsewhere.
-      baseURL: this.getApiUrl() + '/v1',
+      baseURL: this.getApiUrl(),
       maxRetries: 3,
       timeout: REQUEST_TIMEOUT_MS,
+      defaultHeaders: this.assistantConfig.headers,
     });
 
     const messages = parseChatPrompt(prompt, [
-      { role: 'user', content: prompt },
+      {
+        role: 'user',
+        content: prompt,
+        ...(this.assistantConfig.attachments
+          ? { attachments: this.assistantConfig.attachments }
+          : {}),
+      },
     ]) as OpenAI.Beta.Threads.ThreadCreateParams.Message[];
     const body: OpenAI.Beta.Threads.ThreadCreateAndRunParams = {
       assistant_id: this.assistantId,
       model: this.assistantConfig.modelName || undefined,
       instructions: this.assistantConfig.instructions || undefined,
-      tools: this.assistantConfig.tools || undefined,
+      tools:
+        maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars)) ||
+        undefined,
       metadata: this.assistantConfig.metadata || undefined,
+      temperature: this.assistantConfig.temperature || undefined,
+      tool_choice: this.assistantConfig.toolChoice || undefined,
       thread: {
         messages,
       },
@@ -541,7 +674,61 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
-    while (run.status === 'in_progress' || run.status === 'queued') {
+    while (
+      run.status === 'in_progress' ||
+      run.status === 'queued' ||
+      run.status === 'requires_action'
+    ) {
+      if (run.status === 'requires_action') {
+        const requiredAction: OpenAI.Beta.Threads.Runs.Run.RequiredAction | null =
+          run.required_action;
+        if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
+          break;
+        }
+        const functionCallsWithCallbacks: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[] =
+          requiredAction.submit_tool_outputs.tool_calls.filter((toolCall) => {
+            return (
+              toolCall.type === 'function' &&
+              toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
+            );
+          });
+        if (functionCallsWithCallbacks.length === 0) {
+          break;
+        }
+        logger.debug(
+          `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
+            ({ function: { name } }) => name,
+          )}`,
+        );
+        const toolOutputs = await Promise.all(
+          functionCallsWithCallbacks.map(async (toolCall) => {
+            logger.debug(
+              `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
+            );
+            const result = await this.assistantConfig.functionToolCallbacks![
+              toolCall.function.name
+            ](toolCall.function.arguments);
+            return {
+              tool_call_id: toolCall.id,
+              output: result,
+            };
+          }),
+        );
+        logger.debug(
+          `Calling OpenAI API, submitting tool outputs for ${run.thread_id}: ${JSON.stringify(
+            toolOutputs,
+          )}`,
+        );
+        try {
+          run = await openai.beta.threads.runs.submitToolOutputs(run.thread_id, run.id, {
+            tool_outputs: toolOutputs,
+          });
+        } catch (err) {
+          return failApiCall(err);
+        }
+        continue;
+      }
+
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       logger.debug(`Calling OpenAI API, getting thread run ${run.id} status`);
@@ -604,8 +791,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
               `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
             );
             outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
-          } else if (toolCall.type === 'retrieval') {
-            outputBlocks.push(`[Ran retrieval]`);
+          } else if (toolCall.type === 'file_search') {
+            outputBlocks.push(`[Ran file search]`);
           } else if (toolCall.type === 'code_interpreter') {
             const output = toolCall.code_interpreter.outputs
               .map((output) => (output.type === 'logs' ? output.logs : `<${output.type} output>`))
@@ -636,6 +823,205 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   }
 }
 
-export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-ada-002');
-export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4-0613');
-export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4-0613');
+type OpenAiImageOptions = OpenAiSharedOptions & {
+  size?: string;
+};
+
+export class OpenAiImageProvider extends OpenAiGenericProvider {
+  config: OpenAiImageOptions;
+
+  constructor(
+    modelName: string,
+    options: { config?: OpenAiImageOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(modelName, options);
+    this.config = options.config || {};
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const cache = getCache();
+    const cacheKey = `openai:image:${safeJsonStringify({ context, prompt })}`;
+
+    if (!this.getApiKey()) {
+      throw new Error(
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    const openai = new OpenAI({
+      apiKey: this.getApiKey(),
+      organization: this.getOrganization(),
+      baseURL: this.getApiUrl(),
+      maxRetries: 3,
+      timeout: REQUEST_TIMEOUT_MS,
+      defaultHeaders: this.config.headers,
+    });
+
+    let response: OpenAI.Images.ImagesResponse | undefined;
+    let cached = false;
+    if (isCacheEnabled()) {
+      // Try to get the cached response
+      const cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug(`Retrieved cached response for ${prompt}: ${cachedResponse}`);
+        response = JSON.parse(cachedResponse as string) as OpenAI.Images.ImagesResponse;
+        cached = true;
+      }
+    }
+
+    if (!response) {
+      try {
+        response = await openai.images.generate({
+          model: this.modelName,
+          prompt,
+          n: 1,
+          size:
+            ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
+              | '1024x1024'
+              | '256x256'
+              | '512x512'
+              | '1792x1024'
+              | '1024x1792'
+              | undefined) || '1024x1024',
+        });
+      } catch (error) {
+        return {
+          error: `OpenAI threw error: ${(error as Error).message}`,
+        };
+      }
+    }
+    const url = response.data[0].url;
+    if (!url) {
+      return {
+        error: `No image URL found in response: ${JSON.stringify(response)}`,
+      };
+    }
+
+    if (!cached && isCacheEnabled()) {
+      try {
+        await cache.set(cacheKey, JSON.stringify(response));
+      } catch (err) {
+        logger.error(`Failed to cache response: ${String(err)}`);
+      }
+    }
+
+    const sanitizedPrompt = prompt
+      .replace(/\r?\n|\r/g, ' ')
+      .replace(/\[/g, '(')
+      .replace(/\]/g, ')');
+    const ellipsizedPrompt =
+      sanitizedPrompt.length > 50 ? `${sanitizedPrompt.substring(0, 47)}...` : sanitizedPrompt;
+    return {
+      output: `![${ellipsizedPrompt}](${url})`,
+      cached,
+    };
+  }
+}
+
+export class OpenAiModerationProvider
+  extends OpenAiGenericProvider
+  implements ApiModerationProvider
+{
+  async callModerationApi(
+    userPrompt: string, // userPrompt is not supported by OpenAI moderation API
+    assistantResponse: string,
+  ): Promise<ProviderModerationResponse> {
+    if (!this.getApiKey()) {
+      throw new Error(
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    const openai = new OpenAI({
+      apiKey: this.getApiKey(),
+      organization: this.getOrganization(),
+      baseURL: this.getApiUrl(),
+      maxRetries: 3,
+      timeout: REQUEST_TIMEOUT_MS,
+    });
+
+    let cache: Cache | undefined;
+    let cacheKey: string | undefined;
+    if (isCacheEnabled()) {
+      cache = await getCache();
+      cacheKey = `openai:${this.modelName}:${JSON.stringify(
+        this.config,
+      )}:${userPrompt}:${assistantResponse}`;
+
+      // Try to get the cached response
+      const cachedResponse = await cache.get(cacheKey);
+
+      if (cachedResponse) {
+        logger.debug(`Returning cached response for ${userPrompt}: ${cachedResponse}`);
+        return JSON.parse(cachedResponse as string);
+      }
+    }
+
+    logger.debug(
+      `Calling OpenAI moderation API: prompt [${userPrompt}] assistant [${assistantResponse}]`,
+    );
+    let moderation: OpenAI.Moderations.ModerationCreateResponse | undefined;
+    try {
+      moderation = await openai.moderations.create({
+        model: this.modelName,
+        input: assistantResponse,
+      });
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
+    logger.debug(`\tOpenAI moderation API response: ${JSON.stringify(moderation)}`);
+    try {
+      const { results } = moderation;
+
+      const flags: ModerationFlag[] = [];
+      if (!results) {
+        throw new Error('API response error: no results');
+      }
+
+      if (cache && cacheKey) {
+        await cache.set(cacheKey, JSON.stringify(moderation));
+      }
+
+      if (results.length === 0) {
+        return { flags };
+      }
+
+      for (const result of results) {
+        if (result.flagged) {
+          for (const [category, flagged] of Object.entries(result.categories)) {
+            if (flagged) {
+              flags.push({
+                code: category,
+                description: category,
+                confidence:
+                  result.category_scores[category as keyof OpenAI.Moderation.CategoryScores],
+              });
+            }
+          }
+        }
+      }
+      return { flags };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(moderation)}`,
+      };
+    }
+  }
+}
+
+export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-3-large');
+export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4o');
+export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-4o', {
+  config: {
+    response_format: { type: 'json_object' },
+  },
+});
+export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o');
+export const DefaultModerationProvider = new OpenAiModerationProvider('text-moderation-latest');

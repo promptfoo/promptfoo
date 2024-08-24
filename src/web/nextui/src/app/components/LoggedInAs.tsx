@@ -1,11 +1,10 @@
 import React from 'react';
-import Link from 'next/link';
+import { useAuth } from '@/supabase-client';
 import Avatar from '@mui/material/Avatar';
+import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import IconButton from '@mui/material/IconButton';
-
-import { useAuth } from '@/supabase-client';
+import Link from 'next/link';
 
 export default function LoggedInAs() {
   const { user, logout } = useAuth();
@@ -15,13 +14,13 @@ export default function LoggedInAs() {
     setAnchorEl(event.currentTarget);
   };
 
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
   const handleLogout = async () => {
     logout?.();
     handleClose();
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
   };
 
   if (!user) {

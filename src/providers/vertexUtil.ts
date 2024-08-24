@@ -1,3 +1,5 @@
+import type { GoogleAuth } from 'google-auth-library';
+
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
 interface SafetyRating {
@@ -7,6 +9,7 @@ interface SafetyRating {
     | 'HARM_CATEGORY_SEXUALLY_EXPLICIT'
     | 'HARM_CATEGORY_DANGEROUS_CONTENT';
   probability: Probability;
+  blocked: boolean;
 }
 
 interface PartText {
@@ -29,17 +32,17 @@ interface Content {
 
 interface Candidate {
   content: Content;
-  finishReason?: 'FINISH_REASON_STOP' | 'STOP';
+  finishReason?: 'FINISH_REASON_STOP' | 'STOP' | 'SAFETY';
   safetyRatings: SafetyRating[];
 }
 
-interface UsageMetadata {
+interface GeminiUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount?: number;
   totalTokenCount: number;
 }
 
-interface ErrorResponse {
+export interface GeminiErrorResponse {
   error: {
     code: number;
     message: string;
@@ -47,9 +50,70 @@ interface ErrorResponse {
   };
 }
 
-export interface ResponseData {
+export interface GeminiResponseData {
   candidates: Candidate[];
-  usageMetadata?: UsageMetadata;
+  usageMetadata?: GeminiUsageMetadata;
 }
 
-export type GeminiApiResponse = (ResponseData | ErrorResponse)[];
+export type GeminiApiResponse = (GeminiResponseData | GeminiErrorResponse)[];
+
+export interface Palm2ApiResponse {
+  error?: {
+    code: string;
+    message: string;
+  };
+  predictions?: [
+    {
+      candidates: [
+        {
+          content: string;
+        },
+      ];
+    },
+  ];
+}
+
+export function maybeCoerceToGeminiFormat(contents: any) {
+  let coerced = false;
+  if (Array.isArray(contents) && typeof contents[0].content === 'string') {
+    // This looks like an OpenAI chat prompt.  Convert it to a compatible format
+    contents = {
+      role: 'user',
+      parts: {
+        text: contents.map((item) => item.content).join(''),
+      },
+    };
+    coerced = true;
+  }
+  return { contents, coerced };
+}
+
+let cachedAuth: GoogleAuth | undefined;
+export async function getGoogleClient() {
+  if (!cachedAuth) {
+    let GoogleAuth;
+    try {
+      const importedModule = await import('google-auth-library');
+      GoogleAuth = importedModule.GoogleAuth;
+    } catch (err) {
+      throw new Error(
+        'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
+      );
+    }
+    cachedAuth = new GoogleAuth({
+      scopes: 'https://www.googleapis.com/auth/cloud-platform',
+    });
+  }
+  const client = await cachedAuth.getClient();
+  const projectId = await cachedAuth.getProjectId();
+  return { client, projectId };
+}
+
+export async function hasGoogleDefaultCredentials() {
+  try {
+    await getGoogleClient();
+    return true;
+  } catch (err) {
+    return false;
+  }
+}

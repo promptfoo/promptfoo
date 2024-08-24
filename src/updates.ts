@@ -1,34 +1,32 @@
 import chalk from 'chalk';
 import semverGt from 'semver/functions/gt';
-
-import logger from './logger';
+import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
+import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
-import packageJson from '../package.json';
+import logger from './logger';
 
-const VERSION = packageJson.version;
-
-export async function getLatestVersion(packageName: string) {
-  const response = await fetchWithTimeout(`https://registry.npmjs.org/${packageName}`, {}, 1000);
+export async function getLatestVersion() {
+  const response = await fetchWithTimeout(`https://api.promptfoo.dev/api/latestVersion`, {}, 1000);
   if (!response.ok) {
-    throw new Error(`Failed to fetch package information for ${packageName}`);
+    throw new Error(`Failed to fetch package information for promptfoo`);
   }
-  const data = await response.json();
-  return data['dist-tags'].latest;
+  const data = (await response.json()) as { latestVersion: string };
+  return data.latestVersion;
 }
 
 export async function checkForUpdates(): Promise<boolean> {
-  if (process.env.PROMPTFOO_DISABLE_UPDATE) {
+  if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
     return false;
   }
 
   let latestVersion: string;
   try {
-    latestVersion = await getLatestVersion('promptfoo');
+    latestVersion = await getLatestVersion();
   } catch {
     return false;
   }
   if (semverGt(latestVersion, VERSION)) {
-    const border = '='.repeat(process.stdout.columns - 10);
+    const border = '='.repeat(TERMINAL_MAX_WIDTH);
     logger.info(
       `\n${border}
 ${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(

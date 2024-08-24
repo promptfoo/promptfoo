@@ -1,21 +1,20 @@
 import React, { useState } from 'react';
-import yaml from 'js-yaml';
-import Link from 'next/link';
+import type { TestCasesWithMetadata } from '@/../../../types';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import Typography from '@mui/material/Typography';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
-import Pagination from '@mui/material/Pagination';
-
-import type { TestCasesWithMetadata } from '@/../../../types';
+import Typography from '@mui/material/Typography';
+import yaml from 'js-yaml';
+import Link from 'next/link';
 
 interface DatasetDialogProps {
   openDialog: boolean;
@@ -66,21 +65,26 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
               .map((promptData, index) => (
                 <TableRow key={index} hover>
                   <TableCell>
-                    <Link href={`/eval/?file=${promptData.evalFilepath}`}>
-                      {promptData.evalId.slice(0, 6)}
-                    </Link>
+                    <Link href={`/eval/?evalId=${promptData.evalId}`}>{promptData.evalId}</Link>
                   </TableCell>
                   <TableCell style={{ minWidth: '8em' }}>
                     <Link href={`/prompts/?id=${promptData.id}`}>{promptData.id.slice(0, 6)}</Link>
                   </TableCell>
-                  <TableCell>{promptData.prompt.metrics?.score.toFixed(2) ?? '-'}</TableCell>
                   <TableCell>
-                    {promptData.prompt.metrics?.testPassCount !== undefined &&
-                    promptData.prompt.metrics?.testFailCount !== undefined
+                    {typeof promptData.prompt.metrics?.score === 'number'
+                      ? promptData.prompt.metrics.score.toFixed(2)
+                      : '-'}
+                  </TableCell>
+                  <TableCell>
+                    {typeof promptData.prompt.metrics?.testPassCount === 'number' &&
+                    typeof promptData.prompt.metrics?.testFailCount === 'number' &&
+                    promptData.prompt.metrics.testPassCount +
+                      promptData.prompt.metrics.testFailCount >
+                      0
                       ? (
-                          (promptData.prompt.metrics?.testPassCount /
-                            (promptData.prompt.metrics?.testPassCount +
-                              promptData.prompt.metrics?.testFailCount)) *
+                          (promptData.prompt.metrics.testPassCount /
+                            (promptData.prompt.metrics.testPassCount +
+                              promptData.prompt.metrics.testFailCount)) *
                           100.0
                         ).toFixed(2) + '%'
                       : '-'}

@@ -6,7 +6,7 @@ tests:
 
     assert:
       # Ensure the answer agrees with the provided facts
-      - type: model-graded-factuality
+      - type: factuality
         value: The capital of California is Sacramento
 
       # Ensure the answer meets the criteria

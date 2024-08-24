@@ -12,3 +12,11 @@
   border: 1px solid var(--border-color);
   margin-right: 0.25rem; /* spacing for failure reason text in output cell */
 }
+
+.custom-metric-container > span.clickable {
+  cursor: pointer;
+}
+
+.custom-metric-container > span.clickable:hover {
+  border-color: var(--link-color);
+}

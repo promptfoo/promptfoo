@@ -1,8 +1,7 @@
 import yaml from 'js-yaml';
+import { getEnvBool, getEnvInt } from '../envars';
 
-export const REQUEST_TIMEOUT_MS = process.env.REQUEST_TIMEOUT_MS
-  ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
-  : 300_000;
+export const REQUEST_TIMEOUT_MS = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 
 export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
   const trimmedPrompt = prompt.trim();
@@ -19,7 +18,7 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
       return JSON.parse(prompt) as T;
     } catch (err) {
       if (
-        process.env.PROMPTFOO_REQUIRE_JSON_PROMPTS ||
+        getEnvBool('PROMPTFOO_REQUIRE_JSON_PROMPTS') ||
         trimmedPrompt.startsWith('{') ||
         trimmedPrompt.startsWith('[')
       ) {
@@ -29,4 +28,8 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
       return defaultValue;
     }
   }
+}
+
+export function toTitleCase(str: string) {
+  return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
 }

@@ -1,10 +1,9 @@
 import React from 'react';
-import Link from 'next/link';
-import { cookies } from 'next/headers';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-
+import { cookies } from 'next/headers';
+import Link from 'next/link';
 import Eval from './Eval';
-import { IS_RUNNING_LOCALLY } from '@/constants';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
@@ -13,7 +12,7 @@ export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 export const revalidate = 1;
 
 export default async function Page() {
-  if (!IS_RUNNING_LOCALLY) {
+  if (USE_SUPABASE) {
     const supabase = createServerComponentClient({ cookies });
     const {
       data: { user },

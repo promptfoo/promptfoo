@@ -1,3 +1,0 @@
-[
-  {"role": "user", "content": "What is the weather like in {{city}}?"}
-]

@@ -6,30 +6,34 @@ sidebar_position: 6
 
 These metrics are created by logical tests that are run on LLM output.
 
-| Assertion Type                                                  | Returns true if...                                               |
-| --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| [contains](#contains)                                           | output contains substring                                        |
-| [contains-all](#contains-all)                                   | output contains all list of substrings                           |
-| [contains-any](#contains-any)                                   | output contains any of the listed substrings                     |
-| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)     |
-| [cost](#cost)                                                   | Inference cost is below a threshold                              |
-| [equals](#equality)                                             | output matches exactly                                           |
-| [icontains](#contains)                                          | output contains substring, case insensitive                      |
-| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive         |
-| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive   |
-| [is-json](#is-json)                                             | output is valid json (optional json schema validation)           |
-| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema |
-| [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                |
-| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                |
-| [latency](#latency)                                             | Latency is below a threshold (milliseconds)                      |
-| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
-| [perplexity-score](#perplexity-score)                           | Normalized perplexity                                            |
-| [perplexity](#perplexity)                                       | Perplexity is below a threshold                                  |
-| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                    |
-| [regex](#regex)                                                 | output matches regex                                             |
-| rouge-n                                                         | Rouge-N score is above a given threshold                         |
-| [starts-with](#starts-with)                                     | output starts with string                                        |
-| [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                          |
+| Assertion Type                                                  | Returns true if...                                                 |
+| --------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [contains](#contains)                                           | output contains substring                                          |
+| [contains-all](#contains-all)                                   | output contains all list of substrings                             |
+| [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
+| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
+| [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
+| [contains-xml](#contains-xml)                                   | output contains valid xml                                          |
+| [cost](#cost)                                                   | Inference cost is below a threshold                                |
+| [equals](#equality)                                             | output matches exactly                                             |
+| [icontains](#contains)                                          | output contains substring, case insensitive                        |
+| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
+| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
+| [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
+| [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
+| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
+| [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [is-xml](#is-xml)                                               | output is valid xml                                                |
+| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
+| [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
+| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
+| [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
+| [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
+| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
+| [regex](#regex)                                                 | output matches regex                                               |
+| rouge-n                                                         | Rouge-N score is above a given threshold                           |
+| [starts-with](#starts-with)                                     | output starts with string                                          |
+| [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -160,6 +164,17 @@ assert:
 
 See also: [`is-json`](#is-json)
 
+### Contains-Sql
+
+This assertion ensure that the output is either valid SQL, or contains a code block with valid SQL.
+
+```yaml
+assert:
+  - type: contains-sql
+```
+
+See [`is-sql`](#is-sql) for advanced usage, including specific database types and allowlists for tables and columns.
+
 ### Cost
 
 The `cost` assertion checks if the cost of the LLM call is below a specified threshold.
@@ -170,7 +185,7 @@ Example:
 
 ```yaml
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
   - openai:gpt-4
 assert:
   # Pass if the LLM call costs less than $0.001
@@ -188,6 +203,22 @@ Example:
 assert:
   - type: equals
     value: 'The expected output'
+```
+
+You can also check whether it matches the expected JSON format.
+
+```yaml
+assert:
+  - type: equals
+    value: { 'key': 'value' }
+```
+
+If your expected JSON is large, import it from a file:
+
+```yaml
+assert:
+  - type: equals
+    value: 'file://path/to/expected.json'
 ```
 
 ### Is-JSON
@@ -245,6 +276,176 @@ assert:
     value: file://./path/to/schema.json
 ```
 
+### Is-XML
+
+The `is-xml` assertion checks if the entire LLM output is a valid XML string. It can also verify the presence of specific elements within the XML structure.
+
+Example:
+
+```yaml
+assert:
+  - type: is-xml
+```
+
+This basic usage checks if the output is valid XML.
+
+You can also specify required elements:
+
+```yaml
+assert:
+  - type: is-xml
+    value:
+      requiredElements:
+        - root.child
+        - root.sibling
+```
+
+This checks if the XML is valid and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
+
+#### How it works
+
+1. The assertion first attempts to parse the entire output as XML using a parser (fast-xml-parser).
+2. If parsing succeeds, it's considered valid XML.
+3. If `value` is specified:
+   - It checks for a requiredElements key with an array of required elements.
+   - Each element path (e.g., "root.child") is split by dots.
+   - It traverses the parsed XML object following these paths.
+   - If any required element is not found, the assertion fails.
+
+#### Examples
+
+Basic XML validation:
+
+```yaml
+assert:
+  - type: is-xml
+```
+
+Passes for: `<root><child>Content</child></root>`
+Fails for: `<root><child>Content</child></root` (missing closing tag)
+
+Checking for specific elements:
+
+```yaml
+assert:
+  - type: is-xml
+    value:
+      requiredElements:
+        - analysis.classification
+        - analysis.color
+```
+
+Passes for: `<analysis><classification>T-shirt</classification><color>Red</color></analysis>`
+Fails for: `<analysis><classification>T-shirt</classification></analysis>` (missing color element)
+
+Checking nested elements:
+
+```yaml
+assert:
+  - type: is-xml
+    value:
+      requiredElements:
+        - root.parent.child.grandchild
+```
+
+Passes for: `<root><parent><child><grandchild>Content</grandchild></child></parent></root>`
+Fails for: `<root><parent><child></child></parent></root>` (missing grandchild element)
+
+#### Inverse assertion
+
+You can use the `not-is-xml` assertion to check if the output is not valid XML:
+
+```yaml
+assert:
+  - type: not-is-xml
+```
+
+This will pass for non-XML content and fail for valid XML content.
+
+Note: The `is-xml` assertion requires the entire output to be valid XML. For checking XML content within a larger text, use the `contains-xml` assertion.
+
+### Contains-XML
+
+The `contains-xml` is identical to `is-xml`, except it checks if the LLM output contains valid XML content, even if it's not the entire output. For example, the following is valid.
+
+```xml
+Sure, here is your xml:
+<root><child>Content</child></root>
+let me know if you have any other questions!
+```
+
+### Is-SQL
+
+The `is-sql` assertion checks if the LLM output is a valid SQL statement.
+
+Example:
+
+```yaml
+assert:
+  - type: is-sql
+```
+
+To use this assertion, you need to install the `node-sql-parser` package. You can install it using npm:
+
+```
+npm install node-sql-parser
+```
+
+You can optionally set a `databaseType` in the `value` to determine the specific database syntax that your LLM output will be validated against. The default database syntax is MySQL. For a complete and up-to-date list of supported database syntaxes, please refer to the [node-sql-parser documentation](https://github.com/taozhi8833998/node-sql-parser?tab=readme-ov-file#supported-database-sql-syntax).  
+The supported database syntax list:
+
+- Athena
+- BigQuery
+- DB2
+- FlinkSQL
+- Hive
+- MariaDB
+- MySQL
+- Noql
+- PostgresQL
+- Redshift
+- Snowflake(alpha)
+- Sqlite
+- TransactSQL
+
+Example:
+
+```yaml
+assert:
+  - type: is-sql
+    value:
+      databaseType: 'MySQL'
+```
+
+You can also optionally set a `allowedTables`/`allowedColumns` in the `value` to determine the SQL authority list that your LLM output will be validated against.  
+The format of allowedTables:
+
+```
+{type}::{dbName}::{tableName} // type could be select, update, delete or insert
+```
+
+The format of allowedColumns:
+
+```
+{type}::{tableName}::{columnName} // type could be select, update, delete or insert
+```
+
+For `SELECT *`, `DELETE`, and `INSERT INTO tableName VALUES()` without specified columns, the `.*` column authority regex is required.
+
+Example:
+
+```yaml
+assert:
+  - type: is-sql
+    value:
+      databaseType: 'MySQL'
+      allowedTables:
+        - '(select|update|insert|delete)::null::departments'
+      allowedColumns:
+        - 'select::null::name'
+        - 'update::null::id'
+```
+
 ### is-valid-openai-function-call
 
 This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
@@ -286,6 +487,18 @@ assert:
     value: hello world
 ```
 
+`value` can reference other variables using template syntax. For example:
+
+```yaml
+tests:
+  - vars:
+      expected: foobar
+    assert:
+      - type: levenshtein
+        threshold: 2
+        value: '{{expected}}'
+```
+
 ### Perplexity
 
 Perplexity is a measurement used in natural language processing to quantify how well a language model predicts a sample of text. It's essentially a measure of the model's uncertainty.
@@ -322,7 +535,9 @@ Comparing scores across models may not be meaningful, unless the models have bee
 This makes it easier to include in an aggregate promptfoo score, as higher scores are usually better. In this example, we compare perplexity across multiple GPTs:
 
 ```yaml
-providers: [gpt-4-1106-preview, gpt-3.5-turbo-1106]
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
 tests:
   - assert:
       - type: perplexity-score

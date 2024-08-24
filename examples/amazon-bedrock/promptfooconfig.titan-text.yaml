@@ -1,8 +1,9 @@
 prompts:
   - 'Convert this English to {{language}}: {{input}}'
   - 'Translate to {{language}}: {{input}}'
+
 providers:
-  - id: bedrock:completion:amazon.titan-text-lite-v1
+  - id: bedrock:amazon.titan-text-lite-v1
     config:
       region: 'us-west-2'
       textGenerationConfig:
@@ -10,6 +11,7 @@ providers:
         temperature: 0.3
         stopSequences: []
         topP: 0.9
+
 tests:
   - vars:
       language: French

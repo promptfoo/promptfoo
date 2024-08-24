@@ -1,8 +1,8 @@
-import logger from '../logger';
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161
@@ -40,6 +40,42 @@ interface OllamaCompletionOptions {
   stop?: string[];
   num_thread?: number;
 }
+
+const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
+  'num_predict',
+  'top_k',
+  'top_p',
+  'tfs_z',
+  'seed',
+  'useNUMA',
+  'num_ctx',
+  'num_keep',
+  'num_batch',
+  'num_gqa',
+  'num_gpu',
+  'main_gpu',
+  'low_vram',
+  'f16_kv',
+  'logits_all',
+  'vocab_only',
+  'use_mmap',
+  'use_mlock',
+  'embedding_only',
+  'rope_frequency_base',
+  'rope_frequency_scale',
+  'typical_p',
+  'repeat_last_n',
+  'temperature',
+  'repeat_penalty',
+  'presence_penalty',
+  'frequency_penalty',
+  'mirostat',
+  'mirostat_tau',
+  'mirostat_eta',
+  'penalize_newline',
+  'stop',
+  'num_thread',
+]);
 
 interface OllamaCompletionJsonL {
   model: string;
@@ -101,18 +137,32 @@ export class OllamaCompletionProvider implements ApiProvider {
     const params = {
       model: this.modelName,
       prompt,
-      options: this.config,
+      options: Object.keys(this.config).reduce(
+        (options, key) => {
+          const optionName = key as keyof OllamaCompletionOptions;
+          if (OllamaCompletionOptionKeys.has(optionName)) {
+            options[optionName] = this.config[optionName];
+          }
+          return options;
+        },
+        {} as Partial<
+          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
+        >,
+      ),
     };
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/generate`,
+        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(getEnvString('OLLAMA_API_KEY')
+              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
+              : {}),
           },
           body: JSON.stringify(params),
         },
@@ -181,18 +231,32 @@ export class OllamaChatProvider implements ApiProvider {
     const params = {
       model: this.modelName,
       messages,
-      options: this.config,
+      options: Object.keys(this.config).reduce(
+        (options, key) => {
+          const optionName = key as keyof OllamaCompletionOptions;
+          if (OllamaCompletionOptionKeys.has(optionName)) {
+            options[optionName] = this.config[optionName];
+          }
+          return options;
+        },
+        {} as Partial<
+          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
+        >,
+      ),
     };
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/chat`,
+        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(getEnvString('OLLAMA_API_KEY')
+              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
+              : {}),
           },
           body: JSON.stringify(params),
         },
@@ -247,11 +311,14 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/embeddings`,
+        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embeddings`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(getEnvString('OLLAMA_API_KEY')
+              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
+              : {}),
           },
           body: JSON.stringify(params),
         },
@@ -266,7 +333,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     logger.debug(`\tOllama embeddings API response: ${JSON.stringify(response.data)}`);
 
     try {
-      const embedding = response.data.embeddings as number[];
+      const embedding = response.data.embedding as number[];
       if (!embedding) {
         throw new Error('No embedding found in Ollama embeddings API response');
       }

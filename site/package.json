@@ -16,21 +16,26 @@
     "format": "prettier --ignore-path .gitignore -w ."
   },
   "dependencies": {
-    "@docusaurus/core": "^3.0.1",
-    "@docusaurus/plugin-google-gtag": "^3.0.1",
-    "@docusaurus/preset-classic": "^3.0.1",
-    "@docusaurus/theme-search-algolia": "^3.0.1",
-    "@mdx-js/react": "^3.0.0",
-    "clsx": "^1.2.1",
-    "docusaurus-plugin-image-zoom": "^1.0.1",
-    "prism-react-renderer": "^2.3.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "@calcom/embed-react": "^1.5.0",
+    "@docusaurus/core": "^3.5.2",
+    "@docusaurus/plugin-content-docs": "^3.5.2",
+    "@docusaurus/plugin-google-gtag": "^3.5.2",
+    "@docusaurus/preset-classic": "^3.5.2",
+    "@docusaurus/theme-search-algolia": "^3.5.2",
+    "@mdx-js/react": "^3.0.1",
+    "@monaco-editor/react": "^4.6.0",
+    "@mui/icons-material": "^5.16.7",
+    "@segment/ajv-human-errors": "^2.13.0",
+    "clsx": "^2.1.1",
+    "docusaurus-plugin-image-zoom": "^2.0.0",
+    "prism-react-renderer": "^2.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.0.1",
-    "@tsconfig/docusaurus": "^1.0.7",
-    "typescript": "^4.9.5"
+    "@docusaurus/module-type-aliases": "^3.5.2",
+    "@tsconfig/docusaurus": "^2.0.3",
+    "typescript": "^5.5.4"
   },
   "browserslist": {
     "production": [

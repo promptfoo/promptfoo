@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300">
+  <!-- User -->
+  <rect x="10" y="100" width="150" height="100" fill="#e6f3ff" stroke="#000" stroke-width="2"/>
+  <text x="85" y="155" text-anchor="middle" font-family="Arial, sans-serif" font-size="14">User</text>
+  
+  <!-- AI Agent -->
+  <rect x="300" y="100" width="150" height="100" fill="#fff" stroke="#000" stroke-width="2"/>
+  <text x="375" y="155" text-anchor="middle" font-family="Arial, sans-serif" font-size="14">AI Agent</text>
+  
+  <!-- External Resources -->
+  <rect x="600" y="50" width="150" height="200" fill="#fff" stroke="#000" stroke-width="2"/>
+  <text x="675" y="155" text-anchor="middle" font-family="Arial, sans-serif" font-size="14">External Resources</text>
+  
+  <!-- Arrows -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" />
+    </marker>
+  </defs>
+  
+  <line x1="160" y1="130" x2="290" y2="130" stroke="#000" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="290" y1="170" x2="160" y2="170" stroke="#000" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="450" y1="130" x2="590" y2="130" stroke="#000" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="590" y1="170" x2="450" y2="170" stroke="#000" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Labels -->
+  <text x="225" y="120" text-anchor="middle" font-family="Arial, sans-serif" font-size="12">1. User Request</text>
+  <text x="225" y="190" text-anchor="middle" font-family="Arial, sans-serif" font-size="12">4. Response</text>
+  <text x="520" y="120" text-anchor="middle" font-family="Arial, sans-serif" font-size="12">2. Fetch Data</text>
+  <text x="520" y="190" text-anchor="middle" font-family="Arial, sans-serif" font-size="12">3. Return Data</text>
+</svg>
