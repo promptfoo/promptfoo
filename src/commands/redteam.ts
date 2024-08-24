@@ -46,7 +46,7 @@ prompts:
   {% endif %}
 
 providers:
-  # To talk directly to your application, use a custom provider.
+  # Providers are red team targets. To talk directly to your application, use a custom provider.
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
   {% for provider in providers -%}
   - {{ provider }}
@@ -65,9 +65,9 @@ redteam:
   plugins:
     {% for plugin in plugins -%}
     {% if plugin is string -%}
-    - {{plugin}}
+    - {{plugin}}  # {{descriptions[plugin]}}
     {% else -%}
-    - id: {{plugin.id}}
+    - id: {{plugin.id}}  # {{descriptions[plugin.id]}}
       {% if plugin.numTests is defined -%}
       numTests: {{plugin.numTests}}
       {% endif -%}
@@ -85,10 +85,10 @@ redteam:
   {% endif -%}
 
   {% if strategies.length > 0 -%}
-  # Strategies for applying adversarial inputs
+  # Attack methods for applying adversarial inputs
   strategies:
     {% for strategy in strategies -%}
-    - {{strategy}}
+    - {{strategy}} # {{descriptions[strategy]}}
     {% endfor %}
   {% endif -%}
 `;
@@ -451,6 +451,7 @@ export async function redteamInit(directory: string | undefined) {
     strategies,
     prompts,
     providers,
+    descriptions: subCategoryDescriptions,
   });
   fs.writeFileSync(configPath, redteamConfig, 'utf8');
 
