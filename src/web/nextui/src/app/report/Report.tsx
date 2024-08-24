@@ -28,6 +28,29 @@ const App: React.FC = () => {
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
 
+  const categoryFailures = React.useMemo(() => {
+    const failures: Record<string, { prompt: string; output: string }[]> = {};
+    evalData?.results.results.forEach((result) => {
+      const pluginId =
+        result.metadata?.pluginId ||
+        categoryAliasesReverse[result.vars['harmCategory'] as keyof typeof categoryAliases];
+      if (!pluginId) {
+        console.warn(`Could not get failures for plugin ${pluginId}`);
+        return;
+      }
+      if (pluginId && !result.gradingResult?.pass) {
+        if (!failures[pluginId]) {
+          failures[pluginId] = [];
+        }
+        failures[pluginId].push({
+          prompt: result.prompt.raw,
+          output: result.response?.output,
+        });
+      }
+    });
+    return failures;
+  }, [evalData]);
+
   React.useEffect(() => {
     const fetchEvalById = async (id: string) => {
       const resp = await fetch(`${await getApiBaseUrl()}/api/results/${id}`, {
@@ -177,7 +200,11 @@ const App: React.FC = () => {
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} />
-        <RiskCategories categoryStats={categoryStats} />
+        <RiskCategories
+          categoryStats={categoryStats}
+          evalId={evalId}
+          failuresByPlugin={categoryFailures}
+        />
         <TestSuites evalId={evalId} categoryStats={categoryStats} />
       </Stack>
       <Modal
