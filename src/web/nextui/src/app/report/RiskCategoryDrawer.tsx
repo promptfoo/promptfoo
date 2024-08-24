@@ -19,6 +19,19 @@ interface RiskCategoryDrawerProps {
   evalId: string;
 }
 
+function getPromptDisplayString(prompt: string): string {
+  try {
+    const parsedPrompt = JSON.parse(prompt);
+    if (Array.isArray(parsedPrompt)) {
+      const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
+      if (lastPrompt.content) {
+        return lastPrompt.content;
+      }
+    }
+  } catch (e) {}
+  return prompt;
+}
+
 const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   open,
   onClose,
@@ -75,8 +88,6 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           color="inherit"
           fullWidth
           onClick={(event) => {
-            const searchParams = new URLSearchParams(window.location.search);
-            const evalId = searchParams.get('evalId');
             const descriptiveName = categoryAliases[category as keyof typeof categoryAliases];
             const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${descriptiveName}|metric=${descriptiveName})`)}`;
             if (event.ctrlKey || event.metaKey) {
@@ -91,8 +102,15 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
         {failures.length > 0 ? (
           <List>
             {failures.slice(0, 5).map((failure, index) => (
-              <ListItem key={index}>
-                <ListItemText primary={`${failure.output.substring(0, 300)}...`} />
+              <ListItem key={index} className="failure-item">
+                <Box>
+                  <Typography variant="subtitle1" className="prompt">
+                    {getPromptDisplayString(failure.prompt)}
+                  </Typography>
+                  <Typography variant="body2" className="output">
+                    {failure.output}
+                  </Typography>
+                </Box>
               </ListItem>
             ))}
           </List>
