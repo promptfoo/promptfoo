@@ -79,6 +79,11 @@ export abstract class PluginBase {
     return this.promptsToTestCases(prompts);
   }
 
+  /**
+   * Converts an array of { prompt: string } objects into an array of test cases.
+   * @param prompts - An array of { prompt: string } objects.
+   * @returns An array of test cases.
+   */
   protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
     return prompts.sort().map((prompt) => ({
       vars: {
@@ -88,6 +93,12 @@ export abstract class PluginBase {
     }));
   }
 
+  /**
+   * Parses the LLM response of generated prompts into an array of objects.
+   *
+   * @param generatedPrompts - The LLM response of generated prompts.
+   * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
+   */
   protected parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
     return generatedPrompts
       .split('\n')
