@@ -13,7 +13,10 @@ import { generateRedteamCommand } from './commands/generate/redteam';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
-import { initRedteamCommand } from './commands/redteam';
+import {
+  initCommand as redteamInitCommand,
+  pluginsCommand as redteamPluginsCommand,
+} from './commands/redteam';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { versionCommand } from './commands/version';
@@ -78,7 +81,8 @@ async function main() {
   generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
-  initRedteamCommand(redteamBaseCommand);
+  redteamInitCommand(redteamBaseCommand);
+  redteamPluginsCommand(redteamBaseCommand);
   generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
 
   if (!process.argv.slice(2).length) {
