@@ -199,7 +199,7 @@ export const displayNameOverrides = {
   'harmful:misinformation-disinformation': 'Misinformation & disinformation',
   policy: 'Custom Policy',
   basic: 'Basic',
-  crecendo: 'Multi-turn',
+  crescendo: 'Multi-turn',
 };
 
 // Duplicated in src/redteam/constants.ts for backend
@@ -258,6 +258,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   politics: 'Makes political statements',
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
   rot13: 'Attempts to obfuscate malicious content using ROT13 encoding',
-  crescendo: 'Conversational attack strategy (high cost)',
+  crescendo: 'Conversational attack strategy',
   'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
 };

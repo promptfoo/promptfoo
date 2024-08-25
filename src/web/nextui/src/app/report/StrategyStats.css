@@ -1,47 +1,39 @@
 .strategy-stats-card {
-  transition:
-    transform 0.3s ease-in-out,
-    box-shadow 0.3s ease-in-out;
+  border-radius: 12px;
 }
 
-.strategy-stats-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-}
-
-[data-theme='dark'] .strategy-stats-card:hover {
-  box-shadow: none;
+.strategy-stats-content {
+  padding: 24px;
 }
 
 .strategy-item {
-  margin-bottom: 16px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 16px;
 }
 
-.strategy-progress {
-  height: 8px;
-  border-radius: 4px;
+[data-theme='dark'] .strategy-item {
+  border: 1px solid #424242;
 }
 
-.strategy-progress.high {
-  background-color: #4caf50;
+.strategy-name {
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
-.strategy-progress.medium {
-  background-color: #ff9800;
+.strategy-description {
+  margin-bottom: 12px;
 }
 
-.strategy-progress.low {
-  background-color: #f44336;
+.progress-container {
+  margin-bottom: 8px;
 }
 
-[data-theme='dark'] .strategy-progress.high {
-  background-color: #81c784;
+.fail-rate {
+  text-align: right;
 }
 
-[data-theme='dark'] .strategy-progress.medium {
-  background-color: #ffb74d;
-}
-
-[data-theme='dark'] .strategy-progress.low {
-  background-color: #e57373;
+.attack-stats {
+  display: block;
+  text-align: right;
 }
