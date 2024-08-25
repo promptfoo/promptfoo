@@ -6,10 +6,17 @@
   padding: 24px;
 }
 
+.strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
 .strategy-item {
   border: 1px solid #eee;
   border-radius: 8px;
   padding: 16px;
+  height: 100%;
 }
 
 [data-theme='dark'] .strategy-item {

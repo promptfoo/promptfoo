@@ -36,7 +36,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({ strategyStats }) => {
         <Typography variant="h5" mb={2}>
           Attack success rates
         </Typography>
-        <Stack spacing={3}>
+        <Box className="strategy-grid">
           {strategies.map(([strategy, { pass, total }]) => {
             const failRate = ((total - pass) / total) * 100;
             return (
@@ -63,7 +63,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({ strategyStats }) => {
               </Box>
             );
           })}
-        </Stack>
+        </Box>
       </CardContent>
     </Card>
   );
