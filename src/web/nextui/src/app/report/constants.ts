@@ -185,6 +185,7 @@ export const displayNameOverrides = {
   competitors: 'Competitor Endorsements',
   contracts: 'Unsupervised Contracts',
   jailbreak: 'Jailbreak',
+  'jailbreak:tree': 'Tree-based search',
   pii: 'PII Leaks',
   politics: 'Political Opinions',
   'shell-injection': 'Shell Injection',
@@ -197,6 +198,8 @@ export const displayNameOverrides = {
   'harmful:copyright-violations': 'Copyright Violations',
   'harmful:misinformation-disinformation': 'Misinformation & disinformation',
   policy: 'Custom Policy',
+  basic: 'Basic',
+  crecendo: 'Multi-turn',
 };
 
 // Duplicated in src/redteam/constants.ts for backend

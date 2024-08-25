@@ -1,0 +1,47 @@
+.strategy-stats-card {
+  transition:
+    transform 0.3s ease-in-out,
+    box-shadow 0.3s ease-in-out;
+}
+
+.strategy-stats-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .strategy-stats-card:hover {
+  box-shadow: none;
+}
+
+.strategy-item {
+  margin-bottom: 16px;
+}
+
+.strategy-progress {
+  height: 8px;
+  border-radius: 4px;
+}
+
+.strategy-progress.high {
+  background-color: #4caf50;
+}
+
+.strategy-progress.medium {
+  background-color: #ff9800;
+}
+
+.strategy-progress.low {
+  background-color: #f44336;
+}
+
+[data-theme='dark'] .strategy-progress.high {
+  background-color: #81c784;
+}
+
+[data-theme='dark'] .strategy-progress.medium {
+  background-color: #ffb74d;
+}
+
+[data-theme='dark'] .strategy-progress.low {
+  background-color: #e57373;
+}
