@@ -505,7 +505,7 @@ export async function redteamInit(directory: string | undefined) {
   }
 }
 
-export function initRedteamCommand(program: Command) {
+export function initCommand(program: Command) {
   program
     .command('init [directory]')
     .description('Initialize red teaming project')
@@ -530,6 +530,28 @@ export function initRedteamCommand(program: Command) {
         } else {
           throw err;
         }
+      }
+    });
+}
+
+export function pluginsCommand(program: Command) {
+  program
+    .command('plugins')
+    .description('List all available plugins')
+    .option('--ids-only', 'Show only plugin IDs without descriptions')
+    .option('--default', 'Show only the default plugins')
+    .action(async (options) => {
+      const pluginsToShow = options.default ? DEFAULT_PLUGINS : ALL_PLUGINS;
+
+      if (options.idsOnly) {
+        pluginsToShow.forEach((plugin) => {
+          logger.info(plugin);
+        });
+      } else {
+        pluginsToShow.forEach((plugin) => {
+          const description = subCategoryDescriptions[plugin] || 'No description available';
+          logger.info(`${chalk.blue.bold(plugin)}: ${description}`);
+        });
       }
     });
 }
