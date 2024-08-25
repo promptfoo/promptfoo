@@ -6,9 +6,10 @@ import { getStandaloneEvals } from '../../../../../../util';
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function GET() {
-  if (USE_SUPABASE || IS_RUNNING_LOCALLY) {
+  if (USE_SUPABASE) {
     return NextResponse.json({ error: 'Not implemented' });
   }
+
   let results: StandaloneEval[];
   try {
     results = await getStandaloneEvals();
@@ -16,6 +17,7 @@ export async function GET() {
     // Database potentially not yet set up.
     results = [];
   }
+
   return NextResponse.json({
     data: results,
   });
