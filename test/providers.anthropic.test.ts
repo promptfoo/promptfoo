@@ -68,24 +68,28 @@ describe('Anthropic', () => {
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
-      expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(1, {
-        model: 'claude-3-opus-20240229',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                text: 'What is the forecast in San Francisco?',
-                type: 'text',
-              },
-            ],
-          },
-        ],
-        tools,
-        temperature: 0,
-        stream: false,
-      });
+      expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(
+        1,
+        {
+          model: 'claude-3-opus-20240229',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  text: 'What is the forecast in San Francisco?',
+                  type: 'text',
+                },
+              ],
+            },
+          ],
+          tools,
+          temperature: 0,
+          stream: false,
+        },
+        {},
+      );
 
       expect(result).toMatchObject({
         cost: undefined,
@@ -126,25 +130,29 @@ describe('Anthropic', () => {
 
       await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
-      expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(1, {
-        model: 'claude-3-opus-20240229',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                text: 'What is the forecast in San Francisco?',
-                type: 'text',
-              },
-            ],
-          },
-        ],
-        tools,
-        tool_choice: toolChoice,
-        temperature: 0,
-        stream: false,
-      });
+      expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(
+        1,
+        {
+          model: 'claude-3-opus-20240229',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  text: 'What is the forecast in San Francisco?',
+                  type: 'text',
+                },
+              ],
+            },
+          ],
+          tools,
+          tool_choice: toolChoice,
+          temperature: 0,
+          stream: false,
+        },
+        {},
+      );
 
       provider.config.tool_choice = undefined;
     });
