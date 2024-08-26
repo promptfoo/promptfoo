@@ -4,6 +4,12 @@
     "PromptfooConfigSchema": {
       "type": "object",
       "properties": {
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "description": {
           "type": "string"
         },
