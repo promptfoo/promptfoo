@@ -46,6 +46,31 @@ const App: React.FC = () => {
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
 
+  const categoryFailures = React.useMemo(() => {
+    const failures: Record<string, { prompt: string; output: string }[]> = {};
+    evalData?.results.results.forEach((result) => {
+      // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
+      const pluginId =
+        categoryAliasesReverse[result.vars['harmCategory'] as keyof typeof categoryAliases] ||
+        categoryAliasesReverse[Object.keys(result.namedScores)[0]];
+      if (!pluginId) {
+        console.warn(`Could not get failures for plugin ${pluginId}`);
+        return;
+      }
+      if (pluginId && !result.gradingResult?.pass) {
+        if (!failures[pluginId]) {
+          failures[pluginId] = [];
+        }
+        failures[pluginId].push({
+          // FIXME(ian): Use injectVar (and contextVar), not hardcoded query
+          prompt: result.vars.query?.toString() || result.prompt.raw,
+          output: result.response?.output,
+        });
+      }
+    });
+    return failures;
+  }, [evalData]);
+
   React.useEffect(() => {
     const fetchEvalById = async (id: string) => {
       const resp = await fetch(`${await getApiBaseUrl()}/api/results/${id}`, {
@@ -231,7 +256,11 @@ const App: React.FC = () => {
         </Card>
         <Overview categoryStats={categoryStats} />
         <StrategyStats strategyStats={strategyStats} />
-        <RiskCategories categoryStats={categoryStats} />
+        <RiskCategories
+          categoryStats={categoryStats}
+          evalId={evalId}
+          failuresByPlugin={categoryFailures}
+        />
         <TestSuites evalId={evalId} categoryStats={categoryStats} />
       </Stack>
       <Modal
