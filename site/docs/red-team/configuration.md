@@ -66,7 +66,9 @@ Plugins are specified as an array of either strings (plugin IDs) or objects with
 
 If `numTests` is not specified for a plugin, it will use the global `numTests` value.
 
-#### Available Plugin Categories
+#### Available Plugins
+
+To see the list of available plugins on the command line, run `promptfoo redteam plugins`.
 
 #### Harmful Plugins
 

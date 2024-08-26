@@ -6,6 +6,7 @@ import path from 'path';
 import { redteamInit } from './commands/redteam';
 import { getEnvString } from './envars';
 import logger from './logger';
+import telemetry, { type EventValue } from './telemetry';
 import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
@@ -227,6 +228,14 @@ promptfoo eval
 Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
+function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+  telemetry.recordAndSend('funnel', {
+    type: 'eval onboarding',
+    step,
+    ...properties,
+  });
+}
+
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
   if (
     directory && // Make the directory if it doesn't exist
@@ -249,6 +258,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   let action: string;
   let language: string;
   if (interactive) {
+    recordOnboardingStep('start');
+
     // Choose use case
     action = await rawlist({
       message: 'What would you like to do?',
@@ -259,6 +270,10 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         { name: 'Improve agent/chain of thought performance', value: 'agent' },
         { name: 'Run a red team evaluation', value: 'redteam' },
       ],
+    });
+
+    recordOnboardingStep('choose app type', {
+      value: action,
     });
 
     if (action === 'redteam') {
@@ -280,6 +295,10 @@ export async function createDummyFiles(directory: string | null, interactive: bo
           { name: 'Python', value: 'python' },
           { name: 'Javascript', value: 'javascript' },
         ],
+      });
+
+      recordOnboardingStep('choose language', {
+        value: language,
       });
     }
 
@@ -369,6 +388,13 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       message: 'Which model providers would you like to use? (press enter to skip)',
       choices,
     });
+
+    recordOnboardingStep('choose providers', {
+      value: providerChoices.map((choice) =>
+        typeof choice === 'string' ? choice : JSON.stringify(choice),
+      ),
+    });
+
     if (providerChoices.length > 0) {
       const flatProviders = providerChoices.flat();
       if (flatProviders.length > 3) {
@@ -424,6 +450,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         logger.info('⌛ Wrote context.py');
       }
     }
+
+    recordOnboardingStep('complete');
   } else {
     action = 'compare';
     language = 'not_sure';

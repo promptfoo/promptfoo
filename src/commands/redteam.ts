@@ -22,7 +22,7 @@ import {
   DEFAULT_STRATEGIES,
   subCategoryDescriptions,
 } from '../redteam/constants';
-import telemetry from '../telemetry';
+import telemetry, { type EventValue } from '../telemetry';
 import type { RedteamPluginObject } from '../types';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../util/templates';
 import { doGenerateRedteam } from './generate/redteam';
@@ -46,7 +46,7 @@ prompts:
   {% endif %}
 
 providers:
-  # To talk directly to your application, use a custom provider.
+  # Providers are red team targets. To talk directly to your application, use a custom provider.
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
   {% for provider in providers -%}
   - {{ provider }}
@@ -65,9 +65,9 @@ redteam:
   plugins:
     {% for plugin in plugins -%}
     {% if plugin is string -%}
-    - {{plugin}}
+    - {{plugin}}  # {{descriptions[plugin]}}
     {% else -%}
-    - id: {{plugin.id}}
+    - id: {{plugin.id}}  # {{descriptions[plugin.id]}}
       {% if plugin.numTests is defined -%}
       numTests: {{plugin.numTests}}
       {% endif -%}
@@ -82,10 +82,10 @@ redteam:
   {% endif -%}
 
   {% if strategies.length > 0 -%}
-  # Strategies for applying adversarial inputs
+  # Attack methods for applying adversarial inputs
   strategies:
     {% for strategy in strategies -%}
-    - {{strategy}}
+    - {{strategy}} # {{descriptions[strategy]}}
     {% endfor %}
   {% endif -%}
 `;
@@ -111,6 +111,14 @@ def call_api(prompt, options, context):
       "output": response.read().decode()
     }
 `;
+
+function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+  telemetry.recordAndSend('funnel', {
+    type: 'redteam onboarding',
+    step,
+    ...properties,
+  });
+}
 
 async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string> {
   const NOTE =
@@ -149,7 +157,7 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
 export async function redteamInit(directory: string | undefined) {
   telemetry.maybeShowNotice();
   telemetry.record('command_used', { name: 'redteam init - started' });
-  await telemetry.send();
+  recordOnboardingStep('start');
 
   const projectDir = directory || '.';
   if (projectDir !== '.' && !fs.existsSync(projectDir)) {
@@ -172,6 +180,8 @@ export async function redteamInit(directory: string | undefined) {
     pageSize: process.stdout.rows - 6,
   });
 
+  recordOnboardingStep('choose app type', { value: redTeamChoice });
+
   const prompts: string[] = [];
   let defaultPromptUsed = false;
   let purpose: string | undefined;
@@ -188,6 +198,8 @@ export async function redteamInit(directory: string | undefined) {
         (e.g. "${defaultPurpose}")\n`,
       })) || defaultPurpose;
     prompts.push(`{{query}}`);
+
+    recordOnboardingStep('choose purpose', { value: purpose });
   } else if (redTeamChoice === 'prompt_model_chatbot') {
     const promptChoice = await select({
       message: 'Do you want to enter a prompt now or later?',
@@ -196,6 +208,8 @@ export async function redteamInit(directory: string | undefined) {
         { name: 'Enter prompt later', value: 'later' },
       ],
     });
+
+    recordOnboardingStep('choose prompt', { value: promptChoice });
 
     let prompt: string;
     if (promptChoice === 'now') {
@@ -238,6 +252,9 @@ export async function redteamInit(directory: string | undefined) {
       choices: providerChoices,
       pageSize: process.stdout.rows - 6,
     });
+
+    recordOnboardingStep('choose provider', { value: selectedProvider });
+
     if (selectedProvider === 'Other') {
       providers = ['openai:gpt-4o-mini'];
     } else {
@@ -246,6 +263,8 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   if (!getEnvString('OPENAI_API_KEY')) {
+    recordOnboardingStep('missing api key');
+
     console.clear();
     logger.info(chalk.bold('OpenAI API Configuration\n'));
 
@@ -256,6 +275,8 @@ export async function redteamInit(directory: string | undefined) {
         { name: 'Set it later', value: 'later' },
       ],
     });
+
+    recordOnboardingStep('choose api key', { value: apiKeyChoice });
 
     if (apiKeyChoice === 'enter') {
       const apiKey = await input({ message: 'Enter your OpenAI API key:' });
@@ -268,6 +289,9 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   console.clear();
+
+  recordOnboardingStep('begin plugin & strategy selection');
+
   logger.info(chalk.bold('Plugin Configuration\n'));
 
   const pluginChoices = Array.from(ALL_PLUGINS)
@@ -286,6 +310,10 @@ export async function redteamInit(directory: string | undefined) {
     validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
   });
 
+  recordOnboardingStep('choose plugins', {
+    value: plugins.map((p) => (typeof p === 'string' ? p : p.id)),
+  });
+
   // Handle policy plugin
   if (plugins.includes('policy')) {
     // Remove the original 'policy' string if it exists
@@ -294,10 +322,12 @@ export async function redteamInit(directory: string | undefined) {
       plugins.splice(policyIndex, 1);
     }
 
+    recordOnboardingStep('collect policy');
     const policyDescription = await input({
       message:
         'You selected the `policy` plugin. Please enter your custom policy description, or leave empty to skip.\n(e.g. "Never talk about the weather")',
     });
+    recordOnboardingStep('choose policy', { value: policyDescription.length });
 
     if (policyDescription.trim() !== '') {
       plugins.push({
@@ -315,7 +345,9 @@ export async function redteamInit(directory: string | undefined) {
     }
 
     if (defaultPromptUsed) {
+      recordOnboardingStep('collect system prompt');
       const systemPrompt = await getSystemPrompt();
+      recordOnboardingStep('choose system prompt', { value: systemPrompt.length });
 
       if (systemPrompt.trim() !== '') {
         plugins.push({
@@ -433,10 +465,15 @@ export async function redteamInit(directory: string | undefined) {
     loop: false,
   });
 
+  recordOnboardingStep('choose strategies', {
+    value: strategies,
+  });
+
   const hasHarmfulPlugin = plugins.some(
     (plugin) => typeof plugin === 'string' && plugin.startsWith('harmful'),
   );
   if (hasHarmfulPlugin) {
+    recordOnboardingStep('collect email');
     const { hasHarmfulRedteamConsent } = readGlobalConfig();
     if (!hasHarmfulRedteamConsent) {
       logger.info(chalk.yellow('\nImportant Notice:'));
@@ -489,6 +526,7 @@ export async function redteamInit(directory: string | undefined) {
     strategies,
     prompts,
     providers,
+    descriptions: subCategoryDescriptions,
   });
   fs.writeFileSync(configPath, redteamConfig, 'utf8');
 
@@ -500,7 +538,7 @@ export async function redteamInit(directory: string | undefined) {
   logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
 
   telemetry.record('command_used', { name: 'redteam init' });
-  await telemetry.send();
+  await recordOnboardingStep('finish');
 
   if (deferGeneration) {
     logger.info(
@@ -512,10 +550,12 @@ export async function redteamInit(directory: string | undefined) {
     );
     return;
   } else {
+    recordOnboardingStep('offer generate');
     const readyToGenerate = await confirm({
       message: 'Are you ready to generate adversarial test cases?',
       default: true,
     });
+    recordOnboardingStep('choose generate', { value: readyToGenerate });
 
     if (readyToGenerate) {
       await doGenerateRedteam({
@@ -540,7 +580,7 @@ export async function redteamInit(directory: string | undefined) {
   }
 }
 
-export function initRedteamCommand(program: Command) {
+export function initCommand(program: Command) {
   program
     .command('init [directory]')
     .description('Initialize red teaming project')
@@ -560,10 +600,33 @@ export function initRedteamCommand(program: Command) {
             chalk.blue('For help or feedback, visit ') +
               chalk.green('https://www.promptfoo.dev/contact/'),
           );
+          await recordOnboardingStep('early exit');
           process.exit(130);
         } else {
           throw err;
         }
+      }
+    });
+}
+
+export function pluginsCommand(program: Command) {
+  program
+    .command('plugins')
+    .description('List all available plugins')
+    .option('--ids-only', 'Show only plugin IDs without descriptions')
+    .option('--default', 'Show only the default plugins')
+    .action(async (options) => {
+      const pluginsToShow = options.default ? DEFAULT_PLUGINS : ALL_PLUGINS;
+
+      if (options.idsOnly) {
+        pluginsToShow.forEach((plugin) => {
+          logger.info(plugin);
+        });
+      } else {
+        pluginsToShow.forEach((plugin) => {
+          const description = subCategoryDescriptions[plugin] || 'No description available';
+          logger.info(`${chalk.blue.bold(plugin)}: ${description}`);
+        });
       }
     });
 }

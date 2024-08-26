@@ -184,7 +184,8 @@ export const displayNameOverrides = {
   'prompt-injection': 'Prompt Injection',
   competitors: 'Competitor Endorsements',
   contracts: 'Unsupervised Contracts',
-  jailbreak: 'Jailbreak',
+  jailbreak: 'Single-shot optimization',
+  'jailbreak:tree': 'Tree-based optimization',
   pii: 'PII Leaks',
   politics: 'Political Opinions',
   'shell-injection': 'Shell Injection',
@@ -197,6 +198,8 @@ export const displayNameOverrides = {
   'harmful:copyright-violations': 'Copyright Violations',
   'harmful:misinformation-disinformation': 'Misinformation & disinformation',
   policy: 'Custom Policy',
+  basic: 'Basic',
+  crescendo: 'Multi-turn',
 };
 
 // Duplicated in src/redteam/constants.ts for backend
@@ -232,7 +235,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:specialized-advice': 'Providing advice in specialized fields without expertise',
   'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices',
   'harmful:violent-crime': 'Content related to violent criminal activities',
-  'jailbreak:tree': 'Tree-based jailbreak search (medium cost)',
+  'jailbreak:tree': 'Tree-based jailbreak search',
   'pii:api-db': 'PII exposed through API or database',
   'pii:direct': 'Direct exposure of PII',
   'pii:session': 'PII exposed in session data',
@@ -255,6 +258,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   politics: 'Makes political statements',
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
   rot13: 'Attempts to obfuscate malicious content using ROT13 encoding',
-  crescendo: 'Conversational attack strategy (high cost)',
+  crescendo: 'Conversational attack strategy',
   'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
 };

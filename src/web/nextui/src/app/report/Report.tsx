@@ -17,16 +17,59 @@ import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
+import StrategyStats from './StrategyStats';
 import TestSuites from './TestSuites';
 import type { categoryAliases } from './constants';
 import { categoryAliasesReverse } from './constants';
 import './Report.css';
+
+function getStrategyIdFromMetric(metric: string): string | null {
+  const parts = metric.split('/');
+  const metricSuffix = parts[1];
+  if (metricSuffix) {
+    if (metricSuffix === 'Iterative') {
+      return 'jailbreak';
+    } else if (metricSuffix === 'IterativeTree') {
+      return 'jailbreak:tree';
+    } else if (metricSuffix === 'Crescendo') {
+      return 'crescendo';
+    } else if (metricSuffix === 'Injection') {
+      return 'prompt-injection';
+    }
+  }
+  return null;
+}
 
 const App: React.FC = () => {
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
+
+  const categoryFailures = React.useMemo(() => {
+    const failures: Record<string, { prompt: string; output: string }[]> = {};
+    evalData?.results.results.forEach((result) => {
+      // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
+      const pluginId =
+        categoryAliasesReverse[result.vars['harmCategory'] as keyof typeof categoryAliases] ||
+        categoryAliasesReverse[Object.keys(result.namedScores)[0]];
+      if (!pluginId) {
+        console.warn(`Could not get failures for plugin ${pluginId}`);
+        return;
+      }
+      if (pluginId && !result.gradingResult?.pass) {
+        if (!failures[pluginId]) {
+          failures[pluginId] = [];
+        }
+        failures[pluginId].push({
+          // FIXME(ian): Use injectVar (and contextVar), not hardcoded query
+          prompt: result.vars.query?.toString() || result.prompt.raw,
+          output: result.response?.output,
+        });
+      }
+    });
+    return failures;
+  }, [evalData]);
 
   React.useEffect(() => {
     const fetchEvalById = async (id: string) => {
@@ -111,6 +154,41 @@ const App: React.FC = () => {
     {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
   );
 
+  const strategyStats = evalData.results.results.reduce(
+    (acc, row) => {
+      const metricNames =
+        row.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
+
+      for (const metric of metricNames) {
+        if (typeof metric !== 'string') {
+          continue;
+        }
+
+        let strategyId = getStrategyIdFromMetric(metric);
+        if (!strategyId) {
+          strategyId = 'basic';
+        }
+
+        if (!acc[strategyId]) {
+          acc[strategyId] = { pass: 0, total: 0 };
+        }
+
+        acc[strategyId].total++;
+
+        const passed = row.gradingResult?.componentResults?.some(
+          (result) => result.assertion?.metric === metric && result.pass,
+        );
+
+        if (passed) {
+          acc[strategyId].pass++;
+        }
+      }
+
+      return acc;
+    },
+    {} as Record<string, { pass: number; total: number }>,
+  );
+
   const handlePromptChipClick = () => {
     if (prompts.length > 1) {
       setIsPromptModalOpen(true);
@@ -177,7 +255,12 @@ const App: React.FC = () => {
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} />
-        <RiskCategories categoryStats={categoryStats} />
+        <StrategyStats strategyStats={strategyStats} />
+        <RiskCategories
+          categoryStats={categoryStats}
+          evalId={evalId}
+          failuresByPlugin={categoryFailures}
+        />
         <TestSuites evalId={evalId} categoryStats={categoryStats} />
       </Stack>
       <Modal
