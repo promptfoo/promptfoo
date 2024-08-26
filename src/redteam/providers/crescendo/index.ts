@@ -80,20 +80,20 @@ class CrescendoProvider implements ApiProvider {
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      this.redTeamProvider = await loadRedteamProvider(
-        this.config.redteamProvider,
-        ATTACKER_MODEL_SMALL,
-      );
+      this.redTeamProvider = await loadRedteamProvider({
+        provider: this.config.redteamProvider,
+        preferSmallModel: true,
+      });
     }
     return this.redTeamProvider;
   }
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      this.scoringProvider = await loadRedteamProvider(
-        this.config.redteamProvider,
-        ATTACKER_MODEL_SMALL,
-      );
+      this.scoringProvider = await loadRedteamProvider({
+        provider: this.config.redteamProvider,
+        preferSmallModel: true,
+      });
     }
     return this.scoringProvider;
   }

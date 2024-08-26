@@ -1,14 +1,19 @@
+import cliState from '../../cliState';
 import logger from '../../logger';
 import { loadApiProviders } from '../../providers';
 import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import { isProviderOptions, isApiProvider, type RedteamConfig } from '../../types';
-import { ATTACKER_MODEL, TEMPERATURE } from './constants';
+import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
-export async function loadRedteamProvider(
-  redteamProvider: RedteamConfig['provider'],
-  defaultModel: string = ATTACKER_MODEL,
-) {
+export async function loadRedteamProvider({
+  provider,
+  preferSmallModel = false,
+}: {
+  provider?: RedteamConfig['provider'];
+  preferSmallModel?: boolean;
+}) {
   let ret;
+  const redteamProvider = provider || cliState.config?.redteam?.provider;
   if (isApiProvider(redteamProvider)) {
     logger.debug(`Using redteam provider: ${redteamProvider}`);
     ret = redteamProvider;
@@ -16,6 +21,7 @@ export async function loadRedteamProvider(
     logger.debug(`Loading redteam provider: ${redteamProvider}`);
     ret = (await loadApiProviders([redteamProvider]))[0];
   } else {
+    const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default redteam provider: ${defaultModel}`);
     ret = new OpenAiChatCompletionProvider(defaultModel, {
       config: {

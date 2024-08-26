@@ -164,7 +164,7 @@ class RedteamIterativeProvider implements ApiProvider {
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
-    // Redteam provider is sometimes set from the config.
+    // Redteam provider can be set from the config.
     this.redteamProvider = config.redteamProvider;
   }
 
@@ -187,7 +187,7 @@ class RedteamIterativeProvider implements ApiProvider {
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: await loadRedteamProvider(this.redteamProvider),
+      redteamProvider: await loadRedteamProvider({ provider: this.redteamProvider }),
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
     });

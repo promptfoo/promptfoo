@@ -424,7 +424,6 @@ export async function resolveConfigs(
   // Parse prompts, providers, and tests
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
   const parsedProviders = await loadApiProviders(config.providers, {
-    redteamProvider: config.redteam?.provider,
     env: config.env,
     basePath,
   });
