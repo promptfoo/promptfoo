@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
 import type { ApiProvider, Assertion, TestCase } from '../../types';

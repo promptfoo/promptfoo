@@ -23,7 +23,6 @@ import type {
   CallApiOptionsParams,
   Prompt,
   NunjucksFilterMap,
-  RedteamConfig,
 } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import { PENALIZED_PHRASES } from './constants';

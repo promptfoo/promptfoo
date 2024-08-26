@@ -13,7 +13,6 @@ import type {
 } from '../../../types';
 import { getNunjucksEngine } from '../../../util/templates';
 import { isBasicRefusal } from '../../util';
-import { ATTACKER_MODEL_SMALL } from '../constants';
 import { loadRedteamProvider } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
