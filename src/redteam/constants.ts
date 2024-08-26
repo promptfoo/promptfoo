@@ -94,6 +94,7 @@ export const ADDITIONAL_PLUGINS = [
   'ssrf',
   'shell-injection',
   'sql-injection',
+  'indirect-prompt-injection',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -390,4 +391,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   rot13: 'Attempts to obfuscate malicious content using ROT13 encoding',
   crescendo: 'Conversational attack strategy (high cost)',
   'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
+  'indirect-prompt-injection':
+    'Tests if the prompt is vulnerable to instructions injected into variables in the prompt',
 };

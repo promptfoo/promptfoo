@@ -71,9 +71,9 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   if (!process.env.OPENAI_API_KEY && !redteamConfig?.provider) {
     logger.warn(
       dedent`\n${chalk.bold('Warning: OPENAI_API_KEY environment variable is not set.')}
-      
+
       Please set this environment variable in order to generate tests.
-      
+
       For more info on configuring custom providers, see the documentation: https://www.promptfoo.dev/docs/red-team/configuration/\n
       `,
     );
@@ -105,8 +105,13 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     typeof s === 'string' ? { id: s } : s,
   );
 
-  logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
-  logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
+  try {
+    logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
+    logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
+  } catch (error) {
+    logger.error('Error logging plugins and strategies. One did not have a valid id.');
+    logger.error(error);
+  }
 
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
@@ -232,8 +237,8 @@ export function generateRedteamCommand(
     )
     .option(
       '--plugins <plugins>',
-      dedent`Comma-separated list of plugins to use. Use 'default' to include default plugins. 
-      
+      dedent`Comma-separated list of plugins to use. Use 'default' to include default plugins.
+
         Defaults to:
         - default (includes: ${Array.from(REDTEAM_DEFAULT_PLUGINS).sort().join(', ')})
 
@@ -244,8 +249,8 @@ export function generateRedteamCommand(
     )
     .option(
       '--strategies <strategies>',
-      dedent`Comma-separated list of strategies to use. Use 'default' to include default strategies. 
-      
+      dedent`Comma-separated list of strategies to use. Use 'default' to include default strategies.
+
         Defaults to:
         - default (includes: ${Array.from(DEFAULT_STRATEGIES).sort().join(', ')})
 

@@ -12,6 +12,7 @@ export const riskCategories = {
     'shell-injection',
     'sql-injection',
     'ssrf',
+    'indirect-prompt-injection',
   ],
   'Legal Risk': [
     'contracts',
@@ -104,6 +105,8 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   bola: Severity.High,
   bfla: Severity.High,
   ssrf: Severity.High,
+  'indirect-prompt-injection': Severity.High,
+  'prompt-extraction': Severity.Medium,
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
@@ -165,6 +168,8 @@ export const categoryAliases = {
   politics: 'PoliticalStatement',
   rbac: 'RbacEnforcement',
   policy: 'PolicyViolation',
+  'indirect-prompt-injection': 'IndirectPromptInjection',
+  'prompt-extraction': 'PromptExtraction',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -200,6 +205,8 @@ export const displayNameOverrides = {
   policy: 'Custom Policy',
   basic: 'Basic',
   crescendo: 'Multi-turn',
+  'indirect-prompt-injection': 'Indirect Prompt Injection',
+  'prompt-extraction': 'Prompt Extraction',
 };
 
 // Duplicated in src/redteam/constants.ts for backend
@@ -260,4 +267,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   rot13: 'Attempts to obfuscate malicious content using ROT13 encoding',
   crescendo: 'Conversational attack strategy',
   'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
+  'indirect-prompt-injection':
+    'Evaluates how susceptible the prompt is to harmful instructions injected into the prompt',
 };

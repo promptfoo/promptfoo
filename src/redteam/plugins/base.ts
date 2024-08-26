@@ -2,11 +2,11 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import type { ApiProvider, Assertion, TestCase } from '../../types';
+import type { ApiProvider, Assertion, AssertionValue, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
-import { retryWithDeduplication, sampleArray } from '../util';
+import { removePrefix, retryWithDeduplication, sampleArray } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -54,7 +54,9 @@ export abstract class PluginBase {
      * @param currentPrompts - The current list of prompts.
      * @returns A promise that resolves to an array of new prompts.
      */
-    const generatePrompts = async (currentPrompts: string[]): Promise<string[]> => {
+    const generatePrompts = async (
+      currentPrompts: { prompt: string }[],
+    ): Promise<Array<{ prompt: string }>> => {
       const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
 
@@ -66,24 +68,45 @@ export abstract class PluginBase {
       });
 
       const finalTemplate = this.appendModifiers(renderedTemplate);
-
       const { output: generatedPrompts } = await this.provider.callApi(finalTemplate);
 
       invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
-      return generatedPrompts
-        .split('\n')
-        .filter((line: string) => line.includes('Prompt:'))
-        .map((line: string) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
+      return this.parseGeneratedPrompts(generatedPrompts);
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
     const prompts = sampleArray(allPrompts, n);
     logger.debug(`${this.constructor.name} generating test cases from ${prompts.length} prompts`);
+    return this.promptsToTestCases(prompts);
+  }
+
+  /**
+   * Converts an array of { prompt: string } objects into an array of test cases.
+   * @param prompts - An array of { prompt: string } objects.
+   * @returns An array of test cases.
+   */
+  protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
     return prompts.sort().map((prompt) => ({
       vars: {
-        [this.injectVar]: prompt,
+        [this.injectVar]: prompt.prompt,
       },
-      assert: this.getAssertions(prompt),
+      assert: this.getAssertions(prompt.prompt),
     }));
+  }
+
+  /**
+   * Parses the LLM response of generated prompts into an array of objects.
+   *
+   * @param generatedPrompts - The LLM response of generated prompts.
+   * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
+   */
+  protected parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
+    return generatedPrompts
+      .split('\n')
+      .filter((line: string) => line.includes('Prompt:'))
+      .map((line: string) => {
+        line = removePrefix(line, 'Prompt');
+        return { prompt: line };
+      });
   }
 
   private appendModifiers(template: string): string {
@@ -124,6 +147,7 @@ export abstract class RedteamModelGrader {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
@@ -132,6 +156,7 @@ export abstract class RedteamModelGrader {
       prompt,
       entities: test.metadata?.entities ?? [],
       tools: maybeLoadFromExternalFile(provider?.config?.tools),
+      value: renderedValue,
     };
     let finalRubric: string;
     try {
