@@ -235,7 +235,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:specialized-advice': 'Providing advice in specialized fields without expertise',
   'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices',
   'harmful:violent-crime': 'Content related to violent criminal activities',
-  'jailbreak:tree': 'Tree-based jailbreak search (medium cost)',
+  'jailbreak:tree': 'Tree-based jailbreak search',
   'pii:api-db': 'PII exposed through API or database',
   'pii:direct': 'Direct exposure of PII',
   'pii:session': 'PII exposed in session data',
