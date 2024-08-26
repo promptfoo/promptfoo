@@ -112,7 +112,9 @@ export async function synthesize({
   if (isApiProvider(provider)) {
     redteamProvider = provider;
   } else if (isProviderOptions(provider)) {
-    redteamProvider = await loadApiProvider(provider.id || REDTEAM_MODEL, provider);
+    redteamProvider = await loadApiProvider(provider.id || REDTEAM_MODEL, {
+      options: provider
+    });
   } else {
     redteamProvider = await loadApiProvider(REDTEAM_MODEL, {
       options: { config: { temperature: 0.5 } },
