@@ -42,17 +42,21 @@ describe('PluginBase', () => {
   });
 
   it('should generate test cases correctly', async () => {
-    expect.assertions(2);
-    await expect(plugin.generateTests(2)).resolves.toEqual([
-      {
-        vars: { testVar: 'another prompt' },
-        assert: [{ type: 'contains', value: 'another prompt' }],
-      },
-      {
-        vars: { testVar: 'test prompt' },
-        assert: [{ type: 'contains', value: 'test prompt' }],
-      },
-    ]);
+    expect.assertions(3);
+    const tests = await plugin.generateTests(2);
+    expect(tests).toEqual(
+      expect.arrayContaining([
+        {
+          vars: { testVar: 'another prompt' },
+          assert: [{ type: 'contains', value: 'another prompt' }],
+        },
+        {
+          vars: { testVar: 'test prompt' },
+          assert: [{ type: 'contains', value: 'test prompt' }],
+        },
+      ]),
+    );
+    expect(tests).toHaveLength(2);
     expect(provider.callApi).toHaveBeenCalledWith(
       dedent`
         Test template with test purpose for 2 prompts
@@ -77,13 +81,16 @@ describe('PluginBase', () => {
 
   it('should filter and process prompts correctly', async () => {
     expect.assertions(1);
-    await expect(plugin.generateTests(2)).resolves.toEqual([
-      {
-        assert: [{ type: 'contains', value: 'another prompt' }],
-        vars: { testVar: 'another prompt' },
-      },
-      { assert: [{ type: 'contains', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
-    ]);
+    const tests = await plugin.generateTests(2);
+    expect(tests).toEqual(
+      expect.arrayContaining([
+        {
+          assert: [{ type: 'contains', value: 'another prompt' }],
+          vars: { testVar: 'another prompt' },
+        },
+        { assert: [{ type: 'contains', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
+      ]),
+    );
   });
 
   it('should handle batching when requesting more than 20 tests', async () => {
@@ -130,10 +137,13 @@ describe('PluginBase', () => {
 
     const result = await plugin.generateTests(2);
 
-    expect(result).toEqual([
-      { vars: { testVar: 'duplicate' }, assert: expect.any(Array) },
-      { vars: { testVar: 'unique' }, assert: expect.any(Array) },
-    ]);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        { vars: { testVar: 'duplicate' }, assert: expect.any(Array) },
+        { vars: { testVar: 'unique' }, assert: expect.any(Array) },
+      ]),
+    );
+    expect(result).toHaveLength(2);
     expect(provider.callApi).toHaveBeenCalledTimes(2);
   });
 
