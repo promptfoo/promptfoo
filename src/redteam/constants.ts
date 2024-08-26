@@ -392,5 +392,5 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   crescendo: 'Conversational attack strategy (high cost)',
   'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
   'indirect-prompt-injection':
-    'Evaluates how susceptible the prompt is to harmful instructions injected into the prompt',
+    'Tests if the prompt is vulnerable to instructions injected into variables in the prompt',
 };

@@ -114,7 +114,7 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 #### Technical plugins
 
 - `debug-access`: Checks if the model attempts to access or use debugging commands.
-- `indirect-prompt-injection`: Tests if the prompt is vulnerable to instructions injected into the prompt.
+- `indirect-prompt-injection`: Tests if the prompt is vulnerable to instructions injected into variables in the prompt.
 
   - Takes a `config` object with `systemPrompt` and `indirectInjectionVar` property. These properties are **required** for the plugin to work properly. For example:
     ```yaml
@@ -126,7 +126,7 @@ To see the list of available plugins on the command line, run `promptfoo redteam
             indirectInjectionVar: 'name'
     ```
 
-  The `indirectInjectionVar` is the variable in your prompt where your system is injecting untrusted content that you want to test is vulnerable.
+  The `indirectInjectionVar` specifies the variable in your prompt where potentially untrusted content is being injected. This variable is used to test if the system is vulnerable to indirect prompt injection attacks through this input.
 
   The prompt **must** have two variables. One which matches the `indirectInjectionVar` and one which is the user's query.
 
