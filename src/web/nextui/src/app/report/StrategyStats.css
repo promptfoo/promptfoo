@@ -1,21 +1,21 @@
 .strategy-stats-card {
-  border-radius: 12px;
+  border-radius: 0.75rem;
 }
 
-.strategy-stats-content {
-  padding: 24px;
+div.strategy-stats-content {
+  padding: 2rem;
 }
 
 .strategy-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
+  gap: 1.5rem;
 }
 
 .strategy-item {
   border: 1px solid #eee;
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 0.5rem;
+  padding: 1rem;
   height: 100%;
 }
 
@@ -25,15 +25,15 @@
 
 .strategy-name {
   font-weight: 500;
-  margin-bottom: 4px;
+  margin-bottom: 0.25rem;
 }
 
 .strategy-description {
-  margin-bottom: 12px;
+  margin-bottom: 0.75rem;
 }
 
 .progress-container {
-  margin-bottom: 8px;
+  margin-bottom: 0.5rem;
 }
 
 .fail-rate {
