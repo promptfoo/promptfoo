@@ -20,10 +20,17 @@ export ANTHROPIC_API_KEY=your_api_key_here
 
 ### Supported Parameters
 
-| Config Property | Environment Variable | Description                                    |
-| --------------- | -------------------- | ---------------------------------------------- |
-| apiKey          | ANTHROPIC_API_KEY    | Your API key from Anthropic                    |
-| apiBaseUrl      | ANTHROPIC_BASE_URL   | The base URL for requests to the Anthropic API |
+| Config Property | Environment Variable  | Description                                                       |
+| --------------- | --------------------- | ----------------------------------------------------------------- |
+| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                       |
+| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                    |
+| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0)                |
+| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)          |
+| top_p           | -                     | Controls nucleus sampling, affecting the randomness of the output |
+| top_k           | -                     | Only sample from the top K options for each subsequent token      |
+| tools           | -                     | An array of tool or function definitions for the model to call    |
+| tool_choice     | -                     | An object specifying the tool to call                             |
+| headers         | -                     | Additional headers to be sent with the API request                |
 
 ## Latest API (Messages)
 
