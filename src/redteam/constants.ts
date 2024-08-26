@@ -86,6 +86,7 @@ export type BasePlugin = (typeof BASE_PLUGINS)[number];
 export const ADDITIONAL_PLUGINS = [
   'bola',
   'bfla',
+  'bopla',
   'competitors',
   'debug-access',
   'imitation',
@@ -94,6 +95,8 @@ export const ADDITIONAL_PLUGINS = [
   'ssrf',
   'shell-injection',
   'sql-injection',
+  'unrestricted-access',
+  'resource-consumption',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -340,6 +343,9 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   bola: 'Broken Object Level Authorization (BOLA) tests',
   bfla: 'Broken Function Level Authorization (BFLA) tests',
   ssrf: 'Server-Side Request Forgery (SSRF) tests',
+  bopla: 'Broken Object Property Level Authorization (BOPLA) tests.',
+  'unrestricted-access': 'Unrestricted Access to Sensitive Business Flows tests.',
+  'resource-consumption': 'Unrestricted Resource Consumption tests.',
   'debug-access': 'Attempts to access or use debugging commands',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',

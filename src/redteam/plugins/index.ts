@@ -3,6 +3,7 @@ import type { ApiProvider, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS } from '../constants';
 import { BflaPlugin } from './bfla';
 import { BolaPlugin } from './bola';
+import { BoplaPlugin } from './bopla';
 import { CompetitorPlugin } from './competitors';
 import { ContractPlugin } from './contracts';
 import { DebugAccessPlugin } from './debugAccess';
@@ -17,9 +18,11 @@ import { PolicyPlugin } from './policy';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
+import { ResourceConsumptionPlugin } from './resourceConsumption';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { SsrfPlugin } from './ssrf';
+import { UnrestrictedAccessPlugin } from './unrestrictedAccess';
 
 export interface Plugin {
   key: string;
@@ -126,9 +129,24 @@ export const Plugins: Plugin[] = [
       new BflaPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
+    key: 'bopla',
+    action: (provider, purpose, injectVar, n, config) =>
+      new BoplaPlugin(provider, purpose, injectVar, config).generateTests(n),
+  },
+  {
     key: 'ssrf',
     action: (provider, purpose, injectVar, n, config) =>
       new SsrfPlugin(provider, purpose, injectVar, config).generateTests(n),
+  },
+  {
+    key: 'unrestricted-access',
+    action: (provider, purpose, injectVar, n, config) =>
+      new UnrestrictedAccessPlugin(provider, purpose, injectVar, config).generateTests(n),
+  },
+  {
+    key: 'resource-consumption',
+    action: (provider, purpose, injectVar, n, config) =>
+      new ResourceConsumptionPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'prompt-extraction',
