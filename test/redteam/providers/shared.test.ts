@@ -44,6 +44,8 @@ describe('loadRedteamProvider', () => {
     getApiUrl: jest.fn(),
   } as unknown as OpenAiChatCompletionProvider;
 
+  const mockLoadedProvider = { id: () => 'loaded-provider', callApi: jest.fn() };
+
   afterEach(() => {
     jest.clearAllMocks();
   });
@@ -56,7 +58,6 @@ describe('loadRedteamProvider', () => {
   });
 
   it('should load provider from string', async () => {
-    const mockLoadedProvider = { id: 'loaded-provider', callApi: jest.fn() };
     jest.mocked(loadApiProviders).mockResolvedValue([mockLoadedProvider]);
     const result = await loadRedteamProvider({ provider: 'test-provider' });
     expect(result).toBe(mockLoadedProvider);
@@ -65,7 +66,6 @@ describe('loadRedteamProvider', () => {
   });
 
   it('should load provider from ProviderOptions', async () => {
-    const mockLoadedProvider = { id: 'loaded-provider', callApi: jest.fn() };
     const providerOptions = { id: 'test-provider', apiKey: 'test-key' };
     jest.mocked(loadApiProviders).mockResolvedValue([mockLoadedProvider]);
     const result = await loadRedteamProvider({ provider: providerOptions });
