@@ -63,6 +63,7 @@ describe('readConfigs', () => {
   it('reads from existing configs', async () => {
     const config1 = {
       description: 'test1',
+      tags: { tag1: 'value1' },
       providers: ['provider1'],
       prompts: ['prompt1'],
       tests: ['test1'],
@@ -137,6 +138,7 @@ describe('readConfigs', () => {
     const config1Result = await readConfigs(['config1.json']);
     expect(config1Result).toEqual({
       description: 'test1',
+      tags: { tag1: 'value1' },
       providers: ['provider1'],
       prompts: ['prompt1'],
       extensions: [],
@@ -165,6 +167,7 @@ describe('readConfigs', () => {
     const config2Result = await readConfigs(['config2.json']);
     expect(config2Result).toEqual({
       description: 'test2',
+      tags: {},
       providers: ['provider2'],
       prompts: ['prompt2'],
       extensions: [],
@@ -195,6 +198,7 @@ describe('readConfigs', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(4);
     expect(result).toEqual({
       description: 'test1, test2',
+      tags: { tag1: 'value1' },
       providers: ['provider1', 'provider2'],
       prompts: ['prompt1', 'prompt2'],
       tests: ['test1', 'test2'],

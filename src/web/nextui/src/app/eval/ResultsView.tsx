@@ -426,6 +426,14 @@ export default function ResultsView({
             sx={{ opacity: 0.7 }}
           />
         </Tooltip>
+        {Object.keys(config?.tags || {}).map((tag) => (
+          <Chip
+            key={tag}
+            size="small"
+            label={`${tag}: ${config?.tags?.[tag]}`}
+            sx={{ opacity: 0.7 }}
+          />
+        ))}
       </ResponsiveStack>
       <ResponsiveStack direction="row" spacing={1} alignItems="center">
         <Box>
