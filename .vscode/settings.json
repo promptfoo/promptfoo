@@ -10,5 +10,6 @@
     "promptfoo",
     "promptfooconfig",
     "redteam"
-  ]
+  ],
+  "jest.jestCommandLine": "npm run test --"
 }
