@@ -1,10 +1,12 @@
 import cliProgress from 'cli-progress';
+import * as fs from 'fs';
+import yaml from 'js-yaml';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
 import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
-import { synthesize } from '../../src/redteam/index';
+import { synthesize, resolvePluginConfig } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
 import { Strategies } from '../../src/redteam/strategies';
 import { validateStrategies } from '../../src/redteam/strategies';
@@ -320,6 +322,100 @@ describe('synthesize', () => {
       expect(cliProgress.SingleBar).not.toHaveBeenCalled();
 
       logger.level = originalLevel;
+    });
+  });
+});
+jest.mock('fs');
+jest.mock('js-yaml');
+
+describe('resolvePluginConfig', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should return an empty object if config is undefined', () => {
+    const result = resolvePluginConfig(undefined);
+    expect(result).toEqual({});
+  });
+
+  it('should return the original config if no file references are present', () => {
+    const config = { key: 'value' };
+    const result = resolvePluginConfig(config);
+    expect(result).toEqual(config);
+  });
+
+  it('should resolve YAML file references', () => {
+    const config = { key: 'file://test.yaml' };
+    const yamlContent = { nested: 'value' };
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const result = resolvePluginConfig(config);
+
+    expect(result).toEqual({ key: yamlContent });
+    expect(fs.existsSync).toHaveBeenCalledWith('test.yaml');
+    expect(fs.readFileSync).toHaveBeenCalledWith('test.yaml', 'utf8');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+  });
+
+  it('should resolve JSON file references', () => {
+    const config = { key: 'file://test.json' };
+    const jsonContent = { nested: 'value' };
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(jsonContent));
+
+    const result = resolvePluginConfig(config);
+
+    expect(result).toEqual({ key: jsonContent });
+    expect(fs.existsSync).toHaveBeenCalledWith('test.json');
+    expect(fs.readFileSync).toHaveBeenCalledWith('test.json', 'utf8');
+  });
+
+  it('should resolve text file references', () => {
+    const config = { key: 'file://test.txt' };
+    const fileContent = 'text content';
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
+
+    const result = resolvePluginConfig(config);
+
+    expect(result).toEqual({ key: fileContent });
+    expect(fs.existsSync).toHaveBeenCalledWith('test.txt');
+    expect(fs.readFileSync).toHaveBeenCalledWith('test.txt', 'utf8');
+  });
+
+  it('should throw an error if the file does not exist', () => {
+    const config = { key: 'file://nonexistent.yaml' };
+    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    expect(() => resolvePluginConfig(config)).toThrow('File not found: nonexistent.yaml');
+  });
+
+  it('should handle multiple file references', () => {
+    const config = {
+      yaml: 'file://test.yaml',
+      json: 'file://test.json',
+      txt: 'file://test.txt',
+    };
+    const yamlContent = { nested: 'yaml' };
+    const jsonContent = { nested: 'json' };
+    const txtContent = 'text content';
+
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest
+      .spyOn(fs, 'readFileSync')
+      .mockReturnValueOnce('yaml content')
+      .mockReturnValueOnce(JSON.stringify(jsonContent))
+      .mockReturnValueOnce(txtContent);
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const result = resolvePluginConfig(config);
+
+    expect(result).toEqual({
+      yaml: yamlContent,
+      json: jsonContent,
+      txt: txtContent,
     });
   });
 });

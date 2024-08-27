@@ -2,6 +2,8 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import * as fs from 'fs';
+import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
@@ -68,6 +70,37 @@ function generateReport(
     });
 
   return `\nTest Generation Report:\n${table.toString()}`;
+}
+
+/**
+ * Resolves top-level file paths in the plugin configuration.
+ * @param config - The plugin configuration to resolve.
+ * @returns The resolved plugin configuration.
+ */
+export function resolvePluginConfig(config: Record<string, any> | undefined): Record<string, any> {
+  if (!config) {
+    return {};
+  }
+
+  for (const key in config) {
+    const value = config[key];
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const filePath = value.slice('file://'.length);
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`File not found: ${filePath}`);
+      }
+
+      if (filePath.endsWith('.yaml')) {
+        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
+      } else if (filePath.endsWith('.json')) {
+        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      } else {
+        config[key] = fs.readFileSync(filePath, 'utf8');
+      }
+    }
+  }
+  return config;
 }
 
 const categories = {
@@ -239,7 +272,7 @@ export async function synthesize({
       logger.debug(`Generating tests for ${plugin.id}...`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
         language,
-        ...(plugin.config || {}),
+        ...resolvePluginConfig(plugin.config),
       });
       testCases.push(
         ...pluginTests.map((t) => ({
