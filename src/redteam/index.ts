@@ -6,17 +6,16 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
-import { loadApiProvider } from '../providers';
 import type { TestCaseWithPlugin } from '../types';
-import { isApiProvider, isProviderOptions, type ApiProvider } from '../types';
 import type { SynthesizeOptions } from '../types/redteam';
 import { maybeLoadFromExternalFile } from '../util';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
+import { HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
+import { loadRedteamProvider } from './providers/shared';
 import { Strategies, validateStrategies } from './strategies';
 
 /**
@@ -143,16 +142,7 @@ export async function synthesize({
   }
   validateStrategies(strategies);
 
-  let redteamProvider: ApiProvider;
-  if (isApiProvider(provider)) {
-    redteamProvider = provider;
-  } else if (isProviderOptions(provider)) {
-    redteamProvider = await loadApiProvider(provider.id || REDTEAM_MODEL, provider);
-  } else {
-    redteamProvider = await loadApiProvider(REDTEAM_MODEL, {
-      options: { config: { temperature: 0.5 } },
-    });
-  }
+  const redteamProvider = await loadRedteamProvider({ provider });
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
