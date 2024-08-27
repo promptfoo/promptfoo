@@ -114,6 +114,22 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 #### Technical plugins
 
 - `debug-access`: Checks if the model attempts to access or use debugging commands.
+- `indirect-prompt-injection`: Tests if the prompt is vulnerable to instructions injected into variables in the prompt.
+
+  - Takes a `config` object with `systemPrompt` and `indirectInjectionVar` property. These properties are **required** for the plugin to work properly. For example:
+    ```yaml
+    redteam:
+      plugins:
+        - id: 'indirect-prompt-injection'
+          config:
+            systemPrompt: '"You are a travel agent specialized in budget trips to Europe. The user's name is {{name}}. \n\nUser query: {{query}}"'
+            indirectInjectionVar: 'name'
+    ```
+
+  The `indirectInjectionVar` specifies the variable in your prompt where potentially untrusted content is being injected. This variable is used to test if the system is vulnerable to indirect prompt injection attacks through this input.
+
+  The prompt **must** have two variables. One which matches the `indirectInjectionVar` and one which is the user's query.
+
 - `rbac`: Evaluates if the model properly implements Role-Based Access Control (RBAC).
 - `prompt-extraction`: Tests if the model attempts to expose the system prompt and/or instructions.
 

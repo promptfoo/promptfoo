@@ -376,6 +376,6 @@ export class HarmfulGrader extends RedteamModelGrader {
       };
     }
 
-    return super.getResult(prompt, llmOutput, test, provider);
+    return super.getResult(prompt, llmOutput, test, provider, undefined);
   }
 }

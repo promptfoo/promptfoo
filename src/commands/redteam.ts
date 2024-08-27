@@ -71,17 +71,14 @@ redteam:
       {% if plugin.numTests is defined -%}
       numTests: {{plugin.numTests}}
       {% endif -%}
-      {% if plugin.config is defined -%}
+      {%- if plugin.config is defined -%}
       config:
-        {% if plugin.config.systemPrompt is defined -%}
-        systemPrompt: {{plugin.config.systemPrompt | dump}}
-        {% endif -%}
-        {% if plugin.config.policy is defined -%}
-        policy: {{plugin.config.policy | dump}}
-        {% endif -%}
-      {% endif -%}
+        {%- for k, v in plugin.config %}
+        {{k}}: {{v | dump}}
+        {%- endfor -%}
+      {%- endif %}
     {% endif -%}
-    {% endfor %}
+    {%- endfor %}
   {% endif -%}
 
   {% if strategies.length > 0 -%}
@@ -123,11 +120,11 @@ function recordOnboardingStep(step: string, properties: Record<string, EventValu
   });
 }
 
-async function getSystemPrompt(): Promise<string> {
+async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string> {
   const NOTE =
     '(NOTE: your prompt must include an injectible variable like {{query}} as a placeholder for user input) -- REMOVE THIS LINE';
 
-  let prompt = dedent`You are a helpful concise assistant.
+  let prompt = dedent`You are a helpful concise assistant. Helping out user: {{userName}}
 
   User query: {{query}}
 
@@ -138,10 +135,12 @@ async function getSystemPrompt(): Promise<string> {
   });
   prompt = prompt.replace(NOTE, '');
   let variables = extractVariablesFromTemplate(prompt);
-  while (variables.length === 0) {
+  while (variables.length < numVariablesRequired) {
     logger.info(
       chalk.red(
-        'For real though, your prompt must include at least one variable like"{{query}}" as a placeholder for user input',
+        `For real though, your prompt must include ${numVariablesRequired} ${
+          numVariablesRequired === 1 ? 'variable' : 'variables'
+        } like "{{query}}" as a placeholder for user input`,
       ),
     );
     prompt = await editor({
@@ -340,7 +339,6 @@ export async function redteamInit(directory: string | undefined) {
 
   // Handle prompt extraction plugin
   if (plugins.includes('prompt-extraction')) {
-    // Remove the original 'system prompt' string if it exists
     const promptExtractionIdx = plugins.indexOf('prompt-extraction');
     if (promptExtractionIdx !== -1) {
       plugins.splice(promptExtractionIdx, 1);
@@ -354,7 +352,83 @@ export async function redteamInit(directory: string | undefined) {
       if (systemPrompt.trim() !== '') {
         plugins.push({
           id: 'prompt-extraction',
-          config: { systemPrompt: systemPrompt.trim() },
+          config: { systemPrompt: dedent(systemPrompt.trim()) },
+        } as RedteamPluginObject);
+
+        prompts[0] = systemPrompt;
+      }
+    } else {
+      plugins.push({
+        id: 'prompt-extraction',
+        config: { systemPrompt: prompts[0] },
+      } as RedteamPluginObject);
+    }
+  }
+
+  // Handle prompt extraction plugin
+  if (plugins.includes('indirect-prompt-injection')) {
+    logger.info(chalk.bold('Indirect Prompt Injection Configuration\n'));
+    logger.info(
+      chalk.yellow(
+        'This plugin tests if the prompt is vulnerable to instructions injected into the prompt.\n',
+      ),
+    );
+    logger.info(
+      chalk.yellow(
+        'This plugin requires two pieces of information:\n' +
+          '1. The system prompt: This is the template that includes variables where content will be injected.\n' +
+          '2. The indirectInjectionVarName: This is the name of the variable in your system prompt where untrusted content will be injected.\n\n' +
+          'These are needed to test if the model is vulnerable to instructions injected into the prompt through this variable.\n',
+      ),
+    );
+    await input({
+      message: 'Read the above and Press Enter to continue setting up the plugin.',
+    });
+
+    const promptExtractionIdx = plugins.indexOf('indirect-prompt-injection');
+    if (promptExtractionIdx !== -1) {
+      plugins.splice(promptExtractionIdx, 1);
+    }
+
+    if (defaultPromptUsed) {
+      const systemPrompt = await getSystemPrompt(2);
+      const variables = extractVariablesFromTemplate(systemPrompt);
+      let indirectInjectionVar = variables[0].trim();
+      indirectInjectionVar = await input({
+        message: `What is the name of the variable where content will be injected into the prompt? (e.g. "name")`,
+        default: indirectInjectionVar,
+      });
+
+      indirectInjectionVar = indirectInjectionVar.trim();
+
+      if (!variables.includes(indirectInjectionVar)) {
+        logger.info(
+          chalk.red(
+            `The variable ${indirectInjectionVar} is not found in the prompt. Please go back and edit your prompt to add the variable to your prompt`,
+          ),
+        );
+        await input({
+          message: 'Press Enter to continue...',
+        });
+      }
+      if (indirectInjectionVar === variables[variables.length - 1]) {
+        logger.info(
+          chalk.red(
+            `The variable ${indirectInjectionVar} is the last variable in the prompt. This might cause some issues with the plugin since we assume the last variable is the main injectVar. Please make sure you set injectVar properly in your config.`,
+          ),
+        );
+        await input({
+          message: 'Press Enter to continue...',
+        });
+      }
+
+      if (systemPrompt.trim() !== '') {
+        plugins.push({
+          id: 'indirect-prompt-injection',
+          config: {
+            systemPrompt: dedent(systemPrompt.trim()),
+            indirectInjectionVar: indirectInjectionVar.trim(),
+          },
         } as RedteamPluginObject);
 
         prompts[0] = systemPrompt;
@@ -444,6 +518,7 @@ export async function redteamInit(directory: string | undefined) {
   const numTests = 5;
 
   const nunjucks = getNunjucksEngine();
+
   const redteamConfig = nunjucks.renderString(REDTEAM_CONFIG_TEMPLATE, {
     purpose,
     numTests,

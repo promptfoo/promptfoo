@@ -112,12 +112,16 @@ function DownloadMenu() {
       .map((row) => ({
         vars: {
           ...row.test.vars,
-          output: row.outputs[0].text,
+          output: row.outputs[0].text.includes('---')
+            ? row.outputs[0].text.split('---\n')[1]
+            : row.outputs[0].text,
         },
-        assert: {
-          type: 'javascript',
-          value: `${row.outputs[0].pass ? '' : '!'}JSON.parse(output).pass`,
-        },
+        assert: [
+          {
+            type: 'javascript',
+            value: `${row.outputs[0].pass ? '' : '!'}JSON.parse(output).pass`,
+          },
+        ],
         metadata: row.test.metadata,
       }));
 

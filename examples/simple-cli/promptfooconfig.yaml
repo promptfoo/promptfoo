@@ -1,5 +1,10 @@
 description: 'Simple test'
 
+tags:
+  env: staging
+  app: footgpt
+  branch: fix/issue-123
+
 prompts:
   - 'Rephrase this in {{language}}: {{body}}'
   - 'Translate this to conversational {{language}}: {{body}}'
