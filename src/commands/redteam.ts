@@ -122,11 +122,9 @@ function recordOnboardingStep(step: string, properties: Record<string, EventValu
 
 async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string> {
   const NOTE =
-    'NOTE: your prompt must include an injectable variable like {{query}} as a placeholder for user input (REMOVE THIS LINE)';
+    'NOTE: your prompt must include one or more injectable variables like {{query}} or {{name}} as a placeholder for user input (REMOVE THIS LINE)';
 
   let prompt = dedent`You are a helpful and concise assistant.
-
-  Current user: {{name}}
 
   User query: {{query}}
 
