@@ -284,6 +284,10 @@ export async function synthesize({
       );
       logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
+    } else {
+      logger.warn(`Plugin ${plugin.id} not registered, skipping`);
+      pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
+      progressBar?.increment(plugin.numTests);
     }
   });
 
