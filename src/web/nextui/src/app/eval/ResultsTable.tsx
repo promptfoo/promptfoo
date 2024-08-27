@@ -5,7 +5,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import * as React from 'react';
+import React, { useEffect, useMemo, useCallback, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { getApiBaseUrl } from '@/api';
 import { useToast } from '@/app/contexts/ToastContext';
@@ -23,6 +23,8 @@ import type {
   EvaluateTable,
 } from '@/app/eval/types';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import ShareIcon from '@mui/icons-material/Share';
+import { IconButton } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -137,6 +139,42 @@ function ResultsTable({
 }: ResultsTableProps) {
   const { evalId, table, setTable, config, inComparisonMode } = useMainStore();
   const { showToast } = useToast();
+
+  // Function to generate the URL with the row ID
+  const generateRowLink = useCallback((rowId: string) => {
+    const currentUrl = window.location.href.split('#')[0]; // Get the current URL without any hash
+    return `${currentUrl}#row-${rowId}`; // Append the row ID as a hash to the URL
+  }, []);
+
+  // Function to copy the link to the clipboard
+  const copyToClipboard = useCallback(
+    (text: string) => {
+      navigator.clipboard
+        .writeText(text)
+        .then(() => {
+          showToast('Link copied to clipboard', 'success');
+        })
+        .catch((err) => {
+          console.error('Could not copy text: ', err);
+          showToast('Failed to copy link', 'error');
+        });
+    },
+    [showToast],
+  );
+
+  // Scroll to the row when the URL contains a hash
+  useEffect(() => {
+    if (window.location.hash) {
+      const element = document.querySelector(window.location.hash);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        element.classList.add('highlight');
+        setTimeout(() => {
+          element.classList.remove('highlight');
+        }, 2000);
+      }
+    }
+  }, []);
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -647,10 +685,11 @@ function ResultsTable({
           ))}
         </thead>
         <tbody>
-          {reactTable.getRowModel().rows.map((row, rowIndex) => {
+          {reactTable.getRowModel().rows.map((row) => {
             let colBorderDrawn = false;
+
             return (
-              <tr key={row.id}>
+              <tr key={row.id} id={`row-${row.id}`}>
                 {row.getVisibleCells().map((cell) => {
                   const isMetadataCol =
                     cell.column.id.startsWith('Variable') || cell.column.id === 'description';
@@ -658,17 +697,26 @@ function ResultsTable({
                   if (shouldDrawColBorder) {
                     colBorderDrawn = true;
                   }
-                  const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
+                  const shouldDrawRowBorder = !isMetadataCol;
                   return (
                     <td
                       key={cell.id}
                       style={{
                         width: cell.column.getSize(),
                       }}
-                      className={`${isMetadataCol ? 'variable' : ''} ${
-                        shouldDrawRowBorder ? 'first-prompt-row' : ''
-                      } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
+                      className={`${isMetadataCol ? 'variable' : ''} ${shouldDrawRowBorder ? 'first-prompt-row' : ''} ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
                     >
+                      {/* Share Button for Metadata Columns */}
+                      {isMetadataCol && (
+                        <IconButton
+                          color="primary"
+                          onClick={() => copyToClipboard(generateRowLink(row.id))}
+                          style={{ marginTop: '1px' }}
+                          aria-label="share"
+                        >
+                          <ShareIcon />
+                        </IconButton>
+                      )}
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   );
@@ -682,7 +730,7 @@ function ResultsTable({
         <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             onClick={() => {
-              setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));
+              setPagination((prev) => ({ ...prev, pageIndex: Math.max(prev.pageIndex - 1, 0) }));
               window.scrollTo(0, 0);
             }}
             disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -698,8 +746,8 @@ function ResultsTable({
               value={reactTable.getState().pagination.pageIndex + 1}
               onChange={(e) => {
                 const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                setPagination((old) => ({
-                  ...old,
+                setPagination((prev) => ({
+                  ...prev,
                   pageIndex: Math.min(Math.max(page, 0), reactTable.getPageCount() - 1),
                 }));
               }}
@@ -712,9 +760,9 @@ function ResultsTable({
           </Typography>
           <Button
             onClick={() => {
-              setPagination((old) => ({
-                ...old,
-                pageIndex: Math.min(old.pageIndex + 1, reactTable.getPageCount() - 1),
+              setPagination((prev) => ({
+                ...prev,
+                pageIndex: Math.min(prev.pageIndex + 1, reactTable.getPageCount() - 1),
               }));
               window.scrollTo(0, 0);
             }}
