@@ -451,7 +451,6 @@ export async function resolveConfigs(
         scenario.tests = parsedScenarioTests;
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
-      console.error(`scenario: ${JSON.stringify(scenario)}`);
       const filteredTests = await filterTests(
         {
           ...(scenario ?? {}),
