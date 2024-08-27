@@ -2,14 +2,13 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import fs from 'fs';
-import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { TestCaseWithPlugin } from '../types';
 import { isApiProvider, isProviderOptions, type ApiProvider } from '../types';
 import type { SynthesizeOptions } from '../types/redteam';
+import { maybeLoadFromExternalFile } from '../util';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
 import { extractEntities } from './extraction/entities';
@@ -257,40 +256,34 @@ export async function synthesize({
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
     } else if (plugin.id.startsWith('file://')) {
       logger.debug(`Loading custom plugin from ${plugin.id}`);
-      if (plugin.id.endsWith('.yaml')) {
-        const filePath = plugin.id.slice('file://'.length);
+      const filePath = plugin.id.slice('file://'.length);
 
-        const definition = yaml.load(fs.readFileSync(filePath, 'utf8')) as {
-          generator: string;
-          grader: string;
-        };
+      const definition = maybeLoadFromExternalFile(filePath) as {
+        generator: string;
+        grader: string;
+      };
 
-        logger.debug(`Custom plugin definition: ${JSON.stringify(definition, null, 2)}`);
+      logger.debug(`Custom plugin definition: ${JSON.stringify(definition, null, 2)}`);
 
-        const customPlugin = new CustomPlugin(
-          redteamProvider,
-          purpose,
-          injectVar,
-          plugin.config,
-          definition,
-        );
-        const customTests = await customPlugin.generateTests(plugin.numTests);
-        testCases.push(
-          ...customTests.map((t) => ({
-            ...t,
-            metadata: {
-              ...(t.metadata || {}),
-              pluginId: plugin.id,
-            },
-          })),
-        );
-        logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
-      }
-    } else {
-      logger.warn(`Plugin ${plugin.id} not registered, skipping`);
-      pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
-      progressBar?.increment(plugin.numTests);
+      const customPlugin = new CustomPlugin(
+        redteamProvider,
+        purpose,
+        injectVar,
+        plugin.config,
+        definition,
+      );
+      const customTests = await customPlugin.generateTests(plugin.numTests);
+      testCases.push(
+        ...customTests.map((t) => ({
+          ...t,
+          metadata: {
+            ...(t.metadata || {}),
+            pluginId: plugin.id,
+          },
+        })),
+      );
+      logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
+      pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
     }
   });
 
