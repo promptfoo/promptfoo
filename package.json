@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.81.1",
+  "version": "0.81.2",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
