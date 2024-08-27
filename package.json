@@ -168,5 +168,15 @@
     "uuid": "^10.0.0",
     "winston": "^3.14.2",
     "zod": "^3.23.8"
+  },
+  "madge": {
+    "detectiveOptions": {
+      "ts": {
+        "skipAsyncImports": true
+      },
+      "tsx": {
+        "skipAsyncImports": true
+      }
+    }
   }
 }
