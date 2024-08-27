@@ -17,7 +17,6 @@ import type { Environment } from 'nunjucks';
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -26,8 +25,9 @@ import type {
   NunjucksFilterMap,
 } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
-import { ATTACKER_MODEL, TEMPERATURE, PENALIZED_PHRASES } from './constants';
+import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
+import { loadRedteamProvider } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -51,19 +51,6 @@ const MIN_BRANCHES = 1;
 
 /** Maximum number of consecutive iterations without improvement before stopping */
 const MAX_NO_IMPROVEMENT = 15;
-
-/**
- * Initializes and returns the default OpenAI chat completion provider.
- * @returns A promise that resolves to an OpenAiChatCompletionProvider instance.
- */
-export async function defaultInitializeProviders(): Promise<OpenAiChatCompletionProvider> {
-  return new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
-    config: {
-      temperature: TEMPERATURE,
-      response_format: { type: 'json_object' },
-    },
-  });
-}
 
 /**
  * Renders system prompts for the red team, on-topic check, and judge.
@@ -95,7 +82,7 @@ export function renderSystemPrompts(
  * @returns A promise that resolves to the evaluation score.
  */
 export async function evaluateResponse(
-  redteamProvider: OpenAiChatCompletionProvider,
+  redteamProvider: ApiProvider,
   judgeSystemPrompt: string,
   targetResponse: string,
   containsPenalizedPhrase: boolean,
@@ -129,7 +116,7 @@ export async function evaluateResponse(
  * @returns A promise that resolves to an object containing the improvement and new prompt.
  */
 export async function getNewPrompt(
-  redteamProvider: OpenAiChatCompletionProvider,
+  redteamProvider: ApiProvider,
   redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
 ): Promise<{ improvement: string; prompt: string }> {
   const redteamBody = JSON.stringify(redteamHistory);
@@ -149,7 +136,7 @@ export async function getNewPrompt(
  * @returns A promise that resolves to a boolean indicating if the prompt is on-topic.
  */
 export async function checkIfOnTopic(
-  redteamProvider: OpenAiChatCompletionProvider,
+  redteamProvider: ApiProvider,
   onTopicSystemPrompt: string,
   targetPrompt: string,
 ): Promise<boolean> {
@@ -316,19 +303,17 @@ export async function runRedteamConversation({
   prompt,
   filters,
   vars,
-  provider,
+  redteamProvider,
+  targetProvider,
   injectVar,
-  initializeProviders = defaultInitializeProviders,
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
   vars: Record<string, string | object>;
-  provider: ApiProvider;
+  redteamProvider: ApiProvider;
+  targetProvider: ApiProvider;
   injectVar: string;
-  initializeProviders?: () => Promise<OpenAiChatCompletionProvider>;
 }): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
-  const redteamProvider = await initializeProviders();
-  const targetProvider = provider;
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;
 
@@ -389,7 +374,7 @@ export async function runRedteamConversation({
             [injectVar]: newInjectVar,
           },
           filters,
-          provider,
+          targetProvider,
         );
 
         const isOnTopic = await checkIfOnTopic(redteamProvider, onTopicSystemPrompt, targetPrompt);
@@ -485,7 +470,7 @@ export async function runRedteamConversation({
       [injectVar]: bestNode.prompt,
     },
     filters,
-    provider,
+    targetProvider,
   );
 
   const finalTargetResponse = await getTargetResponse(targetProvider, finalTargetPrompt);
@@ -507,21 +492,16 @@ export async function runRedteamConversation({
  */
 class RedteamIterativeTreeProvider implements ApiProvider {
   private readonly injectVar: string;
-  private readonly initializeProviders: () => Promise<OpenAiChatCompletionProvider>;
 
   /**
    * Creates a new instance of RedteamIterativeTreeProvider.
    * @param config - The configuration object for the provider.
    * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
-  constructor(
-    readonly config: Record<string, string | object>,
-    initializeProviders = defaultInitializeProviders,
-  ) {
+  constructor(readonly config: Record<string, string | object>) {
     logger.debug(`RedteamIterativeTreeProvider config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
-    this.initializeProviders = initializeProviders;
   }
 
   /**
@@ -550,9 +530,11 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      provider: context.originalProvider,
+      redteamProvider: await loadRedteamProvider({
+        provider: this.config.redteamProvider,
+      }),
+      targetProvider: context.originalProvider,
       injectVar: this.injectVar,
-      initializeProviders: this.initializeProviders,
     });
   }
 }

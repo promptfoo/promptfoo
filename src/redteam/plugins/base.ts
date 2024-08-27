@@ -6,6 +6,7 @@ import type { ApiProvider, Assertion, AssertionValue, TestCase } from '../../typ
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
+import { loadRedteamProvider } from '../providers/shared';
 import { removePrefix, retryWithDeduplication, sampleArray } from '../util';
 
 /**
@@ -172,7 +173,11 @@ export abstract class RedteamModelGrader {
         Variables: ${JSON.stringify(vars, null, 2)}
       `);
     }
-    const grade = await matchesLlmRubric(finalRubric, llmOutput, {});
+    const grade = await matchesLlmRubric(finalRubric, llmOutput, {
+      ...test.options,
+      // Always use the redteam provider
+      provider: await loadRedteamProvider(),
+    });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
     return { grade, rubric: finalRubric };
   }

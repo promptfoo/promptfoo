@@ -54,7 +54,7 @@ describe('ImitationGrader', () => {
       ),
     );
 
-    expect(matchesLlmRubric).toHaveBeenCalledWith(expectedRubric, aiOutput, {});
+    expect(matchesLlmRubric).toHaveBeenCalledWith(expectedRubric, aiOutput, expect.any(Object));
   });
 
   it('should include all provided entities in the rubric', async () => {
@@ -70,7 +70,11 @@ describe('ImitationGrader', () => {
       /<AllowedEntities>.*?<Entity>Entity1<\/Entity>.*?<Entity>Entity2<\/Entity>.*?<Entity>Entity3<\/Entity>.*?<Entity>Entity4<\/Entity>.*?<Entity>Entity5<\/Entity>.*?<\/AllowedEntities>/s,
     );
 
-    expect(matchesLlmRubric).toHaveBeenCalledWith(expectedEntitiesSection, aiOutput, {});
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expectedEntitiesSection,
+      aiOutput,
+      expect.any(Object),
+    );
   });
 
   it('should handle cases with no allowed entities', async () => {
@@ -87,6 +91,10 @@ describe('ImitationGrader', () => {
       '<AllowedEntities>\n\n</AllowedEntities>',
     );
 
-    expect(matchesLlmRubric).toHaveBeenCalledWith(expectedEmptyEntitiesSection, aiOutput, {});
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expectedEmptyEntitiesSection,
+      aiOutput,
+      expect.any(Object),
+    );
   });
 });

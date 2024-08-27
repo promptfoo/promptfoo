@@ -3,17 +3,17 @@ import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
-import { OpenAiChatCompletionProvider } from '../../../providers/openai';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   Prompt,
   NunjucksFilterMap,
+  RedteamConfig,
 } from '../../../types';
 import { getNunjucksEngine } from '../../../util/templates';
 import { isBasicRefusal } from '../../util';
-import { ATTACKER_MODEL_SMALL, TEMPERATURE } from '../constants';
+import { loadRedteamProvider } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_ROUNDS = 10;
@@ -23,6 +23,7 @@ interface CrescendoConfig {
   injectVar: string;
   maxRounds?: number;
   maxBacktracks?: number;
+  redteamProvider: RedteamConfig['provider'];
 }
 
 interface ConversationMessage {
@@ -55,10 +56,10 @@ export class MemorySystem {
 
 class CrescendoProvider implements ApiProvider {
   readonly config: CrescendoConfig;
-  private userGoal: string | undefined;
-  private readonly redTeamingChat: OpenAiChatCompletionProvider;
-  private readonly scoringChat: OpenAiChatCompletionProvider;
   private readonly nunjucks: any;
+  private userGoal: string | undefined;
+  private redTeamProvider: ApiProvider | undefined;
+  private scoringProvider: ApiProvider | undefined;
   private memory: MemorySystem;
   private targetConversationId: string;
   private redTeamingChatConversationId: string;
@@ -69,23 +70,31 @@ class CrescendoProvider implements ApiProvider {
     this.config = config;
     this.maxRounds = config.maxRounds || DEFAULT_MAX_ROUNDS;
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
-    this.redTeamingChat = new OpenAiChatCompletionProvider(ATTACKER_MODEL_SMALL, {
-      config: {
-        temperature: TEMPERATURE,
-        response_format: { type: 'json_object' },
-      },
-    });
-    this.scoringChat = new OpenAiChatCompletionProvider(ATTACKER_MODEL_SMALL, {
-      config: {
-        temperature: TEMPERATURE,
-        response_format: { type: 'json_object' },
-      },
-    });
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
     this.targetConversationId = uuidv4();
     this.redTeamingChatConversationId = uuidv4();
     logger.debug(`CrescendoProvider initialized with config: ${JSON.stringify(config)}`);
+  }
+
+  private async getRedTeamProvider(): Promise<ApiProvider> {
+    if (!this.redTeamProvider) {
+      this.redTeamProvider = await loadRedteamProvider({
+        provider: this.config.redteamProvider,
+        preferSmallModel: true,
+      });
+    }
+    return this.redTeamProvider;
+  }
+
+  private async getScoringProvider(): Promise<ApiProvider> {
+    if (!this.scoringProvider) {
+      this.scoringProvider = await loadRedteamProvider({
+        provider: this.config.redteamProvider,
+        preferSmallModel: true,
+      });
+    }
+    return this.scoringProvider;
   }
 
   id() {
@@ -256,7 +265,8 @@ class CrescendoProvider implements ApiProvider {
     const redTeamingHistory = this.memory.getConversation(this.redTeamingChatConversationId);
     logger.debug(`Sending to red teaming chat:`);
     this.logChatHistory(this.redTeamingChatConversationId);
-    const response = await this.redTeamingChat.callApi(JSON.stringify(redTeamingHistory));
+    const redTeamingChat = await this.getRedTeamProvider();
+    const response = await redTeamingChat.callApi(JSON.stringify(redTeamingHistory));
     invariant(typeof response.output === 'string', 'Expected output to be a string');
 
     const parsedOutput = JSON.parse(response.output);
@@ -374,7 +384,8 @@ class CrescendoProvider implements ApiProvider {
       { role: 'user', content: refusalInput },
     ]);
 
-    const refusalResponse = await this.scoringChat.callApi(refusalBody);
+    const scoringProvider = await this.getScoringProvider();
+    const refusalResponse = await scoringProvider.callApi(refusalBody);
     invariant(typeof refusalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Refusal score response: ${refusalResponse.output}`);
 
@@ -409,7 +420,8 @@ class CrescendoProvider implements ApiProvider {
       { role: 'user', content: evalInput },
     ]);
 
-    const evalResponse = await this.scoringChat.callApi(evalBody);
+    const scoringProvider = await this.getScoringProvider();
+    const evalResponse = await scoringProvider.callApi(evalBody);
     invariant(typeof evalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Eval score response: ${evalResponse.output}`);
 

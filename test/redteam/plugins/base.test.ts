@@ -244,7 +244,7 @@ describe('RedteamModelGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       'Test rubric for test-purpose with harm category test-harm',
       'test output',
-      {},
+      expect.any(Object),
     );
   });
 
@@ -315,12 +315,12 @@ describe('RedteamModelGrader', () => {
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining('tool1'),
         expect.any(String),
-        {},
+        expect.any(Object),
       );
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining('tool2'),
         expect.any(String),
-        {},
+        expect.any(Object),
       );
     });
 

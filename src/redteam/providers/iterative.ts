@@ -1,17 +1,17 @@
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  Prompt,
-  NunjucksFilterMap,
+import {
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  type Prompt,
+  type NunjucksFilterMap,
+  type RedteamConfig,
 } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
-import { ATTACKER_MODEL, TEMPERATURE } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
+import { loadRedteamProvider } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -23,22 +23,17 @@ async function runRedteamConversation({
   prompt,
   filters,
   vars,
-  provider,
+  redteamProvider,
+  targetProvider,
   injectVar,
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
   vars: Record<string, string | object>;
-  provider: ApiProvider;
+  redteamProvider: ApiProvider;
+  targetProvider: ApiProvider;
   injectVar: string;
 }) {
-  const redteamProvider = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
-    config: {
-      temperature: TEMPERATURE,
-      response_format: { type: 'json_object' },
-    },
-  });
-  const targetProvider = provider;
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
 
@@ -82,7 +77,7 @@ async function runRedteamConversation({
         [injectVar]: newInjectVar,
       },
       filters,
-      provider,
+      targetProvider,
     );
 
     // Is it on topic?
@@ -161,12 +156,16 @@ async function runRedteamConversation({
 }
 
 class RedteamIterativeProvider implements ApiProvider {
+  private readonly redteamProvider: RedteamConfig['provider'];
   private readonly injectVar: string;
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug(`RedteamIterativeProvider config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+
+    // Redteam provider can be set from the config.
+    this.redteamProvider = config.redteamProvider;
   }
 
   id() {
@@ -183,11 +182,13 @@ class RedteamIterativeProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context.vars, 'Expected vars to be set');
+
     return runRedteamConversation({
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      provider: context.originalProvider,
+      redteamProvider: await loadRedteamProvider({ provider: this.redteamProvider }),
+      targetProvider: context.originalProvider,
       injectVar: this.injectVar,
     });
   }

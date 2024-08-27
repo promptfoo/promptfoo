@@ -151,9 +151,14 @@ export type CallApiFunction = {
 };
 
 export function isApiProvider(provider: any): provider is ApiProvider {
-  return typeof provider === 'object' && 'id' in provider && typeof provider.id === 'function';
+  return (
+    typeof provider === 'object' &&
+    provider != null &&
+    'id' in provider &&
+    typeof provider.id === 'function'
+  );
 }
 
 export function isProviderOptions(provider: any): provider is ProviderOptions {
-  return !isApiProvider(provider) && typeof provider === 'object';
+  return !isApiProvider(provider) && typeof provider === 'object' && provider != null;
 }
