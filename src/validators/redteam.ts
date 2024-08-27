@@ -37,8 +37,13 @@ const RedteamPluginObjectSchema = z.object({
  */
 export const RedteamPluginSchema = z.union([
   z
-    .enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]])
-    .describe('Name of the plugin'),
+    .union([
+      z.enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]]),
+      z.string().refine((value) => value.startsWith('file://'), {
+        message: 'Custom plugin must be one of `promptfoo redteam plugins` or start with "file://"',
+      }),
+    ])
+    .describe('Name of the plugin or path to custom plugin'),
   RedteamPluginObjectSchema,
 ]);
 

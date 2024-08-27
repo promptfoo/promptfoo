@@ -2,6 +2,8 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import fs from 'fs';
+import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
@@ -13,6 +15,7 @@ import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } fro
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
+import { CustomPlugin } from './plugins/custom';
 import { Strategies, validateStrategies } from './strategies';
 
 /**
@@ -252,6 +255,38 @@ export async function synthesize({
       );
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
+    } else if (plugin.id.startsWith('file://')) {
+      logger.debug(`Loading custom plugin from ${plugin.id}`);
+      if (plugin.id.endsWith('.yaml')) {
+        const filePath = plugin.id.slice('file://'.length);
+
+        const definition = yaml.load(fs.readFileSync(filePath, 'utf8')) as {
+          generator: string;
+          grader: string;
+        };
+
+        logger.debug(`Custom plugin definition: ${JSON.stringify(definition, null, 2)}`);
+
+        const customPlugin = new CustomPlugin(
+          redteamProvider,
+          purpose,
+          injectVar,
+          plugin.config,
+          definition,
+        );
+        const customTests = await customPlugin.generateTests(plugin.numTests);
+        testCases.push(
+          ...customTests.map((t) => ({
+            ...t,
+            metadata: {
+              ...(t.metadata || {}),
+              pluginId: plugin.id,
+            },
+          })),
+        );
+        logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
+        pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
+      }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
@@ -259,9 +294,7 @@ export async function synthesize({
     }
   });
 
-  if (progressBar) {
-    progressBar.stop();
-  }
+  progressBar?.stop();
 
   const newTestCases: TestCaseWithPlugin[] = [];
 
