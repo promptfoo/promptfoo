@@ -2,6 +2,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import invariant from 'tiny-invariant';
+import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
 import { AI21ChatCompletionProvider } from './providers/ai21';
@@ -409,7 +410,8 @@ export async function loadApiProviders(
     env?: EnvOverrides;
   } = {},
 ): Promise<ApiProvider[]> {
-  const { basePath, env } = options;
+  const { basePath } = options;
+  const env = options.env || cliState.config?.env;
   if (typeof providerPaths === 'string') {
     return [await loadApiProvider(providerPaths, { basePath, env })];
   } else if (typeof providerPaths === 'function') {
