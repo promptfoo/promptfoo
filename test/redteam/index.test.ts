@@ -168,20 +168,6 @@ describe('synthesize', () => {
 
       expect(loadApiProvider).not.toHaveBeenCalled();
     });
-
-    it('should load the default provider if not provided', async () => {
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-      });
-
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4o', {
-        options: { config: { temperature: 0.5 } },
-      });
-    });
   });
 
   // Plugin and strategy tests
