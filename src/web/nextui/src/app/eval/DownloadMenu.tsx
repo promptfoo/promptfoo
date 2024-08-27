@@ -114,10 +114,12 @@ function DownloadMenu() {
           ...row.test.vars,
           output: row.outputs[0].text,
         },
-        assert: {
-          type: 'javascript',
-          value: `${row.outputs[0].pass ? '' : '!'}JSON.parse(output).pass`,
-        },
+        assert: [
+          {
+            type: 'javascript',
+            value: `${row.outputs[0].pass ? '' : '!'}JSON.parse(output).pass`,
+          },
+        ],
         metadata: row.test.metadata,
       }));
 
