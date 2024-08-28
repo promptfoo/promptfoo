@@ -70,7 +70,7 @@ export abstract class PluginBase {
 
       const finalTemplate = this.appendModifiers(renderedTemplate);
       const { output: generatedPrompts } = await this.provider.callApi(finalTemplate);
-      logger.warn(`Generated prompts: ${generatedPrompts}`);
+
       invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
       return this.parseGeneratedPrompts(generatedPrompts);
     };
