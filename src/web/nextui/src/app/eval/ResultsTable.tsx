@@ -5,7 +5,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import React, { useEffect, useMemo, useCallback, useState } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { getApiBaseUrl } from '@/api';
 import { useToast } from '@/app/contexts/ToastContext';
