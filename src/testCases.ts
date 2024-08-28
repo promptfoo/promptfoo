@@ -257,6 +257,69 @@ interface SynthesizeOptions {
   tests: TestCase[];
 }
 
+function generatePersonasPrompt(prompts: string[], numPersonas: number): string {
+  const promptsString = dedent`<Prompts>
+    ${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
+    </Prompts>`;
+
+  return dedent`
+    Consider the following prompt${prompts.length > 1 ? 's' : ''} for an LLM application:
+
+    ${promptsString}
+
+    List up to ${numPersonas} user personas that would send ${prompts.length > 1 ? 'these prompts' : 'this prompt'}. Your response should be JSON of the form {personas: string[]}`;
+}
+
+function generatePersonaPrompt(
+  prompts: string[],
+  persona: string,
+  tests: TestCase[],
+  numTestCasesPerPersona: number,
+  variables: string[],
+  instructions?: string,
+): string {
+  const promptsString = dedent`<Prompts>
+  ${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
+  </Prompts>`;
+  const existingTests =
+    dedent`Here are some existing tests:` +
+    tests
+      .map((test) => {
+        if (!test.vars) {
+          return;
+        }
+        return dedent`<Test>
+                ${JSON.stringify(test.vars, null, 2)}
+              </Test>`;
+      })
+      .filter(Boolean)
+      .slice(0, 100)
+      .join('\n');
+
+  return dedent`
+    Consider ${prompts.length > 1 ? 'these prompts' : 'this prompt'}, which contains some {{variables}}: 
+    ${promptsString}
+
+    This is your persona:
+    <Persona>
+    ${persona}
+    </Persona>
+
+    ${existingTests}
+
+    Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
+
+    You are a tester, so try to think of ${numTestCasesPerPersona} sets of values that would be interesting or unusual to test. ${
+      instructions || ''
+    }
+
+    Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
+      variables,
+    )
+      .map((varName) => `${varName}: string`)
+      .join(', ')}}[]}`;
+}
+
 export async function synthesize({
   prompts,
   instructions,
@@ -294,18 +357,8 @@ export async function synthesize({
     providerModel = await loadApiProvider(provider);
   }
 
-  const promptsString = dedent`<Prompts>
-    ${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
-    </Prompts>`;
-
-  const resp = await providerModel.callApi(
-    dedent`
-      Consider the following prompt${prompts.length > 1 ? 's' : ''} for an LLM application:
-
-      ${promptsString}
-
-      List up to ${numPersonas} user personas that would send ${prompts.length > 1 ? 'these prompts' : 'this prompt'}. Your response should be JSON of the form {personas: string[]}`,
-  );
+  const personasPrompt = generatePersonasPrompt(prompts, numPersonas);
+  const resp = await providerModel.callApi(personasPrompt);
   invariant(typeof resp.output !== 'undefined', 'resp.output must be defined');
   const output = typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
   const respObjects = extractJsonObjects(output);
@@ -328,50 +381,21 @@ export async function synthesize({
       .join('\n')}`,
   );
 
-  const existingTests =
-    dedent`Here are some existing tests:` +
-    tests
-      .map((test) => {
-        if (!test.vars) {
-          return;
-        }
-        return dedent`<Test>
-                ${JSON.stringify(test.vars, null, 2)}
-              </Test>`;
-      })
-      .filter(Boolean)
-      .slice(0, 100)
-      .join('\n');
-
   // For each user persona, we will generate a map of variable names to values
   const testCaseVars: VarMapping[] = [];
   for (let i = 0; i < personas.length; i++) {
     const persona = personas[i];
     logger.debug(`\nGenerating test cases for persona ${i + 1}...`);
-    // Construct the prompt for the LLM to generate variable values
-    const personaPrompt = dedent`
-    
-      Consider ${prompts.length > 1 ? 'these prompts' : 'this prompt'}, which contains some {{variables}}: 
-      ${promptsString}
 
-      This is your persona:
-      <Persona>
-      ${persona}
-      </Persona>
+    const personaPrompt = generatePersonaPrompt(
+      prompts,
+      persona,
+      tests,
+      numTestCasesPerPersona,
+      variables,
+      instructions,
+    );
 
-      ${existingTests}
-
-      Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
-
-      You are a tester, so try to think of ${numTestCasesPerPersona} sets of values that would be interesting or unusual to test. ${
-        instructions || ''
-      }
-
-      Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
-        variables,
-      )
-        .map((varName) => `${varName}: string`)
-        .join(', ')}}[]}`;
     // Call the LLM API with the constructed prompt
     const personaResponse = await providerModel.callApi(personaPrompt);
 

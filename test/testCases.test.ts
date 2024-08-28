@@ -9,9 +9,8 @@ import {
   readTests,
   readVarsFiles,
   synthesize,
-  synthesizeFromTestSuite,
 } from '../src/testCases';
-import type { AssertionType, TestCase, TestCaseWithVarsFile, TestSuite } from '../src/types';
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
@@ -469,9 +468,9 @@ describe('synthesize', () => {
       callApi: jest.fn(() => {
         if (i === 0) {
           i++;
-          return { output: '{"personas": ["Persona 1", "Persona 2"]}' };
+          return Promise.resolve({ output: '{"personas": ["Persona 1", "Persona 2"]}' });
         }
-        return { output: '{"vars": [{"var1": "value1"}, {"var2": "value2"}]}' };
+        return Promise.resolve({ output: '{"vars": [{"var1": "value1"}, {"var2": "value2"}]}' });
       }),
     };
     jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
