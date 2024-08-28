@@ -20,7 +20,7 @@ export async function extractSystemPurpose(
     <Purpose>Provide users a way to manage finances</Purpose>
     <Purpose>Executive assistant that helps with scheduling and reminders</Purpose>
     <Purpose>Ecommerce chatbot that sells shoes</Purpose>
-    `;
+  `;
 
     return await callExtraction(provider, prompt, (output: string) => {
       const match = output.match(/<Purpose>(.*?)<\/Purpose>/);

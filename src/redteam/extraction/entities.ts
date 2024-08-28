@@ -12,7 +12,7 @@ export async function extractEntities(provider: ApiProvider, prompts: string[]):
     ${formatPrompts(prompts)}
 
     Each line in your response must begin with the string "Entity:".
-    `;
+  `;
 
     return await callExtraction(provider, prompt, (output: string) => {
       const entities = output
