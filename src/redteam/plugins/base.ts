@@ -5,9 +5,10 @@ import { matchesLlmRubric } from '../../matchers';
 import type { ApiProvider, Assertion, AssertionValue, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { getNunjucksEngine } from '../../util/templates';
 import { loadRedteamProvider } from '../providers/shared';
-import { removePrefix, retryWithDeduplication, sampleArray } from '../util';
+import { removePrefix } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.

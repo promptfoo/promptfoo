@@ -1,4 +1,4 @@
-import { retryWithDeduplication, sampleArray } from '../../src/redteam/util';
+import { retryWithDeduplication, sampleArray } from '../src/util/generation';
 
 jest.mock('../../src/logger');
 

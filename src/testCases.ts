@@ -14,7 +14,6 @@ import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
-import { retryWithDeduplication } from './redteam/util';
 import type {
   CsvRow,
   TestCase,
@@ -25,6 +24,7 @@ import type {
   ApiProvider,
   ProviderOptions,
 } from './types';
+import { retryWithDeduplication } from './util/generation';
 import { extractJsonObjects } from './util/json';
 import { extractVariablesFromTemplates } from './util/templates';
 
@@ -398,19 +398,18 @@ export async function synthesize({
     const personaResponse = await providerModel.callApi(personaPrompt);
     logger.debug(`Received persona response:\n${personaResponse.output}`);
 
-    const personaResponseObjects = extractJsonObjects(personaResponse.output as string);
-    if (personaResponseObjects.length !== 1) {
-      logger.warn(
-        `Expected exactly one JSON object in the response, but got ${personaResponseObjects.length}`,
-      );
-      return [];
-    }
+    const personaResponseObjects = extractJsonObjects(personaResponse.output as string) as {
+      vars: VarMapping[];
+    }[];
 
-    const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
+    logger.warn(`Received ${personaResponseObjects.length} test cases`);
+    logger.warn(
+      `Test cases: ${personaResponseObjects.map((t) => JSON.stringify(t.vars)).join('\n')}`,
+    );
     if (progressBar) {
-      progressBar.increment(parsed.vars.length);
+      progressBar.increment(personaResponseObjects.length);
     }
-    return parsed.vars || [];
+    return personaResponseObjects.flatMap((t) => t.vars);
   };
 
   const totalTestCases = numPersonas * numTestCasesPerPersona;
