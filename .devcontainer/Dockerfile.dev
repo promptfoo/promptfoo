@@ -16,6 +16,3 @@ WORKDIR /workspace
 
 # Copy package.json and package-lock.json
 COPY --chown=node:node package*.json ./
-
-# Install dependencies
-RUN npm ci && npm link
