@@ -69,8 +69,6 @@ export abstract class PluginBase {
       });
 
       const finalTemplate = this.appendModifiers(renderedTemplate);
-      logger.warn(`purpose: ${this.purpose}`);
-      logger.warn(`Generated template: ${finalTemplate}`);
       const { output: generatedPrompts } = await this.provider.callApi(finalTemplate);
 
       invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
@@ -113,10 +111,7 @@ export abstract class PluginBase {
   }
 
   private appendModifiers(template: string): string {
-    if (
-      Object.keys(this.modifiers).length === 0 ||
-      Object.values(this.modifiers).every((value) => typeof value !== 'string' || value === '')
-    ) {
+    if (Object.keys(this.modifiers).length === 0) {
       return template;
     }
 

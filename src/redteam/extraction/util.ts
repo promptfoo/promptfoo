@@ -2,7 +2,11 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import type { ApiProvider } from '../../types';
 
-export async function callExtraction(provider: ApiProvider, prompt: string): Promise<string> {
+export async function callExtraction<T>(
+  provider: ApiProvider,
+  prompt: string,
+  processOutput: (output: string) => T,
+): Promise<T> {
   const { output, error } = await provider.callApi(prompt);
 
   if (error) {
@@ -15,7 +19,7 @@ export async function callExtraction(provider: ApiProvider, prompt: string): Pro
     throw new Error(`Invalid extraction output: expected string, got: ${output}`);
   }
 
-  return output;
+  return processOutput(output);
 }
 
 export function formatPrompts(prompts: string[]): string {
