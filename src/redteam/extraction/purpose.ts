@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import type { ApiProvider } from '../../types';
+import { extractJsonObjects } from '../../util/json';
 import { callExtraction, formatPrompts } from './util';
 
 export async function extractSystemPurpose(
@@ -11,15 +12,26 @@ export async function extractSystemPurpose(
     
     ${formatPrompts(prompts)}
     
-    Given the above prompts, output the "system purpose" of the application in a single sentence, enclosed in <Purpose> tags.
+    Given the above prompts, output the "system purpose" of the application in a single sentence.
+    Your response should be a valid JSON object with a single key "purpose" and the sentence as its value.
     
     Example outputs:
-    <Purpose>Provide users a way to manage finances</Purpose>
-    <Purpose>Executive assistant that helps with scheduling and reminders</Purpose>
-    <Purpose>Ecommerce chatbot that sells shoes</Purpose>
+    {"purpose": "Provide users a way to manage finances"}
+    {"purpose": "Executive assistant that helps with scheduling and reminders"}
+    {"purpose": "Ecommerce chatbot that sells shoes"}
   `;
 
   const output = await callExtraction(provider, prompt);
-  const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
-  return match ? match[1].trim() : output.trim();
+
+  try {
+    const parsedOutput = extractJsonObjects(output)[0] as { purpose: string };
+    if (typeof parsedOutput.purpose !== 'string') {
+      throw new Error('Invalid JSON format');
+    }
+    console.error(`Extracted purpose: ${parsedOutput.purpose}`);
+    return parsedOutput.purpose.trim();
+  } catch (error) {
+    console.error('Failed to parse purpose from JSON:', error);
+    return output.trim();
+  }
 }
