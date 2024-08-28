@@ -23,7 +23,7 @@ import type {
   ApiProvider,
   ProviderOptions,
 } from './types';
-import { extractJsonObjects } from './util';
+import { extractJsonObjects } from './util/json';
 import { extractVariablesFromTemplates } from './util/templates';
 
 function parseJson(json: string): any | undefined {
