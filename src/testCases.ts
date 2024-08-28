@@ -287,6 +287,7 @@ export function testCasesPrompt(
           </Test>`;
       })
       .filter(Boolean)
+      .sort()
       .join('\n')}
   `;
 
@@ -419,9 +420,16 @@ export async function synthesize({
     return parsed.vars || [];
   };
 
-  const testCaseVars = await retryWithDeduplication(generateTestCasesForPersona, totalTestCases);
+  let testCaseVars = await retryWithDeduplication(generateTestCasesForPersona, totalTestCases);
 
   logger.debug(`Generated ${testCaseVars.length} test cases`);
+
+  if (testCaseVars.length > totalTestCases) {
+    logger.debug(
+      `Generated ${testCaseVars.length} test cases, but only ${totalTestCases} were requested. Sampling down to ${totalTestCases}...`,
+    );
+    testCaseVars = sampleArray(testCaseVars, totalTestCases);
+  }
 
   if (progressBar) {
     progressBar.stop();
