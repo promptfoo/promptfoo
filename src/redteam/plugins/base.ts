@@ -113,7 +113,9 @@ export abstract class PluginBase {
   private appendModifiers(template: string): string {
     if (
       Object.keys(this.modifiers).length === 0 ||
-      Object.values(this.modifiers).every((value) => typeof value !== 'string' || value === '')
+      Object.values(this.modifiers).every(
+        (value) => typeof value === 'undefined' || (typeof value === 'string' && value === ''),
+      )
     ) {
       return template;
     }
