@@ -1,4 +1,3 @@
-
 const REFUSAL_PREFIXES = [
   'Sorry',
   "I'm sorry",

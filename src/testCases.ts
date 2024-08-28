@@ -24,7 +24,7 @@ import type {
   ApiProvider,
   ProviderOptions,
 } from './types';
-import { retryWithDeduplication } from './util/generation';
+import { retryWithDeduplication, sampleArray } from './util/generation';
 import { extractJsonObjects } from './util/json';
 import { extractVariablesFromTemplates } from './util/templates';
 
@@ -276,7 +276,7 @@ export function testCasesPrompt(
     </Prompts>`;
   const existingTests = dedent`
     Here are some existing tests:
-    ${tests
+    ${sampleArray(tests, 100)
       .map((test) => {
         if (!test.vars) {
           return;
@@ -287,7 +287,6 @@ export function testCasesPrompt(
           </Test>`;
       })
       .filter(Boolean)
-      .slice(0, 100)
       .join('\n')}
   `;
 
@@ -377,19 +376,27 @@ export async function synthesize({
       .join('\n')}`,
   );
 
+  const batchSize = 20;
+  const totalTestCases = numPersonas * numTestCasesPerPersona;
+
   const generateTestCasesForPersona = async (
     currentTestCases: VarMapping[],
   ): Promise<VarMapping[]> => {
+    const remainingCount = totalTestCases - currentTestCases.length;
+    const currentBatchSize = Math.min(remainingCount, batchSize);
+
     const persona = personas[currentTestCases.length % personas.length];
     logger.debug(
-      `Generating test cases for persona ${(currentTestCases.length % personas.length) + 1} of ${personas.length}...`,
+      `Generating ${currentBatchSize} test cases for persona ${
+        (currentTestCases.length % personas.length) + 1
+      } of ${personas.length}...`,
     );
 
     const personaPrompt = testCasesPrompt(
       prompts,
       persona,
       tests,
-      numTestCasesPerPersona,
+      currentBatchSize,
       variables,
       instructions,
     );
@@ -398,21 +405,20 @@ export async function synthesize({
     const personaResponse = await providerModel.callApi(personaPrompt);
     logger.debug(`Received persona response:\n${personaResponse.output}`);
 
-    const personaResponseObjects = extractJsonObjects(personaResponse.output as string) as {
-      vars: VarMapping[];
-    }[];
+    const personaResponseObjects = extractJsonObjects(personaResponse.output as string);
 
-    logger.warn(`Received ${personaResponseObjects.length} test cases`);
-    logger.warn(
-      `Test cases: ${personaResponseObjects.map((t) => JSON.stringify(t.vars)).join('\n')}`,
+    invariant(
+      personaResponseObjects.length === 1,
+      `Expected exactly one JSON object in the response for persona ${persona}`,
     );
+    const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
+    logger.debug(`Received ${parsed.vars.length} test cases`);
     if (progressBar) {
-      progressBar.increment(personaResponseObjects.length);
+      progressBar.increment(parsed.vars.length);
     }
-    return personaResponseObjects.flatMap((t) => t.vars);
+    return parsed.vars || [];
   };
 
-  const totalTestCases = numPersonas * numTestCasesPerPersona;
   const testCaseVars = await retryWithDeduplication(generateTestCasesForPersona, totalTestCases);
 
   logger.debug(`Generated ${testCaseVars.length} test cases`);
