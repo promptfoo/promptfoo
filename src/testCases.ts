@@ -85,40 +85,23 @@ export async function readStandaloneTestsFile(
   });
 }
 
+async function loadTestWithVars(
+  testCase: TestCaseWithVarsFile,
+  testBasePath: string,
+): Promise<TestCase> {
+  const ret: TestCase = { ...testCase, vars: undefined };
+  if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
+    ret.vars = await readVarsFiles(testCase.vars, testBasePath);
+  } else {
+    ret.vars = testCase.vars;
+  }
+  return ret;
+}
+
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
 ): Promise<TestCase> {
-  const loadTestWithVars = async (
-    testCase: TestCaseWithVarsFile,
-    testBasePath: string,
-  ): Promise<TestCase> => {
-    const ret: TestCase = { ...testCase, vars: undefined };
-    if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-      ret.vars = await readVarsFiles(testCase.vars, testBasePath);
-    } else {
-      ret.vars = testCase.vars;
-    } /*else if (typeof testCase.vars === 'object') {
-      const vars: Record<string, string | string[] | object> = {};
-      for (const [key, value] of Object.entries(testCase.vars)) {
-        if (typeof value === 'string' && value.startsWith('file://')) {
-          // Load file from disk.
-          const filePath = path.resolve(testBasePath, value.slice('file://'.length));
-          if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
-            vars[key] = (yaml.load(fs.readFileSync(filePath, 'utf-8')) as string).trim();
-          } else {
-            vars[key] = fs.readFileSync(filePath, 'utf-8').trim();
-          }
-        } else {
-          // This is a normal key:value.
-          vars[key] = value;
-        }
-      }
-      ret.vars = vars;
-    }*/
-    return ret;
-  };
-
   let testCase: TestCase;
 
   if (typeof test === 'string') {
@@ -142,10 +125,10 @@ export async function readTest(
     }
   }
 
-  // Validation of the shape of test
+  // Validate the shape of the test case
   if (!testCase.assert && !testCase.vars && !testCase.options && !testCase.metadata) {
     throw new Error(
-      `Test case must have either assert, vars, or options property. Instead got ${JSON.stringify(
+      `Test case must have either assert, vars, options, or metadata property. Instead got ${JSON.stringify(
         testCase,
         null,
         2,
@@ -171,7 +154,7 @@ export async function readTests(
       windowsPathsNoEscape: true,
     });
     const _deref = async (testCases: TestCase[], file: string) => {
-      logger.debug(`Dereferencing testfile ${file}`);
+      logger.debug(`Dereferencing test file: ${file}`);
       return (await $RefParser.dereference(testCases)) as TestCase[];
     };
 
@@ -219,7 +202,7 @@ export async function readTests(
         // Resolve globs
         ret.push(...(await loadTestsFromGlob(globOrTest)));
       } else {
-        // It's just a TestCase
+        // Load individual TestCase
         ret.push(await readTest(globOrTest, basePath));
       }
     }
@@ -270,7 +253,7 @@ function generatePersonasPrompt(prompts: string[], numPersonas: number): string 
     List up to ${numPersonas} user personas that would send ${prompts.length > 1 ? 'these prompts' : 'this prompt'}. Your response should be JSON of the form {personas: string[]}`;
 }
 
-function generatePersonaPrompt(
+function testCasesPrompt(
   prompts: string[],
   persona: string,
   tests: TestCase[],
@@ -347,8 +330,9 @@ export async function synthesize({
     `Starting dataset synthesis. We'll begin by generating up to ${numPersonas} personas. Each persona will be used to generate ${numTestCasesPerPersona} test cases.`,
   );
 
-  // Consider the following prompt for an LLM application: {{prompt}}. List up to 5 user personas that would send this prompt.
-  logger.debug(`\nGenerating user personas from ${prompts.length} prompts...`);
+  logger.debug(
+    `Generating user personas from ${prompts.length} prompt${prompts.length > 1 ? 's' : ''}...`,
+  );
 
   let providerModel: ApiProvider;
   if (typeof provider === 'undefined') {
@@ -358,14 +342,16 @@ export async function synthesize({
   }
 
   const personasPrompt = generatePersonasPrompt(prompts, numPersonas);
+  logger.debug(`Generated personas prompt:\n${personasPrompt}`);
   const resp = await providerModel.callApi(personasPrompt);
+  logger.debug(`Received personas response:\n${resp.output}`);
   invariant(typeof resp.output !== 'undefined', 'resp.output must be defined');
   const output = typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
   const respObjects = extractJsonObjects(output);
   invariant(respObjects.length === 1, 'Expected exactly one JSON object in the response');
   const personas = (respObjects[0] as { personas: string[] }).personas;
   logger.debug(
-    `\nGenerated ${personas.length} personas:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
+    `Generated ${personas.length} persona${personas.length === 1 ? '' : 's'}:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
   );
 
   if (progressBar) {
@@ -376,18 +362,18 @@ export async function synthesize({
   const variables = extractVariablesFromTemplates(prompts);
 
   logger.debug(
-    `\nExtracted ${variables.length} variables from prompts:\n${variables
+    `Extracted ${variables.length} variable${variables.length === 1 ? '' : 's'} from prompt${prompts.length === 1 ? '' : 's'}:\n${variables
       .map((v) => `  - ${v}`)
       .join('\n')}`,
   );
 
-  // For each user persona, we will generate a map of variable names to values
+  // For each user persona, generate a map of variable names to values
   const testCaseVars: VarMapping[] = [];
   for (let i = 0; i < personas.length; i++) {
     const persona = personas[i];
-    logger.debug(`\nGenerating test cases for persona ${i + 1}...`);
+    logger.debug(`Generating test cases for persona ${i + 1} of ${personas.length}...`);
 
-    const personaPrompt = generatePersonaPrompt(
+    const personaPrompt = testCasesPrompt(
       prompts,
       persona,
       tests,
@@ -395,10 +381,11 @@ export async function synthesize({
       variables,
       instructions,
     );
+    logger.debug(`Generated persona prompt for persona ${i + 1}:\n${personaPrompt}`);
 
     // Call the LLM API with the constructed prompt
     const personaResponse = await providerModel.callApi(personaPrompt);
-
+    logger.debug(`Received persona response for persona ${i + 1}:\n${personaResponse.output}`);
     const personaResponseObjects = extractJsonObjects(personaResponse.output as string);
     invariant(
       personaResponseObjects.length === 1,
