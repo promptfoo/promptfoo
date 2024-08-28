@@ -111,11 +111,15 @@ export abstract class PluginBase {
   }
 
   private appendModifiers(template: string): string {
-    if (Object.keys(this.modifiers).length === 0) {
+    if (
+      Object.keys(this.modifiers).length === 0 ||
+      Object.values(this.modifiers).every((value) => typeof value === 'undefined' || value === '')
+    ) {
       return template;
     }
 
     const modifierSection = Object.entries(this.modifiers)
+      .filter(([key, value]) => typeof value !== 'undefined' && value !== '')
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 
