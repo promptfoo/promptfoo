@@ -7,11 +7,11 @@ import { callExtraction, formatPrompts } from './util';
 export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
   try {
     const prompt = dedent`
-      Extract names, brands, organizations, or IDs from the following prompts and return them as a list:
+    Extract names, brands, organizations, or IDs from the following prompts and return them as a list:
 
-      ${formatPrompts(prompts)}
+    ${formatPrompts(prompts)}
 
-      Each line in your response must begin with the string "Entity:".
+    Each line in your response must begin with the string "Entity:".
     `;
 
     return await callExtraction(provider, prompt, (output: string) => {

@@ -10,16 +10,16 @@ export async function extractSystemPurpose(
 ): Promise<string> {
   try {
     const prompt = dedent`
-      The following are prompts that are being used to test an LLM application:
-      
-      ${formatPrompts(prompts)}
-      
-      Given the above prompts, output the "system purpose" of the application in a single sentence, enclosed in <Purpose> tags.
-      
-      Example outputs:
-      <Purpose>Provide users a way to manage finances</Purpose>
-      <Purpose>Executive assistant that helps with scheduling and reminders</Purpose>
-      <Purpose>Ecommerce chatbot that sells shoes</Purpose>
+    The following are prompts that are being used to test an LLM application:
+    
+    ${formatPrompts(prompts)}
+    
+    Given the above prompts, output the "system purpose" of the application in a single sentence, enclosed in <Purpose> tags.
+    
+    Example outputs:
+    <Purpose>Provide users a way to manage finances</Purpose>
+    <Purpose>Executive assistant that helps with scheduling and reminders</Purpose>
+    <Purpose>Ecommerce chatbot that sells shoes</Purpose>
     `;
 
     return await callExtraction(provider, prompt, (output: string) => {
