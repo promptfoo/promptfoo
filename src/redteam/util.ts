@@ -1,4 +1,3 @@
-import logger from '../logger';
 
 const REFUSAL_PREFIXES = [
   'Sorry',
