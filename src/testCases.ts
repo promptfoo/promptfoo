@@ -306,7 +306,9 @@ export async function synthesize({
 
       List up to ${numPersonas} user personas that would send ${prompts.length > 1 ? 'these prompts' : 'this prompt'}. Your response should be JSON of the form {personas: string[]}`,
   );
-  const respObjects = extractJsonObjects(resp.output as string);
+  invariant(typeof resp.output !== 'undefined', 'resp.output must be defined');
+  const output = typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
+  const respObjects = extractJsonObjects(output);
   invariant(respObjects.length === 1, 'Expected exactly one JSON object in the response');
   const personas = (respObjects[0] as { personas: string[] }).personas;
   logger.debug(

@@ -3,8 +3,15 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../src/csv';
 import { loadApiProvider } from '../src/providers';
-import { readStandaloneTestsFile, readTest, readTests } from '../src/testCases';
-import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../src/types';
+import {
+  readStandaloneTestsFile,
+  readTest,
+  readTests,
+  readVarsFiles,
+  synthesize,
+  synthesizeFromTestSuite,
+} from '../src/testCases';
+import type { AssertionType, TestCase, TestCaseWithVarsFile, TestSuite } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
@@ -31,6 +38,10 @@ jest.mock('fs', () => ({
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
+}));
+
+jest.mock('../src/googleSheets', () => ({
+  fetchCsvFromGoogleSheet: jest.fn(),
 }));
 
 describe('readStandaloneTestsFile', () => {
@@ -169,14 +180,17 @@ describe('readTest', () => {
 
       const testCase: TestCase = {
         description: 'Test with provider object',
-        provider: { id: 'mock-provider' },
+        provider: {
+          id: 'mock-provider',
+          callApi: jest.fn(),
+        },
         assert: [{ type: 'equals', value: 'expected' }],
       };
 
       const result = await readTest(testCase);
 
       expect(loadApiProvider).toHaveBeenCalledWith('mock-provider', {
-        options: { id: 'mock-provider' },
+        options: { id: 'mock-provider', callApi: expect.any(Function) },
         basePath: '',
       });
       expect(result.provider).toBe(mockProvider);
@@ -360,6 +374,32 @@ describe('readTests', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual([test1Content]);
   });
+
+  it('should read tests from a Google Sheets URL', async () => {
+    const mockFetchCsvFromGoogleSheet =
+      jest.requireMock('../src/googleSheets').fetchCsvFromGoogleSheet;
+    mockFetchCsvFromGoogleSheet.mockResolvedValue([
+      { var1: 'value1', var2: 'value2', __expected: 'expected1' },
+      { var1: 'value3', var2: 'value4', __expected: 'expected2' },
+    ]);
+
+    const result = await readTests('https://docs.google.com/spreadsheets/d/example');
+
+    expect(mockFetchCsvFromGoogleSheet).toHaveBeenCalledWith(
+      'https://docs.google.com/spreadsheets/d/example',
+    );
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      description: 'Row #1',
+      vars: { var1: 'value1', var2: 'value2' },
+      assert: [{ type: 'equals', value: 'expected1' }],
+    });
+    expect(result[1]).toMatchObject({
+      description: 'Row #2',
+      vars: { var1: 'value3', var2: 'value4' },
+      assert: [{ type: 'equals', value: 'expected2' }],
+    });
+  });
 });
 
 describe('testCaseFromCsvRow', () => {
@@ -392,5 +432,58 @@ describe('testCaseFromCsvRow', () => {
         suffix: 'test-suffix',
       },
     });
+  });
+});
+
+describe('readVarsFiles', () => {
+  it('should read variables from a single YAML file', async () => {
+    const yamlContent = 'var1: value1\nvar2: value2';
+    jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
+    jest.mocked(globSync).mockReturnValue(['vars.yaml']);
+
+    const result = await readVarsFiles('vars.yaml');
+
+    expect(result).toEqual({ var1: 'value1', var2: 'value2' });
+  });
+
+  it('should read variables from multiple YAML files', async () => {
+    const yamlContent1 = 'var1: value1';
+    const yamlContent2 = 'var2: value2';
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(yamlContent1)
+      .mockReturnValueOnce(yamlContent2);
+    jest.mocked(globSync).mockReturnValue(['vars1.yaml', 'vars2.yaml']);
+
+    const result = await readVarsFiles(['vars1.yaml', 'vars2.yaml']);
+
+    expect(result).toEqual({ var1: 'value1', var2: 'value2' });
+  });
+});
+
+describe('synthesize', () => {
+  it('should generate test cases based on prompts and personas', async () => {
+    let i = 0;
+    const mockProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn(() => {
+        if (i === 0) {
+          i++;
+          return { output: '{"personas": ["Persona 1", "Persona 2"]}' };
+        }
+        return { output: '{"vars": [{"var1": "value1"}, {"var2": "value2"}]}' };
+      }),
+    };
+    jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    const result = await synthesize({
+      provider: 'mock-provider',
+      prompts: ['Test prompt'],
+      tests: [],
+      numPersonas: 2,
+      numTestCasesPerPersona: 1,
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result).toEqual([{ var1: 'value1' }, { var2: 'value2' }]);
   });
 });
