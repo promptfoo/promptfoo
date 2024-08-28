@@ -35,7 +35,7 @@ RUN apk update && apk add --no-cache python3 build-base
 # Envars are read in from src/web/nextui/.env.production
 RUN echo "*** Building with env vars from .env.production"
 
-RUN npm install
+RUN npm install --install-links
 RUN npm run build
 
 WORKDIR /app/src/web/nextui
