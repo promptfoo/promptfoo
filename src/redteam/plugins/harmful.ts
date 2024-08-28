@@ -3,6 +3,7 @@ import { getEnvString } from '../../envars';
 import PromptfooHarmfulCompletionProvider from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import {
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
@@ -10,7 +11,7 @@ import {
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
-import { isBasicRefusal, retryWithDeduplication, sampleArray } from '../util';
+import { isBasicRefusal } from '../util';
 import { PluginBase, RedteamModelGrader } from './base';
 
 interface HarmfulCategory {
