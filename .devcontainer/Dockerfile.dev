@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/vscode/devcontainers/javascript-node:0-20
+FROM mcr.microsoft.com/vscode/devcontainers/typescript-node:22
 
 # Install additional OS packages if needed
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
@@ -6,9 +6,6 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     jq htop \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-# Install global npm packages
-RUN npm install -g typescript@latest
 
 # Set up npm directories and cache directory
 RUN mkdir -p /home/node/.promptfoo && \
