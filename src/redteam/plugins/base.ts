@@ -121,6 +121,7 @@ export abstract class PluginBase {
     }
 
     const modifierSection = Object.entries(this.modifiers)
+      .filter(([key, value]) => typeof value === 'string' && value !== '')
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 

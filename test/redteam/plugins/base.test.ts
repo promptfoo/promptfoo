@@ -199,6 +199,31 @@ describe('PluginBase', () => {
     );
     expect(new Set(result.map((r) => r.vars?.testVar)).size).toBe(5);
   });
+
+  describe('appendModifiers', () => {
+    it('should not append modifiers when all modifier values are undefined or empty strings', async () => {
+      const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+        modifier1: undefined as any,
+        modifier2: '',
+      });
+      await plugin.generateTests(1);
+      expect(provider.callApi).toHaveBeenCalledWith(expect.not.stringContaining('<Modifiers>'));
+      expect(provider.callApi).toHaveBeenCalledWith(expect.not.stringContaining('modifier1'));
+      expect(provider.callApi).toHaveBeenCalledWith(expect.not.stringContaining('modifier2'));
+    });
+
+    it('should append modifiers when at least one modifier has a non-empty value', async () => {
+      const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+        modifier1: undefined as any,
+        modifier2: 'value2',
+      });
+
+      await plugin.generateTests(1);
+      expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
+      expect(provider.callApi).toHaveBeenCalledWith(expect.not.stringContaining('modifier1'));
+      expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('modifier2: value2'));
+    });
+  });
 });
 
 class TestGrader extends RedteamModelGrader {
