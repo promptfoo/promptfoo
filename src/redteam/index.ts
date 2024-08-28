@@ -183,17 +183,11 @@ export async function synthesize({
       `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n`,
   );
 
-  let progressBar: cliProgress.SingleBar | null = null;
-  if (logger.level !== 'debug') {
-    progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-    progressBar.start(totalPluginTests + 2, 0);
-  }
-
   if (typeof injectVar !== 'string') {
     const parsedVars = extractVariablesFromTemplates(prompts);
     if (parsedVars.length > 1) {
       logger.warn(
-        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}".`,
+        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}". Override this selection with --injectVar`,
       );
     } else if (parsedVars.length === 0) {
       logger.warn('No variables found in prompts. Using "query" as the inject variable.');
@@ -201,6 +195,12 @@ export async function synthesize({
     // Odds are that the last variable is the user input since the user input usually goes at the end of the prompt
     injectVar = parsedVars[parsedVars.length - 1] || 'query';
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
+  }
+
+  let progressBar: cliProgress.SingleBar | null = null;
+  if (logger.level !== 'debug') {
+    progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+    progressBar.start(totalPluginTests + 2, 0);
   }
 
   for (const [category, categoryPlugins] of Object.entries(categories)) {
