@@ -23,5 +23,5 @@
       "extensions": ["esbenp.prettier-vscode", "dbaeumer.vscode-eslint", "GitHub.copilot"]
     }
   },
-  "postCreateCommand": "npm ci && npm link"
+  "postCreateCommand": "npm ci && npm run build && npm link"
 }
