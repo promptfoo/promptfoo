@@ -64,12 +64,9 @@ RUN mkdir -p /home/$USER/.npm-global /home/$USER/.promptfoo /home/$USER/.cache &
 
 RUN npm config set prefix "/home/$USER/.npm-global" && \
     echo "export PATH=/home/$USER/.npm-global/bin:$PATH" >> /home/$USER/.zshrc && \
-    echo "export PATH=/home/$USER/.npm-global/bin:$PATH" >> /home/$USER/.bashrc && \
-    echo "export PROMPTFOO_CACHE_PATH=/home/$USER/.cache/promptfoo" >> /home/$USER/.zshrc && \
-    echo "export PROMPTFOO_CACHE_PATH=/home/$USER/.cache/promptfoo" >> /home/$USER/.bashrc
+    echo "export PATH=/home/$USER/.npm-global/bin:$PATH" >> /home/$USER/.bashrc
 
 ENV PATH=/home/$USER/.npm-global/bin:$PATH
-ENV PROMPTFOO_CACHE_PATH=/home/$USER/.cache/promptfoo
 
 WORKDIR /workspace
 
@@ -78,9 +75,5 @@ COPY --chown=$USER:$USER package*.json ./
 RUN npm ci && npm link
 
 USER root
-RUN chown -R $USER:$USER /workspace
+RUN chown -R $USER:$USER /workspace /home/$USER/.promptfoo
 USER $USER
-
-# Ensure cache directory exists and has correct permissions
-RUN mkdir -p $PROMPTFOO_CACHE_PATH && \
-    chmod -R 755 $PROMPTFOO_CACHE_PATH
