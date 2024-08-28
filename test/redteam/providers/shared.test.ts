@@ -81,7 +81,7 @@ describe('loadRedteamProvider', () => {
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(ATTACKER_MODEL, {
       config: {
         temperature: TEMPERATURE,
-        response_format: { type: 'json_object' },
+        response_format: undefined,
       },
     });
     expect(logger.debug).toHaveBeenCalledWith(`Using default redteam provider: ${ATTACKER_MODEL}`);
@@ -94,12 +94,25 @@ describe('loadRedteamProvider', () => {
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(ATTACKER_MODEL_SMALL, {
       config: {
         temperature: TEMPERATURE,
-        response_format: { type: 'json_object' },
+        response_format: undefined,
       },
     });
     expect(logger.debug).toHaveBeenCalledWith(
       `Using default redteam provider: ${ATTACKER_MODEL_SMALL}`,
     );
+  });
+
+  it('should set response_format to json_object when jsonOnly is true', async () => {
+    jest.mocked(OpenAiChatCompletionProvider).mockReturnValue(mockOpenAiProvider);
+    const result = await loadRedteamProvider({ jsonOnly: true });
+    expect(result).toBe(mockOpenAiProvider);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(ATTACKER_MODEL, {
+      config: {
+        temperature: TEMPERATURE,
+        response_format: { type: 'json_object' },
+      },
+    });
+    expect(logger.debug).toHaveBeenCalledWith(`Using default redteam provider: ${ATTACKER_MODEL}`);
   });
 
   it('should use provider from cliState if available', async () => {

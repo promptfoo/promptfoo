@@ -26,6 +26,36 @@ export function safeJsonStringify(value: any, prettyPrint: boolean = false): str
   );
 }
 
+export function extractJsonObjects(str: string): object[] {
+  // This will extract all json objects from a string
+
+  const jsonObjects = [];
+  let openBracket = str.indexOf('{');
+  let closeBracket = str.indexOf('}', openBracket);
+  // Iterate over the string until we find a valid JSON-like pattern
+  // Iterate over all trailing } until the contents parse as json
+  while (openBracket !== -1) {
+    const jsonStr = str.slice(openBracket, closeBracket + 1);
+    try {
+      jsonObjects.push(JSON.parse(jsonStr));
+      // This is a valid JSON object, so start looking for
+      // an opening bracket after the last closing bracket
+      openBracket = str.indexOf('{', closeBracket + 1);
+      closeBracket = str.indexOf('}', openBracket);
+    } catch (err) {
+      // Not a valid object, move on to the next closing bracket
+      closeBracket = str.indexOf('}', closeBracket + 1);
+      while (closeBracket === -1) {
+        // No closing brackets made a valid json object, so
+        // start looking with the next opening bracket
+        openBracket = str.indexOf('{', openBracket + 1);
+        closeBracket = str.indexOf('}', openBracket);
+      }
+    }
+  }
+  return jsonObjects;
+}
+
 /**
  * Reorders the keys of an object based on a specified order, preserving any unspecified keys.
  * Symbol keys are preserved and added at the end.

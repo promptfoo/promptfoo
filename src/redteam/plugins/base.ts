@@ -111,11 +111,15 @@ export abstract class PluginBase {
   }
 
   private appendModifiers(template: string): string {
-    if (Object.keys(this.modifiers).length === 0) {
+    if (
+      Object.keys(this.modifiers).length === 0 ||
+      Object.values(this.modifiers).every((value) => typeof value === 'undefined' || value === '')
+    ) {
       return template;
     }
 
     const modifierSection = Object.entries(this.modifiers)
+      .filter(([key, value]) => typeof value !== 'undefined' && value !== '')
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 
@@ -176,7 +180,7 @@ export abstract class RedteamModelGrader {
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
       // Always use the redteam provider
-      provider: await loadRedteamProvider(),
+      provider: await loadRedteamProvider({ jsonOnly: true }),
     });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
     return { grade, rubric: finalRubric };

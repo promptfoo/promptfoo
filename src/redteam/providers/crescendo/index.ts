@@ -82,6 +82,7 @@ class CrescendoProvider implements ApiProvider {
       this.redTeamProvider = await loadRedteamProvider({
         provider: this.config.redteamProvider,
         preferSmallModel: true,
+        jsonOnly: true,
       });
     }
     return this.redTeamProvider;

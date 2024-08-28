@@ -532,6 +532,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       vars: context.vars,
       redteamProvider: await loadRedteamProvider({
         provider: this.config.redteamProvider,
+        jsonOnly: true,
       }),
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
