@@ -5,9 +5,11 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 export async function loadRedteamProvider({
   provider,
+  jsonOnly = false,
   preferSmallModel = false,
 }: {
   provider?: RedteamConfig['provider'];
+  jsonOnly?: boolean;
   preferSmallModel?: boolean;
 } = {}) {
   // FIXME(ian): This approach only works on CLI, it doesn't work when running via node module.
@@ -30,7 +32,7 @@ export async function loadRedteamProvider({
     ret = new OpenAiChatCompletionProviderModule.OpenAiChatCompletionProvider(defaultModel, {
       config: {
         temperature: TEMPERATURE,
-        response_format: { type: 'json_object' },
+        response_format: jsonOnly ? { type: 'json_object' } : undefined,
       },
     });
   }

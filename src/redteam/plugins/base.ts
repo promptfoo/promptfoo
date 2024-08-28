@@ -176,7 +176,7 @@ export abstract class RedteamModelGrader {
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
       // Always use the redteam provider
-      provider: await loadRedteamProvider(),
+      provider: await loadRedteamProvider({ jsonOnly: true }),
     });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
     return { grade, rubric: finalRubric };
