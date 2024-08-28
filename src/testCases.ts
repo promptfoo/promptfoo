@@ -1,4 +1,5 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
+import type { SingleBar } from 'cli-progress';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import * as fs from 'fs';
@@ -13,6 +14,7 @@ import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
+import { retryWithDeduplication } from './redteam/util';
 import type {
   CsvRow,
   TestCase,
@@ -326,7 +328,7 @@ export async function synthesize({
   numPersonas = numPersonas || 5;
   numTestCasesPerPersona = numTestCasesPerPersona || 3;
 
-  let progressBar;
+  let progressBar: SingleBar | undefined;
   if (logger.level !== 'debug') {
     const cliProgress = await import('cli-progress');
     progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
@@ -375,11 +377,13 @@ export async function synthesize({
       .join('\n')}`,
   );
 
-  // For each user persona, generate a map of variable names to values
-  const testCaseVars: VarMapping[] = [];
-  for (let i = 0; i < personas.length; i++) {
-    const persona = personas[i];
-    logger.debug(`Generating test cases for persona ${i + 1} of ${personas.length}...`);
+  const generateTestCasesForPersona = async (
+    currentTestCases: VarMapping[],
+  ): Promise<VarMapping[]> => {
+    const persona = personas[currentTestCases.length % personas.length];
+    logger.debug(
+      `Generating test cases for persona ${(currentTestCases.length % personas.length) + 1} of ${personas.length}...`,
+    );
 
     const personaPrompt = testCasesPrompt(
       prompts,
@@ -389,38 +393,35 @@ export async function synthesize({
       variables,
       instructions,
     );
-    logger.debug(`Generated persona prompt for persona ${i + 1}:\n${personaPrompt}`);
+    logger.debug(`Generated persona prompt:\n${personaPrompt}`);
 
-    // Call the LLM API with the constructed prompt
     const personaResponse = await providerModel.callApi(personaPrompt);
-    logger.debug(`Received persona response for persona ${i + 1}:\n${personaResponse.output}`);
+    logger.debug(`Received persona response:\n${personaResponse.output}`);
+
     const personaResponseObjects = extractJsonObjects(personaResponse.output as string);
-    invariant(
-      personaResponseObjects.length === 1,
-      `Expected exactly one JSON object in the response for persona ${i + 1}`,
-    );
-    const parsed = personaResponseObjects[0] as {
-      vars: VarMapping[];
-    };
-    for (const vars of parsed.vars) {
-      logger.debug(`${JSON.stringify(vars, null, 2)}`);
-      testCaseVars.push(vars);
-      if (progressBar) {
-        progressBar.increment();
-      }
+    if (personaResponseObjects.length !== 1) {
+      logger.warn(
+        `Expected exactly one JSON object in the response, but got ${personaResponseObjects.length}`,
+      );
+      return [];
     }
-  }
+
+    const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
+    if (progressBar) {
+      progressBar.increment(parsed.vars.length);
+    }
+    return parsed.vars || [];
+  };
+
+  const totalTestCases = numPersonas * numTestCasesPerPersona;
+  const testCaseVars = await retryWithDeduplication(generateTestCasesForPersona, totalTestCases);
+
+  logger.debug(`Generated ${testCaseVars.length} test cases`);
 
   if (progressBar) {
     progressBar.stop();
   }
-
-  // Dedup test case vars
-  const uniqueTestCaseStrings = new Set(testCaseVars.map((testCase) => JSON.stringify(testCase)));
-  const dedupedTestCaseVars: VarMapping[] = Array.from(uniqueTestCaseStrings).map((testCase) =>
-    JSON.parse(testCase),
-  );
-  return dedupedTestCaseVars;
+  return testCaseVars;
 }
 
 export async function synthesizeFromTestSuite(
