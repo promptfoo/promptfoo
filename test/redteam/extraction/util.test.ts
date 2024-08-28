@@ -20,10 +20,8 @@ describe('Extraction Utils', () => {
 
   describe('callExtraction', () => {
     it('should call API and process output correctly', async () => {
-      const result = await callExtraction(provider, 'test prompt', (output) =>
-        output.toUpperCase(),
-      );
-      expect(result).toBe('TEST OUTPUT');
+      const result = await callExtraction(provider, 'test prompt');
+      expect(result).toBe('test output');
       expect(provider.callApi).toHaveBeenCalledWith('test prompt');
     });
 
@@ -31,7 +29,7 @@ describe('Extraction Utils', () => {
       const error = new Error('API error');
       jest.mocked(provider.callApi).mockResolvedValue({ error: error.message });
 
-      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+      await expect(callExtraction(provider, 'test prompt')).rejects.toThrow(
         'Failed to perform extraction: API error',
       );
       expect(logger.error).toHaveBeenCalledWith('Error in extraction: API error');
@@ -40,7 +38,7 @@ describe('Extraction Utils', () => {
     it('should throw an error if output is not a string', async () => {
       jest.mocked(provider.callApi).mockResolvedValue({ output: 123 });
 
-      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+      await expect(callExtraction(provider, 'test prompt')).rejects.toThrow(
         'Invalid extraction output: expected string, got: 123',
       );
       expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: 123');
@@ -49,14 +47,14 @@ describe('Extraction Utils', () => {
     it('should handle empty string output', async () => {
       jest.mocked(provider.callApi).mockResolvedValue({ output: '' });
 
-      const result = await callExtraction(provider, 'test prompt', (output) => output.length);
-      expect(result).toBe(0);
+      const result = await callExtraction(provider, 'test prompt');
+      expect(result).toBe('');
     });
 
     it('should handle null output', async () => {
       jest.mocked(provider.callApi).mockResolvedValue({ output: null });
 
-      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+      await expect(callExtraction(provider, 'test prompt')).rejects.toThrow(
         'Invalid extraction output: expected string, got: null',
       );
       expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: null');
@@ -65,7 +63,7 @@ describe('Extraction Utils', () => {
     it('should handle undefined output', async () => {
       jest.mocked(provider.callApi).mockResolvedValue({ output: undefined });
 
-      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+      await expect(callExtraction(provider, 'test prompt')).rejects.toThrow(
         'Invalid extraction output: expected string, got: undefined',
       );
       expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: undefined');

@@ -19,8 +19,7 @@ export async function extractSystemPurpose(
     <Purpose>Ecommerce chatbot that sells shoes</Purpose>
   `;
 
-  return callExtraction(provider, prompt, (output: string) => {
-    const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
-    return match ? match[1].trim() : output.trim();
-  });
+  const output = await callExtraction(provider, prompt);
+  const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
+  return match ? match[1].trim() : output.trim();
 }
