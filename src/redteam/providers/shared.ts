@@ -30,7 +30,8 @@ export async function loadRedteamProvider({
     ret = new OpenAiChatCompletionProviderModule.OpenAiChatCompletionProvider(defaultModel, {
       config: {
         temperature: TEMPERATURE,
-        response_format: { type: 'json_object' },
+        // NOTE(michael): Causes issues when prompts do not return any JSON (xml prompts)
+        // response_format: { type: 'json_object' },
       },
     });
   }

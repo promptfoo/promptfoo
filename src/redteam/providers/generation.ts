@@ -1,8 +1,13 @@
 import { z } from 'zod';
-import type { ApiProvider, CallApiContextParams, ProviderOptions, ProviderResponse } from '../../types';
 import { fetchWithCache } from '../../cache';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../../types';
 
 const RedTeamGenerationResponse = z.object({
   task: z.string(),
@@ -30,7 +35,7 @@ export class RedTeamGenerationProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const prompts = context?.vars?.prompts as string[] | undefined;
-    
+
     if (!prompts || !Array.isArray(prompts)) {
       return { error: 'Prompts array is required in the context vars' };
     }
@@ -40,7 +45,9 @@ export class RedTeamGenerationProvider implements ApiProvider {
       prompts: prompts,
     };
 
-    logger.warn(`Calling Red Team Generation provider: ${this.url} with body: ${JSON.stringify(body)}`);
+    logger.warn(
+      `Calling Red Team Generation provider: ${this.url} with body: ${JSON.stringify(body)}`,
+    );
 
     try {
       const response = await fetchWithCache(
@@ -51,7 +58,7 @@ export class RedTeamGenerationProvider implements ApiProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-        'json'
+        'json',
       );
       logger.warn(`Red Team Generation response: ${JSON.stringify(response.data)}`);
 
@@ -63,6 +70,8 @@ export class RedTeamGenerationProvider implements ApiProvider {
   }
 }
 
-export function createRedTeamGenerationProvider(options: ProviderOptions & { task: RedTeamTask }): ApiProvider {
+export function createRedTeamGenerationProvider(
+  options: ProviderOptions & { task: RedTeamTask },
+): ApiProvider {
   return new RedTeamGenerationProvider(options);
 }
