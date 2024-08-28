@@ -45,6 +45,7 @@ jest.mock('../src/database', () => ({
 jest.mock('../src/googleSheets', () => ({
   fetchCsvFromGoogleSheet: jest.fn(),
 }));
+jest.mock('../src/logger');
 
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
