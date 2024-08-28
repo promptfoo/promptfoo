@@ -240,7 +240,7 @@ interface SynthesizeOptions {
   tests: TestCase[];
 }
 
-function generatePersonasPrompt(prompts: string[], numPersonas: number): string {
+export function generatePersonasPrompt(prompts: string[], numPersonas: number): string {
   const promptsString = dedent`<Prompts>
     ${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
     </Prompts>`;
@@ -253,7 +253,7 @@ function generatePersonasPrompt(prompts: string[], numPersonas: number): string 
     List up to ${numPersonas} user personas that would send ${prompts.length > 1 ? 'these prompts' : 'this prompt'}. Your response should be JSON of the form {personas: string[]}`;
 }
 
-function testCasesPrompt(
+export function testCasesPrompt(
   prompts: string[],
   persona: string,
   tests: TestCase[],
@@ -261,46 +261,54 @@ function testCasesPrompt(
   variables: string[],
   instructions?: string,
 ): string {
-  const promptsString = dedent`<Prompts>
-  ${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
-  </Prompts>`;
-  const existingTests =
-    dedent`Here are some existing tests:` +
-    tests
+  const promptsString = dedent`
+    <Prompts>
+    ${prompts
+      .map(
+        (prompt) => dedent`
+      <Prompt>
+      ${prompt}
+      </Prompt>`,
+      )
+      .join('\n')}
+    </Prompts>`;
+  const existingTests = dedent`
+    Here are some existing tests:
+    ${tests
       .map((test) => {
         if (!test.vars) {
           return;
         }
-        return dedent`<Test>
-                ${JSON.stringify(test.vars, null, 2)}
-              </Test>`;
+        return dedent`
+          <Test>
+          ${JSON.stringify(test.vars, null, 2)}
+          </Test>`;
       })
       .filter(Boolean)
       .slice(0, 100)
-      .join('\n');
+      .join('\n')}
+  `;
 
   return dedent`
-    Consider ${prompts.length > 1 ? 'these prompts' : 'this prompt'}, which contains some {{variables}}: 
-    ${promptsString}
+    Consider ${prompts.length > 1 ? 'these prompts' : 'this prompt'}, which contains some {{variables}}:
+  ${promptsString}
 
-    This is your persona:
-    <Persona>
-    ${persona}
-    </Persona>
+  This is your persona:
+  <Persona>
+  ${persona}
+  </Persona>
 
-    ${existingTests}
+  ${existingTests}
 
-    Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
+  Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
 
-    You are a tester, so try to think of ${numTestCasesPerPersona} sets of values that would be interesting or unusual to test. ${
-      instructions || ''
-    }
+  You are a tester, so try to think of ${numTestCasesPerPersona} sets of values that would be interesting or unusual to test.${instructions ? ` ${instructions}` : ''}
 
-    Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
-      variables,
-    )
-      .map((varName) => `${varName}: string`)
-      .join(', ')}}[]}`;
+  Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
+    variables,
+  )
+    .map((varName) => `${varName}: string`)
+    .join(', ')}}[]}`;
 }
 
 export async function synthesize({
