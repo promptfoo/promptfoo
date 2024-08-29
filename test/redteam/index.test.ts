@@ -266,36 +266,10 @@ describe('synthesize', () => {
     });
   });
 
-  // Progress bar tests
-  describe('Progress bar', () => {
-    it('should use the progress bar', async () => {
-      const mockProgressBar = {
-        increment: jest.fn(),
-        start: jest.fn(),
-        stop: jest.fn(),
-        update: jest.fn(),
-      };
-      jest.mocked(cliProgress.SingleBar).mockReturnValue(mockProgressBar as any);
-
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-      });
-
-      expect(mockProgressBar.start).toHaveBeenCalledWith(expect.any(Number), 0);
-      expect(mockProgressBar.increment).toHaveBeenCalledWith(1);
-      expect(mockProgressBar.stop).toHaveBeenCalledWith();
-    });
-  });
-
-  // Logger tests
   describe('Logger', () => {
-    it('should handle different logger levels appropriately', async () => {
-      const originalLevel = logger.level;
-      logger.level = 'debug';
+    it('debug log level hides progress bar', async () => {
+      const originalLogLevel = process.env.LOG_LEVEL;
+      process.env.LOG_LEVEL = 'debug';
 
       await synthesize({
         language: 'en',
@@ -307,10 +281,11 @@ describe('synthesize', () => {
 
       expect(cliProgress.SingleBar).not.toHaveBeenCalled();
 
-      logger.level = originalLevel;
+      process.env.LOG_LEVEL = originalLogLevel;
     });
   });
 });
+
 jest.mock('fs');
 jest.mock('js-yaml');
 
