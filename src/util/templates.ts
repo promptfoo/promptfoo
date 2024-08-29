@@ -17,6 +17,9 @@ export function getNunjucksEngine(
     throwOnUndefined,
   });
 
+  // Add environment variables as global under 'env'
+  env.addGlobal('env', process.env);
+
   if (filters) {
     for (const [name, filter] of Object.entries(filters)) {
       env.addFilter(name, filter);
