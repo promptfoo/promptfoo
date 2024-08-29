@@ -1,12 +1,43 @@
 import dedent from 'dedent';
+import { fetchWithCache } from '../../cache';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
-import { createRedTeamGenerationProvider } from '../providers/generation';
+import { RedTeamGenerationResponse } from './common';
 import { callExtraction, formatPrompts } from './util';
 
 export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
-  try {
-    const prompt = dedent`
+  const useRemoteGeneration = !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION', false);
+
+  if (useRemoteGeneration) {
+    try {
+      const url = 'https://us-central1-promptfoo.cloudfunctions.net/generate';
+      const body = {
+        task: 'entities',
+        prompts: prompts,
+      };
+
+      const response = await fetchWithCache(
+        url,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+      );
+
+      const parsedResponse = RedTeamGenerationResponse.parse(response.data);
+      return parsedResponse.result as string[];
+    } catch (error) {
+      logger.warn(`Error using remote generation, falling back to local extraction: ${error}`);
+    }
+  }
+
+  // Fallback to local extraction
+  const prompt = dedent`
     Extract names, brands, organizations, or IDs from the following prompts and return them as a list:
 
     ${formatPrompts(prompts)}
@@ -14,34 +45,16 @@ export async function extractEntities(provider: ApiProvider, prompts: string[]):
     Each line in your response must begin with the string "Entity:".
   `;
 
-    return await callExtraction(provider, prompt, (output: string) => {
-      const entities = output
-        .split('\n')
-        .filter((line) => line.trim().startsWith('Entity:'))
-        .map((line) => line.substring(line.indexOf('Entity:') + 'Entity:'.length).trim());
+  return await callExtraction(provider, prompt, (output: string) => {
+    const entities = output
+      .split('\n')
+      .filter((line) => line.trim().startsWith('Entity:'))
+      .map((line) => line.substring(line.indexOf('Entity:') + 'Entity:'.length).trim());
 
-      if (entities.length === 0) {
-        logger.debug('No entities were extracted from the prompts.');
-      }
-
-      return entities;
-    });
-  } catch (error) {
-    // Fallback to Red Team Generation Provider
-    logger.warn(
-      `Error using main extraction method, falling back to Red Team Generation: ${error}`,
-    );
-    const redTeamProvider = createRedTeamGenerationProvider({ task: 'entities' });
-
-    const result = await redTeamProvider.callApi('', {
-      prompt: { raw: '', label: 'purpose' },
-      vars: { prompts },
-    });
-
-    if ('error' in result) {
-      throw new Error(`Error extracting entities: ${result.error}`);
+    if (entities.length === 0) {
+      logger.debug('No entities were extracted from the prompts.');
     }
 
-    return result.output as string[];
-  }
+    return entities;
+  });
 }

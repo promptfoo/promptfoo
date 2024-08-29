@@ -1,15 +1,46 @@
 import dedent from 'dedent';
+import { fetchWithCache } from '../../cache';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
-import { createRedTeamGenerationProvider } from '../providers/generation';
+import { RedTeamGenerationResponse } from './common';
 import { callExtraction, formatPrompts } from './util';
 
 export async function extractSystemPurpose(
   provider: ApiProvider,
   prompts: string[],
 ): Promise<string> {
-  try {
-    const prompt = dedent`
+  const useRemoteGeneration = !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION', false);
+
+  if (useRemoteGeneration) {
+    try {
+      const url = 'https://us-central1-promptfoo.cloudfunctions.net/generate';
+      const body = {
+        task: 'purpose',
+        prompts: prompts,
+      };
+
+      const response = await fetchWithCache(
+        url,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+      );
+
+      const parsedResponse = RedTeamGenerationResponse.parse(response.data);
+      return parsedResponse.result as string;
+    } catch (error) {
+      logger.warn(`Error using remote generation, falling back to local extraction: ${error}`);
+    }
+  }
+
+  // Fallback to local extraction
+  const prompt = dedent`
     The following are prompts that are being used to test an LLM application:
     
     ${formatPrompts(prompts)}
@@ -22,26 +53,8 @@ export async function extractSystemPurpose(
     <Purpose>Ecommerce chatbot that sells shoes</Purpose>
   `;
 
-    return await callExtraction(provider, prompt, (output: string) => {
-      const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
-      return match ? match[1].trim() : output.trim();
-    });
-  } catch (error) {
-    // Fallback to Red Team Generation Provider
-    logger.warn(
-      `Error using main extraction method, falling back to Red Team Generation: ${error}`,
-    );
-    const redTeamProvider = createRedTeamGenerationProvider({ task: 'purpose' });
-
-    const result = await redTeamProvider.callApi('', {
-      prompt: { raw: '', label: 'purpose' },
-      vars: { prompts },
-    });
-
-    if ('error' in result) {
-      throw new Error(`Error extracting system purpose: ${result.error}`);
-    }
-
-    return result.output as string;
-  }
+  return await callExtraction(provider, prompt, (output: string) => {
+    const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
+    return match ? match[1].trim() : output.trim();
+  });
 }
