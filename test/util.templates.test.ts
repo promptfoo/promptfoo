@@ -130,4 +130,25 @@ describe('getNunjucksEngine', () => {
     expect(engine.renderString('{{ "hello" | uppercase }}', {})).toBe('HELLO');
     expect(engine.renderString('{{ 5 | add(3) }}', {})).toBe('8');
   });
+
+  it('should add environment variables as globals under "env"', () => {
+    process.env.TEST_VAR = 'test_value';
+    const engine = getNunjucksEngine();
+    expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+    delete process.env.TEST_VAR;
+  });
+
+  it('should throw an error when throwOnUndefined is true and a variable is undefined', () => {
+    const engine = getNunjucksEngine({}, true);
+    expect(() => {
+      engine.renderString('{{ undefined_var }}', {});
+    }).toThrow(/attempted to output null or undefined value/);
+  });
+
+  it('should not throw an error when throwOnUndefined is false and a variable is undefined', () => {
+    const engine = getNunjucksEngine({}, false);
+    expect(() => {
+      engine.renderString('{{ undefined_var }}', {});
+    }).not.toThrow();
+  });
 });

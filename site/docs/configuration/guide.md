@@ -463,6 +463,16 @@ tests:
       topic: 'theoretical quantum physics in alternate dimensions'
 ```
 
+### Accessing environment variables
+
+You can access environment variables in your templates using the `env` global:
+
+```yaml
+tests:
+  - vars:
+      headline: 'Articles about {{ env.TOPIC }}'
+```
+
 ## Tools and Functions
 
 promptfoo supports tool use and function calling with OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
