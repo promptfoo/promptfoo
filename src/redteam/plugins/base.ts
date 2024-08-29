@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
 import type { ApiProvider, Assertion, AssertionValue, TestCase } from '../../types';
@@ -180,8 +181,14 @@ export abstract class RedteamModelGrader {
     }
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
-      // Always use the redteam provider
-      provider: await loadRedteamProvider({ jsonOnly: true }),
+      provider: await loadRedteamProvider({
+        provider:
+          // First try loading the provider from defaultTest, otherwise fall back to the default red team provider.
+          cliState.config?.defaultTest?.provider ||
+          cliState.config?.defaultTest?.options?.provider?.text ||
+          cliState.config?.defaultTest?.options?.provider,
+        jsonOnly: true,
+      }),
     });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
     return { grade, rubric: finalRubric };
