@@ -860,6 +860,7 @@ class Evaluator {
         getEnvBool('JENKINS') ||
         getEnvBool('GITLAB_CI'),
       hasAnyPass: results.some((r) => r.success),
+      isRedteam: Boolean(testSuite.redteam),
     });
 
     return { version: 2, timestamp: new Date().toISOString(), results, stats: this.stats, table };

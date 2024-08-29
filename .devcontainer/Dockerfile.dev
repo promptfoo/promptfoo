@@ -1,86 +1,22 @@
-ARG VARIANT=22.04
-FROM ubuntu:${VARIANT}
+FROM mcr.microsoft.com/vscode/devcontainers/typescript-node:22
 
-ARG USER=promptfoo
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
-ENV DEBIAN_FRONTEND=noninteractive
-ENV NODE_VERSION=20.x
-
-# Create unprivileged user
-RUN groupadd --gid $USER_GID $USER \
-    && useradd --uid $USER_UID --gid $USER_GID -m $USER \
-    && apt-get update \
-    && apt-get install -y sudo \
-    && echo $USER ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USER \
-    && chmod 0440 /etc/sudoers.d/$USER
-
-# Install basic tools
-RUN apt-get update && \
-    apt-get install -y wget curl && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install Node.js
-RUN curl -sL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - && \
-    apt-get install -y nodejs && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install global npm packages
-RUN npm install -g typescript@latest npm@latest
-
-# Install additional OS packages
+# Install additional OS packages including Python 3.11
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
-    git python3-dev python3-pip vim nano jq htop \
+    jq htop python3.11 python3.11-venv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-ENV NODE_ENV=development
-
-# Install oh-my-zsh
-USER $USER_UID
-ENV ZSH_THEME="spaceship"
-RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
-    -t https://github.com/denysdovhan/spaceship-prompt \
-    -a 'SPACESHIP_PROMPT_ADD_NEWLINE="false"' \
-    -a 'SPACESHIP_PROMPT_SEPARATE_LINE="false"' \
-    -p git \
-    -p ssh-agent \
-    -p https://github.com/zsh-users/zsh-autosuggestions \
-    -p https://github.com/zsh-users/zsh-completions
-
-# Set zsh as the default shell for the user
-USER root
-RUN chsh -s /bin/zsh $USER
-
-USER $USER
+# Set Python 3.11 as the default python and python3
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 
 # Set up npm directories and cache directory
-RUN mkdir -p /home/$USER/.npm-global /home/$USER/.promptfoo /home/$USER/.cache && \
-    chown -R $USER:$USER /home/$USER && \
-    chmod -R 755 /home/$USER
+RUN mkdir -p /home/node/.promptfoo && \
+    chown -R node:node /home/node
 
-RUN npm config set prefix "/home/$USER/.npm-global" && \
-    echo "export PATH=/home/$USER/.npm-global/bin:$PATH" >> /home/$USER/.zshrc && \
-    echo "export PATH=/home/$USER/.npm-global/bin:$PATH" >> /home/$USER/.bashrc && \
-    echo "export PROMPTFOO_CACHE_PATH=/home/$USER/.cache/promptfoo" >> /home/$USER/.zshrc && \
-    echo "export PROMPTFOO_CACHE_PATH=/home/$USER/.cache/promptfoo" >> /home/$USER/.bashrc
-
-ENV PATH=/home/$USER/.npm-global/bin:$PATH
-ENV PROMPTFOO_CACHE_PATH=/home/$USER/.cache/promptfoo
-
+USER node
 WORKDIR /workspace
 
-COPY --chown=$USER:$USER package*.json ./
-
-RUN npm ci && npm link
-
-USER root
-RUN chown -R $USER:$USER /workspace
-USER $USER
-
-# Ensure cache directory exists and has correct permissions
-RUN mkdir -p $PROMPTFOO_CACHE_PATH && \
-    chmod -R 755 $PROMPTFOO_CACHE_PATH
+# Copy package.json and package-lock.json
+COPY --chown=node:node package*.json ./

@@ -183,17 +183,11 @@ export async function synthesize({
       `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n`,
   );
 
-  let progressBar: cliProgress.SingleBar | null = null;
-  if (logger.level !== 'debug') {
-    progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-    progressBar.start(totalPluginTests + 2, 0);
-  }
-
   if (typeof injectVar !== 'string') {
     const parsedVars = extractVariablesFromTemplates(prompts);
     if (parsedVars.length > 1) {
       logger.warn(
-        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}".`,
+        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}". Override this selection with --injectVar`,
       );
     } else if (parsedVars.length === 0) {
       logger.warn('No variables found in prompts. Using "query" as the inject variable.');
@@ -201,6 +195,17 @@ export async function synthesize({
     // Odds are that the last variable is the user input since the user input usually goes at the end of the prompt
     injectVar = parsedVars[parsedVars.length - 1] || 'query';
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
+  }
+
+  let progressBar: cliProgress.SingleBar | null = null;
+  if (process.env.LOG_LEVEL !== 'debug') {
+    progressBar = new cliProgress.SingleBar(
+      {
+        format: 'Generating tests | {bar} | {percentage}% | {value}/{total} | {task}',
+      },
+      cliProgress.Presets.shades_classic,
+    );
+    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
   }
 
   for (const [category, categoryPlugins] of Object.entries(categories)) {
@@ -244,23 +249,22 @@ export async function synthesize({
 
   plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
 
+  progressBar?.increment(1, { task: 'Extracting system purpose' });
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
-  progressBar?.increment();
+
+  progressBar?.increment(1, { task: 'Extracting entities' });
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
     : await extractEntities(redteamProvider, prompts);
-  progressBar?.increment();
 
   logger.debug(`System purpose: ${purpose}`);
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
-  const strategyResults: Record<string, { requested: number; generated: number }> = {};
-
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+    progressBar?.update({ task: `Processing plugin: ${plugin.id}` });
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
-      progressBar?.increment(plugin.numTests);
       logger.debug(`Generating tests for ${plugin.id}...`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
         language,
@@ -275,6 +279,7 @@ export async function synthesize({
           },
         })),
       );
+      progressBar?.increment(plugin.numTests);
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
     } else if (plugin.id.startsWith('file://')) {
@@ -314,10 +319,9 @@ export async function synthesize({
     }
   });
 
-  progressBar?.stop();
-
   const newTestCases: TestCaseWithPlugin[] = [];
 
+  const strategyResults: Record<string, { requested: number; generated: number }> = {};
   if (strategies.length > 0) {
     const existingTestCount = testCases.length;
     const totalStrategyTests = existingTestCount * strategies.length;
@@ -330,31 +334,36 @@ export async function synthesize({
         `\n• Expected new tests: ${chalk.cyan(totalStrategyTests)}` +
         `\n• Total expected tests: ${chalk.cyan(existingTestCount + totalStrategyTests)}`,
     );
-  }
 
-  for (const { key, action } of Strategies) {
-    const strategy = strategies.find((s) => s.id === key);
-    if (strategy) {
-      logger.debug(`Generating ${key} tests`);
-      const strategyTestCases = await action(testCases, injectVar, strategy.config || {});
-      newTestCases.push(
-        ...strategyTestCases.map((t) => ({
-          ...t,
-          metadata: {
-            ...(t.metadata || {}),
-            pluginId: t.metadata?.pluginId,
-            strategyId: strategy.id,
-          },
-        })),
-      );
-      strategyResults[key] = {
-        requested: testCases.length,
-        generated: strategyTestCases.length,
-      };
+    for (const { key, action } of Strategies) {
+      const strategy = strategies.find((s) => s.id === key);
+      if (strategy) {
+        progressBar?.update({ task: `Applying strategy: ${key}` });
+        logger.debug(`Generating ${key} tests`);
+        const strategyTestCases = await action(testCases, injectVar, strategy.config || {});
+        newTestCases.push(
+          ...strategyTestCases.map((t) => ({
+            ...t,
+            metadata: {
+              ...(t.metadata || {}),
+              pluginId: t.metadata?.pluginId,
+              strategyId: strategy.id,
+            },
+          })),
+        );
+        strategyResults[key] = {
+          requested: testCases.length,
+          generated: strategyTestCases.length,
+        };
+      }
     }
+
+    testCases.push(...newTestCases);
   }
 
-  testCases.push(...newTestCases);
+  progressBar?.update({ task: 'Done.' });
+  progressBar?.stop();
+
   logger.info(generateReport(pluginResults, strategyResults));
 
   return { purpose, entities, testCases };

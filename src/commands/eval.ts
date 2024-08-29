@@ -206,6 +206,7 @@ export async function doEval(
       name: 'eval',
       watch: Boolean(cmdObj.watch),
       duration: Math.round((Date.now() - startTime) / 1000),
+      isRedteam: Boolean(testSuite.redteam),
     });
     await telemetry.send();
 
