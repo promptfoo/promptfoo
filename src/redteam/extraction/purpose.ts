@@ -4,7 +4,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
-import { RedTeamGenerationResponse } from './common';
+import { RedTeamGenerationResponse, REMOTE_GENERATION_URL } from './common';
 import { callExtraction, formatPrompts } from './util';
 
 export async function extractSystemPurpose(
@@ -15,14 +15,13 @@ export async function extractSystemPurpose(
 
   if (useRemoteGeneration) {
     try {
-      const url = 'https://us-central1-promptfoo.cloudfunctions.net/generate';
       const body = {
         task: 'purpose',
         prompts: prompts,
       };
 
       const response = await fetchWithCache(
-        url,
+        REMOTE_GENERATION_URL,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
