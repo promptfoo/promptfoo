@@ -135,6 +135,7 @@ describe('getNunjucksEngine', () => {
     process.env.TEST_VAR = 'test_value';
     const engine = getNunjucksEngine();
     expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+    delete process.env.TEST_VAR;
   });
 
   it('should throw an error when throwOnUndefined is true and a variable is undefined', () => {
