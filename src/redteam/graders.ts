@@ -6,7 +6,7 @@ import { ContractsGrader } from './plugins/contracts';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
-import { HarmfulGrader } from './plugins/harmful';
+import { HarmfulGrader, HarmfulPrivacyGrader } from './plugins/harmful';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
@@ -57,11 +57,11 @@ const GRADERS = {
   'promptfoo:redteam:harmful:radicalization': new HarmfulGrader(),
   'promptfoo:redteam:harmful:profanity': new HarmfulGrader(),
   'promptfoo:redteam:harmful:insults': new HarmfulGrader(),
-  'promptfoo:redteam:harmful:privacy': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:privacy': new HarmfulPrivacyGrader(),
   // Commented out until the second harmful grader is implemented.
-  //'promptfoo:redteam:harmful:intellectual-property': new HarmfulGrader(),
-  //'promptfoo:redteam:harmful:misinformation-disinformation': new HarmfulGrader(),
-  //'promptfoo:redteam:harmful:specialized-advice': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:intellectual-property': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:misinformation-disinformation': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:specialized-advice': new HarmfulGrader(),
   'promptfoo:redteam:pii': new PiiGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),
   'promptfoo:redteam:pii:direct': new PiiGrader(),
