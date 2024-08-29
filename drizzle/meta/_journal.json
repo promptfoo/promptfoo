@@ -29,6 +29,13 @@
       "when": 1722936175344,
       "tag": "0003_lively_naoko",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1724913206349,
+      "tag": "0004_rare_lord_tyger",
+      "breakpoints": true
     }
   ]
 }

@@ -203,6 +203,7 @@ export async function writeResultsToDatabase(
         description: config.description,
         config,
         results,
+        tags: config.tags,
       })
       .onConflictDoNothing()
       .run(),
@@ -924,7 +925,13 @@ export type StandaloneEval = CompletedPrompt & {
   promptId: string | null;
 };
 
-export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): StandaloneEval[] {
+export function getStandaloneEvals({
+  limit = DEFAULT_QUERY_LIMIT,
+  tag,
+}: {
+  limit?: number;
+  tag?: { key: string; value: string };
+} = {}): StandaloneEval[] {
   const db = getDb();
   const results = db
     .select({
@@ -934,8 +941,10 @@ export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): Standal
       results: evals.results,
       promptId: evalsToPrompts.promptId,
       datasetId: evalsToDatasets.datasetId,
+      tags: evals.tags,
     })
     .from(evals)
+    .where(tag ? sql`json_extract(${evals.tags}, '$."${tag.key}"') = '${tag.value}'` : undefined)
     .leftJoin(evalsToPrompts, eq(evals.id, evalsToPrompts.evalId))
     .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
     .orderBy(desc(evals.createdAt))
@@ -948,11 +957,13 @@ export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): Standal
       promptId,
       datasetId,
       results: { table },
+      tags,
     } = result;
     return table.head.prompts.map((col) => ({
       evalId,
       promptId,
       datasetId,
+      tags,
       ...col,
     }));
   });

@@ -29,10 +29,12 @@ export const evals = sqliteTable(
     description: text('description'),
     results: text('results', { mode: 'json' }).$type<EvaluateSummary>().notNull(),
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
+    tags: text('tags', { mode: 'json' }).$type<Record<string, string>>(),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
     authorIdx: index('evals_author_idx').on(table.author),
+    tagsIdx: index('evals_tags_idx').on(table.tags),
   }),
 );
 
