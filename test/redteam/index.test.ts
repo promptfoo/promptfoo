@@ -265,7 +265,27 @@ describe('synthesize', () => {
       expect(logger.warn).toHaveBeenCalledWith('Plugin invalid-plugin not registered, skipping');
     });
   });
+
+  describe('Logger', () => {
+    it('debug log level hides progress bar', async () => {
+      const originalLogLevel = process.env.LOG_LEVEL;
+      process.env.LOG_LEVEL = 'debug';
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+      });
+
+      expect(cliProgress.SingleBar).not.toHaveBeenCalled();
+
+      process.env.LOG_LEVEL = originalLogLevel;
+    });
+  });
 });
+
 jest.mock('fs');
 jest.mock('js-yaml');
 
