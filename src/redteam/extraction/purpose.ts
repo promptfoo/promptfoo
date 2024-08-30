@@ -17,7 +17,7 @@ export async function extractSystemPurpose(
     try {
       const body = {
         task: 'purpose',
-        prompts: prompts,
+        prompts,
       };
 
       const response = await fetchWithCache(
