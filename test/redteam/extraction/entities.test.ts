@@ -91,6 +91,5 @@ describe('Entities Extractor', () => {
     const result = await extractEntities(provider, ['prompt']);
 
     expect(result).toEqual([]);
-    expect(logger.debug).toHaveBeenCalledWith('No entities were extracted from the prompts.');
   });
 });

@@ -18,6 +18,22 @@ export const prompts = sqliteTable(
   }),
 );
 
+// ------------ Tags ------------
+
+export const tags = sqliteTable(
+  'tags',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull().unique(),
+    value: text('value').notNull(),
+  },
+  (table) => ({
+    nameIdx: index('tags_name_idx').on(table.name),
+  }),
+);
+
+// ------------ Evals ------------
+
 export const evals = sqliteTable(
   'evals',
   {
@@ -57,6 +73,38 @@ export const evalsToPrompts = sqliteTable(
 
 export const promptsRelations = relations(prompts, ({ many }) => ({
   evalsToPrompts: many(evalsToPrompts),
+}));
+
+export const evalsToTags = sqliteTable(
+  'evals_to_tags',
+  {
+    evalId: text('eval_id')
+      .notNull()
+      .references(() => evals.id),
+    tagId: text('tag_id')
+      .notNull()
+      .references(() => tags.id),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.evalId, t.tagId] }),
+    evalIdIdx: index('evals_to_tags_eval_id_idx').on(t.evalId),
+    tagIdIdx: index('evals_to_tags_tag_id_idx').on(t.tagId),
+  }),
+);
+
+export const tagsRelations = relations(tags, ({ many }) => ({
+  evalsToTags: many(evalsToTags),
+}));
+
+export const evalsToTagsRelations = relations(evalsToTags, ({ one }) => ({
+  eval: one(evals, {
+    fields: [evalsToTags.evalId],
+    references: [evals.id],
+  }),
+  tag: one(tags, {
+    fields: [evalsToTags.tagId],
+    references: [tags.id],
+  }),
 }));
 
 // ------------ Datasets ------------
@@ -103,6 +151,7 @@ export const datasetsRelations = relations(datasets, ({ many }) => ({
 export const evalsRelations = relations(evals, ({ many }) => ({
   evalsToPrompts: many(evalsToPrompts),
   evalsToDatasets: many(evalsToDatasets),
+  evalsToTags: many(evalsToTags),
 }));
 
 export const evalsToPromptsRelations = relations(evalsToPrompts, ({ one }) => ({
