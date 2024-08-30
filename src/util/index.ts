@@ -932,6 +932,7 @@ export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): Standal
       description: evals.description,
       config: evals.config,
       results: evals.results,
+      createdAt: evals.createdAt,
       promptId: evalsToPrompts.promptId,
       datasetId: evalsToDatasets.datasetId,
     })
@@ -944,6 +945,7 @@ export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): Standal
 
   return results.flatMap((result) => {
     const {
+      createdAt,
       evalId,
       promptId,
       datasetId,
@@ -953,6 +955,7 @@ export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): Standal
       evalId,
       promptId,
       datasetId,
+      createdAt,
       ...col,
     }));
   });
