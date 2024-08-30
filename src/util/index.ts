@@ -832,7 +832,7 @@ export async function getEvalsWithPredicate(
     const createdAt = new Date(eval_.createdAt).toISOString();
     const resultWrapper: ResultsFile = {
       version: 3,
-      createdAt: createdAt,
+      createdAt,
       author: eval_.author,
       results: eval_.results,
       config: eval_.config,

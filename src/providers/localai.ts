@@ -53,7 +53,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
     const body = {
       model: this.modelName,
-      messages: messages,
+      messages,
       temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);

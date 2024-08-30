@@ -830,7 +830,7 @@ class Evaluator {
     }
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
-      results: results,
+      results,
       suite: testSuite,
     });
 

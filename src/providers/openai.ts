@@ -465,7 +465,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const body = {
       model: this.modelName,
-      messages: messages,
+      messages,
       seed: this.config.seed || 0,
       max_tokens:
         this.config.max_tokens ?? Number.parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
