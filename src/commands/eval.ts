@@ -202,12 +202,40 @@ export async function doEval(
       `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
     );
 
+    const isRedteam = Boolean(testSuite.redteam);
     telemetry.record('command_used', {
       name: 'eval',
       watch: Boolean(cmdObj.watch),
       duration: Math.round((Date.now() - startTime) / 1000),
-      isRedteam: Boolean(testSuite.redteam),
+      isRedteam,
     });
+    const performanceByPlugin = summary.results.reduce(
+      (acc, result) => {
+        const pluginId = result.metadata?.pluginId;
+        if (pluginId) {
+          if (!acc[pluginId]) {
+            acc[pluginId] = { pass: 0, fail: 0, total: 0 };
+          }
+          if (result.success) {
+            acc[pluginId].pass++;
+          } else {
+            acc[pluginId].fail++;
+          }
+          acc[pluginId].total++;
+        }
+        return acc;
+      },
+      {} as Record<string, { pass: number; fail: number; total: number }>,
+    );
+    telemetry.record(
+      'redteam',
+      Object.fromEntries(
+        Object.entries(performanceByPlugin).map(([pluginId, stats]) => [
+          `plugin-${pluginId}`,
+          stats.total > 0 ? (stats.pass / stats.total) * 100 : 0,
+        ]),
+      ),
+    );
     await telemetry.send();
 
     if (cmdObj.watch) {
