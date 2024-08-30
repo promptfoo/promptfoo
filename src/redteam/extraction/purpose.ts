@@ -1,10 +1,9 @@
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
-import { RedTeamGenerationResponse, REMOTE_GENERATION_URL } from './common';
+import type { RedTeamTask } from './common';
+import { fetchRemoteGeneration } from './common';
 import { callExtraction, formatPrompts } from './util';
 
 export async function extractSystemPurpose(
@@ -15,24 +14,8 @@ export async function extractSystemPurpose(
 
   if (useRemoteGeneration) {
     try {
-      const body = {
-        task: 'purpose',
-        prompts,
-      };
-
-      const response = await fetchWithCache(
-        REMOTE_GENERATION_URL,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-        'json',
-      );
-
-      const parsedResponse = RedTeamGenerationResponse.parse(response.data);
-      return parsedResponse.result as string;
+      const result = await fetchRemoteGeneration('purpose' as RedTeamTask, prompts);
+      return result as string;
     } catch (error) {
       logger.warn(`Error using remote generation, falling back to local extraction: ${error}`);
     }
@@ -52,7 +35,7 @@ export async function extractSystemPurpose(
     <Purpose>Ecommerce chatbot that sells shoes</Purpose>
   `;
 
-  return await callExtraction(provider, prompt, (output: string) => {
+  return callExtraction(provider, prompt, (output: string) => {
     const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
     return match ? match[1].trim() : output.trim();
   });
