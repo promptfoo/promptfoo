@@ -124,7 +124,8 @@ function HomepageWalkthrough() {
           </p>
           <p>
             Promptfoo's simple file-based config and local runtime make it easy to set up in{' '}
-            <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI/CD services.
+            <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI/CD
+            services.
           </p>
           <p>
             <Link to="/docs/getting-started">&raquo; See setup docs</Link>
