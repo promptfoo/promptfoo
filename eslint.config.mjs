@@ -70,6 +70,7 @@ export default [
       'no-empty': 0,
       'no-unused-expressions': 'error',
       'no-useless-escape': 0,
+      'object-shorthand': 'error',
       'prefer-const': 'error',
       'unicorn/no-lonely-if': 'error',
       'unicorn/no-negated-condition': 'error',
