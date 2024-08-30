@@ -114,7 +114,7 @@ function HomepageWalkthrough() {
     },
     {
       id: 3,
-      caption: 'CI/CD Testing',
+      caption: 'Continuous Monitoring',
       image: '/img/docs/github-action-comment.png',
       image2x: '/img/docs/github-action-comment@2x.png',
       description: (
@@ -124,7 +124,7 @@ function HomepageWalkthrough() {
           </p>
           <p>
             Promptfoo's simple file-based config and local runtime make it easy to set up in{' '}
-            <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI services.
+            <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI/CD services.
           </p>
           <p>
             <Link to="/docs/getting-started">&raquo; See setup docs</Link>
