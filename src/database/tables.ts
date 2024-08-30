@@ -151,7 +151,7 @@ export const datasetsRelations = relations(datasets, ({ many }) => ({
 export const evalsRelations = relations(evals, ({ many }) => ({
   evalsToPrompts: many(evalsToPrompts),
   evalsToDatasets: many(evalsToDatasets),
-  evalsToTags: many(evalsToTags), // Add this line
+  evalsToTags: many(evalsToTags),
 }));
 
 export const evalsToPromptsRelations = relations(evalsToPrompts, ({ one }) => ({
