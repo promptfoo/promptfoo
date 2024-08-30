@@ -14,7 +14,15 @@ import { getAuthor } from '../accounts';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
-import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/tables';
+import {
+  datasets,
+  evals,
+  evalsToDatasets,
+  evalsToPrompts,
+  evalsToTags,
+  prompts,
+  tags,
+} from '../database/tables';
 import { getEnvBool, getEnvInt } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
@@ -265,6 +273,38 @@ export async function writeResultsToDatabase(
   );
 
   logger.debug(`Inserting dataset ${datasetId}`);
+
+  // Record tags
+  if (config.tags) {
+    for (const [tagKey, tagValue] of Object.entries(config.tags)) {
+      const tagId = sha256(`${tagKey}:${tagValue}`);
+
+      promises.push(
+        db
+          .insert(tags)
+          .values({
+            id: tagId,
+            name: tagKey,
+            value: tagValue,
+          })
+          .onConflictDoNothing()
+          .run(),
+      );
+
+      promises.push(
+        db
+          .insert(evalsToTags)
+          .values({
+            evalId,
+            tagId,
+          })
+          .onConflictDoNothing()
+          .run(),
+      );
+
+      logger.debug(`Inserting tag ${tagId}`);
+    }
+  }
 
   logger.debug(`Awaiting ${promises.length} promises to database...`);
   await Promise.all(promises);
@@ -924,21 +964,31 @@ export type StandaloneEval = CompletedPrompt & {
   promptId: string | null;
 };
 
-export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): StandaloneEval[] {
+export function getStandaloneEvals({
+  limit = DEFAULT_QUERY_LIMIT,
+  tag,
+}: {
+  limit?: number;
+  tag?: { key: string; value: string };
+} = {}): StandaloneEval[] {
   const db = getDb();
   const results = db
     .select({
       evalId: evals.id,
       description: evals.description,
-      config: evals.config,
       results: evals.results,
       createdAt: evals.createdAt,
       promptId: evalsToPrompts.promptId,
       datasetId: evalsToDatasets.datasetId,
+      tagName: tags.name,
+      tagValue: tags.value,
     })
     .from(evals)
     .leftJoin(evalsToPrompts, eq(evals.id, evalsToPrompts.evalId))
     .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
+    .leftJoin(evalsToTags, eq(evals.id, evalsToTags.evalId))
+    .leftJoin(tags, eq(evalsToTags.tagId, tags.id))
+    .where(tag ? and(eq(tags.name, tag.key), eq(tags.value, tag.value)) : undefined)
     .orderBy(desc(evals.createdAt))
     .limit(limit)
     .all();
