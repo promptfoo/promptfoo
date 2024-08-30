@@ -14,7 +14,15 @@ import { getAuthor } from '../accounts';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
-import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/tables';
+import {
+  datasets,
+  evals,
+  evalsToDatasets,
+  evalsToPrompts,
+  evalsToTags,
+  prompts,
+  tags,
+} from '../database/tables';
 import { getEnvBool, getEnvInt } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
@@ -203,7 +211,6 @@ export async function writeResultsToDatabase(
         description: config.description,
         config,
         results,
-        tags: config.tags,
       })
       .onConflictDoNothing()
       .run(),
@@ -266,6 +273,38 @@ export async function writeResultsToDatabase(
   );
 
   logger.debug(`Inserting dataset ${datasetId}`);
+
+  // Record tags
+  if (config.tags) {
+    for (const [tagKey, tagValue] of Object.entries(config.tags)) {
+      const tagId = sha256(`${tagKey}:${tagValue}`);
+
+      promises.push(
+        db
+          .insert(tags)
+          .values({
+            id: tagId,
+            name: tagKey,
+            value: tagValue,
+          })
+          .onConflictDoNothing()
+          .run(),
+      );
+
+      promises.push(
+        db
+          .insert(evalsToTags)
+          .values({
+            evalId,
+            tagId,
+          })
+          .onConflictDoNothing()
+          .run(),
+      );
+
+      logger.debug(`Inserting tag ${tagId}`);
+    }
+  }
 
   logger.debug(`Awaiting ${promises.length} promises to database...`);
   await Promise.all(promises);
@@ -937,16 +976,18 @@ export function getStandaloneEvals({
     .select({
       evalId: evals.id,
       description: evals.description,
-      config: evals.config,
       results: evals.results,
       promptId: evalsToPrompts.promptId,
       datasetId: evalsToDatasets.datasetId,
-      tags: evals.tags,
+      tagName: tags.name,
+      tagValue: tags.value,
     })
     .from(evals)
-    .where(tag ? sql`json_extract(${evals.tags}, '$."${tag.key}"') = '${tag.value}'` : undefined)
     .leftJoin(evalsToPrompts, eq(evals.id, evalsToPrompts.evalId))
     .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
+    .leftJoin(evalsToTags, eq(evals.id, evalsToTags.evalId))
+    .leftJoin(tags, eq(evalsToTags.tagId, tags.id))
+    .where(tag ? and(eq(tags.name, tag.key), eq(tags.value, tag.value)) : undefined)
     .orderBy(desc(evals.createdAt))
     .limit(limit)
     .all();
@@ -957,13 +998,11 @@ export function getStandaloneEvals({
       promptId,
       datasetId,
       results: { table },
-      tags,
     } = result;
     return table.head.prompts.map((col) => ({
       evalId,
       promptId,
       datasetId,
-      tags,
       ...col,
     }));
   });
