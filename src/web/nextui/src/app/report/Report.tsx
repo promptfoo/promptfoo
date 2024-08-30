@@ -12,7 +12,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Modal from '@mui/material/Modal';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import type { ResultsFile, SharedResults } from '../eval/types';
+import type { EvaluateResult, ResultsFile, SharedResults } from '../eval/types';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
@@ -40,19 +40,31 @@ function getStrategyIdFromMetric(metric: string): string | null {
   return null;
 }
 
+function getPluginIdFromResult(result: EvaluateResult): string | null {
+  // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
+  const harmCategory = result.vars['harmCategory'];
+  if (harmCategory) {
+    return categoryAliasesReverse[harmCategory as keyof typeof categoryAliases];
+  }
+  const metricNames =
+    result.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
+  const metricBaseName = metricNames[0]?.split('/')[0];
+  if (metricBaseName) {
+    return categoryAliasesReverse[metricBaseName as keyof typeof categoryAliases];
+  }
+  return null;
+}
+
 const App: React.FC = () => {
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
 
-  const categoryFailures = React.useMemo(() => {
+  const failuresByPlugin = React.useMemo(() => {
     const failures: Record<string, { prompt: string; output: string }[]> = {};
     evalData?.results.results.forEach((result) => {
-      // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
-      const pluginId =
-        categoryAliasesReverse[result.vars['harmCategory'] as keyof typeof categoryAliases] ||
-        categoryAliasesReverse[Object.keys(result.namedScores)[0]];
+      const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
         console.warn(`Could not get failures for plugin ${pluginId}`);
         return;
@@ -259,7 +271,7 @@ const App: React.FC = () => {
         <RiskCategories
           categoryStats={categoryStats}
           evalId={evalId}
-          failuresByPlugin={categoryFailures}
+          failuresByPlugin={failuresByPlugin}
         />
         <TestSuites evalId={evalId} categoryStats={categoryStats} />
       </Stack>
