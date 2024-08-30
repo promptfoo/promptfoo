@@ -152,10 +152,6 @@ export const Plugins: Plugin[] = [
     key: 'indirect-prompt-injection',
     validate: (config) => {
       invariant(
-        config.systemPrompt,
-        'Indirect prompt injection plugin requires `config.systemPrompt` to be set',
-      );
-      invariant(
         config.indirectInjectionVar,
         'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
       );
@@ -165,7 +161,7 @@ export const Plugins: Plugin[] = [
         provider,
         purpose,
         injectVar,
-        config as { systemPrompt: string; indirectInjectionVar: string },
+        config as { indirectInjectionVar: string },
       ).generateTests(n),
   },
 ];

@@ -7,25 +7,19 @@ import { PluginBase, RedteamModelGrader } from './base';
 export const PLUGIN_ID = 'promptfoo:redteam:indirect-prompt-injection';
 
 export class IndirectPromptInjectionPlugin extends PluginBase {
-  private systemPrompt: string;
   private indirectInjectionVar: string;
 
   constructor(
     provider: ApiProvider,
     purpose: string,
     injectVar: string,
-    config: { systemPrompt: string; indirectInjectionVar: string },
+    config: { indirectInjectionVar: string },
   ) {
     super(provider, purpose, injectVar);
-    invariant(
-      config.systemPrompt,
-      '`systemPrompt` config is required for `indirect-prompt-injection` plugin',
-    );
     invariant(
       config.indirectInjectionVar,
       '`indirectInjectionVar` config is required for `indirect-prompt-injection` plugin',
     );
-    this.systemPrompt = config.systemPrompt;
     this.indirectInjectionVar = config.indirectInjectionVar;
   }
 
@@ -65,7 +59,6 @@ export class IndirectPromptInjectionPlugin extends PluginBase {
     }));
   }
 
-  // Override the parseGeneratedPrompts method
   protected parseGeneratedPrompts(
     output: string,
   ): { systemPromptInjection: string; prompt: string }[] {
