@@ -1,9 +1,23 @@
 import dedent from 'dedent';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import type { ApiProvider } from '../../types';
-import { callExtraction, formatPrompts } from './util';
+import type { RedTeamTask } from './util';
+import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
 export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
+  const useRemoteGeneration = !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION', false);
+
+  if (useRemoteGeneration) {
+    try {
+      const result = await fetchRemoteGeneration('entities' as RedTeamTask, prompts);
+      return result as string[];
+    } catch (error) {
+      logger.warn(`Error using remote generation, falling back to local extraction: ${error}`);
+    }
+  }
+
+  // Fallback to local extraction
   const prompt = dedent`
     Extract names, brands, organizations, or IDs from the following prompts and return them as a list:
 

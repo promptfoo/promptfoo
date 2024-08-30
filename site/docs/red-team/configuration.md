@@ -365,6 +365,16 @@ redteam:
 Some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
 :::
 
+### Remote Generation
+
+By default, promptfoo uses a remote service for generating adversarial certain inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+
+:::warning
+Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.
+:::
+
+If you need to use a custom provider for generation, you can still benefit from our remote service by leaving `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` set to `false` (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
+
 ### Custom Providers
 
 In some cases your target application may require custom requests or setups.
