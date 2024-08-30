@@ -14,7 +14,7 @@ export async function extractEntities(provider: ApiProvider, prompts: string[]):
     try {
       const body = {
         task: 'entities',
-        prompts: prompts,
+        prompts,
       };
 
       const response = await fetchWithCache(
