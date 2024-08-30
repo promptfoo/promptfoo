@@ -8,6 +8,7 @@
     "deduped",
     "envars",
     "Groq",
+    "mitigations",
     "openai",
     "overreliance",
     "OWASP",
