@@ -182,7 +182,7 @@ export function containsXml(
   for (const xmlMatch of xmlMatches) {
     const { isValid, reason } = validateXml(xmlMatch, requiredElements);
     if (isValid) {
-      return { isValid: true, reason: reason };
+      return { isValid: true, reason };
     }
   }
 

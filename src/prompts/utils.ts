@@ -77,7 +77,7 @@ export function normalizeInput(
       */
     return Object.entries(promptPathOrGlobs).map(([raw, key]) => ({
       label: key,
-      raw: raw,
+      raw,
     }));
   }
   // numbers, booleans, etc
