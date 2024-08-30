@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import invariant from 'tiny-invariant';
 import type { Assertion, ApiProvider, TestCase, AtomicTestCase, GradingResult } from '../../types';
 import { PluginBase, RedteamModelGrader } from './base';
 
@@ -15,6 +16,7 @@ export class PolicyPlugin extends PluginBase {
     config: { policy: string },
   ) {
     super(provider, purpose, injectVar);
+    invariant(config.policy, 'A "policy" property is required for the policy plugin.');
     this.policy = config.policy;
   }
 
