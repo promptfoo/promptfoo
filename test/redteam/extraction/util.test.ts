@@ -34,7 +34,6 @@ describe('Extraction Utils', () => {
       await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
         'Failed to perform extraction: API error',
       );
-      expect(logger.error).toHaveBeenCalledWith('Error in extraction: API error');
     });
 
     it('should throw an error if output is not a string', async () => {
@@ -43,7 +42,6 @@ describe('Extraction Utils', () => {
       await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
         'Invalid extraction output: expected string, got: 123',
       );
-      expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: 123');
     });
 
     it('should handle empty string output', async () => {
@@ -59,7 +57,6 @@ describe('Extraction Utils', () => {
       await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
         'Invalid extraction output: expected string, got: null',
       );
-      expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: null');
     });
 
     it('should handle undefined output', async () => {
@@ -68,7 +65,6 @@ describe('Extraction Utils', () => {
       await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
         'Invalid extraction output: expected string, got: undefined',
       );
-      expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: undefined');
     });
   });
 

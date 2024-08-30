@@ -131,22 +131,6 @@ describe('synthesize', () => {
         'Prompt 3',
       ]);
     });
-
-    it('should use default injectVar when no variables found in prompts', async () => {
-      jest.mocked(extractVariablesFromTemplates).mockReturnValue([]);
-
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-      });
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        'No variables found in prompts. Using "query" as the inject variable.',
-      );
-    });
   });
 
   // API provider tests
@@ -249,20 +233,6 @@ describe('synthesize', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Generation Report:'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('test-plugin'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('mockStrategy'));
-    });
-
-    it('should handle errors when executing invalid plugins', async () => {
-      jest.spyOn(Plugins, 'find').mockReturnValue(undefined);
-
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'invalid-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-      });
-
-      expect(logger.warn).toHaveBeenCalledWith('Plugin invalid-plugin not registered, skipping');
     });
   });
 

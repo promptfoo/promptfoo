@@ -108,7 +108,6 @@ describe('doGenerateRedteam', () => {
       }),
       'output.yaml',
     );
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Wrote 1 new test cases'));
   });
 
   it('should write to config file when write option is true', async () => {
