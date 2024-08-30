@@ -1,4 +1,3 @@
-import logger from '../../../src/logger';
 import { extractEntities } from '../../../src/redteam/extraction/entities';
 import type { ApiProvider } from '../../../src/types';
 

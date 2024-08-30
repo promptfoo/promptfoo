@@ -1,4 +1,3 @@
-import logger from '../../../src/logger';
 import { callExtraction, formatPrompts } from '../../../src/redteam/extraction/util';
 import type { ApiProvider } from '../../../src/types';
 

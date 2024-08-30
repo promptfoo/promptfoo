@@ -1,5 +1,4 @@
 import cliState from '../../../src/cliState';
-import logger from '../../../src/logger';
 import { loadApiProviders } from '../../../src/providers';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
 import {

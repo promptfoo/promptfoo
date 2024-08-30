@@ -10,7 +10,6 @@ import { synthesize, resolvePluginConfig } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
 import { Strategies } from '../../src/redteam/strategies';
 import { validateStrategies } from '../../src/redteam/strategies';
-import { extractVariablesFromTemplates } from '../../src/util/templates';
 
 jest.mock('cli-progress');
 jest.mock('../../src/logger');
