@@ -2,9 +2,8 @@ import dedent from 'dedent';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import type { ApiProvider } from '../../types';
-import type { RedTeamTask } from './common';
-import { fetchRemoteGeneration } from './common';
-import { callExtraction, formatPrompts } from './util';
+import type { RedTeamTask } from './util';
+import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
 export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
   const useRemoteGeneration = !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION', false);

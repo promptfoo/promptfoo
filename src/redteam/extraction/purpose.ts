@@ -2,9 +2,8 @@ import dedent from 'dedent';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import type { ApiProvider } from '../../types';
-import type { RedTeamTask } from './common';
-import { fetchRemoteGeneration } from './common';
-import { callExtraction, formatPrompts } from './util';
+import type { RedTeamTask } from './util';
+import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
 export async function extractSystemPurpose(
   provider: ApiProvider,
