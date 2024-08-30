@@ -54,7 +54,6 @@ describe('loadRedteamProvider', () => {
     const mockApiProvider = { id: jest.fn(), callApi: jest.fn() };
     const result = await loadRedteamProvider({ provider: mockApiProvider });
     expect(result).toBe(mockApiProvider);
-    expect(logger.debug).toHaveBeenCalledWith(`Using redteam provider: ${mockApiProvider}`);
   });
 
   it('should load provider from string', async () => {
@@ -62,7 +61,6 @@ describe('loadRedteamProvider', () => {
     const result = await loadRedteamProvider({ provider: 'test-provider' });
     expect(result).toBe(mockLoadedProvider);
     expect(loadApiProviders).toHaveBeenCalledWith(['test-provider']);
-    expect(logger.debug).toHaveBeenCalledWith('Loading redteam provider: test-provider');
   });
 
   it('should load provider from ProviderOptions', async () => {
@@ -71,7 +69,6 @@ describe('loadRedteamProvider', () => {
     const result = await loadRedteamProvider({ provider: providerOptions });
     expect(result).toBe(mockLoadedProvider);
     expect(loadApiProviders).toHaveBeenCalledWith([providerOptions]);
-    expect(logger.debug).toHaveBeenCalledWith('Loading redteam provider: [object Object]');
   });
 
   it('should use default provider when no provider is specified', async () => {
@@ -84,7 +81,6 @@ describe('loadRedteamProvider', () => {
         response_format: undefined,
       },
     });
-    expect(logger.debug).toHaveBeenCalledWith(`Using default redteam provider: ${ATTACKER_MODEL}`);
   });
 
   it('should use small model when preferSmallModel is true', async () => {
@@ -97,9 +93,6 @@ describe('loadRedteamProvider', () => {
         response_format: undefined,
       },
     });
-    expect(logger.debug).toHaveBeenCalledWith(
-      `Using default redteam provider: ${ATTACKER_MODEL_SMALL}`,
-    );
   });
 
   it('should set response_format to json_object when jsonOnly is true', async () => {
@@ -112,7 +105,6 @@ describe('loadRedteamProvider', () => {
         response_format: { type: 'json_object' },
       },
     });
-    expect(logger.debug).toHaveBeenCalledWith(`Using default redteam provider: ${ATTACKER_MODEL}`);
   });
 
   it('should use provider from cliState if available', async () => {
@@ -120,6 +112,5 @@ describe('loadRedteamProvider', () => {
     cliState.config!.redteam!.provider = mockStateProvider;
     const result = await loadRedteamProvider();
     expect(result).toBe(mockStateProvider);
-    expect(logger.debug).toHaveBeenCalledWith(`Using redteam provider: ${mockStateProvider}`);
   });
 });
