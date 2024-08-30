@@ -38,7 +38,7 @@ describe('fetchRemoteGeneration', () => {
 
     expect(result).toBe('This is a purpose');
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://functions.promptfoo.dev',
+      'https://api.promptfoo.dev/v1/generate',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -63,7 +63,7 @@ describe('fetchRemoteGeneration', () => {
 
     expect(result).toEqual(['Entity1', 'Entity2']);
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://functions.promptfoo.dev',
+      'https://api.promptfoo.dev/v1/generate',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
