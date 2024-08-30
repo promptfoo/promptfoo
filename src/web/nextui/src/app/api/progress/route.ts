@@ -5,14 +5,19 @@ import { getStandaloneEvals } from '../../../../../../util';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
   if (USE_SUPABASE) {
     return NextResponse.json({ error: 'Not implemented' });
   }
 
+  const { searchParams } = new URL(request.url);
+  const tagName = searchParams.get('tagName');
+  const tagValue = searchParams.get('tagValue');
+
   let results: StandaloneEval[];
   try {
-    results = await getStandaloneEvals();
+    const tag = tagName && tagValue ? { key: tagName, value: tagValue } : undefined;
+    results = await getStandaloneEvals({ tag });
   } catch (err) {
     // Database potentially not yet set up.
     results = [];

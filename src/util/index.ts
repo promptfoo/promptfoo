@@ -972,6 +972,7 @@ export type StandaloneEval = CompletedPrompt & {
   evalId: string;
   datasetId: string | null;
   promptId: string | null;
+  createdAt: number;
 };
 
 export function getStandaloneEvals({

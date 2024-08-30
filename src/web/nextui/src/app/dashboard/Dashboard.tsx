@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import type { StandaloneEval } from '@/../../../util';
-import { Box, Container, Grid, Paper, Typography } from '@mui/material';
-import { Chart, registerables } from 'chart.js';
+import { Box, Container, Grid, Paper, Typography, TextField, Button } from '@mui/material';
+import { Chart, type ChartConfiguration, registerables } from 'chart.js';
 import CategoryBreakdown from './CategoryBreakdown';
 import RecentEvals from './RecentEvals';
 
@@ -11,17 +11,31 @@ Chart.register(...registerables);
 
 export default function Dashboard() {
   const [evals, setEvals] = useState<StandaloneEval[]>([]);
+  const [tagName, setTagName] = useState('');
+  const [tagValue, setTagValue] = useState('');
   const passRateChartRef = useRef<HTMLCanvasElement | null>(null);
   const overallPassRateChartRef = useRef<HTMLCanvasElement | null>(null);
+  const passRateChartInstanceRef = useRef<Chart | null>(null);
+  const overallPassRateChartInstanceRef = useRef<Chart<'doughnut', number[], string> | null>(null);
+
+  const fetchEvals = async () => {
+    const queryParams = new URLSearchParams();
+    if (tagName) {
+      queryParams.append('tagName', tagName);
+    }
+    if (tagValue) {
+      queryParams.append('tagValue', tagValue);
+    }
+
+    const response = await fetch(`/api/progress?${queryParams}`);
+    const data = await response.json();
+    if (data && data.data) {
+      setEvals(data.data);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      const response = await fetch(`/api/progress`);
-      const data = await response.json();
-      if (data && data.data) {
-        setEvals(data.data);
-      }
-    })();
+    fetchEvals();
   }, []);
 
   useEffect(() => {
@@ -47,9 +61,17 @@ export default function Dashboard() {
         0,
       );
 
+    // Destroy existing chart instances
+    if (passRateChartInstanceRef.current) {
+      passRateChartInstanceRef.current.destroy();
+    }
+    if (overallPassRateChartInstanceRef.current) {
+      overallPassRateChartInstanceRef.current.destroy();
+    }
+
     // Pass Rate Over Time Chart
     if (passRateChartRef.current) {
-      new Chart(passRateChartRef.current, {
+      passRateChartInstanceRef.current = new Chart(passRateChartRef.current, {
         type: 'line',
         data: {
           labels: passRateOverTime.map((item) => item.date.toLocaleDateString()),
@@ -83,7 +105,7 @@ export default function Dashboard() {
 
     // Overall Pass Rate Chart
     if (overallPassRateChartRef.current) {
-      new Chart(overallPassRateChartRef.current, {
+      const config: ChartConfiguration<'doughnut', number[], string> = {
         type: 'doughnut',
         data: {
           labels: ['Pass', 'Fail'],
@@ -104,57 +126,102 @@ export default function Dashboard() {
           },
           cutout: '80%',
         },
-      });
+      };
+      overallPassRateChartInstanceRef.current = new Chart(overallPassRateChartRef.current, config);
     }
+
+    // Cleanup function
+    return () => {
+      if (passRateChartInstanceRef.current) {
+        passRateChartInstanceRef.current.destroy();
+      }
+      if (overallPassRateChartInstanceRef.current) {
+        overallPassRateChartInstanceRef.current.destroy();
+      }
+    };
   }, [evals]);
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        Redteam Evaluation Dashboard
-      </Typography>
-      <Grid container spacing={3}>
-        {/* Pass Rate Over Time Chart */}
-        <Grid item xs={12} md={8} lg={9}>
-          <Paper
-            sx={{
-              p: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              height: 240,
-            }}
-          >
-            <canvas ref={passRateChartRef}></canvas>
-          </Paper>
+    <Box sx={{ width: '100vw', maxWidth: '100%', overflowX: 'hidden', bgcolor: '#f5f5f5' }}>
+      <Container maxWidth={false} disableGutters sx={{ mt: 4, mb: 4, px: 4 }}>
+        <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 'bold', color: '#333' }}>
+          LLM Risk - Continuous Monitoring
+        </Typography>
+
+        {/* Filters */}
+        <Paper sx={{ p: 3, mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <TextField
+            label="Tag Name"
+            variant="outlined"
+            size="small"
+            value={tagName}
+            onChange={(e) => setTagName(e.target.value)}
+          />
+          <TextField
+            label="Tag Value"
+            variant="outlined"
+            size="small"
+            value={tagValue}
+            onChange={(e) => setTagValue(e.target.value)}
+          />
+          <Button variant="contained" color="primary" onClick={fetchEvals}>
+            Apply Filters
+          </Button>
+        </Paper>
+
+        <Grid container spacing={3}>
+          {/* Pass Rate Over Time Chart */}
+          <Grid item xs={12} md={8} lg={9}>
+            <Paper
+              elevation={3}
+              sx={{
+                p: 3,
+                display: 'flex',
+                flexDirection: 'column',
+                height: 300,
+                borderRadius: 2,
+              }}
+            >
+              <canvas ref={passRateChartRef}></canvas>
+            </Paper>
+          </Grid>
+          {/* Overall Pass Rate */}
+          <Grid item xs={12} md={4} lg={3}>
+            <Paper
+              elevation={3}
+              sx={{
+                p: 3,
+                display: 'flex',
+                flexDirection: 'column',
+                height: 300,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderRadius: 2,
+              }}
+            >
+              <canvas ref={overallPassRateChartRef}></canvas>
+            </Paper>
+          </Grid>
+          {/* Category Breakdown */}
+          <Grid item xs={12} md={6}>
+            <Paper
+              elevation={3}
+              sx={{ p: 3, display: 'flex', flexDirection: 'column', borderRadius: 2 }}
+            >
+              <CategoryBreakdown evals={evals} />
+            </Paper>
+          </Grid>
+          {/* Recent Evals */}
+          <Grid item xs={12} md={6}>
+            <Paper
+              elevation={3}
+              sx={{ p: 3, display: 'flex', flexDirection: 'column', borderRadius: 2 }}
+            >
+              <RecentEvals evals={evals} />
+            </Paper>
+          </Grid>
         </Grid>
-        {/* Overall Pass Rate */}
-        <Grid item xs={12} md={4} lg={3}>
-          <Paper
-            sx={{
-              p: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              height: 240,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            <canvas ref={overallPassRateChartRef}></canvas>
-          </Paper>
-        </Grid>
-        {/* Category Breakdown */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-            <CategoryBreakdown evals={evals} />
-          </Paper>
-        </Grid>
-        {/* Recent Evals */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-            <RecentEvals evals={evals} />
-          </Paper>
-        </Grid>
-      </Grid>
-    </Container>
+      </Container>
+    </Box>
   );
 }
