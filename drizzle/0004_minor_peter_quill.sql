@@ -16,5 +16,4 @@ DROP INDEX IF EXISTS `evals_tags_idx`;--> statement-breakpoint
 CREATE INDEX `evals_to_tags_eval_id_idx` ON `evals_to_tags` (`eval_id`);--> statement-breakpoint
 CREATE INDEX `evals_to_tags_tag_id_idx` ON `evals_to_tags` (`tag_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `tags_name_unique` ON `tags` (`name`);--> statement-breakpoint
-CREATE INDEX `tags_name_idx` ON `tags` (`name`);--> statement-breakpoint
-ALTER TABLE `evals` DROP COLUMN `tags`;
+CREATE INDEX `tags_name_idx` ON `tags` (`name`);
