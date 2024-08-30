@@ -24,6 +24,7 @@ import { SsrfPlugin } from './ssrf';
 
 export interface Plugin {
   key: string;
+  validate?: (config: Record<string, any>) => void;
   action: (
     provider: ApiProvider,
     purpose: string,
@@ -106,8 +107,9 @@ export const Plugins: Plugin[] = [
   })) as Plugin[]),
   {
     key: 'policy',
+    validate: (config) =>
+      invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
     action: (provider, purpose, injectVar, n, config) => {
-      invariant(config?.policy, 'Policy plugin requires a config');
       return new PolicyPlugin(
         provider,
         purpose,
@@ -133,6 +135,11 @@ export const Plugins: Plugin[] = [
   },
   {
     key: 'prompt-extraction',
+    validate: (config) =>
+      invariant(
+        config.systemPrompt,
+        'Prompt extraction plugin requires `config.systemPrompt` to be set',
+      ),
     action: (provider, purpose, injectVar, n, config) =>
       new PromptExtractionPlugin(
         provider,
@@ -143,6 +150,16 @@ export const Plugins: Plugin[] = [
   },
   {
     key: 'indirect-prompt-injection',
+    validate: (config) => {
+      invariant(
+        config.systemPrompt,
+        'Indirect prompt injection plugin requires `config.systemPrompt` to be set',
+      );
+      invariant(
+        config.indirectInjectionVar,
+        'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
+      );
+    },
     action: (provider, purpose, injectVar, n, config) =>
       new IndirectPromptInjectionPlugin(
         provider,

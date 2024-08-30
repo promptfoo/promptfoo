@@ -259,6 +259,16 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
+  for (const plugin of plugins) {
+    const { validate } = Plugins.find((p) => p.key === plugin.id) || {};
+    if (validate) {
+      validate({
+        language,
+        ...resolvePluginConfig(plugin.config),
+      });
+    }
+  }
+
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
