@@ -47,7 +47,9 @@ const RecentEvals: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
               return (
                 <TableRow key={index}>
                   <TableCell>
-                    <Link href={`/eval?evalId=${eval_.evalId}`}>{eval_.evalId}</Link>
+                    <Link href={`/eval?evalId=${eval_.evalId}`}>
+                      {eval_.description || eval_.evalId}
+                    </Link>
                   </TableCell>
                   <TableCell>{new Date(eval_.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell align="right">{passRate.toFixed(1)}%</TableCell>

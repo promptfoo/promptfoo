@@ -154,6 +154,7 @@
     "js-rouge": "3.0.0",
     "js-yaml": "^4.1.0",
     "mathjs": "^13.1.1",
+    "node-cache": "^5.1.2",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
     "openai": "^4.57.2",

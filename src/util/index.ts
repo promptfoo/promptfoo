@@ -7,6 +7,7 @@ import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import NodeCache from 'node-cache';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
@@ -970,10 +971,13 @@ export function setupEnv(envPath: string | undefined) {
 
 export type StandaloneEval = CompletedPrompt & {
   evalId: string;
+  description: string | null;
   datasetId: string | null;
   promptId: string | null;
   createdAt: number;
 };
+
+const standaloneEvalCache = new NodeCache({ stdTTL: 60 * 60 * 2 }); // Cache for 2 hours
 
 export function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
@@ -982,6 +986,13 @@ export function getStandaloneEvals({
   limit?: number;
   tag?: { key: string; value: string };
 } = {}): StandaloneEval[] {
+  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}`;
+  const cachedResult = standaloneEvalCache.get<StandaloneEval[]>(cacheKey);
+
+  if (cachedResult) {
+    return cachedResult;
+  }
+
   const db = getDb();
   const results = db
     .select({
@@ -1004,8 +1015,9 @@ export function getStandaloneEvals({
     .limit(limit)
     .all();
 
-  return results.flatMap((result) => {
+  const standaloneEvals = results.flatMap((result) => {
     const {
+      description,
       createdAt,
       evalId,
       promptId,
@@ -1014,12 +1026,16 @@ export function getStandaloneEvals({
     } = result;
     return table.head.prompts.map((col) => ({
       evalId,
+      description,
       promptId,
       datasetId,
       createdAt,
       ...col,
     }));
   });
+
+  standaloneEvalCache.set(cacheKey, standaloneEvals);
+  return standaloneEvals;
 }
 
 export function providerToIdentifier(provider: TestCase['provider']): string | undefined {

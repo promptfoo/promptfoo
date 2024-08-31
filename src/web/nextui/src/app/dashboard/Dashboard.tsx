@@ -2,11 +2,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import type { StandaloneEval } from '@/../../../util';
-import AssessmentIcon from '@mui/icons-material/Assessment';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import HelpIcon from '@mui/icons-material/Help';
-import MenuIcon from '@mui/icons-material/Menu';
-import SettingsIcon from '@mui/icons-material/Settings';
 import {
   Box,
   Container,
@@ -17,10 +12,10 @@ import {
   Button,
   CircularProgress,
 } from '@mui/material';
-import Drawer from '@mui/material/Drawer';
 import { Chart, type ChartConfiguration, registerables } from 'chart.js';
 import CategoryBreakdown from './CategoryBreakdown';
 import RecentEvals from './RecentEvals';
+import Sidebar from './Sidebar';
 
 Chart.register(...registerables);
 
@@ -72,7 +67,8 @@ export default function Dashboard() {
                 (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
               100
             : 0,
-      }));
+      }))
+      .filter((item) => item.passRate);
 
     const overallPassRate =
       evals.reduce((sum, eval_) => sum + (eval_.metrics?.testPassCount || 0), 0) /
@@ -108,6 +104,7 @@ export default function Dashboard() {
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           plugins: {
             title: {
               display: true,
@@ -173,79 +170,7 @@ export default function Dashboard() {
       }}
     >
       {/* Sidebar */}
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: 60,
-          flexShrink: 0,
-          '& .MuiDrawer-paper': {
-            width: 60,
-            boxSizing: 'border-box',
-            overflowX: 'hidden',
-            transition: 'width 0.3s ease-in-out',
-            top: '48px', // Adjust this value to match your navbar height
-            height: 'calc(100% - 48px)', // Adjust this value to match your navbar height
-            zIndex: 1, // Ensure it's below the navbar
-            ...(sidebarOpen && {
-              width: 240,
-            }),
-          },
-        }}
-      >
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <Box sx={{ display: 'flex', p: 1 }}>
-            <Button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              sx={{ justifyContent: 'flex-start' }}
-            >
-              <MenuIcon />
-            </Button>
-          </Box>
-          <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', mt: 2 }}>
-            <Button
-              startIcon={<DashboardIcon />}
-              sx={{
-                justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                px: sidebarOpen ? 2 : 1,
-                mb: 1,
-              }}
-            >
-              {sidebarOpen && 'Dashboard'}
-            </Button>
-            <Button
-              startIcon={<AssessmentIcon />}
-              sx={{
-                justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                px: sidebarOpen ? 2 : 1,
-                mb: 1,
-              }}
-            >
-              {sidebarOpen && 'Reports'}
-            </Button>
-            <Button
-              startIcon={<SettingsIcon />}
-              sx={{
-                justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                px: sidebarOpen ? 2 : 1,
-                mb: 1,
-              }}
-            >
-              {sidebarOpen && 'Settings'}
-            </Button>
-          </Box>
-          <Box sx={{ mb: 2 }}>
-            <Button
-              startIcon={<HelpIcon />}
-              sx={{
-                justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                px: sidebarOpen ? 2 : 1,
-              }}
-            >
-              {sidebarOpen && 'Help'}
-            </Button>
-          </Box>
-        </Box>
-      </Drawer>
+      <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       {/* Main content */}
       <Box
@@ -256,7 +181,7 @@ export default function Dashboard() {
           ...(sidebarOpen && { marginLeft: '180px' }),
         }}
       >
-        <Container maxWidth={false} disableGutters sx={{ mt: 4, mb: 4, px: 4 }}>
+        <Container maxWidth={false} disableGutters sx={{ mt: 2, mb: 4, px: 4 }}>
           <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 'bold', color: '#333' }}>
             LLM Risk - Continuous Monitoring
           </Typography>
@@ -300,7 +225,9 @@ export default function Dashboard() {
                     borderRadius: 2,
                   }}
                 >
-                  <canvas ref={passRateChartRef}></canvas>
+                  <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
+                    <canvas ref={passRateChartRef}></canvas>
+                  </Box>
                 </Paper>
               </Grid>
               {/* Overall Pass Rate */}
