@@ -88,37 +88,70 @@ export default function Dashboard() {
 
     // Pass Rate Over Time Chart
     if (passRateChartRef.current) {
-      passRateChartInstanceRef.current = new Chart(passRateChartRef.current, {
-        type: 'line',
-        data: {
-          labels: passRateOverTime.map((item) => item.date.toLocaleDateString()),
-          datasets: [
-            {
-              label: 'Pass Rate',
-              data: passRateOverTime.map((item) => item.passRate),
-              fill: true,
-              borderColor: 'rgb(75, 192, 192)',
-              tension: 0.1,
+      const ctx = passRateChartRef.current.getContext('2d');
+      if (ctx) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(75, 192, 192, 0.6)');
+        gradient.addColorStop(0.5, 'rgba(75, 192, 192, 0.2)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
+
+        passRateChartInstanceRef.current = new Chart(passRateChartRef.current, {
+          type: 'line',
+          data: {
+            labels: passRateOverTime.map((item) => item.date.toLocaleDateString()),
+            datasets: [
+              {
+                label: 'Pass Rate',
+                data: passRateOverTime.map((item) => item.passRate),
+                fill: true,
+                backgroundColor: gradient,
+                borderColor: 'rgb(75, 192, 192)',
+                borderWidth: 2,
+                pointBorderWidth: 0,
+                pointRadius: 0,
+                pointHoverRadius: 6,
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: 'Pass Rate Over Time',
+                font: {
+                  size: 16,
+                  weight: 'bold',
+                },
+              },
+              legend: {
+                display: false,
+              },
             },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            title: {
-              display: true,
-              text: 'Pass Rate Over Time',
+            scales: {
+              y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: {
+                  callback: (value) => `${value}%`,
+                },
+              },
+              x: {
+                grid: {
+                  display: false,
+                },
+              },
+            },
+            elements: {
+              line: {
+                tension: 0.3,
+              },
             },
           },
-          scales: {
-            y: {
-              beginAtZero: true,
-              max: 100,
-            },
-          },
-        },
-      });
+        });
+      }
     }
 
     // Overall Pass Rate Chart
@@ -247,15 +280,6 @@ export default function Dashboard() {
                   <canvas ref={overallPassRateChartRef}></canvas>
                 </Paper>
               </Grid>
-              {/* Category Breakdown */}
-              <Grid item xs={12} md={6}>
-                <Paper
-                  elevation={3}
-                  sx={{ p: 3, display: 'flex', flexDirection: 'column', borderRadius: 2 }}
-                >
-                  <CategoryBreakdown evals={evals} />
-                </Paper>
-              </Grid>
               {/* Recent Evals */}
               <Grid item xs={12} md={6}>
                 <Paper
@@ -264,6 +288,10 @@ export default function Dashboard() {
                 >
                   <RecentEvals evals={evals} />
                 </Paper>
+              </Grid>
+              {/* Category Breakdown */}
+              <Grid item xs={12}>
+                <CategoryBreakdown evals={evals} />
               </Grid>
             </Grid>
           )}

@@ -8,6 +8,8 @@ import {
   TableHead,
   TableRow,
   Tooltip,
+  Grid,
+  Paper,
 } from '@mui/material';
 import {
   categoryAliases,
@@ -42,51 +44,57 @@ const CategoryBreakdown: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => 
     {} as Record<string, Record<string, { passCount: number; totalCount: number }>>,
   );
 
+  const RiskTile: React.FC<{
+    title: string;
+    subCategories: Record<string, { passCount: number; totalCount: number }>;
+  }> = ({ title, subCategories }) => (
+    <Grid item xs={12} md={4}>
+      <Paper elevation={3} sx={{ p: 2, height: '100%' }}>
+        <Typography variant="h6" gutterBottom>
+          {title}
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Subcategory</TableCell>
+              <TableCell align="right">Pass Rate</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {Object.entries(subCategories).map(([subCategory, stats]) => {
+              const passRate =
+                stats.totalCount > 0 ? (stats.passCount / stats.totalCount) * 100 : 0;
+              const displayName =
+                displayNameOverrides[subCategory as keyof typeof displayNameOverrides] ||
+                categoryAliases[subCategory as keyof typeof categoryAliases];
+              return (
+                <Tooltip
+                  key={subCategory}
+                  title={
+                    subCategoryDescriptions[subCategory as keyof typeof subCategoryDescriptions]
+                  }
+                  placement="left"
+                  arrow
+                >
+                  <TableRow>
+                    <TableCell>{displayName}</TableCell>
+                    <TableCell align="right">{passRate.toFixed(1)}%</TableCell>
+                  </TableRow>
+                </Tooltip>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Paper>
+    </Grid>
+  );
+
   return (
-    <>
-      <Typography variant="h6" gutterBottom>
-        Category Breakdown
-      </Typography>
-      {Object.entries(categoryStats).map(([category, subCategories]) => (
-        <React.Fragment key={category}>
-          <Typography variant="subtitle1" gutterBottom>
-            {category}
-          </Typography>
-          <Table size="small" style={{ marginBottom: '20px' }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Subcategory</TableCell>
-                <TableCell align="right">Pass Rate</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {Object.entries(subCategories).map(([subCategory, stats]) => {
-                const passRate =
-                  stats.totalCount > 0 ? (stats.passCount / stats.totalCount) * 100 : 0;
-                const displayName =
-                  displayNameOverrides[subCategory as keyof typeof displayNameOverrides] ||
-                  categoryAliases[subCategory as keyof typeof categoryAliases];
-                return (
-                  <Tooltip
-                    key={subCategory}
-                    title={
-                      subCategoryDescriptions[subCategory as keyof typeof subCategoryDescriptions]
-                    }
-                    placement="left"
-                    arrow
-                  >
-                    <TableRow>
-                      <TableCell>{displayName}</TableCell>
-                      <TableCell align="right">{passRate.toFixed(1)}%</TableCell>
-                    </TableRow>
-                  </Tooltip>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </React.Fragment>
-      ))}
-    </>
+    <Grid container spacing={2}>
+      <RiskTile title="Security Risk" subCategories={categoryStats['Security Risk']} />
+      <RiskTile title="Legal Risk" subCategories={categoryStats['Legal Risk']} />
+      <RiskTile title="Brand Risk" subCategories={categoryStats['Brand Risk']} />
+    </Grid>
   );
 };
 
