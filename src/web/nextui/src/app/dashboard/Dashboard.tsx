@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { Chart, type ChartConfiguration, registerables } from 'chart.js';
 import CategoryBreakdown from './CategoryBreakdown';
+import MetricCard from './MetricCard';
 import RecentEvals from './RecentEvals';
 import Sidebar from './Sidebar';
 
@@ -192,6 +193,29 @@ export default function Dashboard() {
     };
   }, [evals]);
 
+  const totalTests = evals.reduce(
+    (sum, eval_) => sum + (eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0),
+    0,
+  );
+  const averagePassRate =
+    evals.length > 0
+      ? evals.reduce((sum, eval_) => {
+          const passRate =
+            eval_.metrics?.testPassCount && eval_.metrics?.testFailCount
+              ? eval_.metrics.testPassCount /
+                (eval_.metrics.testPassCount + eval_.metrics.testFailCount)
+              : 0;
+          return sum + passRate;
+        }, 0) / evals.length
+      : 0;
+  const latestPassRate =
+    evals.length > 0
+      ? evals[0].metrics?.testPassCount && evals[0].metrics?.testFailCount
+        ? evals[0].metrics.testPassCount /
+          (evals[0].metrics.testPassCount + evals[0].metrics.testFailCount)
+        : 0
+      : 0;
+
   return (
     <Box
       sx={{
@@ -246,6 +270,23 @@ export default function Dashboard() {
             </Box>
           ) : (
             <Grid container spacing={3}>
+              {/* Add these new metric cards */}
+              <Grid item xs={12} md={4}>
+                <MetricCard
+                  title="Current Pass Rate"
+                  value={`${(latestPassRate * 100).toFixed(2)}%`}
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <MetricCard
+                  title="Average Pass Rate"
+                  value={`${(averagePassRate * 100).toFixed(2)}%`}
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <MetricCard title="Total Probes" value={totalTests.toLocaleString()} />
+              </Grid>
+
               {/* Pass Rate Over Time Chart */}
               <Grid item xs={12} md={8} lg={9}>
                 <Paper
