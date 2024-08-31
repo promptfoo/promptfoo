@@ -17,6 +17,7 @@ import CategoryBreakdown from './CategoryBreakdown';
 import MetricCard from './MetricCard';
 import RecentEvals from './RecentEvals';
 import Sidebar from './Sidebar';
+import TopFailingCategories from './TopFailingCategories';
 
 Chart.register(...registerables);
 
@@ -356,6 +357,15 @@ export default function Dashboard() {
                   sx={{ p: 3, display: 'flex', flexDirection: 'column', borderRadius: 2 }}
                 >
                   <RecentEvals evals={evals} />
+                </Paper>
+              </Grid>
+              {/* New panel: Top Failing Categories */}
+              <Grid item xs={12} md={6}>
+                <Paper
+                  elevation={3}
+                  sx={{ p: 3, display: 'flex', flexDirection: 'column', borderRadius: 2 }}
+                >
+                  <TopFailingCategories evals={evals} />
                 </Paper>
               </Grid>
               {/* Category Breakdown */}
