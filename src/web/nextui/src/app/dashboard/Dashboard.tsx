@@ -30,6 +30,8 @@ export default function Dashboard() {
   const passRateChartInstanceRef = useRef<Chart | null>(null);
   const overallPassRateChartInstanceRef = useRef<Chart<'doughnut', number[], string> | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const fetchEvals = async () => {
     setIsLoading(true);
@@ -39,6 +41,12 @@ export default function Dashboard() {
     }
     if (tagValue) {
       queryParams.append('tagValue', tagValue);
+    }
+    if (startDate) {
+      queryParams.append('startDate', startDate);
+    }
+    if (endDate) {
+      queryParams.append('endDate', endDate);
     }
 
     const response = await fetch(`/api/progress?${queryParams}`);
@@ -244,7 +252,9 @@ export default function Dashboard() {
           </Typography>
 
           {/* Filters */}
-          <Paper sx={{ p: 3, mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Paper
+            sx={{ p: 3, mb: 3, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
+          >
             <TextField
               label="Tag Name"
               variant="outlined"
@@ -258,6 +268,24 @@ export default function Dashboard() {
               size="small"
               value={tagValue}
               onChange={(e) => setTagValue(e.target.value)}
+            />
+            <TextField
+              label="Start Date"
+              type="date"
+              variant="outlined"
+              size="small"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+            />
+            <TextField
+              label="End Date"
+              type="date"
+              variant="outlined"
+              size="small"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
             />
             <Button variant="contained" color="inherit" onClick={fetchEvals}>
               Apply Filters
