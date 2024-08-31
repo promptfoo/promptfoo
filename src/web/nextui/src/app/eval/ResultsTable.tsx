@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-table';
 import React, { useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { useSearchParams } from 'react-router-dom';
 import { getApiBaseUrl } from '@/api';
 import { useToast } from '@/app/contexts/ToastContext';
 import CustomMetrics from '@/app/eval/CustomMetrics';
@@ -22,8 +23,8 @@ import type {
   FilterMode,
   EvaluateTable,
 } from '@/app/eval/types';
+import LinkIcon from '@mui/icons-material/Link';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import ShareIcon from '@mui/icons-material/Share';
 import { IconButton } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -141,9 +142,13 @@ function ResultsTable({
   const { showToast } = useToast();
 
   // Function to generate the URL with the row ID
-  const generateRowLink = useCallback((rowId: string) => {
-    const currentUrl = window.location.href.split('#')[0]; // Get the current URL without any hash
-    return `${currentUrl}#row-${rowId}`; // Append the row ID as a hash to the URL
+  // Enhanced generateRowLink function to include query parameters
+  const generateRowLink = useCallback((rowId, additionalParams = {}) => {
+    const currentUrl = new URL(window.location.href);
+    const params = new URLSearchParams(additionalParams);
+    params.set('row-id', rowId);
+    currentUrl.search = params.toString();
+    return currentUrl.toString();
   }, []);
 
   // Function to copy the link to the clipboard
@@ -161,20 +166,10 @@ function ResultsTable({
     },
     [showToast],
   );
-
+  const parseQueryParams = (queryString) => {
+    return Object.fromEntries(new URLSearchParams(queryString));
+  };
   // Scroll to the row when the URL contains a hash
-  useEffect(() => {
-    if (window.location.hash) {
-      const element = document.querySelector(window.location.hash);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        element.classList.add('highlight');
-        setTimeout(() => {
-          element.classList.remove('highlight');
-        }, 2000);
-      }
-    }
-  }, []);
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -640,6 +635,57 @@ function ResultsTable({
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
 
+  const [isShiftPressed, setIsShiftPressed] = React.useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        setIsShiftPressed(true);
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        setIsShiftPressed(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+  useEffect(() => {
+    const params = parseQueryParams(window.location.search);
+    const rowId = params['row-id'];
+
+    if (rowId) {
+      const rowElement = document.querySelector(`#row-${rowId}`);
+
+      if (rowElement) {
+        // Check if the row is on the current page
+        const rowIndex = Number(rowId.split('-').pop()); // Assuming the rowId is in the format 'row-{index}'
+        const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
+
+        // Update pagination if necessary
+        if (rowPageIndex !== pagination.pageIndex) {
+          setPagination((prev) => ({ ...prev, pageIndex: rowPageIndex }));
+        }
+
+        // Wait for pagination to complete and then scroll to the row
+        setTimeout(() => {
+          rowElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          rowElement.classList.add('highlight');
+          setTimeout(() => {
+            rowElement.classList.remove('highlight');
+          }, 2000);
+        }, 300); // Timeout to wait for pagination update (could be adjusted as needed)
+      }
+    }
+  }, [pagination.pageIndex, pagination.pageSize]);
   const reactTable = useReactTable({
     data: filteredBody,
     columns,
@@ -685,7 +731,7 @@ function ResultsTable({
           ))}
         </thead>
         <tbody>
-          {reactTable.getRowModel().rows.map((row) => {
+          {reactTable.getRowModel().rows.map((row, rowIndex) => {
             let colBorderDrawn = false;
 
             return (
@@ -697,7 +743,7 @@ function ResultsTable({
                   if (shouldDrawColBorder) {
                     colBorderDrawn = true;
                   }
-                  const shouldDrawRowBorder = !isMetadataCol;
+                  const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
                   return (
                     <td
                       key={cell.id}
@@ -707,16 +753,17 @@ function ResultsTable({
                       className={`${isMetadataCol ? 'variable' : ''} ${shouldDrawRowBorder ? 'first-prompt-row' : ''} ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
                     >
                       {/* Share Button for Metadata Columns */}
-                      {isMetadataCol && (
+                      {isMetadataCol && isShiftPressed && (
                         <IconButton
                           color="primary"
                           onClick={() => copyToClipboard(generateRowLink(row.id))}
                           style={{ marginTop: '1px' }}
-                          aria-label="share"
+                          aria-label="copy link"
                         >
-                          <ShareIcon />
+                          <LinkIcon />
                         </IconButton>
                       )}
+
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   );
