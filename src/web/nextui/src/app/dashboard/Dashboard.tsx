@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { StandaloneEval } from '@/../../../util';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -10,7 +10,18 @@ import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { Chart, type ChartConfiguration, registerables } from 'chart.js';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
 import CategoryBreakdown from './CategoryBreakdown';
 import EmergingRisks from './EmergingRisks';
 import MetricCard from './MetricCard';
@@ -19,19 +30,25 @@ import Sidebar from './Sidebar';
 import TopFailingCategories from './TopFailingCategories';
 import { calculateTrend } from './utils';
 
-Chart.register(...registerables);
+interface OverallPassRateDataPoint {
+  name: string;
+  value: number;
+}
+
+interface PassRateDataPoint {
+  date: string;
+  passRate: number;
+}
 
 export default function Dashboard() {
   const [evals, setEvals] = useState<StandaloneEval[]>([]);
   const [tagValue, setTagValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const passRateChartRef = useRef<HTMLCanvasElement | null>(null);
-  const overallPassRateChartRef = useRef<HTMLCanvasElement | null>(null);
-  const passRateChartInstanceRef = useRef<Chart | null>(null);
-  const overallPassRateChartInstanceRef = useRef<Chart<'doughnut', number[], string> | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [passRateData, setPassRateData] = useState<PassRateDataPoint[]>([]);
+  const [overallPassRateData, setOverallPassRateData] = useState<OverallPassRateDataPoint[]>([]);
 
   const fetchEvals = async () => {
     setIsLoading(true);
@@ -64,10 +81,11 @@ export default function Dashboard() {
       return;
     }
 
+    // Prepare data for Recharts
     const passRateOverTime = evals
       .sort((a, b) => a.createdAt - b.createdAt)
       .map((eval_) => ({
-        date: new Date(eval_.createdAt),
+        date: new Date(eval_.createdAt).toLocaleDateString(),
         passRate:
           eval_.metrics?.testPassCount && eval_.metrics?.testFailCount
             ? (eval_.metrics.testPassCount /
@@ -77,6 +95,8 @@ export default function Dashboard() {
       }))
       .filter((item) => item.passRate);
 
+    setPassRateData(passRateOverTime);
+
     const overallPassRate =
       evals.reduce((sum, eval_) => sum + (eval_.metrics?.testPassCount || 0), 0) /
       evals.reduce(
@@ -85,118 +105,10 @@ export default function Dashboard() {
         0,
       );
 
-    // Destroy existing chart instances
-    if (passRateChartInstanceRef.current) {
-      passRateChartInstanceRef.current.destroy();
-    }
-    if (overallPassRateChartInstanceRef.current) {
-      overallPassRateChartInstanceRef.current.destroy();
-    }
-
-    // Pass Rate Over Time Chart
-    if (passRateChartRef.current) {
-      const ctx = passRateChartRef.current.getContext('2d');
-      if (ctx) {
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, 'rgba(75, 192, 192, 0.6)');
-        gradient.addColorStop(0.5, 'rgba(75, 192, 192, 0.2)');
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
-
-        passRateChartInstanceRef.current = new Chart(passRateChartRef.current, {
-          type: 'line',
-          data: {
-            labels: passRateOverTime.map((item) => item.date.toLocaleDateString()),
-            datasets: [
-              {
-                label: 'Pass Rate',
-                data: passRateOverTime.map((item) => item.passRate),
-                fill: true,
-                backgroundColor: gradient,
-                borderColor: 'rgb(75, 192, 192)',
-                borderWidth: 2,
-                pointBorderWidth: 0,
-                pointRadius: 0,
-                pointHoverRadius: 6,
-                tension: 0.1,
-              },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              title: {
-                display: true,
-                text: 'Pass Rate Over Time',
-                font: {
-                  size: 16,
-                  weight: 'bold',
-                },
-              },
-              legend: {
-                display: false,
-              },
-            },
-            scales: {
-              y: {
-                beginAtZero: true,
-                max: 100,
-                ticks: {
-                  callback: (value) => `${value}%`,
-                },
-              },
-              x: {
-                grid: {
-                  display: false,
-                },
-              },
-            },
-            elements: {
-              line: {
-                tension: 0.3,
-              },
-            },
-          },
-        });
-      }
-    }
-
-    // Overall Pass Rate Chart
-    if (overallPassRateChartRef.current) {
-      const config: ChartConfiguration<'doughnut', number[], string> = {
-        type: 'doughnut',
-        data: {
-          labels: ['Pass', 'Fail'],
-          datasets: [
-            {
-              data: [overallPassRate * 100, (1 - overallPassRate) * 100],
-              backgroundColor: ['#4caf50', '#f44336'],
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            title: {
-              display: true,
-              text: 'Overall Pass Rate',
-            },
-          },
-          cutout: '80%',
-        },
-      };
-      overallPassRateChartInstanceRef.current = new Chart(overallPassRateChartRef.current, config);
-    }
-
-    // Cleanup function
-    return () => {
-      if (passRateChartInstanceRef.current) {
-        passRateChartInstanceRef.current.destroy();
-      }
-      if (overallPassRateChartInstanceRef.current) {
-        overallPassRateChartInstanceRef.current.destroy();
-      }
-    };
+    setOverallPassRateData([
+      { name: 'Pass', value: overallPassRate * 100 },
+      { name: 'Fail', value: (1 - overallPassRate) * 100 },
+    ]);
   }, [evals]);
 
   const totalTests = evals.reduce(
@@ -371,13 +283,52 @@ export default function Dashboard() {
                     p: 3,
                     display: 'flex',
                     flexDirection: 'column',
-                    height: 300,
+                    height: 350,
                     borderRadius: 2,
                   }}
                 >
-                  <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
-                    <canvas ref={passRateChartRef}></canvas>
-                  </Box>
+                  <Typography variant="h6" mb={4}>
+                    Pass Rate Over Time
+                  </Typography>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={passRateData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                      <YAxis
+                        width={40}
+                        domain={[0, 100]}
+                        tickFormatter={(value) => `${value}%`}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip
+                        formatter={(value: number | string) => [
+                          typeof value === 'number'
+                            ? value.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              }) + '%'
+                            : value,
+                          'Pass Rate:',
+                        ]}
+                      />
+                      <defs>
+                        <linearGradient id="passRateGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#2196f3" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#2196f3" stopOpacity={0.1} />
+                        </linearGradient>
+                      </defs>
+                      <Area
+                        type="monotone"
+                        dataKey="passRate"
+                        stroke="#0d47a1"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#passRateGradient)"
+                        dot={false}
+                        activeDot={{ r: 6, fill: '#0d47a1', stroke: '#fff', strokeWidth: 2 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </Paper>
               </Grid>
               {/* Overall Pass Rate */}
@@ -388,13 +339,38 @@ export default function Dashboard() {
                     p: 3,
                     display: 'flex',
                     flexDirection: 'column',
-                    height: 300,
-                    justifyContent: 'center',
-                    alignItems: 'center',
+                    height: 350,
                     borderRadius: 2,
                   }}
                 >
-                  <canvas ref={overallPassRateChartRef}></canvas>
+                  <Typography variant="h6" gutterBottom>
+                    Overall Pass Rate
+                  </Typography>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={overallPassRateData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        fill="#2196f3"
+                        paddingAngle={5}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        labelLine={false}
+                      >
+                        {overallPassRateData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={index === 0 ? '#2196f3' : '#f44336'} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number | string) =>
+                          typeof value === 'number' ? `${value.toFixed(2)}%` : value
+                        }
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </Paper>
               </Grid>
               {/* Emerging Risks */}
