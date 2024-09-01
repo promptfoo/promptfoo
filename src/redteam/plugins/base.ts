@@ -59,7 +59,7 @@ export abstract class PluginBase {
      */
     const generatePrompts = async (
       currentPrompts: { prompt: string }[],
-    ): Promise<Array<{ prompt: string }>> => {
+    ): Promise<{ prompt: string }[]> => {
       const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
 

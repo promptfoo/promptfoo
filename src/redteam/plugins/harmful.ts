@@ -242,11 +242,11 @@ async function generateTestsForCategory(
   count: number,
 ): Promise<TestCase[]> {
   if (provider instanceof PromptfooHarmfulCompletionProvider) {
-    const results = await Promise.all(
-      Array(count)
-        .fill(null)
-        .map(() => provider.callApi('')),
-    );
+    const results = [];
+    for (let i = 0; i < count; i++) {
+      const result = await provider.callApi('');
+      results.push(result);
+    }
     return results.map((result) => createTestCase(injectVar, result.output || '', harmCategory));
   } else {
     const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, {});
