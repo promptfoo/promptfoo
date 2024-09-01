@@ -35,7 +35,7 @@ import {
   migrateResultsFromFileSystemToDatabase,
   getStandaloneEvals,
   deleteEval,
-  getEvalsByDatasetId,
+  getEvalsByDescription,
 } from '../util';
 
 // Running jobs
@@ -196,7 +196,8 @@ export async function startServer(
   });
 
   app.get('/api/progress', async (req, res) => {
-    const results = await getStandaloneEvals();
+    const description = req.query.description as string | undefined;
+    const results = await getStandaloneEvals({ description });
     res.json({
       data: results,
     });
@@ -212,14 +213,15 @@ export async function startServer(
     res.json({ data: await getTestCases() });
   });
 
-  app.get('/api/evals', async (req, res) => {
-    const datasetId = req.query.datasetId;
-    if (typeof datasetId !== 'string') {
-      res.status(400).send('datasetId is required and must be a string');
+  app.get('/api/eval', async (req, res) => {
+    const description = req.query.description;
+    if (typeof description !== 'string') {
+      res.status(400).send('description is required and must be a string');
       return;
     }
-    const limit = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : undefined;
-    const data = await getEvalsByDatasetId(datasetId, limit);
+    const limit =
+      typeof req.query.limit === 'string' ? Number.parseInt(req.query.limit, 10) : undefined;
+    const data = await getEvalsByDescription(description, limit);
     res.json({ data });
   });
 

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { getApiBaseUrl } from '@/api';
 import CloseIcon from '@mui/icons-material/Close';
@@ -26,7 +26,6 @@ import {
   Colors,
   type TooltipItem,
 } from 'chart.js';
-import { createHash } from 'crypto';
 import { useStore } from './store';
 import type {
   EvaluateTable,
@@ -441,9 +440,9 @@ function ordinalSuffixOf(i: number): string {
   return i + 'th';
 }
 
-const fetchDataset = async (id: string) => {
+const fetchEvalsWithDescription = async (description: string) => {
   try {
-    const res = await fetch(`${await getApiBaseUrl()}/api/evals/?datasetId=${id}`);
+    const res = await fetch(`${await getApiBaseUrl()}/api/eval?description=${description}`);
     return await res.json();
   } catch (err) {
     const error = err as Error;
@@ -451,7 +450,8 @@ const fetchDataset = async (id: string) => {
   }
 };
 
-function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartProps) {
+function PerformanceOverTimeChart({ table, evalId }: ChartProps) {
+  const { config } = useStore();
   const lineCanvasRef = useRef(null);
   const lineChartInstance = useRef<Chart | null>(null);
   const [dataset, setDataset] = useState<TestCasesWithMetadata>();
@@ -471,18 +471,21 @@ function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartPro
   }
 
   useEffect(() => {
-    if (!datasetId) return;
     (async () => {
-      const data = await fetchDataset(datasetId);
+      if (!config?.description) {
+        return;
+      }
+      const data = await fetchEvalsWithDescription(config.description);
+      // Current eval
       setDataset(data.data[0]);
     })();
-  }, [datasetId]);
+  }, [config?.description]);
 
   useEffect(() => {
     if (
       !lineCanvasRef.current ||
       !evalId ||
-      !datasetId ||
+      !config?.description ||
       !dataset ||
       dataset.prompts.length <= 1
     ) {
@@ -557,7 +560,6 @@ function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartPro
           },
         ],
       },
-
       options: {
         animation: false,
         scales: {
@@ -569,7 +571,7 @@ function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartPro
             type: 'linear',
             position: 'bottom',
             ticks: {
-              callback: function (value) {
+              callback: (value) => {
                 if (Number.isInteger(value)) {
                   return ordinalSuffixOf(Number(value));
                 }
@@ -583,7 +585,7 @@ function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartPro
               text: `Pass Rate`,
             },
             ticks: {
-              callback: function (value: string | number, index: number, values: any[]) {
+              callback: (value: string | number, index: number, values: any[]) => {
                 let ret = String(Math.round(Number(value)));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -600,10 +602,10 @@ function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartPro
           },
           tooltip: {
             callbacks: {
-              title: function (context) {
+              title: (context) => {
                 return `Pass Rate: ${context[0].parsed.y.toFixed(2)}%`;
               },
-              label: function (context) {
+              label: (context) => {
                 const point = context.raw as Point;
                 let label = point.metadata.label;
                 if (label && label.length > 30) {
@@ -620,7 +622,7 @@ function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartPro
           },
         },
 
-        onClick: function (event, elements) {
+        onClick: (event, elements) => {
           if (elements.length > 0) {
             const topMostElement = elements[0];
             const pointData = (topMostElement.element as any).$context.raw as Point;
@@ -630,7 +632,7 @@ function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartPro
         },
       },
     });
-  }, [table, evalId, config, datasetId, dataset]);
+  }, [table, evalId, config, dataset]);
 
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
@@ -643,20 +645,18 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
 
   const { table, evalId, config } = useStore();
 
-  const datasetId = useMemo(() => {
-    if (config) {
-      return createHash('sha256').update(JSON.stringify(config.tests)).digest('hex');
-    }
-  }, [config]);
-
-  useMemo(async () => {
-    if (datasetId) {
-      const filteredEvals = recentEvals.filter((evaluation) => evaluation.datasetId === datasetId);
-      setShowPerformanceOverTimeChart(filteredEvals.length > 1);
+  useEffect(() => {
+    if (config?.description) {
+      const filteredEvals = recentEvals.filter(
+        (evaluation) => evaluation.description === config.description,
+      );
+      if (filteredEvals.length > 1) {
+        setShowPerformanceOverTimeChart(true);
+      }
     } else {
       setShowCharts(false);
     }
-  }, [datasetId, recentEvals]);
+  }, [config?.description, recentEvals]);
 
   if (
     !table ||
@@ -679,12 +679,7 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
           </IconButton>
 
           <div style={{ width: '100%' }}>
-            <PerformanceOverTimeChart
-              table={table}
-              evalId={evalId}
-              config={config}
-              datasetId={datasetId}
-            />
+            <PerformanceOverTimeChart table={table} evalId={evalId} />
           </div>
         </Paper>
       </ErrorBoundary>
@@ -726,12 +721,7 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
           </div>
           {showPerformanceOverTimeChart && (
             <div style={{ width: chartWidth }}>
-              <PerformanceOverTimeChart
-                table={table}
-                evalId={evalId}
-                config={config}
-                datasetId={datasetId}
-              />
+              <PerformanceOverTimeChart table={table} evalId={evalId} />
             </div>
           )}
         </div>

@@ -757,6 +757,7 @@ export async function getTestCasesWithPredicate(
       config: evals.config,
     })
     .from(evals)
+    .orderBy(desc(evals.createdAt))
     .limit(limit)
     .all();
 
@@ -906,13 +907,12 @@ export async function getEvalFromId(hash: string) {
   return undefined;
 }
 
-export async function getEvalsByDatasetId(
-  datasetId: string,
+export async function getEvalsByDescription(
+  description: string,
   limit: number = DEFAULT_QUERY_LIMIT,
-): Promise<TestCasesWithMetadata[]> {
-  const allTestCases = await getTestCasesWithPredicate(() => true, limit);
-  const matchingEvals = allTestCases.filter((testCase) => testCase.id == datasetId);
-  return matchingEvals;
+) {
+  // TODO(ian): Make this use a proper database query...
+  return getTestCasesWithPredicate((result) => result.config.description === description, limit);
 }
 
 export async function deleteEval(evalId: string) {
@@ -976,9 +976,11 @@ export type StandaloneEval = CompletedPrompt & {
 export function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
   tag,
+  description,
 }: {
   limit?: number;
   tag?: { key: string; value: string };
+  description?: string;
 } = {}): StandaloneEval[] {
   const db = getDb();
   const results = db
@@ -997,7 +999,12 @@ export function getStandaloneEvals({
     .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
     .leftJoin(evalsToTags, eq(evals.id, evalsToTags.evalId))
     .leftJoin(tags, eq(evalsToTags.tagId, tags.id))
-    .where(tag ? and(eq(tags.name, tag.key), eq(tags.value, tag.value)) : undefined)
+    .where(
+      and(
+        tag ? and(eq(tags.name, tag.key), eq(tags.value, tag.value)) : undefined,
+        description ? eq(evals.description, description) : undefined,
+      ),
+    )
     .orderBy(desc(evals.createdAt))
     .limit(limit)
     .all();
