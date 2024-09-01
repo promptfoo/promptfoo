@@ -207,7 +207,7 @@ export async function synthesize({
   if (process.env.LOG_LEVEL !== 'debug') {
     progressBar = new cliProgress.SingleBar(
       {
-        format: 'Generating tests | {bar} | {percentage}% | {value}/{total} | {task}',
+        format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
       },
       cliProgress.Presets.shades_classic,
     );
@@ -278,7 +278,7 @@ export async function synthesize({
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
-    progressBar?.update({ task: `Processing plugin: ${plugin.id}` });
+    progressBar?.update({ task: plugin.id });
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);

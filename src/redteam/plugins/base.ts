@@ -3,7 +3,7 @@ import invariant from 'tiny-invariant';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import type { ApiProvider, Assertion, AssertionValue, TestCase } from '../../types';
+import type { ApiProvider, Assertion, AssertionValue, PluginConfig, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
@@ -20,13 +20,13 @@ export abstract class PluginBase {
    * @param provider - The API provider used for generating prompts.
    * @param purpose - The purpose of the plugin.
    * @param injectVar - The variable name to inject the generated prompt into.
-   * @param modifiers - An optional object of modifiers to append to the template.
+   * @param config - An optional object of plugin configuration.
    */
   constructor(
     protected provider: ApiProvider,
     protected purpose: string,
     protected injectVar: string,
-    protected modifiers: Record<string, string> = {},
+    protected config: PluginConfig = {},
   ) {
     logger.debug(`PluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }
@@ -118,14 +118,26 @@ export abstract class PluginBase {
   }
 
   private appendModifiers(template: string): string {
+    // Take everything under "modifiers" config key
+    const modifiers: Record<string, string> =
+      (this.config.modifiers as Record<string, string>) ?? {};
+
+    // Right now, only preconfigured modifier is language
+    if (this.config.language) {
+      invariant(typeof this.config.language === 'string', 'language must be a string');
+      modifiers.language = this.config.language;
+    }
+
+    // No modifiers
     if (
-      Object.keys(this.modifiers).length === 0 ||
-      Object.values(this.modifiers).every((value) => typeof value === 'undefined' || value === '')
+      Object.keys(modifiers).length === 0 ||
+      Object.values(modifiers).every((value) => typeof value === 'undefined' || value === '')
     ) {
       return template;
     }
 
-    const modifierSection = Object.entries(this.modifiers)
+    // Append all modifiers
+    const modifierSection = Object.entries(modifiers)
       .filter(([key, value]) => typeof value !== 'undefined' && value !== '')
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');

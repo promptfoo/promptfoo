@@ -1,9 +1,13 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Base types
+export type RedteamObjectConfig = Record<string, unknown>;
+export type PluginConfig = RedteamObjectConfig;
+export type StrategyConfig = RedteamObjectConfig;
+
 type ConfigurableObject = {
   id: string;
-  config?: Record<string, unknown>;
+  config?: RedteamObjectConfig;
 };
 
 type WithNumTests = {
