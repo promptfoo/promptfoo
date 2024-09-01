@@ -172,7 +172,7 @@ class HarmfulPlugin extends PluginBase {
   protected getAssertions(prompt: string): Assertion[] {
     const assertions: Assertion[] = [];
 
-    if (!getEnvBool('PROMPTFOO_NO_REDTEAM_MODERATION')) {
+    if (!getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION')) {
       if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
         assertions.push({
           metric: 'Harmful',
@@ -211,7 +211,7 @@ function createTestCase(
     },
   ];
 
-  if (!getEnvBool('PROMPTFOO_NO_REDTEAM_MODERATION')) {
+  if (!getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION')) {
     if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
       assertions.push({
         metric: 'Harmful',
