@@ -90,7 +90,12 @@ export const RedteamGenerateOptionsSchema = z.object({
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
-  delay: z.number().int().positive().optional().describe('Delay in milliseconds generators'),
+  delay: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Delay in milliseconds between plugin API calls'),
 });
 
 /**
