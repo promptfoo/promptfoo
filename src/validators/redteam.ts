@@ -13,7 +13,7 @@ import {
   ALIASED_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
 } from '../redteam/constants';
-import type { RedteamConfig, RedteamPluginObject } from '../types/redteam';
+import type { RedteamFileConfig, RedteamPluginObject } from '../types/redteam';
 import { ProviderSchema } from '../validators/providers';
 
 /**
@@ -90,6 +90,12 @@ export const RedteamGenerateOptionsSchema = z.object({
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
+  delay: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Delay in milliseconds between plugin API calls'),
 });
 
 /**
@@ -134,8 +140,14 @@ export const RedteamConfigSchema = z
       .positive()
       .optional()
       .describe('Maximum number of concurrent API calls'),
+    delay: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Delay in milliseconds between plugin API calls'),
   })
-  .transform((data): RedteamConfig => {
+  .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
 
     data.plugins.forEach((plugin) => {
@@ -202,6 +214,7 @@ export const RedteamConfigSchema = z
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
+      ...(data.delay ? { delay: data.delay } : {}),
     };
   });
 
@@ -210,6 +223,6 @@ export const RedteamConfigSchema = z
 function assert<T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
-assert<TypeEqualityGuard<RedteamConfig, z.infer<typeof RedteamConfigSchema>>>();
+assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>>();
 // TODO: Why is this never?
 // assert<TypeEqualityGuard<RedteamPluginObject, z.infer<typeof RedteamPluginObjectSchema>>>();

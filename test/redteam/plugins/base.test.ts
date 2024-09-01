@@ -203,8 +203,10 @@ describe('PluginBase', () => {
   describe('appendModifiers', () => {
     it('should not append modifiers when all modifier values are undefined or empty strings', async () => {
       const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
-        modifier1: undefined as any,
-        modifier2: '',
+        modifiers: {
+          modifier1: undefined as any,
+          modifier2: '',
+        },
       });
       await plugin.generateTests(1);
       expect(provider.callApi).toHaveBeenCalledWith(expect.not.stringContaining('<Modifiers>'));
@@ -214,14 +216,26 @@ describe('PluginBase', () => {
 
     it('should append modifiers when at least one modifier has a non-empty value', async () => {
       const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
-        modifier1: undefined as any,
-        modifier2: 'value2',
+        modifiers: {
+          modifier1: undefined as any,
+          modifier2: 'value2',
+        },
       });
 
       await plugin.generateTests(1);
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
       expect(provider.callApi).toHaveBeenCalledWith(expect.not.stringContaining('modifier1'));
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('modifier2: value2'));
+    });
+
+    it('should append language modifier', async () => {
+      const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+        language: 'German',
+      });
+
+      await plugin.generateTests(1);
+      expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
+      expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('language: German'));
     });
   });
 });

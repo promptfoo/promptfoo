@@ -9,7 +9,7 @@ import type {
   CallApiOptionsParams,
   Prompt,
   NunjucksFilterMap,
-  RedteamConfig,
+  RedteamFileConfig,
 } from '../../../types';
 import { getNunjucksEngine } from '../../../util/templates';
 import { isBasicRefusal } from '../../util';
@@ -23,7 +23,7 @@ interface CrescendoConfig {
   injectVar: string;
   maxRounds?: number;
   maxBacktracks?: number;
-  redteamProvider: RedteamConfig['provider'];
+  redteamProvider: RedteamFileConfig['provider'];
 }
 
 interface ConversationMessage {

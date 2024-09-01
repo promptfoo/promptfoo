@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { getEnvString } from '../../envars';
+import logger from '../../logger';
 import PromptfooHarmfulCompletionProvider from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
@@ -239,6 +240,7 @@ async function generateTestsForCategory(
   provider: ApiProvider | PromptfooHarmfulCompletionProvider,
   purpose: string,
   harmCategory: string,
+  delayMs: number,
   count: number,
 ): Promise<TestCase[]> {
   if (provider instanceof PromptfooHarmfulCompletionProvider) {
@@ -246,11 +248,15 @@ async function generateTestsForCategory(
     for (let i = 0; i < count; i++) {
       const result = await provider.callApi('');
       results.push(result);
+      if (delayMs > 0) {
+        logger.debug(`Delaying for ${delayMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
     return results.map((result) => createTestCase(injectVar, result.output || '', harmCategory));
   } else {
     const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, {});
-    return plugin.generateTests(count);
+    return plugin.generateTests(count, delayMs);
   }
 }
 
@@ -260,6 +266,7 @@ export async function getHarmfulTests(
   injectVar: string,
   plugins: string[],
   numTests: number,
+  delayMs: number = 0,
 ): Promise<TestCase[]> {
   const testCases: TestCase[] = [];
   const harmCategoriesToUse =
@@ -286,6 +293,7 @@ export async function getHarmfulTests(
         adversarialProvider,
         purpose,
         harmCategory,
+        delayMs,
         remainingCount,
       );
       newTests.push(...results);
@@ -308,7 +316,7 @@ export async function getHarmfulTests(
 
     for (const harmCategory of redteamProviderHarmCategories) {
       const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, {});
-      const results = await plugin.generateTests(remainingCount);
+      const results = await plugin.generateTests(remainingCount, delayMs);
       for (const result of results) {
         if (result.vars) {
           result.vars.harmCategory = harmCategory;

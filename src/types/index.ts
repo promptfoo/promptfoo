@@ -11,7 +11,7 @@ import {
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
-import type { RedteamAssertionTypes, RedteamConfig } from './redteam';
+import type { RedteamAssertionTypes, RedteamFileConfig } from './redteam';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
 export * from './prompts';
@@ -558,7 +558,7 @@ export const TestSuiteSchema = z.object({
   extensions: z.array(z.string()).optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: z.custom<RedteamConfig>().optional(),
+  redteam: z.custom<RedteamFileConfig>().optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -630,7 +630,7 @@ export const TestSuiteConfigSchema = z.object({
   metadata: MetadataSchema.optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: z.custom<RedteamConfig>().optional(),
+  redteam: z.custom<RedteamFileConfig>().optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
