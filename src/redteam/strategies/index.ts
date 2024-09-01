@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { TestCase, TestCaseWithPlugin } from '../../types';
+import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { addBase64Encoding } from './base64';
 import { addCrescendo } from './crescendo';
 import { addIterativeJailbreaks } from './iterative';
@@ -95,7 +95,7 @@ export const Strategies: Strategy[] = [
   },
 ];
 
-export function validateStrategies(strategies: { id: string }[]): void {
+export function validateStrategies(strategies: RedteamStrategyObject[]): void {
   const invalidStrategies = strategies.filter(
     (strategy) => !Strategies.map((s) => s.key).includes(strategy.id),
   );
