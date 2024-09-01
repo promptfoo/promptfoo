@@ -154,25 +154,25 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                     Recent:{' '}
                     {risk.recentFailureRate.toLocaleString(undefined, {
                       style: 'percent',
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
                     })}{' '}
                     ({risk.recentFails}/{risk.recentTotal} runs)
                   </Typography>
-                  <Typography variant="body2">
+                  <Typography variant="body1">
                     Historical:{' '}
                     {risk.historicalFailureRate.toLocaleString(undefined, {
                       style: 'percent',
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
                     })}{' '}
                     ({risk.historicalFails}/{risk.historicalTotal} runs)
                   </Typography>
-                  <Typography variant="body2" color="error">
+                  <Typography variant="body1" color="error">
                     {risk.increaseFactor.toLocaleString(undefined, {
                       style: 'percent',
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
                     })}{' '}
                     increase
                   </Typography>

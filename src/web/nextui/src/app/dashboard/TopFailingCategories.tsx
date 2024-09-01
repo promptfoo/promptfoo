@@ -67,7 +67,10 @@ const TopFailingCategories: React.FC<TopFailingCategoriesProps> = ({ evals }) =>
               <Box sx={{ width: '100%' }}>
                 <ListItemText
                   primary={displayName}
-                  secondary={`${category.failureRate.toFixed(2)}% failing (${Math.round(
+                  secondary={`${category.failureRate.toLocaleString(undefined, {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  })}% failing (${Math.round(
                     (category.failureRate * category.totalTests) / 100,
                   )}/${category.totalTests} runs)`}
                 />

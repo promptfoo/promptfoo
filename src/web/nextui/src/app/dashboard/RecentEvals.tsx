@@ -51,7 +51,7 @@ const RecentEvals: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
                       {eval_.description || eval_.evalId}
                     </Link>
                   </TableCell>
-                  <TableCell>{new Date(eval_.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell>{new Date(eval_.createdAt).toLocaleString()}</TableCell>
                   <TableCell align="right">{passRate.toFixed(1)}%</TableCell>
                 </TableRow>
               );

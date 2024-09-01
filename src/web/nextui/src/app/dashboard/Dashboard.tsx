@@ -135,12 +135,11 @@ export default function Dashboard() {
       : 0;
 
   const calculateMetricTrends = () => {
-    const currentPassRate = latestPassRate * 100;
+    const currentPassRate = latestPassRate;
     const previousPassRate =
       evals.length > 1 && evals[1].metrics?.testPassCount && evals[1].metrics?.testFailCount
-        ? (evals[1].metrics.testPassCount /
-            (evals[1].metrics.testPassCount + evals[1].metrics.testFailCount)) *
-          100
+        ? evals[1].metrics.testPassCount /
+          (evals[1].metrics.testPassCount + evals[1].metrics.testFailCount)
         : currentPassRate;
 
     const passRateTrend = calculateTrend(currentPassRate, previousPassRate);
@@ -160,19 +159,17 @@ export default function Dashboard() {
     const totalTestsTrend = calculateTrend(currentTotalTests, previousTotalTests);
 
     // Calculate average pass rate trend by looking at the average pass rate of the last half of the evals
-    const currentAveragePassRate = averagePassRate * 100;
+    const currentAveragePassRate = averagePassRate;
     const previousAveragePassRate =
       evals.length > 1
-        ? (evals.slice(Math.floor(evals.length / 2)).reduce((sum, eval_) => {
+        ? evals.slice(Math.floor(evals.length / 2)).reduce((sum, eval_) => {
             const passRate =
               eval_.metrics?.testPassCount && eval_.metrics?.testFailCount
                 ? eval_.metrics.testPassCount /
                   (eval_.metrics.testPassCount + eval_.metrics.testFailCount)
                 : 0;
             return sum + passRate;
-          }, 0) /
-            Math.floor(evals.length / 2)) *
-          100
+          }, 0) / Math.floor(evals.length / 2)
         : currentAveragePassRate;
 
     const averagePassRateTrend = calculateTrend(currentAveragePassRate, previousAveragePassRate);
@@ -253,17 +250,33 @@ export default function Dashboard() {
               <Grid item xs={12} md={4}>
                 <MetricCard
                   title="Current Pass Rate"
-                  value={`${(latestPassRate * 100).toFixed(2)}%`}
+                  value={`${latestPassRate.toLocaleString(undefined, {
+                    style: 'percent',
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  })}`}
                   trend={passRateTrend.direction}
-                  trendValue={`${passRateTrend.value.toFixed(2)}%`}
+                  trendValue={`${passRateTrend.value.toLocaleString(undefined, {
+                    style: 'percent',
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  })}`}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
                 <MetricCard
                   title="Average Pass Rate"
-                  value={`${(averagePassRate * 100).toFixed(2)}%`}
+                  value={`${averagePassRate.toLocaleString(undefined, {
+                    style: 'percent',
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  })}`}
                   trend={averagePassRateTrend.direction}
-                  trendValue={`${averagePassRateTrend.value.toFixed(2)}%`}
+                  trendValue={`${averagePassRateTrend.value.toLocaleString(undefined, {
+                    style: 'percent',
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  })}`}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
@@ -271,7 +284,11 @@ export default function Dashboard() {
                   title="Total Probes"
                   value={totalTests.toLocaleString()}
                   trend={totalTestsTrend.direction}
-                  trendValue={`${totalTestsTrend.value.toFixed(2)}%`}
+                  trendValue={`${totalTestsTrend.value.toLocaleString(undefined, {
+                    style: 'percent',
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  })}`}
                 />
               </Grid>
 
@@ -304,8 +321,8 @@ export default function Dashboard() {
                         formatter={(value: number | string) => [
                           typeof value === 'number'
                             ? value.toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
                               }) + '%'
                             : value,
                           'Pass Rate:',
@@ -357,7 +374,13 @@ export default function Dashboard() {
                         fill="#2196f3"
                         paddingAngle={5}
                         dataKey="value"
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }) =>
+                          `${name} ${percent.toLocaleString(undefined, {
+                            style: 'percent',
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0,
+                          })}`
+                        }
                         labelLine={false}
                       >
                         {overallPassRateData.map((entry, index) => (
@@ -366,7 +389,13 @@ export default function Dashboard() {
                       </Pie>
                       <Tooltip
                         formatter={(value: number | string) =>
-                          typeof value === 'number' ? `${value.toFixed(2)}%` : value
+                          typeof value === 'number'
+                            ? value.toLocaleString(undefined, {
+                                style: 'percent',
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                              })
+                            : value
                         }
                       />
                     </PieChart>

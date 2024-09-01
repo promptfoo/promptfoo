@@ -1,6 +1,6 @@
 export function calculateTrend(current: number, previous: number) {
   const difference = current - previous;
-  const percentChange = (difference / previous) * 100;
+  const percentChange = difference / previous;
 
   let direction: 'up' | 'down' | 'flat';
   if (percentChange > 1) {
