@@ -2,18 +2,17 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import type { StandaloneEval } from '@/../../../util';
-import {
-  Box,
-  Container,
-  Grid,
-  Paper,
-  Typography,
-  TextField,
-  Button,
-  CircularProgress,
-} from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Container from '@mui/material/Container';
+import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { Chart, type ChartConfiguration, registerables } from 'chart.js';
 import CategoryBreakdown from './CategoryBreakdown';
+import EmergingRisks from './EmergingRisks';
 import MetricCard from './MetricCard';
 import RecentEvals from './RecentEvals';
 import Sidebar from './Sidebar';
@@ -425,6 +424,10 @@ export default function Dashboard() {
                 >
                   <TopFailingCategories evals={evals} />
                 </Paper>
+              </Grid>
+              {/* New panel: Emerging Risks */}
+              <Grid item xs={12} md={12}>
+                <EmergingRisks evals={evals} />
               </Grid>
               {/* Category Breakdown */}
               <Grid item xs={12}>

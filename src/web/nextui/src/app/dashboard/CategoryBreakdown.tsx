@@ -1,16 +1,14 @@
 import React from 'react';
 import type { StandaloneEval } from '@/../../../util';
-import {
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Grid,
-  Paper,
-} from '@mui/material';
+import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
   riskCategories,
@@ -91,9 +89,9 @@ const CategoryBreakdown: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => 
 
   return (
     <Grid container spacing={2}>
-      <RiskTile title="Security Risk" subCategories={categoryStats['Security Risk']} />
-      <RiskTile title="Legal Risk" subCategories={categoryStats['Legal Risk']} />
-      <RiskTile title="Brand Risk" subCategories={categoryStats['Brand Risk']} />
+      <RiskTile title="Security Risks" subCategories={categoryStats['Security Risk']} />
+      <RiskTile title="Legal Risks" subCategories={categoryStats['Legal Risk']} />
+      <RiskTile title="Brand Risks" subCategories={categoryStats['Brand Risk']} />
     </Grid>
   );
 };

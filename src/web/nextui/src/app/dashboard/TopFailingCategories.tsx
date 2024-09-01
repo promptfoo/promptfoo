@@ -1,6 +1,11 @@
 import React from 'react';
 import type { StandaloneEval } from '@/../../../util';
-import { Typography, List, ListItem, ListItemText, LinearProgress, Box } from '@mui/material';
+import Box from '@mui/material/Box';
+import LinearProgress from '@mui/material/LinearProgress';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemText from '@mui/material/ListItemText';
+import Typography from '@mui/material/Typography';
 import { categoryAliases, displayNameOverrides } from '../report/constants';
 
 interface TopFailingCategoriesProps {
