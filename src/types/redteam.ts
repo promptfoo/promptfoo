@@ -26,9 +26,10 @@ type CommonOptions = {
   provider?: string | ProviderOptions | ApiProvider;
   purpose?: string;
   strategies?: RedteamStrategy[];
+  delay?: number;
 };
 
-export interface RedteamGenerateOptions extends CommonOptions {
+export interface RedteamCliGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
   defaultConfig: Record<string, unknown>;
@@ -39,7 +40,7 @@ export interface RedteamGenerateOptions extends CommonOptions {
   write: boolean;
 }
 
-export interface RedteamConfig extends CommonOptions {
+export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
 }
 

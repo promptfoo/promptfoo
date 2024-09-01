@@ -7,7 +7,7 @@ import {
   type CallApiOptionsParams,
   type Prompt,
   type NunjucksFilterMap,
-  type RedteamConfig,
+  type RedteamFileConfig,
 } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
@@ -156,7 +156,7 @@ async function runRedteamConversation({
 }
 
 class RedteamIterativeProvider implements ApiProvider {
-  private readonly redteamProvider: RedteamConfig['provider'];
+  private readonly redteamProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
 
   constructor(readonly config: Record<string, string | object>) {

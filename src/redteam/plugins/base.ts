@@ -46,9 +46,10 @@ export abstract class PluginBase {
   /**
    * Generates test cases based on the plugin's configuration.
    * @param n - The number of test cases to generate.
+   * @param delayMs - The delay in milliseconds between plugin API calls.
    * @returns A promise that resolves to an array of TestCase objects.
    */
-  async generateTests(n: number): Promise<TestCase[]> {
+  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
 
@@ -72,6 +73,10 @@ export abstract class PluginBase {
 
       const finalTemplate = this.appendModifiers(renderedTemplate);
       const { output: generatedPrompts } = await this.provider.callApi(finalTemplate);
+      if (delayMs > 0) {
+        logger.debug(`Delaying for ${delayMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
 
       invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
       return this.parseGeneratedPrompts(generatedPrompts);

@@ -132,6 +132,7 @@ export async function synthesize({
   provider,
   purpose: purposeOverride,
   strategies,
+  delay,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -139,6 +140,10 @@ export async function synthesize({
 }> {
   if (prompts.length === 0) {
     throw new Error('Prompts array cannot be empty');
+  }
+  if (delay && maxConcurrency > 1) {
+    maxConcurrency = 1;
+    logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
   validateStrategies(strategies);
 
@@ -180,7 +185,8 @@ export async function synthesize({
       `\n• Plugin tests: ${chalk.cyan(totalPluginTests)}` +
       `\n• Plugins: ${chalk.cyan(plugins.length)}` +
       `\n• Strategies: ${chalk.cyan(strategies.length)}` +
-      `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n`,
+      `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n` +
+      (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
   );
 
   if (typeof injectVar !== 'string') {
@@ -276,10 +282,17 @@ export async function synthesize({
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
-      const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
-        language,
-        ...resolvePluginConfig(plugin.config),
-      });
+      const pluginTests = await action(
+        redteamProvider,
+        purpose,
+        injectVar,
+        plugin.numTests,
+        delay || 0,
+        {
+          language,
+          ...resolvePluginConfig(plugin.config),
+        },
+      );
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,
@@ -304,7 +317,7 @@ export async function synthesize({
       logger.debug(`Custom plugin definition: ${JSON.stringify(definition, null, 2)}`);
 
       const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, definition);
-      const customTests = await customPlugin.generateTests(plugin.numTests);
+      const customTests = await customPlugin.generateTests(plugin.numTests, delay);
       testCases.push(
         ...customTests.map((t) => ({
           ...t,
@@ -341,25 +354,26 @@ export async function synthesize({
 
     for (const { key, action } of Strategies) {
       const strategy = strategies.find((s) => s.id === key);
-      if (strategy) {
-        progressBar?.update({ task: `Applying strategy: ${key}` });
-        logger.debug(`Generating ${key} tests`);
-        const strategyTestCases = await action(testCases, injectVar, strategy.config || {});
-        newTestCases.push(
-          ...strategyTestCases.map((t) => ({
-            ...t,
-            metadata: {
-              ...(t.metadata || {}),
-              pluginId: t.metadata?.pluginId,
-              strategyId: strategy.id,
-            },
-          })),
-        );
-        strategyResults[key] = {
-          requested: testCases.length,
-          generated: strategyTestCases.length,
-        };
+      if (!strategy) {
+        continue;
       }
+      progressBar?.update({ task: `Applying strategy: ${key}` });
+      logger.debug(`Generating ${key} tests`);
+      const strategyTestCases = await action(testCases, injectVar, strategy.config || {});
+      newTestCases.push(
+        ...strategyTestCases.map((t) => ({
+          ...t,
+          metadata: {
+            ...(t.metadata || {}),
+            pluginId: t.metadata?.pluginId,
+            strategyId: strategy.id,
+          },
+        })),
+      );
+      strategyResults[key] = {
+        requested: testCases.length,
+        generated: strategyTestCases.length,
+      };
     }
 
     testCases.push(...newTestCases);

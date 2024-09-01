@@ -8,7 +8,7 @@ import type {
   CallApiOptionsParams,
   Prompt,
   NunjucksFilterMap,
-  RedteamConfig,
+  RedteamFileConfig,
 } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import { loadRedteamProvider } from './shared';
@@ -239,7 +239,7 @@ async function runRedteamConversation({
 }
 
 class RedteamIterativeProvider implements ApiProvider {
-  private readonly redteamProvider: RedteamConfig['provider'];
+  private readonly redteamProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
 
   constructor(readonly config: Record<string, string | object>) {
