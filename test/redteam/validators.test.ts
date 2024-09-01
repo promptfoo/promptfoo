@@ -493,7 +493,7 @@ describe('redteamConfigSchema', () => {
     const result = RedteamConfigSchema.safeParse(input);
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
-    const piiPlugins = result.data?.plugins.filter((p) => p.id.startsWith('pii:'));
+    const piiPlugins = result.data?.plugins?.filter((p) => p.id.startsWith('pii:'));
     expect(piiPlugins).toEqual(
       expect.arrayContaining([
         { id: 'pii:session', numTests: 3 },

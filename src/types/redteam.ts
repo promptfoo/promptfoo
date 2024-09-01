@@ -1,59 +1,56 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
-export type RedteamPluginObject = {
+// Base types
+type ConfigurableObject = {
   id: string;
-  numTests?: number;
   config?: Record<string, unknown>;
 };
 
-export type RedteamPlugin = string | RedteamPluginObject;
-
-export type RedteamStrategyObject = {
-  id: string;
+type WithNumTests = {
+  numTests?: number;
 };
 
+// Derived types
+export type RedteamPluginObject = ConfigurableObject & WithNumTests;
+export type RedteamPlugin = string | RedteamPluginObject;
+
+export type RedteamStrategyObject = ConfigurableObject;
 export type RedteamStrategy = string | RedteamStrategyObject;
 
-export type RedteamGenerateOptions = {
+// Shared redteam options
+type CommonOptions = {
+  injectVar?: string;
+  language?: string;
+  numTests?: number;
+  plugins?: RedteamPluginObject[];
+  provider?: string | ProviderOptions | ApiProvider;
+  purpose?: string;
+  strategies?: RedteamStrategy[];
+};
+
+export interface RedteamGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
   defaultConfig: Record<string, unknown>;
   defaultConfigPath?: string;
   envFile?: string;
-  injectVar?: string;
-  language?: string;
   maxConcurrency?: number;
-  numTests?: number;
   output?: string;
-  plugins?: RedteamPluginObject[];
-  provider?: string;
-  purpose?: string;
-  strategies?: RedteamStrategy[];
   write: boolean;
-};
+}
 
-export type RedteamConfig = {
+export interface RedteamConfig extends CommonOptions {
   entities?: string[];
-  injectVar?: string;
-  numTests?: number;
-  language?: string;
-  plugins: RedteamPluginObject[];
-  provider?: string | ProviderOptions | ApiProvider;
-  purpose?: string;
-  strategies: RedteamStrategyObject[];
-};
+}
 
-export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
-
-export interface SynthesizeOptions {
+export interface SynthesizeOptions extends CommonOptions {
   entities?: string[];
-  injectVar?: string;
   language: string;
   maxConcurrency?: number;
   numTests: number;
-  plugins: { id: string; numTests: number; config?: Record<string, any> }[];
+  plugins: (RedteamPluginObject & { id: string; numTests: number })[];
   prompts: [string, ...string[]];
-  provider?: ApiProvider | ProviderOptions | string;
-  purpose?: string;
-  strategies: { id: string; config?: Record<string, any> }[];
+  strategies: RedteamStrategyObject[];
 }
+
+export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
