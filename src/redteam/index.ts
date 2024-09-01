@@ -303,13 +303,7 @@ export async function synthesize({
 
       logger.debug(`Custom plugin definition: ${JSON.stringify(definition, null, 2)}`);
 
-      const customPlugin = new CustomPlugin(
-        redteamProvider,
-        purpose,
-        injectVar,
-        plugin.config,
-        definition,
-      );
+      const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, definition);
       const customTests = await customPlugin.generateTests(plugin.numTests);
       testCases.push(
         ...customTests.map((t) => ({

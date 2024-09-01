@@ -10,6 +10,7 @@ export type RedteamPlugin = string | RedteamPluginObject;
 
 export type RedteamStrategyObject = {
   id: string;
+  config?: Record<string, unknown>;
 };
 
 export type RedteamStrategy = string | RedteamStrategyObject;
@@ -51,9 +52,9 @@ export interface SynthesizeOptions {
   language: string;
   maxConcurrency?: number;
   numTests: number;
-  plugins: { id: string; numTests: number; config?: Record<string, any> }[];
+  plugins: (RedteamPluginObject & { id: string; numTests: number })[];
   prompts: [string, ...string[]];
   provider?: ApiProvider | ProviderOptions | string;
   purpose?: string;
-  strategies: { id: string; config?: Record<string, any> }[];
+  strategies: RedteamStrategyObject[];
 }

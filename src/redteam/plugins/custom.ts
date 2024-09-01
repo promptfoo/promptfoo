@@ -8,10 +8,9 @@ export class CustomPlugin extends PluginBase {
     provider: ApiProvider,
     purpose: string,
     injectVar: string,
-    modifiers: Record<string, string> = {},
     definition: { generator: string; grader: string },
   ) {
-    super(provider, purpose, injectVar, modifiers);
+    super(provider, purpose, injectVar);
     this.definition = definition;
   }
 
