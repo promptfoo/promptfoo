@@ -20,6 +20,10 @@ interface CategoryRisk {
   recentFailureRate: number;
   historicalFailureRate: number;
   increaseFactor: number;
+  recentFails: number;
+  recentTotal: number;
+  historicalFails: number;
+  historicalTotal: number;
 }
 
 const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
@@ -47,26 +51,33 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
         });
       });
 
-      return Object.entries(categoryFailures).reduce(
-        (acc, [category, { fails, total }]) => {
-          acc[category] = fails / total;
-          return acc;
-        },
-        {} as { [key: string]: number },
-      );
+      return categoryFailures;
     };
 
-    const recentFailureRates = calculateFailureRate(recentEvals);
-    const historicalFailureRates = calculateFailureRate(historicalEvals);
+    const recentFailures = calculateFailureRate(recentEvals);
+    const historicalFailures = calculateFailureRate(historicalEvals);
 
-    const emergingRisks = Object.keys(recentFailureRates).map((category) => ({
-      category,
-      recentFailureRate: recentFailureRates[category],
-      historicalFailureRate: historicalFailureRates[category] || 0,
-      increaseFactor:
-        (recentFailureRates[category] - (historicalFailureRates[category] || 0)) /
-        (historicalFailureRates[category] || 0.01),
-    }));
+    const emergingRisks = Object.keys(recentFailures).map((category) => {
+      const recentFails = recentFailures[category].fails;
+      const recentTotal = recentFailures[category].total;
+      const historicalFails = historicalFailures[category]?.fails || 0;
+      const historicalTotal = historicalFailures[category]?.total || 1;
+
+      const recentFailureRate = recentFails / recentTotal;
+      const historicalFailureRate = historicalFails / historicalTotal;
+
+      return {
+        category,
+        recentFailureRate,
+        historicalFailureRate,
+        increaseFactor:
+          (recentFailureRate - historicalFailureRate) / (historicalFailureRate || 0.01),
+        recentFails,
+        recentTotal,
+        historicalFails,
+        historicalTotal,
+      };
+    });
 
     return emergingRisks
       .filter((risk) => risk.increaseFactor > 0.1) // Only show risks with at least 10% increase
@@ -77,8 +88,8 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
   const emergingRisks = calculateEmergingRisks();
 
   return (
-    <>
-      <Typography variant="h6" gutterBottom>
+    <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+      <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
         Emerging Risks
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
@@ -88,9 +99,8 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
             categoryAliases[risk.category as keyof typeof categoryAliases] ||
             risk.category;
           return (
-            <Paper
+            <Box
               key={index}
-              elevation={2}
               sx={{
                 flexGrow: 1,
                 flexBasis: '0',
@@ -98,6 +108,8 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                 maxWidth: '300px',
                 p: 2,
                 borderRadius: 2,
+                bgcolor: '#f8f8f8',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
               }}
             >
               <Box
@@ -143,14 +155,16 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                     {risk.recentFailureRate.toLocaleString(undefined, {
                       style: 'percent',
                       minimumFractionDigits: 2,
-                    })}
+                    })}{' '}
+                    ({risk.recentFails}/{risk.recentTotal} runs)
                   </Typography>
                   <Typography variant="body2">
                     Historical:{' '}
                     {risk.historicalFailureRate.toLocaleString(undefined, {
                       style: 'percent',
                       minimumFractionDigits: 2,
-                    })}
+                    })}{' '}
+                    ({risk.historicalFails}/{risk.historicalTotal} runs)
                   </Typography>
                   <Typography variant="body2" color="error">
                     {risk.increaseFactor.toLocaleString(undefined, {
@@ -161,11 +175,11 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                   </Typography>
                 </Box>
               </Box>
-            </Paper>
+            </Box>
           );
         })}
       </Box>
-    </>
+    </Paper>
   );
 };
 

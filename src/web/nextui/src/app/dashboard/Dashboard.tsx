@@ -23,7 +23,6 @@ Chart.register(...registerables);
 
 export default function Dashboard() {
   const [evals, setEvals] = useState<StandaloneEval[]>([]);
-  const [tagName, setTagName] = useState('');
   const [tagValue, setTagValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const passRateChartRef = useRef<HTMLCanvasElement | null>(null);
@@ -37,10 +36,8 @@ export default function Dashboard() {
   const fetchEvals = async () => {
     setIsLoading(true);
     const queryParams = new URLSearchParams();
-    if (tagName) {
-      queryParams.append('tagName', tagName);
-    }
     if (tagValue) {
+      queryParams.append('tagName', 'application');
       queryParams.append('tagValue', tagValue);
     }
     if (startDate) {
@@ -296,7 +293,7 @@ export default function Dashboard() {
         }}
       >
         <Container maxWidth={false} disableGutters sx={{ mt: 2, mb: 4, px: 4 }}>
-          <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 'bold', color: '#333' }}>
+          <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 'bold' }}>
             LLM Risk - Continuous Monitoring
           </Typography>
 
@@ -305,14 +302,7 @@ export default function Dashboard() {
             sx={{ p: 3, mb: 3, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
           >
             <TextField
-              label="Tag Name"
-              variant="outlined"
-              size="small"
-              value={tagName}
-              onChange={(e) => setTagName(e.target.value)}
-            />
-            <TextField
-              label="Tag Value"
+              label="Application Name"
               variant="outlined"
               size="small"
               value={tagValue}

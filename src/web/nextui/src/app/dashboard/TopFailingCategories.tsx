@@ -69,7 +69,7 @@ const TopFailingCategories: React.FC<TopFailingCategoriesProps> = ({ evals }) =>
                   primary={displayName}
                   secondary={`${category.failureRate.toFixed(2)}% failing (${Math.round(
                     (category.failureRate * category.totalTests) / 100,
-                  )}/${category.totalTests} tests)`}
+                  )}/${category.totalTests} runs)`}
                 />
                 <LinearProgress
                   variant="determinate"

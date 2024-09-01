@@ -24,7 +24,7 @@ const RecentEvals: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
   return (
     <>
       <Typography variant="h6" gutterBottom>
-        Recent Evaluations
+        Recent Runs
       </Typography>
       <Table size="small">
         <TableHead>
