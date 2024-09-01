@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import semverGt from 'semver/functions/gt';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
+import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
 import logger from './logger';
 
@@ -14,7 +15,7 @@ export async function getLatestVersion() {
 }
 
 export async function checkForUpdates(): Promise<boolean> {
-  if (process.env.PROMPTFOO_DISABLE_UPDATE) {
+  if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
     return false;
   }
 

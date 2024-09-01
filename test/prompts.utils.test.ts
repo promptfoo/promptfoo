@@ -29,6 +29,10 @@ describe('maybeFilePath', () => {
     expect(maybeFilePath('langfuse://path/to/file')).toBe(false);
   });
 
+  it('should return false for strings with "helicone://"', () => {
+    expect(maybeFilePath('helicone://path/to/file')).toBe(false);
+  });
+
   it('should return false for strings without file path indicators', () => {
     expect(maybeFilePath('anotherstring')).toBe(false);
     expect(maybeFilePath('justastring')).toBe(false);
@@ -85,12 +89,12 @@ describe('maybeFilePath', () => {
   });
 
   it('should return true for very long valid file paths', () => {
-    const longPath = 'a/'.repeat(100) + 'file.txt';
+    const longPath = `${'a/'.repeat(100)}file.txt`;
     expect(maybeFilePath(longPath)).toBe(true);
   });
 
   it('should return false for very long invalid file paths', () => {
-    const longInvalidPath = 'a/'.repeat(100) + 'file\n.txt';
+    const longInvalidPath = `${'a/'.repeat(100)}file\n.txt`;
     expect(maybeFilePath(longInvalidPath)).toBe(false);
   });
 

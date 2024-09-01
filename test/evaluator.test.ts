@@ -1,13 +1,6 @@
-import * as fs from 'fs';
 import glob from 'glob';
-import * as path from 'path';
-import {
-  evaluate,
-  renderPrompt,
-  resolveVariables,
-  generateVarCombinations,
-  isAllowedPrompt,
-} from '../src/evaluator';
+import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
+import { runExtensionHook } from '../src/evaluatorHelpers';
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
@@ -33,6 +26,11 @@ jest.mock('fs', () => ({
 jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
+}));
+jest.mock('../src/logger');
+jest.mock('../src/evaluatorHelpers', () => ({
+  ...jest.requireActual('../src/evaluatorHelpers'),
+  runExtensionHook: jest.fn(),
 }));
 
 const mockApiProvider: ApiProvider = {
@@ -513,6 +511,59 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Transformed: Original output');
   });
 
+  it('evaluate with provider transform and test transform', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`ProviderTransformed: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        options: {
+          // overridden by the test transform
+          transform: '"defaultTestTransformed " + output',
+        },
+      },
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              // Order of transforms: 1. Provider transform 2. Test transform (or defaultTest transform, if test transform unset)
+              value: 'testTransformed ProviderTransformed: Original output',
+            },
+          ],
+          // This transform overrides the defaultTest transform
+          options: { transform: '"testTransformed " + output' },
+        },
+      ],
+    };
+
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            response: expect.objectContaining({
+              output: 'testTransformed ProviderTransformed: Original output',
+            }),
+          }),
+        ]),
+      }),
+    );
+
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -706,6 +757,7 @@ describe('evaluator', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
       defaultTest: {
+        metadata: { defaultKey: 'defaultValue' },
         assert: [
           {
             type: 'starts-with',
@@ -715,8 +767,8 @@ describe('evaluator', () => {
       },
       scenarios: [
         {
-          config: [{}],
-          tests: [{}],
+          config: [{ metadata: { configKey: 'configValue' } }],
+          tests: [{ metadata: { testKey: 'testValue' } }],
         },
         {
           config: [
@@ -743,13 +795,60 @@ describe('evaluator', () => {
       ],
     };
 
-    const summary = await evaluate(testSuite, {});
+    const result = await evaluate(testSuite, {});
+
+    expect(result).toMatchObject({
+      stats: {
+        successes: 2,
+        failures: 0,
+      },
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          gradingResult: expect.objectContaining({
+            componentResults: expect.arrayContaining([expect.anything()]),
+          }),
+        }),
+        expect.objectContaining({
+          gradingResult: expect.objectContaining({
+            componentResults: expect.arrayContaining([
+              expect.anything(),
+              expect.anything(),
+              expect.anything(),
+            ]),
+          }),
+        }),
+      ]),
+    });
+
+    expect(result.table.body[0].test.metadata).toEqual({
+      defaultKey: 'defaultValue',
+      configKey: 'configValue',
+      testKey: 'testValue',
+    });
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
-    expect(summary.stats.successes).toBe(2);
-    expect(summary.stats.failures).toBe(0);
-    expect(summary.results[0].gradingResult?.componentResults?.length).toBe(1);
-    expect(summary.results[1].gradingResult?.componentResults?.length).toBe(3);
+  });
+
+  it('merges metadata correctly for regular tests', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        metadata: { defaultKey: 'defaultValue' },
+      },
+      tests: [
+        {
+          metadata: { testKey: 'testValue' },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.table.body[0].test.metadata).toEqual({
+      defaultKey: 'defaultValue',
+      testKey: 'testValue',
+    });
   });
 
   it('evaluate with _conversation variable', async () => {
@@ -887,147 +986,334 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe('Test output postprocessed');
   });
-});
 
-describe('renderPrompt', () => {
-  it('should render a prompt with a single variable', async () => {
-    const prompt = toPrompt('Test prompt {{ var1 }}');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
-    expect(renderedPrompt).toBe('Test prompt value1');
-  });
-
-  it('should render a JSON prompt', async () => {
-    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
-    expect(renderedPrompt).toBe(
-      JSON.stringify(JSON.parse('[{"text":"Test prompt "},{"text":"value1"}]'), null, 2),
-    );
-  });
-
-  it('should render a JSON prompt and escape the var string', async () => {
-    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'He said "hello world!"' }, {});
-    expect(renderedPrompt).toBe(
-      JSON.stringify(
-        JSON.parse('[{"text":"Test prompt "},{"text":"He said \\"hello world!\\""}]'),
-        null,
-        2,
-      ),
-    );
-  });
-
-  it('should render a JSON prompt with nested JSON', async () => {
-    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
-    const renderedPrompt = await renderPrompt(prompt, { var1: '{"nested": "value1"}' }, {});
-    expect(renderedPrompt).toBe(
-      JSON.stringify(
-        JSON.parse('[{"text":"Test prompt "},{"text":"{\\"nested\\": \\"value1\\"}"}]'),
-        null,
-        2,
-      ),
-    );
-  });
-
-  it('should load external yaml files in renderPrompt', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }}');
-    const vars = { var1: 'file://test.txt' };
-    const evaluateOptions = {};
-
-    // Mock fs.readFileSync to simulate loading a YAML file
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('loaded from file');
-
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.txt'), 'utf8');
-    expect(renderedPrompt).toBe('Test prompt with loaded from file');
-  });
-
-  it('should load external js files in renderPrompt and execute the exported function', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
-    const vars = {
-      var1: 'file:///path/to/testFunction.js',
-      var2: 'file:///path/to/testFunction.cjs',
-      var3: 'file:///path/to/testFunction.mjs',
+  it('evaluate with multiple transforms', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`Provider: ${output}`',
     };
-    const evaluateOptions = {};
 
-    jest.doMock(
-      path.resolve('/path/to/testFunction.js'),
-      () => (varName: any, prompt: any, vars: any) => ({ output: `Dynamic value for ${varName}` }),
-      { virtual: true },
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test: Provider: Original output',
+            },
+          ],
+          options: {
+            transform: '`Test: ${output}`',
+          },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Test: Provider: Original output');
+  });
+
+  it('evaluate with provider transform and test postprocess (deprecated)', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`Provider: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Postprocess: Provider: Original output',
+            },
+          ],
+          options: {
+            postprocess: '`Postprocess: ${output}`',
+          },
+        },
+      ],
+    };
+
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            response: expect.objectContaining({
+              output: 'Postprocess: Provider: Original output',
+            }),
+          }),
+        ]),
+      }),
     );
-    jest.doMock(
-      path.resolve('/path/to/testFunction.cjs'),
-      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
-      { virtual: true },
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate with provider transform, test transform, and test postprocess (deprecated)', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`Provider: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Transform: Provider: Original output',
+            },
+          ],
+          options: {
+            transform: '`Transform: ${output}`',
+            postprocess: '`Postprocess: ${output}`', // This should be ignored
+          },
+        },
+      ],
+    };
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            response: expect.objectContaining({
+              output: 'Transform: Provider: Original output',
+            }),
+          }),
+        ]),
+      }),
     );
-    jest.doMock(
-      path.resolve('/path/to/testFunction.mjs'),
-      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
-      { virtual: true },
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate with no output', async () => {
+    const mockApiProviderNoOutput: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-output'),
+      callApi: jest.fn().mockResolvedValue({
+        output: null,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoOutput],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(0);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.results[0].error).toBe('No output');
+    expect(summary.results[0].success).toBe(false);
+    expect(summary.results[0].score).toBe(0);
+    expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate with false output', async () => {
+    const mockApiProviderNoOutput: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-output'),
+      callApi: jest.fn().mockResolvedValue({
+        output: false,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoOutput],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].success).toBe(true);
+    expect(summary.results[0].score).toBe(1);
+    expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should apply prompt config to provider call', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: 'You are a helpful math tutor. Solve {{problem}}',
+          label: 'Math problem',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'math_response',
+                strict: true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    final_answer: { type: 'string' },
+                  },
+                  required: ['final_answer'],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+        },
+      ],
+      tests: [{ vars: { problem: '8x + 31 = 2' } }],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockApiProvider.callApi).toHaveBeenCalledWith(
+      'You are a helpful math tutor. Solve 8x + 31 = 2',
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'math_response',
+                strict: true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    final_answer: { type: 'string' },
+                  },
+                  required: ['final_answer'],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('should call runExtensionHook with correct parameters at appropriate times', async () => {
+    const mockExtension = 'file:./path/to/extension.js:extensionFunction';
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ var1 }}')],
+      tests: [
+        {
+          vars: { var1: 'value1' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockClear();
+
+    await evaluate(testSuite, {});
+
+    // Check if runExtensionHook was called 4 times (beforeAll, beforeEach, afterEach, afterAll)
+    expect(mockedRunExtensionHook).toHaveBeenCalledTimes(4);
+
+    // Check beforeAll call
+    expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
+      1,
+      [mockExtension],
+      'beforeAll',
+      expect.objectContaining({ suite: testSuite }),
     );
 
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-    expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
-  });
+    // Check beforeEach call
+    expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
+      2,
+      [mockExtension],
+      'beforeEach',
+      expect.objectContaining({
+        test: expect.objectContaining({
+          vars: { var1: 'value1' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+        }),
+      }),
+    );
 
-  it('should load external json files in renderPrompt and parse the JSON content', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }}');
-    const vars = { var1: 'file:///path/to/testData.json' };
-    const evaluateOptions = {};
+    // Check afterEach call
+    expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
+      3,
+      [mockExtension],
+      'afterEach',
+      expect.objectContaining({
+        test: expect.objectContaining({
+          vars: { var1: 'value1' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+        }),
+        result: expect.objectContaining({
+          success: true,
+          score: 1,
+          response: expect.objectContaining({
+            output: 'Test output',
+          }),
+        }),
+      }),
+    );
 
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(JSON.stringify({ key: 'valueFromJson' }));
-
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.json'), 'utf8');
-    expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromJson"}');
-  });
-
-  it('should load external yaml files in renderPrompt and parse the YAML content', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }}');
-    const vars = { var1: 'file:///path/to/testData.yaml' };
-    const evaluateOptions = {};
-
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('key: valueFromYaml');
-
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.yaml'), 'utf8');
-    expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
-  });
-});
-
-describe('resolveVariables', () => {
-  it('should replace placeholders with corresponding variable values', () => {
-    const variables = { final: '{{ my_greeting }}, {{name}}!', my_greeting: 'Hello', name: 'John' };
-    const expected = { final: 'Hello, John!', my_greeting: 'Hello', name: 'John' };
-    expect(resolveVariables(variables)).toEqual(expected);
-  });
-
-  it('should handle nested variable substitutions', () => {
-    const variables = { first: '{{second}}', second: '{{third}}', third: 'value' };
-    const expected = { first: 'value', second: 'value', third: 'value' };
-    expect(resolveVariables(variables)).toEqual(expected);
-  });
-
-  it('should not modify variables without placeholders', () => {
-    const variables = { greeting: 'Hello, world!', name: 'John' };
-    const expected = { greeting: 'Hello, world!', name: 'John' };
-    expect(resolveVariables(variables)).toEqual(expected);
-  });
-
-  it('should not fail if a variable is not found', () => {
-    const variables = { greeting: 'Hello, {{name}}!' };
-    expect(resolveVariables(variables)).toEqual({ greeting: 'Hello, {{name}}!' });
-  });
-
-  it('should not fail for unresolved placeholders', () => {
-    const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
-    expect(resolveVariables(variables)).toEqual({
-      greeting: 'Hello, {{unknown}}!',
-      name: '{{unknown}}',
-    });
+    // Check afterAll call
+    expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
+      4,
+      [mockExtension],
+      'afterAll',
+      expect.objectContaining({
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            success: true,
+            score: 1,
+            response: expect.objectContaining({
+              output: 'Test output',
+            }),
+          }),
+        ]),
+        suite: testSuite,
+      }),
+    );
   });
 });
 

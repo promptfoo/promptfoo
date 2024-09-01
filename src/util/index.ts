@@ -1,7 +1,8 @@
 import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
+import dedent from 'dedent';
 import dotenv from 'dotenv';
-import { desc, eq, like, and } from 'drizzle-orm';
+import { desc, eq, like, and, sql } from 'drizzle-orm';
 import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -10,14 +11,23 @@ import nunjucks from 'nunjucks';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { getAuthor } from '../accounts';
+import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
-import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/operations';
+import {
+  datasets,
+  evals,
+  evalsToDatasets,
+  evalsToPrompts,
+  evalsToTags,
+  prompts,
+  tags,
+} from '../database/tables';
+import { getEnvBool, getEnvInt } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import { runPython } from '../python/pythonUtils';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -32,7 +42,6 @@ import {
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
   type OutputFile,
-  type Prompt,
   type CompletedPrompt,
   type CsvRow,
   type ResultLightweight,
@@ -45,6 +54,37 @@ import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;
 
+/**
+ * Checks if a file is a JavaScript or TypeScript file based on its extension.
+ *
+ * @param filePath - The path of the file to check.
+ * @returns True if the file has a JavaScript or TypeScript extension, false otherwise.
+ */
+export function isJavascriptFile(filePath: string): boolean {
+  return /\.(js|cjs|mjs|ts|cts|mts)$/.test(filePath);
+}
+
+const outputToSimpleString = (output: EvaluateTableOutput) => {
+  const passFailText = output.pass ? '[PASS]' : '[FAIL]';
+  const namedScoresText = Object.entries(output.namedScores)
+    .map(([name, value]) => `${name}: ${value?.toFixed(2)}`)
+    .join(', ');
+  const scoreText =
+    namedScoresText.length > 0
+      ? `(${output.score?.toFixed(2)}, ${namedScoresText})`
+      : `(${output.score?.toFixed(2)})`;
+  const gradingResultText = output.gradingResult
+    ? `${output.pass ? 'Pass' : 'Fail'} Reason: ${output.gradingResult.reason}`
+    : '';
+  return dedent`
+      ${passFailText} ${scoreText}
+
+      ${output.text}
+
+      ${gradingResultText}
+    `.trim();
+};
+
 export async function writeOutput(
   outputPath: string,
   evalId: string | null,
@@ -52,33 +92,6 @@ export async function writeOutput(
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
 ) {
-  const { data: outputExtension } = OutputFileExtension.safeParse(
-    path.extname(outputPath).slice(1).toLowerCase(),
-  );
-  invariant(
-    outputExtension,
-    `Unsupported output file format ${outputExtension}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
-  );
-
-  const outputToSimpleString = (output: EvaluateTableOutput) => {
-    const passFailText = output.pass ? '[PASS]' : '[FAIL]';
-    const namedScoresText = Object.entries(output.namedScores)
-      .map(([name, value]) => `${name}: ${value?.toFixed(2)}`)
-      .join(', ');
-    const scoreText =
-      namedScoresText.length > 0
-        ? `(${output.score?.toFixed(2)}, ${namedScoresText})`
-        : `(${output.score?.toFixed(2)})`;
-    const gradingResultText = output.gradingResult
-      ? `${output.pass ? 'Pass' : 'Fail'} Reason: ${output.gradingResult.reason}`
-      : '';
-    return `${passFailText} ${scoreText}
-
-${output.text}
-
-${gradingResultText}`.trim();
-  };
-
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
     const rows = results.table.body.map((row) => {
       const csvRow: CsvRow = {};
@@ -90,50 +103,56 @@ ${gradingResultText}`.trim();
       });
       return csvRow;
     });
+    logger.info(`Writing ${rows.length} rows to Google Sheets...`);
     await writeCsvToGoogleSheet(rows, outputPath);
-  } else {
-    // Ensure the directory exists
-    const outputDir = path.dirname(outputPath);
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
+    return;
+  }
 
-    if (outputExtension === 'csv') {
-      const csvOutput = stringify([
-        [
-          ...results.table.head.vars,
-          ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-        ],
-        ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
-      ]);
-      fs.writeFileSync(outputPath, csvOutput);
-    } else if (outputExtension === 'json') {
-      fs.writeFileSync(
-        outputPath,
-        JSON.stringify({ evalId, results, config, shareableUrl } satisfies OutputFile, null, 2),
-      );
-    } else if (
-      outputExtension === 'yaml' ||
-      outputExtension === 'yml' ||
-      outputExtension === 'txt'
-    ) {
-      fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl } as OutputFile));
-    } else if (outputExtension === 'html') {
-      const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
-      const table = [
-        [
-          ...results.table.head.vars,
-          ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-        ],
-        ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
-      ];
-      const htmlOutput = getNunjucksEngine().renderString(template, {
-        config,
-        table,
-        results: results.results,
-      });
-      fs.writeFileSync(outputPath, htmlOutput);
-    }
+  const { data: outputExtension } = OutputFileExtension.safeParse(
+    path.extname(outputPath).slice(1).toLowerCase(),
+  );
+  invariant(
+    outputExtension,
+    `Unsupported output file format ${outputExtension}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
+  );
+
+  // Ensure the directory exists
+  const outputDir = path.dirname(outputPath);
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  if (outputExtension === 'csv') {
+    const csvOutput = stringify([
+      [
+        ...results.table.head.vars,
+        ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+      ],
+      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+    ]);
+    fs.writeFileSync(outputPath, csvOutput);
+  } else if (outputExtension === 'json') {
+    fs.writeFileSync(
+      outputPath,
+      JSON.stringify({ evalId, results, config, shareableUrl } satisfies OutputFile, null, 2),
+    );
+  } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
+    fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl } as OutputFile));
+  } else if (outputExtension === 'html') {
+    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+    const table = [
+      [
+        ...results.table.head.vars,
+        ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+      ],
+      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+    ];
+    const htmlOutput = getNunjucksEngine().renderString(template, {
+      config,
+      table,
+      results: results.results,
+    });
+    fs.writeFileSync(outputPath, htmlOutput);
   }
 }
 
@@ -255,6 +274,38 @@ export async function writeResultsToDatabase(
 
   logger.debug(`Inserting dataset ${datasetId}`);
 
+  // Record tags
+  if (config.tags) {
+    for (const [tagKey, tagValue] of Object.entries(config.tags)) {
+      const tagId = sha256(`${tagKey}:${tagValue}`);
+
+      promises.push(
+        db
+          .insert(tags)
+          .values({
+            id: tagId,
+            name: tagKey,
+            value: tagValue,
+          })
+          .onConflictDoNothing()
+          .run(),
+      );
+
+      promises.push(
+        db
+          .insert(evalsToTags)
+          .values({
+            evalId,
+            tagId,
+          })
+          .onConflictDoNothing()
+          .run(),
+      );
+
+      logger.debug(`Inserting tag ${tagId}`);
+    }
+  }
+
   logger.debug(`Awaiting ${promises.length} promises to database...`);
   await Promise.all(promises);
 
@@ -280,12 +331,14 @@ export function listPreviousResults(
   datasetId?: string,
 ): ResultLightweight[] {
   const db = getDb();
+  const startTime = performance.now();
+
   const query = db
     .select({
       evalId: evals.id,
       createdAt: evals.createdAt,
       description: evals.description,
-      config: evals.config,
+      numTests: sql<number>`json_array_length(${evals.results}->'table'->'body')`,
       datasetId: evalsToDatasets.datasetId,
     })
     .from(evals)
@@ -298,14 +351,19 @@ export function listPreviousResults(
     );
 
   const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
-
-  return results.map((result) => ({
+  const mappedResults = results.map((result) => ({
     evalId: result.evalId,
     createdAt: result.createdAt,
     description: result.description,
-    numTests: result.config.tests?.length || 0,
+    numTests: result.numTests,
     datasetId: result.datasetId,
   }));
+
+  const endTime = performance.now();
+  const executionTime = endTime - startTime;
+  logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
+
+  return mappedResults;
 }
 
 /**
@@ -465,8 +523,7 @@ export async function migrateResultsFromFileSystemToDatabase() {
   logger.info('Migration complete. Please restart your web server if it is running.');
 }
 
-const RESULT_HISTORY_LENGTH =
-  parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || DEFAULT_QUERY_LIMIT;
+const RESULT_HISTORY_LENGTH = getEnvInt('RESULT_HISTORY_LENGTH', DEFAULT_QUERY_LIMIT);
 
 export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
   const sortedFilenames = listPreviousResultFilenames_fileSystem();
@@ -564,9 +621,7 @@ export async function updateResult(
   }
 }
 
-export async function readLatestResults(
-  filterDescription?: string,
-): Promise<ResultsFile | undefined> {
+export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
   const db = getDb();
   let latestResults = await db
     .select({
@@ -817,7 +872,7 @@ export async function getEvalsWithPredicate(
     const createdAt = new Date(eval_.createdAt).toISOString();
     const resultWrapper: ResultsFile = {
       version: 3,
-      createdAt: createdAt,
+      createdAt,
       author: eval_.author,
       results: eval_.results,
       config: eval_.config,
@@ -875,6 +930,11 @@ export async function deleteEval(evalId: string) {
   });
 }
 
+export async function deleteAllEvals() {
+  const db = getDb();
+  await db.delete(evals).run();
+}
+
 export async function readFilters(
   filters: Record<string, string>,
   basePath: string = '',
@@ -898,53 +958,6 @@ export function printBorder() {
   logger.info(border);
 }
 
-export async function transformOutput(
-  codeOrFilepath: string,
-  output: string | object | undefined,
-  context: { vars?: Record<string, string | object | undefined>; prompt: Partial<Prompt> },
-) {
-  let postprocessFn;
-  if (codeOrFilepath.startsWith('file://')) {
-    const filePath = codeOrFilepath.slice('file://'.length);
-    if (
-      codeOrFilepath.endsWith('.js') ||
-      codeOrFilepath.endsWith('.cjs') ||
-      codeOrFilepath.endsWith('.mjs')
-    ) {
-      const requiredModule = await importModule(filePath);
-      if (typeof requiredModule === 'function') {
-        postprocessFn = requiredModule;
-      } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-        postprocessFn = requiredModule.default;
-      } else {
-        throw new Error(
-          `Transform ${filePath} must export a function or have a default export as a function`,
-        );
-      }
-    } else if (codeOrFilepath.endsWith('.py')) {
-      postprocessFn = async (
-        output: string,
-        context: { vars: Record<string, string | object> },
-      ) => {
-        return runPython(filePath, 'get_transform', [output, context]);
-      };
-    } else {
-      throw new Error(`Unsupported transform file format: ${codeOrFilepath}`);
-    }
-  } else {
-    postprocessFn = new Function(
-      'output',
-      'context',
-      codeOrFilepath.includes('\n') ? codeOrFilepath : `return ${codeOrFilepath}`,
-    );
-  }
-  const ret = await Promise.resolve(postprocessFn(output, context));
-  if (ret == null) {
-    throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
-  }
-  return ret;
-}
-
 export function setupEnv(envPath: string | undefined) {
   if (envPath) {
     logger.info(`Loading environment variables from ${envPath}`);
@@ -960,37 +973,51 @@ export type StandaloneEval = CompletedPrompt & {
   promptId: string | null;
 };
 
-export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): StandaloneEval[] {
+export function getStandaloneEvals({
+  limit = DEFAULT_QUERY_LIMIT,
+  tag,
+}: {
+  limit?: number;
+  tag?: { key: string; value: string };
+} = {}): StandaloneEval[] {
   const db = getDb();
   const results = db
     .select({
       evalId: evals.id,
       description: evals.description,
-      config: evals.config,
       results: evals.results,
+      createdAt: evals.createdAt,
       promptId: evalsToPrompts.promptId,
       datasetId: evalsToDatasets.datasetId,
+      tagName: tags.name,
+      tagValue: tags.value,
     })
     .from(evals)
     .leftJoin(evalsToPrompts, eq(evals.id, evalsToPrompts.evalId))
     .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
+    .leftJoin(evalsToTags, eq(evals.id, evalsToTags.evalId))
+    .leftJoin(tags, eq(evalsToTags.tagId, tags.id))
+    .where(tag ? and(eq(tags.name, tag.key), eq(tags.value, tag.value)) : undefined)
     .orderBy(desc(evals.createdAt))
     .limit(limit)
     .all();
 
-  const flatResults: StandaloneEval[] = [];
-  results.forEach((result) => {
-    const table = result.results.table;
-    table.head.prompts.forEach((col) => {
-      flatResults.push({
-        evalId: result.evalId,
-        promptId: result.promptId,
-        datasetId: result.datasetId,
-        ...col,
-      });
-    });
+  return results.flatMap((result) => {
+    const {
+      createdAt,
+      evalId,
+      promptId,
+      datasetId,
+      results: { table },
+    } = result;
+    return table.head.prompts.map((col) => ({
+      evalId,
+      promptId,
+      datasetId,
+      createdAt,
+      ...col,
+    }));
   });
-  return flatResults;
 }
 
 export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
@@ -998,9 +1025,10 @@ export function providerToIdentifier(provider: TestCase['provider']): string | u
     return provider.id();
   } else if (isProviderOptions(provider)) {
     return provider.id;
+  } else if (typeof provider === 'string') {
+    return provider;
   }
-
-  return provider;
+  return undefined;
 }
 
 export function varsMatch(
@@ -1020,7 +1048,7 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
   // Renders nunjucks template strings with context variables
-  if (!vars || process.env.PROMPTFOO_DISABLE_TEMPLATING) {
+  if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
   }
   if (typeof obj === 'string') {
@@ -1040,36 +1068,6 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return renderVarsInObject(fn({ vars }) as T);
   }
   return obj;
-}
-
-export function extractJsonObjects(str: string): object[] {
-  // This will extract all json objects from a string
-
-  const jsonObjects = [];
-  let openBracket = str.indexOf('{');
-  let closeBracket = str.indexOf('}', openBracket);
-  // Iterate over the string until we find a valid JSON-like pattern
-  // Iterate over all trailing } until the contents parse as json
-  while (openBracket !== -1) {
-    const jsonStr = str.slice(openBracket, closeBracket + 1);
-    try {
-      jsonObjects.push(JSON.parse(jsonStr));
-      // This is a valid JSON object, so start looking for
-      // an opening bracket after the last closing bracket
-      openBracket = str.indexOf('{', closeBracket + 1);
-      closeBracket = str.indexOf('}', openBracket);
-    } catch (err) {
-      // Not a valid object, move on to the next closing bracket
-      closeBracket = str.indexOf('}', closeBracket + 1);
-      while (closeBracket === -1) {
-        // No closing brackets made a valid json object, so
-        // start looking with the next opening bracket
-        openBracket = str.indexOf('{', openBracket + 1);
-        closeBracket = str.indexOf('}', openBracket);
-      }
-    }
-  }
-  return jsonObjects;
 }
 
 /**
@@ -1098,7 +1096,7 @@ export function parsePathOrGlob(
   try {
     stats = fs.statSync(filePath);
   } catch (err) {
-    if (process.env.PROMPTFOO_STRICT_FILES) {
+    if (getEnvBool('PROMPTFOO_STRICT_FILES')) {
       throw err;
     }
   }
@@ -1108,7 +1106,7 @@ export function parsePathOrGlob(
 
   if (filename.includes(':')) {
     const splits = filename.split(':');
-    if (splits[0] && ['.js', '.cjs', '.mjs', '.py'].some((ext) => splits[0].endsWith(ext))) {
+    if (splits[0] && (isJavascriptFile(splits[0]) || splits[0].endsWith('.py'))) {
       [filename, functionName] = splits;
     }
   }
@@ -1124,4 +1122,46 @@ export function parsePathOrGlob(
     functionName,
     isPathPattern,
   };
+}
+
+/**
+ * Loads content from an external file if the input is a file path, otherwise
+ * returns the input as-is.
+ *
+ * @param filePath - The input to process. Can be a file path string starting with "file://",
+ * an array of file paths, or any other type of data.
+ * @returns The loaded content if the input was a file path, otherwise the original input.
+ * For JSON and YAML files, the content is parsed into an object.
+ * For other file types, the raw file content is returned as a string.
+ *
+ * @throws {Error} If the specified file does not exist.
+ */
+export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
+  if (Array.isArray(filePath)) {
+    return filePath.map((path) => {
+      const content: any = maybeLoadFromExternalFile(path);
+      return content;
+    });
+  }
+
+  if (typeof filePath !== 'string') {
+    return filePath;
+  }
+  if (!filePath.startsWith('file://')) {
+    return filePath;
+  }
+
+  const finalPath = path.resolve(cliState.basePath || '', filePath.slice('file://'.length));
+  if (!fs.existsSync(finalPath)) {
+    throw new Error(`File does not exist: ${finalPath}`);
+  }
+
+  const contents = fs.readFileSync(finalPath, 'utf8');
+  if (finalPath.endsWith('.json')) {
+    return JSON.parse(contents);
+  }
+  if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
+    return yaml.load(contents);
+  }
+  return contents;
 }

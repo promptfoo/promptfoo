@@ -90,6 +90,7 @@ jest.mock('glob', () => ({
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
+jest.mock('../src/logger');
 
 describe('call provider apis', () => {
   afterEach(async () => {
@@ -626,8 +627,12 @@ describe('call provider apis', () => {
         const hydratedBody = typeof body === 'string' ? JSON.parse(body) : body;
         expect(hydratedBody.prompt).toBe(PROMPT);
 
-        const { accountId, apiKey, ...passThroughConfig } = cloudflareChatConfig;
-        const { prompt, ...bodyWithoutPrompt } = hydratedBody;
+        const {
+          accountId: _accountId,
+          apiKey: _apiKey,
+          ...passThroughConfig
+        } = cloudflareChatConfig;
+        const { prompt: _prompt, ...bodyWithoutPrompt } = hydratedBody;
         expect(bodyWithoutPrompt).toEqual(passThroughConfig);
       });
     });
@@ -732,6 +737,10 @@ describe('call provider apis', () => {
         },
       });
       const result = await provider.callApi('Test prompt', {
+        prompt: {
+          label: 'Test prompt',
+          raw: 'Test prompt',
+        },
         vars: {
           var1: 'value 1',
           var2: 'value 2 "with some double "quotes""',
@@ -746,7 +755,7 @@ describe('call provider apis', () => {
           inputArgs.concat([
             'Test prompt',
             '{"config":{"some_config_val":42}}',
-            '{"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}}',
+            '{"prompt":{"label":"Test prompt","raw":"Test prompt"},"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}}',
           ]),
         ),
         expect.any(Object),
@@ -759,7 +768,7 @@ describe('call provider apis', () => {
 });
 
 describe('loadApiProvider', () => {
-  it('loadApiProvider with filepath', async () => {
+  it('loadApiProvider with yaml filepath', async () => {
     const mockYamlContent = `id: 'openai:gpt-4'
 config:
   key: 'value'`;
@@ -770,6 +779,23 @@ config:
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync).toHaveBeenCalledWith(
       expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.yaml/),
+      'utf8',
+    );
+  });
+
+  it('loadApiProvider with json filepath', async () => {
+    const mockJsonContent = `{
+  "id": "openai:gpt-4",
+  "config": {
+    "key": "value"
+  }
+}`;
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(mockJsonContent);
+
+    const provider = await loadApiProvider('file://path/to/mock-provider-file.json');
+    expect(provider.id()).toBe('openai:gpt-4');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.json/),
       'utf8',
     );
   });
@@ -800,9 +826,9 @@ config:
   });
 
   it('loadApiProvider with OpenAI finetuned model', async () => {
-    const provider = await loadApiProvider('openai:chat:ft:gpt-3.5-turbo-0613:company-name::ID:');
+    const provider = await loadApiProvider('openai:chat:ft:gpt-4o-mini:company-name::ID:');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    expect(provider.id()).toBe('openai:ft:gpt-3.5-turbo-0613:company-name::ID:');
+    expect(provider.id()).toBe('openai:ft:gpt-4o-mini:company-name::ID:');
   });
 
   it('loadApiProvider with azureopenai:completion:modelName', async () => {
@@ -1009,7 +1035,13 @@ config:
   });
 
   it('loadApiProvider with promptfoo:redteam:iterative:image', async () => {
-    const provider = await loadApiProvider('promptfoo:redteam:iterative:image');
+    const provider = await loadApiProvider('promptfoo:redteam:iterative:image', {
+      options: {
+        config: {
+          injectVar: 'imageUrl',
+        },
+      },
+    });
     expect(provider).toBeInstanceOf(RedteamImageIterativeProvider);
     expect(provider.id()).toBe('promptfoo:redteam:iterative:image');
   });

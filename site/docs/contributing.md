@@ -28,9 +28,21 @@ We particularly welcome contributions in the following areas:
 
 3. Set up your development environment:
 
+   3.1. Setup locally
+
    ```sh
    # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 18)
    nvm use
+   npm install
+   ```
+
+   3.2 Setup using `devcontainer` (requires Docker and VSCode)
+
+   Open the repository in VSCode and click on the "Reopen in Container" button. This will build a Docker container with all the necessary dependencies.
+
+   Now install node based dependencies:
+
+   ```sh
    npm install
    ```
 
@@ -189,6 +201,17 @@ promptfoo view
 ```
 
 Note that this will not update the web UI if you make further changes to the code. You have to run `npm run build` again.
+
+## Python Contributions
+
+While promptfoo is primarily written in TypeScript, we support custom Python prompts, providers, asserts, and many examples in Python. We strive to keep our Python codebase simple and minimal, without external dependencies. Please adhere to these guidelines:
+
+- Use Python 3.9 or later
+- For linting and formatting, use `ruff`. Run `ruff check --fix` and `ruff format` before submitting changes
+- Follow the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
+- Use type hints to improve code readability and catch potential errors
+- Write unit tests for new Python functions using the built-in `unittest` module
+- When adding new Python dependencies to an example, update the relevant `requirements.txt` file
 
 ## Documentation
 

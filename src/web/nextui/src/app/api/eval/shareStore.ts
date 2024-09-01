@@ -2,7 +2,7 @@ import cacheManager from 'cache-manager';
 
 const storeType = process.env.PROMPTFOO_SHARE_STORE_TYPE || 'memory';
 
-const ttl = parseInt(process.env.PROMPTFOO_SHARE_TTL || String(60 * 60 * 24 * 14), 10);
+const ttl = Number.parseInt(process.env.PROMPTFOO_SHARE_TTL || String(60 * 60 * 24 * 14), 10);
 
 function getStore() {
   // TODO(ian): Just use the sqlite db for this
@@ -14,7 +14,7 @@ function getStore() {
         host: process.env.PROMPTFOO_SHARE_REDIS_HOST,
         port: process.env.PROMPTFOO_SHARE_REDIS_PORT,
         password: process.env.PROMPTFOO_SHARE_REDIS_PASSWORD,
-        db: parseInt(process.env.PROMPTFOO_SHARE_REDIS_DB || '0', 10),
+        db: Number.parseInt(process.env.PROMPTFOO_SHARE_REDIS_DB || '0', 10),
         ttl,
       });
     case 'filesystem':

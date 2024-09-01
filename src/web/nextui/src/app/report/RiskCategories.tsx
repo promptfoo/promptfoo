@@ -1,12 +1,15 @@
 import React from 'react';
 import Stack from '@mui/material/Stack';
 import RiskCard from './RiskCard';
-import { TopLevelCategory, categoryDescriptions, riskCategories } from './constants';
+import type { TopLevelCategory } from './constants';
+import { categoryDescriptions, riskCategories } from './constants';
 import './RiskCategories.css';
 
 const RiskCategories: React.FC<{
   categoryStats: Record<string, { pass: number; total: number }>;
-}> = ({ categoryStats }) => {
+  evalId: string;
+  failuresByPlugin: Record<string, { prompt: string; output: string }[]>;
+}> = ({ categoryStats, evalId, failuresByPlugin }) => {
   const categories = Object.keys(riskCategories).map((category) => ({
     name: category,
     passed: riskCategories[category as TopLevelCategory].every(
@@ -39,11 +42,14 @@ const RiskCategories: React.FC<{
             numTestsFailed={totalTests - totalPasses}
             testTypes={subCategories.map((subCategory) => ({
               name: subCategory,
-              passed: categoryStats[subCategory]?.pass === categoryStats[subCategory]?.total,
-              // If there are no tests, default to 100% pass rate
-              percentage:
-                (categoryStats[subCategory]?.pass || 1) / (categoryStats[subCategory]?.total || 1),
+              categoryPassed:
+                categoryStats[subCategory]?.pass === categoryStats[subCategory]?.total,
+              numPassed: categoryStats[subCategory]?.pass || 0,
+              numFailed:
+                (categoryStats[subCategory]?.total || 0) - (categoryStats[subCategory]?.pass || 0),
             }))}
+            evalId={evalId}
+            failuresByPlugin={failuresByPlugin}
           />
         );
       })}

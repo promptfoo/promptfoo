@@ -17,6 +17,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import DatasetDialog from './DatasetDialog';
 
+const rowsPerPage = 10;
+
 export default function Datasets() {
   const searchParams = useSearchParams();
 
@@ -26,7 +28,6 @@ export default function Datasets() {
   const [sortField, setSortField] = useState<string | null>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogTestCaseIndex, setDialogTestCaseIndex] = useState(0);
 
@@ -42,14 +43,18 @@ export default function Datasets() {
         .then((response) => response.json())
         .then((data) => {
           const sortedData = [...data.data].sort((a, b) => {
-            if (sortField === null) return 0;
-            if (sortOrder === 'asc') return a[sortField] > b[sortField] ? 1 : -1;
+            if (sortField === null) {
+              return 0;
+            }
+            if (sortOrder === 'asc') {
+              return a[sortField] > b[sortField] ? 1 : -1;
+            }
             return a[sortField] < b[sortField] ? 1 : -1;
           });
           setTestCases(sortedData);
         });
     })();
-  }, [sortField, sortOrder, page, rowsPerPage]);
+  }, [sortField, sortOrder, page]);
 
   const handleClickOpen = (index: number) => {
     setDialogTestCaseIndex(index);

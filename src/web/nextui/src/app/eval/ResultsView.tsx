@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
 import { getApiBaseUrl } from '@/api';
+import { IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore as useMainStore } from '@/state/evalConfig';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -24,7 +25,8 @@ import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
-import Select, { SelectChangeEvent } from '@mui/material/Select';
+import type { SelectChangeEvent } from '@mui/material/Select';
+import Select from '@mui/material/Select';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -78,8 +80,9 @@ export default function ResultsView({
     wordBreak,
     showInferenceDetails,
     evalId,
-    inComparisonMode,
     setInComparisonMode,
+    columnStates,
+    setColumnState,
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
@@ -120,6 +123,8 @@ export default function ResultsView({
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
+  const currentEvalId = evalId || defaultEvalId || 'default';
+
   // Handle menu close
   const handleMenuClose = () => {
     setAnchorEl(null);
@@ -132,26 +137,31 @@ export default function ResultsView({
 
   const handleShareButtonClick = async () => {
     setShareLoading(true);
+    let shareUrl = '';
     try {
-      const response = await fetch(`${REMOTE_API_BASE_URL}/api/eval`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          data: {
-            version: 2,
-            createdAt: new Date().toISOString(),
-            results: {
-              table,
-            },
-            config,
+      if (IS_RUNNING_LOCALLY) {
+        const response = await fetch(`${REMOTE_API_BASE_URL}/api/eval`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
-        }),
-      });
+          body: JSON.stringify({
+            data: {
+              version: 2,
+              createdAt: new Date().toISOString(),
+              results: {
+                table,
+              },
+              config,
+            },
+          }),
+        });
+        const { id } = await response.json();
+        shareUrl = `${REMOTE_APP_BASE_URL}/eval/${id}`;
+      } else {
+        shareUrl = `${window.location.host}/eval/?evalId=${evalId}`;
+      }
 
-      const { id } = await response.json();
-      const shareUrl = `${REMOTE_APP_BASE_URL}/eval/${id}`;
       setShareUrl(shareUrl);
       setShareModalOpen(true);
     } catch {
@@ -212,6 +222,15 @@ export default function ResultsView({
     [table.body],
   );
 
+  const promptOptions = head.prompts.map((prompt, idx) => {
+    const label = prompt.label || prompt.display || prompt.raw;
+    return {
+      value: `Prompt ${idx + 1}`,
+      label: `Prompt ${idx + 1}: ${label && label.length > 100 ? label.slice(0, 100) + '...' : label || ''}`,
+      group: 'Prompts',
+    };
+  });
+
   const columnData = React.useMemo(() => {
     return [
       ...(hasAnyDescriptions ? [{ value: 'description', label: 'Description' }] : []),
@@ -222,44 +241,60 @@ export default function ResultsView({
         }`,
         group: 'Variables',
       })),
-      ...head.prompts.map((_, idx) => {
-        const prompt = head.prompts[idx];
-        const label = prompt.label || prompt.display || prompt.raw;
-        return {
-          value: `Prompt ${idx + 1}`,
-          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
-          group: 'Prompts',
-        };
-      }),
+      ...promptOptions,
     ];
-  }, [head.vars, head.prompts, hasAnyDescriptions]);
+  }, [head.vars, promptOptions, hasAnyDescriptions]);
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [selectedColumns, setSelectedColumns] = React.useState<string[]>(
-    columnData.map((col) => col.value),
-  );
 
-  const handleChange = (event: SelectChangeEvent<typeof selectedColumns>) => {
-    const {
-      target: { value },
-    } = event;
-    setSelectedColumns(typeof value === 'string' ? value.split(',') : value);
-
-    const allColumns = [
+  const allColumns = React.useMemo(
+    () => [
       ...(hasAnyDescriptions ? ['description'] : []),
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
       ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ];
-    const newColumnVisibility: VisibilityState = {};
-    allColumns.forEach((col) => {
-      newColumnVisibility[col] = (typeof value === 'string' ? value.split(',') : value).includes(
-        col,
-      );
-    });
-    setColumnVisibility(newColumnVisibility);
+    ],
+    [hasAnyDescriptions, head.vars, head.prompts],
+  );
+
+  const currentColumnState = columnStates[currentEvalId] || {
+    selectedColumns: [],
+    columnVisibility: {},
   };
+
+  const updateColumnVisibility = React.useCallback(
+    (columns: string[]) => {
+      const newColumnVisibility: VisibilityState = {};
+      allColumns.forEach((col) => {
+        newColumnVisibility[col] = columns.includes(col);
+      });
+      setColumnState(currentEvalId, {
+        selectedColumns: columns,
+        columnVisibility: newColumnVisibility,
+      });
+    },
+    [allColumns, setColumnState, currentEvalId],
+  );
+
+  React.useEffect(() => {
+    if (
+      currentColumnState.selectedColumns.length === 0 ||
+      !currentColumnState.selectedColumns.every((col: string) => allColumns.includes(col))
+    ) {
+      updateColumnVisibility(allColumns);
+    }
+  }, [allColumns, currentColumnState.selectedColumns, updateColumnVisibility]);
+
+  const handleChange = React.useCallback(
+    (event: SelectChangeEvent<string[]>) => {
+      const newSelectedColumns = Array.isArray(event.target.value)
+        ? event.target.value
+        : event.target.value.split(',');
+
+      updateColumnVisibility(newSelectedColumns);
+    },
+    [updateColumnVisibility],
+  );
 
   const handleDescriptionClick = async () => {
     invariant(config, 'Config must be loaded before clicking its description');
@@ -380,7 +415,7 @@ export default function ResultsView({
             />
           </>
         )}
-        <Tooltip title={!author ? 'Set eval author with `promptfoo config set email`' : ''}>
+        <Tooltip title={author ? '' : 'Set eval author with `promptfoo config set email`'}>
           <Chip
             size="small"
             label={
@@ -391,6 +426,14 @@ export default function ResultsView({
             sx={{ opacity: 0.7 }}
           />
         </Tooltip>
+        {Object.keys(config?.tags || {}).map((tag) => (
+          <Chip
+            key={tag}
+            size="small"
+            label={`${tag}: ${config?.tags?.[tag]}`}
+            sx={{ opacity: 0.7 }}
+          />
+        ))}
       </ResponsiveStack>
       <ResponsiveStack direction="row" spacing={1} alignItems="center">
         <Box>
@@ -400,14 +443,14 @@ export default function ResultsView({
               labelId="visible-columns-label"
               id="visible-columns"
               multiple
-              value={selectedColumns}
+              value={currentColumnState.selectedColumns}
               onChange={handleChange}
               input={<OutlinedInput label="Visible columns" />}
               renderValue={(selected: string[]) => selected.join(', ')}
             >
               {columnData.map((column) => (
                 <MenuItem dense key={column.value} value={column.value}>
-                  <Checkbox checked={selectedColumns.indexOf(column.value) > -1} />
+                  <Checkbox checked={currentColumnState.selectedColumns.includes(column.value)} />
                   <ListItemText primary={column.label} />
                 </MenuItem>
               ))}
@@ -522,7 +565,8 @@ export default function ResultsView({
                 Table Settings
               </Button>
             </Tooltip>
-            {config?.metadata?.redteam && (
+            {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
+            {(config?.redteam || config?.metadata?.redteam) && (
               <Tooltip title="View vulnerability scan report" placement="bottom">
                 <Button
                   color="primary"
@@ -537,10 +581,13 @@ export default function ResultsView({
           </ResponsiveStack>
         </Box>
       </ResponsiveStack>
-      <ResultsCharts columnVisibility={columnVisibility} recentEvals={recentEvals} />
+      <ResultsCharts
+        columnVisibility={currentColumnState.columnVisibility}
+        recentEvals={recentEvals}
+      />
       <ResultsTable
         maxTextLength={maxTextLength}
-        columnVisibility={columnVisibility}
+        columnVisibility={currentColumnState.columnVisibility}
         wordBreak={wordBreak}
         showStats={showInferenceDetails}
         filterMode={filterMode}

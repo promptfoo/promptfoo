@@ -115,7 +115,7 @@ The example pictured above includes 150 examples of hallucination-prone question
 To set this up, we use the `defaultTest` property to set a requirement on every test:
 
 ```yaml
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 prompts: [prompt1.txt, prompt2.txt]
 // highlight-start
 defaultTest:
@@ -154,7 +154,7 @@ Determining the perplexity threshold is a bit of trial and error. You can also r
 ```yaml
 providers:
   - openai:gpt-4
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 
 tests:
   # ...
@@ -206,7 +206,7 @@ Then, we can use this provider in our evaluation and compare the results:
 prompts: [prompt1.txt]
 // highlight-start
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
   - exec:python langchain_provider.py
 // highlight-end
 tests:

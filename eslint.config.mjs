@@ -1,6 +1,8 @@
 // @ts-check
+import reactHooks from 'eslint-plugin-react-hooks';
 import eslint from '@eslint/js';
 import jest from 'eslint-plugin-jest';
+import eslintPluginUnicorn from 'eslint-plugin-unicorn';
 import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -42,19 +44,37 @@ export default [
       globals: globals.node,
     },
     plugins: {
+      'react-hooks': reactHooks,
       'unused-imports': unusedImports,
+      unicorn: eslintPluginUnicorn,
     },
     rules: {
       '@typescript-eslint/ban-ts-comment': 0,
       '@typescript-eslint/ban-types': 0,
+      '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-explicit-any': 0,
-      '@typescript-eslint/no-unused-vars': 0,
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          vars: 'all',
+          varsIgnorePattern: '^_',
+          args: 'none',
+          ignoreRestSiblings: false,
+        },
+      ],
       '@typescript-eslint/no-use-before-define': 'error',
       '@typescript-eslint/no-var-requires': 0,
+      curly: 'error',
       'no-case-declarations': 0,
       'no-control-regex': 0,
       'no-empty': 0,
+      'no-unused-expressions': 'error',
       'no-useless-escape': 0,
+      'object-shorthand': 'error',
+      'prefer-const': 'error',
+      'unicorn/no-lonely-if': 'error',
+      'unicorn/no-negated-condition': 'error',
+      'unicorn/prefer-number-properties': 'error',
       'unused-imports/no-unused-imports': 'error',
     },
   },
@@ -63,6 +83,7 @@ export default [
     rules: {
       '@typescript-eslint/no-namespace': 0,
       '@typescript-eslint/no-var-requires': 0,
+      '@typescript-eslint/no-unused-vars': 0,
     },
   },
 ];

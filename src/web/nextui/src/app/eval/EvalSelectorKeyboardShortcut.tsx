@@ -9,11 +9,9 @@ interface EvalSelectorProps {
 
 const EvalSelector: React.FC<EvalSelectorProps> = ({ recentEvals, onRecentEvalSelected }) => {
   const [open, setOpen] = useState(false);
-  const isMac =
-    typeof navigator === 'undefined'
-      ? false
-      : navigator.platform.toUpperCase().indexOf('MAC') !== -1;
-  const tooltipTitle = isMac ? 'Search for Evals (⌘ + K)' : 'Search for Evals (Ctrl + K)';
+  //const isMac =
+  //  typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
+  //const tooltipTitle = isMac ? 'Search for Evals (⌘ + K)' : 'Search for Evals (Ctrl + K)';
 
   const handleOpen = () => {
     setOpen(true);
@@ -39,15 +37,13 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({ recentEvals, onRecentEvalSe
   }, []);
 
   return (
-    <>
-      <EvalSelectorDialog
-        title="Open an Eval"
-        open={open}
-        onClose={handleClose}
-        recentEvals={recentEvals}
-        onRecentEvalSelected={onRecentEvalSelected}
-      />
-    </>
+    <EvalSelectorDialog
+      title="Open an Eval"
+      open={open}
+      onClose={handleClose}
+      recentEvals={recentEvals}
+      onRecentEvalSelected={onRecentEvalSelected}
+    />
   );
 };
 

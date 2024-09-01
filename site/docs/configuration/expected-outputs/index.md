@@ -308,7 +308,7 @@ assertionTemplates:
 // highlight-end
 
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-4o-mini, localai:chat:vicuna]
 tests:
   - vars:
       input: Tell me about the benefits of exercise.

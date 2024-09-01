@@ -1,8 +1,27 @@
+// Note: This file is in the process of being deconstructed into `types/` and `validators/`
+// Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import { redteamConfigSchema } from '../redteam/types';
+import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
+import {
+  ApiProviderSchema,
+  ProviderEnvOverridesSchema,
+  ProviderOptionsSchema,
+  ProvidersSchema,
+} from '../validators/providers';
+import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
+import type { Prompt, PromptFunction } from './prompts';
+import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
+import type { RedteamAssertionTypes, RedteamConfig } from './redteam';
+import type { NunjucksFilterMap, TokenUsage } from './shared';
+
+export * from './prompts';
+export * from './providers';
+export * from './redteam';
+export * from './shared';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
+  description: z.string().optional(),
   prompts: z.array(z.string()).optional(),
   providers: z.array(z.string()),
   output: z.array(z.string()),
@@ -27,7 +46,6 @@ export const CommandLineOptionsSchema = z.object({
   share: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
-  interactiveProviders: z.boolean().optional(),
   filterFailing: z.string().optional(),
   filterFirstN: z.string().optional(),
   filterPattern: z.string().optional(),
@@ -41,209 +59,13 @@ export const CommandLineOptionsSchema = z.object({
   envFile: z.string().optional(),
 });
 
-export const EnvOverridesSchema = z.object({
-  ANTHROPIC_API_KEY: z.string().optional(),
-  BAM_API_KEY: z.string().optional(),
-  BAM_API_HOST: z.string().optional(),
-  AZURE_OPENAI_API_HOST: z.string().optional(),
-  AZURE_OPENAI_API_KEY: z.string().optional(),
-  AZURE_OPENAI_API_BASE_URL: z.string().optional(),
-  AZURE_OPENAI_BASE_URL: z.string().optional(),
-  AWS_BEDROCK_REGION: z.string().optional(),
-  COHERE_API_KEY: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
-  OPENAI_API_HOST: z.string().optional(),
-  OPENAI_API_BASE_URL: z.string().optional(),
-  OPENAI_BASE_URL: z.string().optional(),
-  OPENAI_ORGANIZATION: z.string().optional(),
-  REPLICATE_API_KEY: z.string().optional(),
-  REPLICATE_API_TOKEN: z.string().optional(),
-  LOCALAI_BASE_URL: z.string().optional(),
-  MISTRAL_API_HOST: z.string().optional(),
-  MISTRAL_API_BASE_URL: z.string().optional(),
-  PALM_API_KEY: z.string().optional(),
-  PALM_API_HOST: z.string().optional(),
-  GOOGLE_API_KEY: z.string().optional(),
-  GOOGLE_API_HOST: z.string().optional(),
-  VERTEX_API_KEY: z.string().optional(),
-  VERTEX_API_HOST: z.string().optional(),
-  VERTEX_PROJECT_ID: z.string().optional(),
-  VERTEX_REGION: z.string().optional(),
-  VERTEX_PUBLISHER: z.string().optional(),
-  MISTRAL_API_KEY: z.string().optional(),
-  CLOUDFLARE_API_KEY: z.string().optional(),
-  CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
-});
-
-export const ProviderOptionsSchema = z
-  .object({
-    id: z.custom<ProviderId>().optional(),
-    label: z.custom<ProviderLabel>().optional(),
-    config: z.any().optional(),
-    // List of prompt display strings
-    prompts: z.union([z.string().transform((value) => [value]), z.array(z.string())]).optional(),
-    transform: z.string().optional(),
-    delay: z.number().optional(),
-    env: EnvOverridesSchema.optional(),
-  })
-  .strict();
-
-export const CallApiContextParamsSchema = z.object({
-  vars: z.record(z.union([z.string(), z.object({})])),
-  logger: z.optional(z.any()),
-  fetchWithCache: z.optional(z.any()),
-  getCache: z.optional(z.any()),
-});
-
-export const CallApiOptionsParamsSchema = z.object({
-  includeLogProbs: z.optional(z.boolean()),
-  originalProvider: z.optional(z.any()), // Assuming ApiProvider is not a zod schema, using z.any()
-});
-
-const CallApiFunctionSchema = z
-  .function()
-  .args(
-    z.string().describe('prompt'),
-    CallApiContextParamsSchema.optional(),
-    CallApiOptionsParamsSchema.optional(),
-  )
-  .returns(z.promise(z.custom<ProviderResponse>()))
-  .and(z.object({ label: z.string().optional() }));
-
-export const ApiProviderSchema = z.object({
-  id: z.function().returns(z.string()),
-
-  callApi: z.custom<CallApiFunction>(),
-
-  callEmbeddingApi: z
-    .function()
-    .args(z.string())
-    .returns(z.promise(z.custom<ProviderEmbeddingResponse>()))
-    .optional(),
-
-  callClassificationApi: z
-    .function()
-    .args(z.string())
-    .returns(z.promise(z.custom<ProviderClassificationResponse>()))
-    .optional(),
-
-  label: z.custom<ProviderLabel>().optional(),
-
-  transform: z.string().optional(),
-
-  delay: z.number().optional(),
-});
-
-export function isApiProvider(provider: any): provider is ApiProvider {
-  return typeof provider === 'object' && 'id' in provider && typeof provider.id === 'function';
-}
-
-export function isProviderOptions(provider: any): provider is ProviderOptions {
-  return !isApiProvider(provider) && typeof provider === 'object';
-}
-
-export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
-}
-
-export interface ApiSimilarityProvider extends ApiProvider {
-  callSimilarityApi: (reference: string, input: string) => Promise<ProviderSimilarityResponse>;
-}
-
-export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
-}
-
-export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
-}
-
-const TokenUsageSchema = z.object({
-  cached: z.number().optional(),
-  completion: z.number().optional(),
-  prompt: z.number().optional(),
-  total: z.number().optional(),
-});
-
-const ProviderResponseSchema = z.object({
-  cached: z.boolean().optional(),
-  cost: z.number().optional(),
-  error: z.string().optional(),
-  logProbs: z.array(z.number()).optional(),
-  metadata: z
-    .object({
-      redteamFinalPrompt: z.string().optional(),
-    })
-    .catchall(z.any())
-    .optional(),
-  output: z.union([z.string(), z.any()]).optional(),
-  tokenUsage: TokenUsageSchema.optional(),
-});
-
-const ProviderEmbeddingResponseSchema = z.object({
-  error: z.string().optional(),
-  embedding: z.array(z.number()).optional(),
-  tokenUsage: TokenUsageSchema.partial().optional(),
-});
-
-const ProviderSimilarityResponseSchema = z.object({
-  error: z.string().optional(),
-  similarity: z.number().optional(),
-  tokenUsage: TokenUsageSchema.partial().optional(),
-});
-
-const ProviderClassificationResponseSchema = z.object({
-  error: z.string().optional(),
-  classification: z.record(z.number()).optional(),
-});
-
-export type ApiProvider = z.infer<typeof ApiProviderSchema>;
-export type CallApiContextParams = z.infer<typeof CallApiContextParamsSchema>;
-export type CallApiOptionsParams = z.infer<typeof CallApiOptionsParamsSchema>;
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
-export type EnvOverrides = z.infer<typeof EnvOverridesSchema>;
-export type FilePath = string;
-export type ProviderClassificationResponse = z.infer<typeof ProviderClassificationResponseSchema>;
-export type ProviderEmbeddingResponse = z.infer<typeof ProviderEmbeddingResponseSchema>;
-export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
-export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;
-export type ProviderSimilarityResponse = z.infer<typeof ProviderSimilarityResponseSchema>;
-export type TokenUsage = z.infer<typeof TokenUsageSchema>;
-
-// The z.infer type is not as good as a manually created type
-type CallApiFunction = {
-  (
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse>;
-  label?: string;
-};
-// Confirm that manually created type is equivalent to z.infer type
-function assert<T extends never>() {}
-type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
-assert<TypeEqualityGuard<CallApiFunction, z.infer<typeof CallApiFunctionSchema>>>();
-
-export interface ModerationFlag {
-  code: string;
-  description: string;
-  confidence: number;
-}
-
-export interface ProviderModerationResponse {
-  error?: string;
-  flags?: ModerationFlag[];
-}
 
 export interface CsvRow {
   [key: string]: string;
 }
 
 export type VarMapping = Record<string, string>;
-
-export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
-
-export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 const GradingConfigSchema = z.object({
   rubricPrompt: z
@@ -274,13 +96,6 @@ const GradingConfigSchema = z.object({
 
 export type GradingConfig = z.infer<typeof GradingConfigSchema>;
 
-export const PromptConfigSchema = z.object({
-  prefix: z.string().optional(),
-  suffix: z.string().optional(),
-});
-
-export type PromptConfig = z.infer<typeof PromptConfigSchema>;
-
 export const OutputConfigSchema = z.object({
   /**
    * @deprecated in > 0.38.0. Use `transform` instead.
@@ -293,39 +108,6 @@ export const OutputConfigSchema = z.object({
 });
 
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
-
-export type PromptFunctionContext = {
-  vars: Record<string, string | object>;
-  provider: {
-    id: string;
-    label?: string;
-  };
-};
-
-export const PromptFunctionSchema = z
-  .function()
-  .args(
-    z.object({
-      vars: z.record(z.union([z.string(), z.any()])),
-      provider: z.custom<ApiProvider>().optional(),
-    }),
-  )
-  .returns(z.promise(z.union([z.string(), z.any()])));
-
-export type PromptFunction = z.infer<typeof PromptFunctionSchema>;
-
-export const PromptSchema = z.object({
-  id: z.string().optional(),
-  raw: z.string(),
-  /**
-   * @deprecated in > 0.59.0. Use `label` instead.
-   */
-  display: z.string().optional(),
-  label: z.string(),
-  function: PromptFunctionSchema.optional(),
-});
-
-export type Prompt = z.infer<typeof PromptSchema>;
 
 export interface RunEvalOptions {
   provider: ApiProvider;
@@ -341,25 +123,23 @@ export interface RunEvalOptions {
   repeatIndex: number;
 }
 
-type progressCallback = (
-  progress: number,
-  total: number,
-  index: number,
-  evalStep: RunEvalOptions,
-) => void;
-
 const EvaluateOptionsSchema = z.object({
+  cache: z.boolean().optional(),
+  delay: z.number().optional(),
+  eventSource: z.string().optional(),
+  generateSuggestions: z.boolean().optional(),
+  /**
+   * @deprecated This option has been removed as of 2024-08-21.
+   * @description Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.
+   * @author mldangelo
+   */
+  interactiveProviders: z.boolean().optional(),
   maxConcurrency: z.number().optional(),
-  showProgressBar: z.boolean().optional(),
   progressCallback: z
     .function(z.tuple([z.number(), z.number(), z.number(), z.custom<RunEvalOptions>()]), z.void())
     .optional(),
-  generateSuggestions: z.boolean().optional(),
   repeat: z.number().optional(),
-  delay: z.number().optional(),
-  cache: z.boolean().optional(),
-  eventSource: z.string().optional(),
-  interactiveProviders: z.boolean().optional(),
+  showProgressBar: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema>;
 
@@ -545,7 +325,10 @@ export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
-export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
+export type AssertionType =
+  | BaseAssertionTypes
+  | NotPrefixed<BaseAssertionTypes>
+  | RedteamAssertionTypes;
 
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
@@ -619,21 +402,22 @@ const ProviderPromptMapSchema = z.record(
   z.union([z.string().transform((value) => [value]), z.array(z.string())]),
 );
 
-export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
-export type Provider = z.infer<typeof ProviderSchema>;
-
 // Metadata is a key-value store for arbitrary data
 const MetadataSchema = z.record(z.string(), z.any());
 
-const VarsSchema = z.record(
+export const VarsSchema = z.record(
   z.union([
     z.string(),
     z.number().transform(String),
-    z.array(z.union([z.string(), z.number().transform(String)])),
+    z.boolean().transform(String),
+    z.array(z.union([z.string(), z.number().transform(String), z.boolean().transform(String)])),
     z.object({}),
     z.array(z.any()),
   ]),
 );
+
+export type Vars = z.infer<typeof VarsSchema>;
+
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 export const TestCaseSchema = z.object({
   // Optional description of what you're testing
@@ -641,6 +425,7 @@ export const TestCaseSchema = z.object({
 
   // Key-value pairs to substitute in the prompt
   vars: VarsSchema.optional(),
+
   // Override the provider.
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
@@ -672,9 +457,12 @@ export const TestCaseSchema = z.object({
   metadata: MetadataSchema.optional(),
 });
 
-export type TestCase<Vars = Record<string, string | string[] | object>> = z.infer<
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export type TestCase<vars = Record<string, string | string[] | object>> = z.infer<
   typeof TestCaseSchema
 >;
+
+export type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
 export const TestCaseWithVarsFileSchema = TestCaseSchema.extend({
   vars: z.union([VarsSchema, z.string(), z.array(z.string())]).optional(),
@@ -711,16 +499,10 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: z.record(z.union([z.string(), z.object({})])).optional(),
 }).strict();
 
-export type AtomicTestCase<Vars = Record<string, string | object>> = z.infer<
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
-
-export const NunjucksFilterMapSchema = z.record(
-  z.string(),
-  z.function(z.tuple([z.any()]).rest(z.any()), z.string()),
-);
-// Define the type using the schema
-export type NunjucksFilterMap = z.infer<typeof NunjucksFilterMapSchema>;
 
 export const DerivedMetricSchema = z.object({
   // The name of this metric
@@ -739,6 +521,9 @@ export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
+  // Optional tags to describe the test suite
+  tags: z.record(z.string(), z.string()).optional(),
+
   // Optional description of what your LLM is trying to do
   description: z.string().optional(),
 
@@ -764,56 +549,53 @@ export const TestSuiteSchema = z.object({
   nunjucksFilters: NunjucksFilterMapSchema.optional(),
 
   // Envar overrides
-  env: EnvOverridesSchema.optional(),
+  env: ProviderEnvOverridesSchema.optional(),
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
+  // Extensions that are called at various plugin points
+  extensions: z.array(z.string()).optional(),
+
   // Redteam configuration - used only when generating redteam tests
-  redteam: redteamConfigSchema.optional(),
+  redteam: z.custom<RedteamConfig>().optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
 
-export type ProviderId = string;
-
-export type ProviderLabel = string;
-
-export type ProviderFunction = ApiProvider['callApi'];
-
-export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
-
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export const TestSuiteConfigSchema = z.object({
+  // Optional tags to describe the test suite
+  tags: z.record(z.string(), z.string()).optional(),
+
   // Optional description of what you're trying to test
   description: z.string().optional(),
 
-  // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-  providers: z.union([
-    z.string(),
-    CallApiFunctionSchema,
-    z.array(
-      z.union([
-        z.string(),
-        z.record(z.string(), ProviderOptionsSchema),
-        ProviderOptionsSchema,
-        CallApiFunctionSchema,
-      ]),
-    ),
-  ]),
+  // One or more LLM APIs to use, for example: openai:gpt-4o-mini, openai:gpt-4o, localai:chat:vicuna
+  providers: ProvidersSchema,
 
   // One or more prompt files to load
   prompts: z.union([
     z.string(),
-    z.array(z.union([z.string(), PromptSchema])),
+    z.array(
+      z.union([
+        z.string(),
+        z.object({
+          id: z.string(),
+          label: z.string().optional(),
+          raw: z.string().optional(),
+        }),
+        PromptSchema,
+      ]),
+    ),
     z.record(z.string(), z.string()),
   ]),
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
-  tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]),
+  tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]).optional(),
 
   // Scenarios, groupings of data and tests to be evaluated
-  scenarios: z.array(ScenarioSchema).optional(),
+  scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTest: TestCaseSchema.partial().omit({ description: true }).optional(),
@@ -835,17 +617,20 @@ export const TestSuiteConfigSchema = z.object({
   // Nunjucks filters
   nunjucksFilters: z.record(z.string(), z.string()).optional(),
 
-  // Envar overrides
-  env: EnvOverridesSchema.optional(),
+  // Envvar overrides
+  env: ProviderEnvOverridesSchema.optional(),
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
+
+  // Extension that is called at various plugin points
+  extensions: z.array(z.string()).optional(),
 
   // Any other information about this configuration.
   metadata: MetadataSchema.optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: redteamConfigSchema.optional(),
+  redteam: z.custom<RedteamConfig>().optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;

@@ -1,12 +1,14 @@
 import dedent from 'dedent';
+import type {
+  BedrockClaudeMessagesCompletionOptions,
+  LlamaMessage,
+} from '../src/providers/bedrock';
 import {
   addConfigParam,
   AwsBedrockGenericProvider,
   BEDROCK_MODEL,
-  BedrockClaudeMessagesCompletionOptions,
   formatPromptLlama2Chat,
   getLlamaModelHandler,
-  LlamaMessage,
   LlamaVersion,
   parseValue,
 } from '../src/providers/bedrock';
@@ -471,13 +473,12 @@ describe('llama', () => {
       const messages: LlamaMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
       ];
-      const expectedPrompt =
-        dedent`
+      const expectedPrompt = `${dedent`
       <s>[INST] <<SYS>>
       You are a helpful assistant.
       <</SYS>>
 
-      ` + '\n\n';
+      `}\n\n`;
       expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
     });
   });

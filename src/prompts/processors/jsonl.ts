@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { Prompt } from '../../types';
+import type { Prompt } from '../../types';
 
 /**
  * Processes a JSONL file to extract prompts.
@@ -18,5 +18,6 @@ export function processJsonlFile(filePath: string, prompt: Partial<Prompt>): Pro
         ? `${prompt.label}: ${json}`
         : `${filePath}: ${json}`
       : prompt.label || `${filePath}`,
+    config: prompt.config,
   }));
 }

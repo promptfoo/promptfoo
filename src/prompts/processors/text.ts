@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { Prompt } from '../../types';
+import type { Prompt } from '../../types';
 import { PROMPT_DELIMITER } from '../constants';
 
 /**
@@ -17,5 +17,6 @@ export function processTxtFile(filePath: string, { label }: Partial<Prompt>): Pr
     .map((prompt) => ({
       raw: prompt,
       label: label ? `${label}: ${filePath}: ${prompt}` : `${filePath}: ${prompt}`,
+      // no config
     }));
 }

@@ -3,7 +3,10 @@ import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
+import { redteamInit } from './commands/redteam/init';
+import { getEnvString } from './envars';
 import logger from './logger';
+import telemetry, { type EventValue } from './telemetry';
 import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
@@ -28,7 +31,7 @@ tests:
       {%- elif language == 'javascript' -%}
       context: file://context.js
       {%- else -%}
-      context: file://context.txt
+      context: file://context.py
       {%- endif %}
 
   - vars:
@@ -198,7 +201,9 @@ module.exports = function (varName, prompt, otherVars) {
 
   if (varName === 'context') {
     // Return value based on the variable name and test context
-    return \`... Documents for \${otherVars.inquiry} for prompt: \${prompt} ...\`;
+    return {
+      output: \`... Documents for \${otherVars.inquiry} for prompt: \${prompt} ...\`
+    };
   }
 
   // Default variable value
@@ -223,12 +228,20 @@ promptfoo eval
 Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
+function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+  telemetry.recordAndSend('funnel', {
+    type: 'eval onboarding',
+    step,
+    ...properties,
+  });
+}
+
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
-  if (directory) {
-    // Make the directory if it doesn't exist
-    if (!fs.existsSync(directory)) {
-      fs.mkdirSync(directory);
-    }
+  if (
+    directory && // Make the directory if it doesn't exist
+    !fs.existsSync(directory)
+  ) {
+    fs.mkdirSync(directory);
   }
 
   if (directory) {
@@ -245,6 +258,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   let action: string;
   let language: string;
   if (interactive) {
+    recordOnboardingStep('start');
+
     // Choose use case
     action = await rawlist({
       message: 'What would you like to do?',
@@ -253,8 +268,24 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         { name: 'Improve prompt and model performance', value: 'compare' },
         { name: 'Improve RAG performance', value: 'rag' },
         { name: 'Improve agent/chain of thought performance', value: 'agent' },
+        { name: 'Run a red team evaluation', value: 'redteam' },
       ],
     });
+
+    recordOnboardingStep('choose app type', {
+      value: action,
+    });
+
+    if (action === 'redteam') {
+      await redteamInit(directory || '.');
+      return {
+        numPrompts: 0,
+        providerPrefixes: [],
+        action: 'redteam',
+        language: 'not_applicable',
+      };
+    }
+
     language = 'not_sure';
     if (action === 'rag' || action === 'agent') {
       language = await rawlist({
@@ -265,12 +296,16 @@ export async function createDummyFiles(directory: string | null, interactive: bo
           { name: 'Javascript', value: 'javascript' },
         ],
       });
+
+      recordOnboardingStep('choose language', {
+        value: language,
+      });
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
-      { name: 'Choose later', value: ['openai:gpt-3.5-turbo', 'openai:gpt-4o'] },
+      { name: 'Choose later', value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
       {
-        name: '[OpenAI] GPT 4o, GPT-3.5, ...',
+        name: '[OpenAI] GPT 4o, GPT 4o-mini, GPT-3.5, ...',
         value:
           action === 'agent'
             ? [
@@ -299,7 +334,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
                   },
                 },
               ]
-            : ['openai:gpt-3.5-turbo', 'openai:gpt-4o'],
+            : ['openai:gpt-4o-mini', 'openai:gpt-4o'],
       },
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
@@ -353,6 +388,13 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       message: 'Which model providers would you like to use? (press enter to skip)',
       choices,
     });
+
+    recordOnboardingStep('choose providers', {
+      value: providerChoices.map((choice) =>
+        typeof choice === 'string' ? choice : JSON.stringify(choice),
+      ),
+    });
+
     if (providerChoices.length > 0) {
       const flatProviders = providerChoices.flat();
       if (flatProviders.length > 3) {
@@ -382,7 +424,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         logger.info('⌛ Wrote provider.py');
       }
     } else {
-      providers.push('openai:gpt-3.5-turbo');
+      providers.push('openai:gpt-4o-mini');
       providers.push('openai:gpt-4o');
     }
 
@@ -408,12 +450,14 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         logger.info('⌛ Wrote context.py');
       }
     }
+
+    recordOnboardingStep('complete');
   } else {
     action = 'compare';
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-3.5-turbo');
+    providers.push('openai:gpt-4o-mini');
     providers.push('openai:gpt-4o');
   }
 
@@ -427,7 +471,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   fs.writeFileSync(path.join(process.cwd(), directory, 'promptfooconfig.yaml'), config);
   fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
-  const isNpx = process.env.npm_execpath?.includes('npx');
+  const isNpx = getEnvString('npm_execpath')?.includes('npx');
   const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
   if (directory === '.') {
     logger.info(

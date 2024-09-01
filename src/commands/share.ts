@@ -1,10 +1,18 @@
 import chalk from 'chalk';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import readline from 'readline';
+import { URL } from 'url';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
-import { readLatestResults, readResult, setupEnv } from '../util';
+import type { ResultsFile } from '../types';
+import { getLatestEval, readResult, setupEnv } from '../util';
+
+async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
+  const url = await createShareableUrl(results.results, results.config, showAuth);
+  logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+}
 
 export function shareCommand(program: Command) {
   program
@@ -12,8 +20,16 @@ export function shareCommand(program: Command) {
     .description('Create a shareable URL of an eval (defaults to most recent)')
     .option('-y, --yes', 'Skip confirmation')
     .option('--env-file <path>', 'Path to .env file')
+    .option(
+      '--show-auth',
+      'Show username/password authentication information in the URL if exists',
+      false,
+    )
     .action(
-      async (evalId: string | undefined, cmdObj: { yes: boolean; envFile?: string } & Command) => {
+      async (
+        evalId: string | undefined,
+        cmdObj: { yes: boolean; envFile?: string; showAuth: boolean } & Command,
+      ) => {
         setupEnv(cmdObj.envFile);
         telemetry.maybeShowNotice();
         telemetry.record('command_used', {
@@ -29,29 +45,23 @@ export function shareCommand(program: Command) {
             process.exit(1);
           }
         } else {
-          results = await readLatestResults();
+          results = await getLatestEval();
           if (!results) {
             logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
             process.exit(1);
           }
         }
 
-        const createPublicUrl = async () => {
-          const url = await createShareableUrl(results.results, results.config);
-          logger.info(`View results: ${chalk.greenBright.bold(url)}`);
-        };
-
-        if (cmdObj.yes || process.env.PROMPTFOO_DISABLE_SHARE_WARNING) {
-          await createPublicUrl();
+        if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
+          await createPublicUrl(results, cmdObj.showAuth);
         } else {
           const reader = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
           });
 
-          const hostname = process.env.PROMPTFOO_SHARING_APP_BASE_URL
-            ? new URL(process.env.PROMPTFOO_SHARING_APP_BASE_URL).hostname
-            : 'app.promptfoo.dev';
+          const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
+          const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
 
           reader.question(
             `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
@@ -62,7 +72,7 @@ export function shareCommand(program: Command) {
               }
               reader.close();
 
-              await createPublicUrl();
+              await createPublicUrl(results, cmdObj.showAuth);
             },
           );
         }

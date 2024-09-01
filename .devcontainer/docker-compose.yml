@@ -1,0 +1,14 @@
+services:
+  promptfoo_dev:
+    build:
+      context: ..
+      dockerfile: ./.devcontainer/Dockerfile.dev
+    volumes:
+      - ..:/workspace:cached
+      - promptfoo_cache:/home/node/.promptfoo/
+      - promptfoo_npm_global:/home/node/.npm-global
+    command: sleep infinity
+
+volumes:
+  promptfoo_cache:
+  promptfoo_npm_global:

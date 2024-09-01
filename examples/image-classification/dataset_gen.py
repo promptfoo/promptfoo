@@ -15,13 +15,14 @@ Arguments:
     --filename: Output CSV file name (default: fashion_mnist_sample_base64.csv)
 """
 
-import tensorflow as tf
-import pandas as pd
 import base64
 import io
-from PIL import Image
 from typing import List
+
 import numpy as np
+import pandas as pd
+import tensorflow as tf
+from PIL import Image
 
 # set np seed for reproducibility
 np.random.seed(0)

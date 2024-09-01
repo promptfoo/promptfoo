@@ -23,6 +23,7 @@ import type {
 import { TestGrader } from './utils';
 
 jest.mock('../src/esm');
+jest.mock('../src/logger');
 
 const Grader = new TestGrader();
 
@@ -61,6 +62,7 @@ describe('matchesSimilarity', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -78,6 +80,7 @@ describe('matchesSimilarity', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -97,6 +100,7 @@ describe('matchesSimilarity', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -116,6 +120,7 @@ describe('matchesSimilarity', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -152,6 +157,7 @@ describe('matchesSimilarity', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith('Expected output');
@@ -200,6 +206,7 @@ describe('matchesLlmRubric', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -225,6 +232,7 @@ describe('matchesLlmRubric', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -261,6 +269,7 @@ describe('matchesLlmRubric', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith('Grading prompt');
@@ -291,6 +300,7 @@ describe('matchesFactuality', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -313,6 +323,7 @@ describe('matchesFactuality', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -346,6 +357,7 @@ describe('matchesFactuality', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -374,7 +386,7 @@ describe('matchesClosedQa', () => {
     const grading = {};
 
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
-      output: 'foo \n \n bar\n Y Y',
+      output: 'foo \n \n bar\n Y Y \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
@@ -386,6 +398,7 @@ describe('matchesClosedQa', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -397,18 +410,19 @@ describe('matchesClosedQa', () => {
     const grading = {};
 
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
-      output: 'foo bar N',
+      output: 'foo bar N \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
     await expect(matchesClosedQa(input, expected, output, grading)).resolves.toEqual({
       pass: false,
-      reason: 'The submission does not meet the criterion:\nfoo bar N',
+      reason: 'The submission does not meet the criterion:\nfoo bar N \n',
       score: 0,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
   });
@@ -455,6 +469,7 @@ describe('matchesClosedQa', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(isJson).toBeTruthy();
@@ -623,6 +638,7 @@ describe('matchesAnswerRelevance', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -660,7 +676,7 @@ describe('matchesAnswerRelevance', () => {
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
         });
       }
-      return Promise.reject(new Error('Unexpected input ' + text));
+      return Promise.reject(new Error(`Unexpected input ${text}`));
     });
 
     await expect(matchesAnswerRelevance(input, output, threshold)).resolves.toEqual({
@@ -671,6 +687,7 @@ describe('matchesAnswerRelevance', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -810,6 +827,7 @@ describe('matchesContextRelevance', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -840,6 +858,7 @@ describe('matchesContextRelevance', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -880,6 +899,7 @@ describe('matchesContextFaithfulness', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(mockCallApi).toHaveBeenCalledTimes(2);
@@ -916,6 +936,7 @@ describe('matchesContextFaithfulness', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(mockCallApi).toHaveBeenCalledTimes(2);
@@ -946,6 +967,7 @@ describe('matchesContextRecall', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining(CONTEXT_RECALL.slice(0, 100)));
@@ -974,6 +996,7 @@ describe('matchesContextRecall', () => {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
+        cached: expect.any(Number),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining(CONTEXT_RECALL.slice(0, 100)));

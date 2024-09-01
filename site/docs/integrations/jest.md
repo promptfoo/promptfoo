@@ -191,7 +191,7 @@ import { installMatchers } from './matchers';
 installMatchers();
 
 const gradingConfig = {
-  provider: 'openai:chat:gpt-3.5-turbo',
+  provider: 'openai:chat:gpt-4o-mini',
 };
 
 describe('semantic similarity tests', () => {

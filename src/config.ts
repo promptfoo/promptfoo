@@ -6,24 +6,27 @@ import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { readAssertions } from './assertions';
 import { validateAssertions } from './assertions/validateAssertions';
+import cliState from './cliState';
 import { filterTests } from './commands/eval/filterTests';
+import { getEnvBool } from './envars';
 import { importModule } from './esm';
 import logger from './logger';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import { loadApiProviders } from './providers';
 import { readTest, readTests } from './testCases';
-import {
+import type {
   CommandLineOptions,
   Prompt,
   ProviderOptions,
+  Scenario,
   TestCase,
   TestSuite,
   UnifiedConfig,
 } from './types';
-import { readFilters } from './util';
+import { isJavascriptFile, maybeLoadFromExternalFile, readFilters } from './util';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
-  if (process.env.PROMPTFOO_DISABLE_REF_PARSER) {
+  if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
     return rawConfig;
   }
 
@@ -78,20 +81,25 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 
   if (Array.isArray(rawConfig.providers)) {
     rawConfig.providers.forEach((provider, providerIndex) => {
-      if (typeof provider === 'string') return;
-      if (typeof provider === 'function') return;
+      if (typeof provider === 'string') {
+        return;
+      }
+      if (typeof provider === 'function') {
+        return;
+      }
       if (!provider.config) {
         // Handle when provider is a map
         provider = Object.values(provider)[0] as ProviderOptions;
       }
 
-      if (provider.config?.functions) {
+      // Handle dereferencing for inline tools, but skip external file paths (which are just strings)
+      if (Array.isArray(provider.config?.functions)) {
         functionsParametersList[providerIndex] = extractFunctionParameters(
           provider.config.functions,
         );
       }
 
-      if (provider.config?.tools) {
+      if (Array.isArray(provider.config?.tools)) {
         toolsParametersList[providerIndex] = extractToolParameters(provider.config.tools);
       }
     });
@@ -103,8 +111,12 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   // Restore functions and tools parameters
   if (Array.isArray(config.providers)) {
     config.providers.forEach((provider, index) => {
-      if (typeof provider === 'string') return;
-      if (typeof provider === 'function') return;
+      if (typeof provider === 'string') {
+        return;
+      }
+      if (typeof provider === 'function') {
+        return;
+      }
       if (!provider.config) {
         // Handle when provider is a map
         provider = Object.values(provider)[0] as ProviderOptions;
@@ -126,19 +138,13 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
-  switch (ext) {
-    case '.json':
-    case '.yaml':
-    case '.yml':
-      const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
-      return dereferenceConfig(rawConfig);
-    case '.js':
-    case '.cjs':
-    case '.mjs':
-      return (await importModule(configPath)) as UnifiedConfig;
-    default:
-      throw new Error(`Unsupported configuration file format: ${ext}`);
+  if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
+    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
+    return dereferenceConfig(rawConfig || {});
+  } else if (isJavascriptFile(configPath)) {
+    return (await importModule(configPath)) as UnifiedConfig;
   }
+  throw new Error(`Unsupported configuration file format: ${ext}`);
 }
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
@@ -201,10 +207,48 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
+  const extensions: UnifiedConfig['extensions'] = [];
+  for (const config of configs) {
+    if (Array.isArray(config.extensions)) {
+      extensions.push(...config.extensions);
+    }
+  }
+  if (extensions.length > 1 && configs.length > 1) {
+    console.warn(
+      'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
+    );
+  }
+
+  const redteam: UnifiedConfig['redteam'] = {
+    plugins: [],
+    strategies: [],
+  };
+
+  for (const config of configs) {
+    if (config.redteam) {
+      for (const redteamKey of Object.keys(config.redteam) as Array<keyof typeof redteam>) {
+        if (['entities', 'plugins', 'strategies'].includes(redteamKey)) {
+          if (Array.isArray(config.redteam[redteamKey])) {
+            const currentValue = redteam[redteamKey];
+            const newValue = config.redteam[redteamKey];
+            if (Array.isArray(currentValue) && Array.isArray(newValue)) {
+              (redteam[redteamKey] as unknown[]) = [
+                ...new Set([...currentValue, ...newValue]),
+              ].sort();
+            }
+          }
+        } else {
+          (redteam as Record<string, unknown>)[redteamKey] =
+            config.redteam[redteamKey as keyof typeof config.redteam];
+        }
+      }
+    }
+  }
+
   const configsAreStringOrArray = configs.every(
     (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
   );
-  const configsAreObjects = configs.every((config) => typeof config.prompts === 'object');
+
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
   const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
@@ -243,9 +287,14 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
-      config.prompts
-        .map((prompt) => makeAbsolute(configPaths[idx], prompt))
-        .forEach((prompt) => addSeenPrompt(prompt));
+      config.prompts.forEach((prompt) => {
+        invariant(
+          typeof prompt === 'string' ||
+            (typeof prompt === 'object' && typeof prompt.raw === 'string'),
+          'Invalid prompt',
+        );
+        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+      });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
       invariant(typeof prompts === 'object', 'Cannot mix configs with map and array-type prompts');
@@ -258,6 +307,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
 
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
+    tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
     description: configs.map((config) => config.description).join(', '),
     providers,
     prompts,
@@ -270,8 +320,15 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
         vars: { ...prev?.vars, ...curr.defaultTest?.vars },
         assert: [...(prev?.assert || []), ...(curr.defaultTest?.assert || [])],
         options: { ...prev?.options, ...curr.defaultTest?.options },
+        metadata: { ...prev?.metadata, ...curr.defaultTest?.metadata },
       };
     }, {}),
+    derivedMetrics: configs.reduce<UnifiedConfig['derivedMetrics']>((prev, curr) => {
+      if (curr.derivedMetrics) {
+        return [...(prev ?? []), ...curr.derivedMetrics];
+      }
+      return prev;
+    }, undefined),
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
     env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
     evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
@@ -279,6 +336,8 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
     ),
+    extensions,
+    redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
     sharing: !configs.some((config) => config.sharing === false),
   };
@@ -328,24 +387,27 @@ export async function resolveConfigs(
     });
   }
 
-  // Use basepath in cases where path was supplied in the config file
+  // Use base path in cases where path was supplied in the config file
   const basePath = configPaths ? path.dirname(configPaths[0]) : '';
+
+  cliState.basePath = basePath;
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
-    description: fileConfig.description || defaultConfig.description,
+    tags: fileConfig.tags || defaultConfig.tags,
+    description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
     providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers || [],
     tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests || [],
     scenarios: fileConfig.scenarios || defaultConfig.scenarios,
     env: fileConfig.env || defaultConfig.env,
-    sharing:
-      process.env.PROMPTFOO_DISABLE_SHARING === '1'
-        ? false
-        : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
+    sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
+      ? false
+      : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
     defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
+    extensions: fileConfig.extensions || defaultConfig.extensions || [],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
   };
@@ -374,15 +436,24 @@ export async function resolveConfigs(
 
   // Parse testCases for each scenario
   if (fileConfig.scenarios) {
+    fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
+  }
+  if (Array.isArray(fileConfig.scenarios)) {
     for (const scenario of fileConfig.scenarios) {
-      const parsedScenarioTests: TestCase[] = await readTests(
-        scenario.tests,
-        cmdObj.tests ? undefined : basePath,
-      );
-      scenario.tests = parsedScenarioTests;
+      if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
+        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
+      }
+      if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
+        const parsedScenarioTests: TestCase[] = await readTests(
+          scenario.tests,
+          cmdObj.tests ? undefined : basePath,
+        );
+        scenario.tests = parsedScenarioTests;
+      }
+      invariant(typeof scenario === 'object', 'scenario must be an object');
       const filteredTests = await filterTests(
         {
-          ...scenario,
+          ...(scenario ?? {}),
           providers: parsedProviders,
           prompts: parsedPrompts,
         },
@@ -405,6 +476,7 @@ export async function resolveConfigs(
   }
 
   const defaultTest: TestCase = {
+    metadata: config.metadata,
     options: {
       prefix: cmdObj.promptPrefix,
       suffix: cmdObj.promptSuffix,
@@ -417,17 +489,19 @@ export async function resolveConfigs(
 
   const testSuite: TestSuite = {
     description: config.description,
+    tags: config.tags,
     prompts: parsedPrompts,
     providers: parsedProviders,
     providerPromptMap: parsedProviderPromptMap,
     tests: parsedTests,
-    scenarios: config.scenarios,
+    scenarios: config.scenarios as Scenario[],
     defaultTest,
     derivedMetrics: config.derivedMetrics,
     nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
       basePath,
     ),
+    extensions: config.extensions,
   };
 
   if (testSuite.tests) {

@@ -4,12 +4,12 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - openai:gpt-3.5-turbo-0613
+  - openai:gpt-4o-mini
 
 defaultTest:
   options:
     transform: file://transform.js
-    # transform: file://transform.py
+    # transform: file://transform.py:custom_func_name
 
 tests:
   - vars:

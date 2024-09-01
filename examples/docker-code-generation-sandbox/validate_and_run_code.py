@@ -1,5 +1,6 @@
-import epicbox
 import re
+
+import epicbox
 
 # Replace with your preferred Docker image
 DOCKER_IMAGE = "python:3.9-alpine"

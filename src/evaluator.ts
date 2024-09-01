@@ -1,19 +1,17 @@
 import async from 'async';
 import chalk from 'chalk';
 import type { MultiBar, SingleBar } from 'cli-progress';
-import * as fs from 'fs';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
 import * as path from 'path';
 import readline from 'readline';
 import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
-import { importModule } from './esm';
+import { getEnvBool, getEnvInt } from './envars';
+import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
-import { runPython } from './python/pythonUtils';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type {
@@ -24,15 +22,14 @@ import type {
   EvaluateStats,
   EvaluateSummary,
   EvaluateTable,
-  NunjucksFilterMap,
   Prompt,
   RunEvalOptions,
   TestSuite,
   ProviderResponse,
   Assertion,
 } from './types';
-import { transformOutput, sha256, renderVarsInObject } from './util';
-import { getNunjucksEngine } from './util/templates';
+import { sha256 } from './util';
+import { transform } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -102,166 +99,6 @@ export function generateVarCombinations(
   return combinations;
 }
 
-export function resolveVariables(
-  variables: Record<string, string | object>,
-): Record<string, string | object> {
-  let resolved = true;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
-
-  let iterations = 0;
-  do {
-    resolved = true;
-    for (const key of Object.keys(variables)) {
-      if (typeof variables[key] !== 'string') {
-        continue;
-      }
-      const value = variables[key] as string;
-      const match = regex.exec(value);
-      if (match) {
-        const [placeholder, varName] = match;
-        if (variables[varName] !== undefined) {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
-          resolved = false; // Indicate that we've made a replacement and should check again
-        } else {
-          // Do nothing - final nunjucks render will fail if necessary.
-          // logger.warn(`Variable "${varName}" not found for substitution.`);
-        }
-      }
-    }
-    iterations++;
-  } while (!resolved && iterations < 5);
-
-  return variables;
-}
-
-export async function renderPrompt(
-  prompt: Prompt,
-  vars: Record<string, string | object>,
-  nunjucksFilters?: NunjucksFilterMap,
-  provider?: ApiProvider,
-): Promise<string> {
-  const nunjucks = getNunjucksEngine(nunjucksFilters);
-
-  let basePrompt = prompt.raw;
-
-  // Load files
-  for (const [varName, value] of Object.entries(vars)) {
-    if (typeof value === 'string' && value.startsWith('file://')) {
-      const basePath = cliState.basePath || '';
-      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-      const fileExtension = filePath.split('.').pop();
-
-      logger.debug(`Loading var ${varName} from file: ${filePath}`);
-      switch (fileExtension) {
-        case 'js':
-        case 'cjs':
-        case 'mjs':
-          const javascriptOutput = (await (
-            await importModule(filePath)
-          )(varName, basePrompt, vars, provider)) as {
-            output?: string;
-            error?: string;
-          };
-          if (javascriptOutput.error) {
-            throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
-          }
-          if (!javascriptOutput.output) {
-            throw new Error(
-              `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
-            );
-          }
-          vars[varName] = javascriptOutput.output;
-          break;
-        case 'py':
-          const pythonScriptOutput = (await runPython(filePath, 'get_var', [
-            varName,
-            basePrompt,
-            vars,
-          ])) as { output?: string; error?: string };
-          if (pythonScriptOutput.error) {
-            throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
-          }
-          if (!pythonScriptOutput.output) {
-            throw new Error(`Python script ${filePath} did not return any output`);
-          }
-          vars[varName] = pythonScriptOutput.output.trim();
-          break;
-        case 'yaml':
-        case 'yml':
-          vars[varName] = JSON.stringify(
-            yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
-          );
-          break;
-        case 'json':
-        default:
-          vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
-          break;
-      }
-    }
-  }
-
-  // Apply prompt functions
-  if (prompt.function) {
-    const result = await prompt.function({ vars, provider });
-    if (typeof result === 'string') {
-      basePrompt = result;
-    } else if (typeof result === 'object') {
-      basePrompt = JSON.stringify(result);
-    } else {
-      throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
-    }
-  }
-
-  // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
-  for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string') {
-      vars[key] = (vars[key] as string).replace(/\n$/, '');
-    }
-  }
-
-  // Resolve variable mappings
-  resolveVariables(vars);
-
-  // Third party integrations
-  if (prompt.raw.startsWith('portkey://')) {
-    const { getPrompt } = await import('./integrations/portkey');
-    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
-    return JSON.stringify(portKeyResult.messages);
-  } else if (prompt.raw.startsWith('langfuse://')) {
-    const { getPrompt } = await import('./integrations/langfuse');
-    const langfusePrompt = prompt.raw.slice('langfuse://'.length);
-
-    // we default to "text" type.
-    const [helper, version, promptType = 'text'] = langfusePrompt.split(':');
-    if (promptType !== 'text' && promptType !== 'chat') {
-      throw new Error('Unknown promptfoo prompt type');
-    }
-
-    const langfuseResult = await getPrompt(
-      helper,
-      vars,
-      promptType,
-      version !== 'latest' ? Number(version) : undefined,
-    );
-    return langfuseResult;
-  }
-
-  // Render prompt
-  try {
-    if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
-      return nunjucks.renderString(basePrompt, vars);
-    }
-
-    const parsed = JSON.parse(basePrompt);
-
-    // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
-    // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
-  } catch (err) {
-    return nunjucks.renderString(basePrompt, vars);
-  }
-}
-
 class Evaluator {
   testSuite: TestSuite;
   options: EvaluateOptions;
@@ -291,7 +128,7 @@ class Evaluator {
 
   async runEval({
     provider,
-    prompt,
+    prompt, // raw prompt
     test,
     delay,
     nunjucksFilters: filters,
@@ -305,7 +142,7 @@ class Evaluator {
     const conversationKey = `${provider.label || provider.id()}:${prompt.id}`;
     const usesConversation = prompt.raw.includes('_conversation');
     if (
-      !process.env.PROMPTFOO_DISABLE_CONVERSATION_VAR &&
+      !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
       !test.options?.disableConversationVar &&
       usesConversation
     ) {
@@ -331,6 +168,7 @@ class Evaluator {
       prompt: {
         raw: renderedPrompt,
         label: promptLabel,
+        config: prompt.config,
       },
       vars,
     };
@@ -352,15 +190,20 @@ class Evaluator {
         response = await ((test.provider as ApiProvider) || provider).callApi(
           renderedPrompt,
           {
+            // Always included
             vars,
 
-            // These are removed in python and script providers, but every Javascript provider gets them
+            // Part of these may be removed in python and script providers, but every Javascript provider gets them
+            prompt,
+            filters,
+            originalProvider: provider,
+
+            // All of these are removed in python and script providers, but every Javascript provider gets them
             logger,
             fetchWithCache,
             getCache,
           },
           {
-            originalProvider: provider,
             includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
           },
         );
@@ -383,8 +226,8 @@ class Evaluator {
 
       if (!response.cached) {
         let sleep = provider.delay ?? delay;
-        if (!sleep && process.env.PROMPTFOO_DELAY_MS) {
-          sleep = parseInt(process.env.PROMPTFOO_DELAY_MS, 10) || 0;
+        if (!sleep) {
+          sleep = getEnvInt('PROMPTFOO_DELAY_MS', 0);
         }
         if (sleep) {
           logger.debug(`Sleeping for ${sleep}ms`);
@@ -404,13 +247,22 @@ class Evaluator {
       };
       if (response.error) {
         ret.error = response.error;
-      } else if (response.output) {
+      } else if (response.output == null) {
+        ret.success = false;
+        ret.score = 0;
+        ret.error = 'No output';
+      } else {
         // Create a copy of response so we can potentially mutate it.
         const processedResponse = { ...response };
-        const transform =
-          test.options?.transform || test.options?.postprocess || provider.transform;
-        if (transform) {
-          processedResponse.output = await transformOutput(transform, processedResponse.output, {
+        const transforms: string[] = [
+          provider.transform, // Apply provider transform first
+          // NOTE: postprocess is deprecated. Use the first defined transform.
+          [test.options?.transform, test.options?.postprocess].find((s) => s),
+        ]
+          .flat()
+          .filter((s): s is string => typeof s === 'string');
+        for (const t of transforms) {
+          processedResponse.output = await transform(t, processedResponse.output, {
             vars,
             prompt,
           });
@@ -434,13 +286,10 @@ class Evaluator {
           this.stats.tokenUsage.total += checkResult.tokensUsed.total || 0;
           this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
           this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
+          this.stats.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
         }
         ret.response = processedResponse;
         ret.gradingResult = checkResult;
-      } else {
-        ret.success = false;
-        ret.score = 0;
-        ret.error = 'No output';
       }
 
       // Update token usage stats
@@ -479,6 +328,8 @@ class Evaluator {
   async evaluate(): Promise<EvaluateSummary> {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
+
+    await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -600,6 +451,11 @@ class Evaluator {
                 ...(data.assert || []),
                 ...(test.assert || []),
               ],
+              metadata: {
+                ...testSuite.defaultTest?.metadata,
+                ...data.metadata,
+                ...test.metadata,
+              },
             };
           });
           // Add scenario tests to tests
@@ -625,7 +481,7 @@ class Evaluator {
     }
 
     // Set up eval cases
-    let runEvalOptions: RunEvalOptions[] = [];
+    const runEvalOptions: RunEvalOptions[] = [];
     let rowIndex = 0;
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
@@ -642,6 +498,7 @@ class Evaluator {
       testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
       testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
+      testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
 
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
@@ -650,7 +507,7 @@ class Evaluator {
 
       // Finalize test case eval
       const varCombinations =
-        process.env.PROMPTFOO_DISABLE_VAR_EXPANSION || testCase.options.disableVarExpansion
+        getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options.disableVarExpansion
           ? [testCase.vars]
           : generateVarCombinations(testCase.vars || {});
 
@@ -693,7 +550,10 @@ class Evaluator {
     const table: EvaluateTable = {
       head: {
         prompts,
-        vars: Array.from(varNames).sort(),
+        vars: [
+          ...Object.keys(testSuite.defaultTest?.vars || {}).sort(),
+          ...Array.from(varNames).sort(),
+        ],
       },
       body: [],
     };
@@ -723,6 +583,9 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
+      await runExtensionHook(testSuite.extensions, 'beforeEach', {
+        test: evalStep.test,
+      });
       const row = await this.runEval(evalStep);
 
       results.push(row);
@@ -790,7 +653,7 @@ class Evaluator {
       }
 
       if (testSuite.derivedMetrics) {
-        const math = await import('mathjs');
+        const math = await import('mathjs'); // TODO: move this
         for (const metric of testSuite.derivedMetrics) {
           if (metrics.namedScores[metric.name] === undefined) {
             metrics.namedScores[metric.name] = 0;
@@ -825,6 +688,11 @@ class Evaluator {
       metrics.tokenUsage.total =
         (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.cost += row.cost || 0;
+
+      await runExtensionHook(testSuite.extensions, 'afterEach', {
+        test: evalStep.test,
+        result: row,
+      });
     };
 
     // Set up main progress bars
@@ -880,66 +748,10 @@ class Evaluator {
     };
 
     // Run the evals
-    if (this.options.interactiveProviders) {
-      runEvalOptions = runEvalOptions.sort((a, b) =>
-        a.provider.id().localeCompare(b.provider.id()),
-      );
-      logger.warn('Providers are running in serial with user input.');
-
-      // Group evalOptions by provider
-      const groupedEvalOptions = runEvalOptions.reduce<Record<string, RunEvalOptions[]>>(
-        (acc, evalOption) => {
-          const providerId = evalOption.provider.id();
-          if (!acc[providerId]) {
-            acc[providerId] = [];
-          }
-          acc[providerId].push(evalOption);
-          return acc;
-        },
-        {},
-      );
-
-      // Process each group
-      for (const [providerId, providerEvalOptions] of Object.entries(groupedEvalOptions)) {
-        logger.info(
-          `Running ${providerEvalOptions.length} evaluations for provider ${providerId} with concurrency=${concurrency}...`,
-        );
-
-        if (this.options.showProgressBar) {
-          await createMultiBars(providerEvalOptions);
-        }
-        await async.forEachOfLimit(providerEvalOptions, concurrency, processEvalStep);
-        if (multibar) {
-          multibar.stop();
-        }
-
-        // Prompt to continue to the next provider unless it's the last one
-        if (
-          Object.keys(groupedEvalOptions).indexOf(providerId) <
-          Object.keys(groupedEvalOptions).length - 1
-        ) {
-          await new Promise((resolve) => {
-            const rl = readline.createInterface({
-              input: process.stdin,
-              output: process.stdout,
-            });
-            rl.question(`\nReady to continue to the next provider? (Y/n) `, (answer) => {
-              rl.close();
-              if (answer.toLowerCase() === 'n') {
-                logger.info('Aborting evaluation.');
-                process.exit(1);
-              }
-              resolve(true);
-            });
-          });
-        }
-      }
-    } else {
-      if (this.options.showProgressBar) {
-        await createMultiBars(runEvalOptions);
-      }
-      await async.forEachOfLimit(runEvalOptions, concurrency, processEvalStep);
+    if (this.options.showProgressBar) {
+      await createMultiBars(runEvalOptions);
     }
+    await async.forEachOfLimit(runEvalOptions, concurrency, processEvalStep);
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = table.body.reduce(
@@ -964,9 +776,7 @@ class Evaluator {
         const gradingResults = await runCompareAssertion(row.test, compareAssertion, outputs);
         row.outputs.forEach((output, index) => {
           const gradingResult = gradingResults[index];
-          if (!output.gradingResult) {
-            output.gradingResult = gradingResult;
-          } else {
+          if (output.gradingResult) {
             output.gradingResult.tokensUsed = output.gradingResult.tokensUsed || {
               total: 0,
               prompt: 0,
@@ -997,6 +807,8 @@ class Evaluator {
               output.gradingResult.componentResults = [];
             }
             output.gradingResult.componentResults.push(gradingResult);
+          } else {
+            output.gradingResult = gradingResult;
           }
         });
         if (progressBar) {
@@ -1017,6 +829,11 @@ class Evaluator {
       progressBar.stop();
     }
 
+    await runExtensionHook(testSuite.extensions, 'afterAll', {
+      results,
+      suite: testSuite,
+    });
+
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
       numTests: tests.length,
@@ -1035,15 +852,15 @@ class Evaluator {
         new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
       ).sort(),
       eventSource: options.eventSource || 'default',
-      ci: Boolean(
-        process.env.CI ||
-          process.env.GITHUB_ACTIONS ||
-          process.env.TRAVIS ||
-          process.env.CIRCLECI ||
-          process.env.JENKINS ||
-          process.env.GITLAB_CI,
-      ),
+      ci:
+        getEnvBool('CI') ||
+        getEnvBool('GITHUB_ACTIONS') ||
+        getEnvBool('TRAVIS') ||
+        getEnvBool('CIRCLECI') ||
+        getEnvBool('JENKINS') ||
+        getEnvBool('GITLAB_CI'),
       hasAnyPass: results.some((r) => r.success),
+      isRedteam: Boolean(testSuite.redteam),
     });
 
     return { version: 2, timestamp: new Date().toISOString(), results, stats: this.stats, table };

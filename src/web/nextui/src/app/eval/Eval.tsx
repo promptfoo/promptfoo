@@ -30,7 +30,7 @@ async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string
     data: { user },
   } = await supabase.auth.getUser();
   invariant(user, 'User not logged in');
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from('EvaluationResult')
     .select('id, createdAt')
     .eq('user_id', user.id)
@@ -43,7 +43,7 @@ async function fetchEvalFromSupabase(
   id: string,
 ): Promise<Database['public']['Tables']['EvaluationResult']['Row'] | null> {
   const supabase = createClientComponentClient<Database>();
-  const { data, error } = await supabase.from('EvaluationResult').select('*').eq('id', id).single();
+  const { data } = await supabase.from('EvaluationResult').select('*').eq('id', id).single();
   return data;
 }
 
@@ -61,7 +61,8 @@ export default function Eval({
   defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
   const router = useRouter();
-  const { table, setTable, setConfig, setEvalId, setAuthor, setInComparisonMode } = useStore();
+  const { table, setTable, config, setConfig, evalId, setEvalId, setAuthor, setInComparisonMode } =
+    useStore();
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
@@ -101,15 +102,15 @@ export default function Eval({
   );
 
   const searchParams = useSearchParams();
-  const evalId = searchParams ? searchParams.get('evalId') : null;
+  const searchEvalId = searchParams ? searchParams.get('evalId') : null;
 
   React.useEffect(() => {
-    if (evalId) {
-      console.log('Eval init: Fetching eval by id', evalId);
+    if (searchEvalId) {
+      console.log('Eval init: Fetching eval by id', searchEvalId);
       const run = async () => {
-        await fetchEvalById(evalId);
+        await fetchEvalById(searchEvalId);
         setLoaded(true);
-        setDefaultEvalId(evalId);
+        setDefaultEvalId(searchEvalId);
         // Load other recent eval runs
         fetchRecentFileEvals();
       };
@@ -121,9 +122,10 @@ export default function Eval({
       setAuthor(preloadedData.data.author || null);
       setLoaded(true);
     } else if (fetchId) {
-      console.log('Eval init: Fetching eval from remote server', fetchId);
+      console.log('Eval init: Fetching eval', fetchId);
       const run = async () => {
-        const url = `${REMOTE_API_BASE_URL}/api/eval/${fetchId}`;
+        const host = IS_RUNNING_LOCALLY ? REMOTE_API_BASE_URL : '';
+        const url = `${host}/api/eval/${fetchId}`;
         console.log('Fetching eval from remote server', url);
         const response = await fetch(url);
         if (!response.ok) {
@@ -236,9 +238,13 @@ export default function Eval({
     fetchEvalById,
     preloadedData,
     setDefaultEvalId,
-    evalId,
+    searchEvalId,
     setInComparisonMode,
   ]);
+
+  React.useEffect(() => {
+    document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
+  }, [config, evalId]);
 
   if (failed) {
     return <div className="notice">404 Eval not found</div>;

@@ -17,6 +17,8 @@ const config = {
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
 
+  trailingSlash: true,
+
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'promptfoo', // Usually your GitHub org/user name.
@@ -114,19 +116,20 @@ const config = {
             label: 'Tutorial',
           },
           */
-          { to: '/docs/intro', label: 'Docs', position: 'left' },
+          { to: '/docs/intro/', label: 'Docs', position: 'left' },
+          { to: '/pricing/', label: 'Enterprise', position: 'left' },
           {
-            to: '/llm-vulnerability-scanner',
-            label: 'LLM Vulnerability Scanner',
+            to: '/llm-vulnerability-scanner/',
+            label: 'Vulnerability Scanner',
             position: 'left',
           },
           {
-            to: '/docs/red-team',
-            label: 'LLM Red Teaming',
+            to: '/docs/red-team/',
+            label: 'Red Teaming',
             position: 'left',
           },
           {
-            href: '/blog',
+            href: '/blog/',
             label: 'Blog',
             position: 'left',
           },
@@ -214,6 +217,10 @@ const config = {
               {
                 label: 'Blog',
                 href: '/blog',
+              },
+              {
+                label: 'Enterprise',
+                href: '/pricing/',
               },
               {
                 label: 'Contact Us',

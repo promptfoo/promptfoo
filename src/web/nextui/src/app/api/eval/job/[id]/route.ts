@@ -1,8 +1,10 @@
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
-import { getJob, getResult, SupabaseJobStatus, SupabaseEvaluationJob } from '@/database';
+import type { SupabaseEvaluationJob } from '@/database';
+import { getJob, getResult, SupabaseJobStatus } from '@/database';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import invariant from 'tiny-invariant';
 import evalJobs from '../evalJobsStore';
 

@@ -12,10 +12,16 @@ import { useToast } from '@/app/contexts/ToastContext';
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
 import GenerateTestCases from '@/app/eval/GenerateTestCases';
-import TruncatedText, { TruncatedTextProps } from '@/app/eval/TruncatedText';
+import type { TruncatedTextProps } from '@/app/eval/TruncatedText';
+import TruncatedText from '@/app/eval/TruncatedText';
 import { useStore as useMainStore } from '@/app/eval/store';
 import { useStore as useResultsViewStore } from '@/app/eval/store';
-import { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from '@/app/eval/types';
+import type {
+  EvaluateTableRow,
+  EvaluateTableOutput,
+  FilterMode,
+  EvaluateTable,
+} from '@/app/eval/types';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -27,6 +33,7 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+import yaml from 'js-yaml';
 import Link from 'next/link';
 import remarkGfm from 'remark-gfm';
 import invariant from 'tiny-invariant';
@@ -128,7 +135,7 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, inComparisonMode } = useMainStore();
+  const { evalId, table, setTable, config, inComparisonMode } = useMainStore();
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
@@ -165,10 +172,10 @@ function ResultsTable({
           assertion: { type: 'human' as const },
         };
 
-        if (humanResultIndex !== -1) {
-          componentResults[humanResultIndex] = newResult;
-        } else {
+        if (humanResultIndex === -1) {
           componentResults.push(newResult);
+        } else {
+          componentResults[humanResultIndex] = newResult;
         }
       }
 
@@ -459,15 +466,21 @@ function ResultsTable({
                 </div>
               ) : null;
 
+              const providerConfig = Array.isArray(config?.providers)
+                ? config.providers[idx]
+                : undefined;
               const providerParts = prompt.provider ? prompt.provider.split(':') : [];
-              const providerDisplay =
-                providerParts.length > 1 ? (
-                  <>
-                    {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
-                  </>
-                ) : (
-                  <strong>{prompt.provider}</strong>
-                );
+              const providerDisplay = (
+                <Tooltip title={providerConfig ? <pre>{yaml.dump(providerConfig)}</pre> : ''}>
+                  {providerParts.length > 1 ? (
+                    <>
+                      {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
+                    </>
+                  ) : (
+                    <strong>{prompt.provider}</strong>
+                  )}
+                </Tooltip>
+              );
               return (
                 <div className="output-header">
                   <div className="pills">
@@ -542,6 +555,7 @@ function ResultsTable({
     ];
   }, [
     body.length,
+    config?.providers,
     columnHelper,
     failureFilter,
     filterMode,

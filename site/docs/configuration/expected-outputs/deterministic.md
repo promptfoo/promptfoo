@@ -185,7 +185,7 @@ Example:
 
 ```yaml
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
   - openai:gpt-4
 assert:
   # Pass if the LLM call costs less than $0.001
@@ -537,7 +537,7 @@ This makes it easier to include in an aggregate promptfoo score, as higher score
 ```yaml
 providers:
   - openai:gpt-4o-mini
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o
 tests:
   - assert:
       - type: perplexity-score

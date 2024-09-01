@@ -1,4 +1,4 @@
-import { TestSuite } from '../../types';
+import type { TestSuite } from '../../types';
 import { filterFailingTests } from './filterFailingTests';
 
 interface Args {
@@ -34,9 +34,9 @@ export async function filterTests(testSuite: TestSuite, args: Args): Promise<Tes
   }
 
   if (firstN) {
-    const count = parseInt(firstN);
+    const count = Number.parseInt(firstN);
 
-    if (isNaN(count)) {
+    if (Number.isNaN(count)) {
       throw new Error(`firstN must be a number, got: ${firstN}`);
     }
 

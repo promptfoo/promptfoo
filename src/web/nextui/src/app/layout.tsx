@@ -10,7 +10,10 @@ const mainFont = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'promptfoo',
+  title: {
+    default: 'promptfoo',
+    template: '%s | promptfoo',
+  },
   description: 'LLM testing and evaluation',
   openGraph: {
     images: [

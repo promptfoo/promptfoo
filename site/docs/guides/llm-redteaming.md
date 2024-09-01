@@ -14,6 +14,7 @@ This guide shows you how to automatically generate adversarial tests specificall
 - Competitor recommendations (when the LLM suggests alternatives to your business)
 - Unintended contracts (when the LLM makes commitments or agreements on behalf of your business)
 - Political statements
+- Custom policy violations (tailored to your specific use case)
 - Safety risks from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241): violent crimes, non-violent crimes, sex crimes, child exploitation, specialized financial/legal/medical advice, privacy, intellectual property, indiscriminate weapons, hate, self-harm, sexual content.
 - Safety risks from the [HarmBench](https://www.harmbench.org/) framework: Cybercrime & Unauthorized Intrusion, Chemical & Biological Weapons, Illegal Drugs, Copyright Violations, Misinformation & Disinformation, Harassment & Bullying, Illegal Activities, Graphic & age-restricted content, Promotion of unsafe practices, Privacy violations & data exploitation.
 
@@ -47,7 +48,7 @@ prompts:
   - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 ```
 
 :::tip
@@ -57,7 +58,7 @@ You can specify your redteam configuration directly in `promptfooconfig.yaml`. S
 Then create adversarial test cases:
 
 ```sh
-npx promptfoo@latest generate redteam -w
+npx promptfoo@latest redteam generate -w
 ```
 
 The `-w` option overwrites the `promptfooconfig.yaml` file to include the newly generated test cases.
@@ -237,10 +238,10 @@ For more information, see [Overriding the LLM grader](/docs/configuration/expect
 
 ## Step 3: Generate adversarial test cases
 
-Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo generate redteam` command:
+Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo redteam generate` command:
 
 ```sh
-npx promptfoo@latest generate redteam -w
+npx promptfoo@latest redteam generate -w
 ```
 
 This command works by reading your prompts and providers, and then generating a set of adversarial inputs that stress-test your prompts/models in a variety of situations. Test generation usually takes about 5 minutes.
@@ -257,6 +258,7 @@ The adversarial tests include:
 - Competitor recommendations (when the LLM suggests alternatives to your business)
 - Unintended contracts (when the LLM makes unintended commitments or agreements)
 - Political statements
+- Imitation of a person, brand, or organization
 
 It also tests for a variety of harmful input and output scenarios from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241) and [HarmBench](https://www.harmbench.org/) framework:
 
@@ -290,7 +292,7 @@ It also tests for a variety of harmful input and output scenarios from the [ML C
 By default, all of the above will be included in the redteam. To use specific types of tests, use `--plugins`:
 
 ```yaml
-npx promptfoo@latest generate redteam -w --plugins 'harmful,jailbreak,hijacking'
+npx promptfoo@latest redteam generate -w --plugins 'harmful,jailbreak,hijacking'
 ```
 
 The following plugins are enabled by default:
@@ -301,6 +303,7 @@ The following plugins are enabled by default:
 | excessive-agency | Tests if the model exhibits too much autonomy or makes decisions on its own. |
 | hallucination    | Tests if the model generates false or misleading content.                    |
 | harmful          | Tests for the generation of harmful or offensive content.                    |
+| imitation        | Tests if the model imitates a person, brand, or organization.                |
 | hijacking        | Tests the model's vulnerability to being used for unintended tasks.          |
 | jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       |
 | overreliance     | Tests for excessive trust in LLM output without oversight.                   |

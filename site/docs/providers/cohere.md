@@ -77,6 +77,46 @@ connectors:
   - id: web-search
 ```
 
+## Embedding Configuration
+
+Cohere provides embedding capabilities that can be used for various natural language processing tasks, including similarity comparisons. To use Cohere's embedding model in your evaluations, you can configure it as follows:
+
+1. In your `promptfooconfig.yaml` file, add the embedding configuration under the `defaultTest` section:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: cohere:embedding:embed-english-v3.0
+```
+
+This configuration sets the default embedding provider for all tests that require embeddings (such as similarity assertions) to use Cohere's `embed-english-v3.0` model.
+
+2. You can also specify the embedding provider for individual assertions:
+
+```yaml
+assert:
+  - type: similar
+    value: Some reference text
+    provider:
+      embedding:
+        id: cohere:embedding:embed-english-v3.0
+```
+
+3. Additional configuration options can be passed to the embedding provider:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: cohere:embedding:embed-english-v3.0
+        config:
+          apiKey: your_api_key_here # If not set via environment variable
+          truncate: NONE # Options: NONE, START, END
+```
+
 ## Displaying searches and documents
 
 When the Cohere API is called, the provider can optionally include the search queries and documents in the output. This is controlled by the `showSearchQueries` and `showDocuments` config parameters. If true, the content will be appending to the output.

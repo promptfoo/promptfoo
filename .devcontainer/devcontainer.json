@@ -1,0 +1,27 @@
+{
+  "name": "promptfoo_dev",
+  "dockerComposeFile": ["docker-compose.yml"],
+  "service": "promptfoo_dev",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "node",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": "never",
+          "source.trimTrailingWhitespace": "always",
+          "source.trimAutoWhitespace": "always"
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.inlayHints.enabled": "on"
+        },
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      },
+      "extensions": ["esbenp.prettier-vscode", "dbaeumer.vscode-eslint", "GitHub.copilot"]
+    }
+  },
+  "postCreateCommand": "npm ci && npm run build && npm link"
+}

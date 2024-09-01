@@ -2,8 +2,10 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import invariant from 'tiny-invariant';
+import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
+import { AI21ChatCompletionProvider } from './providers/ai21';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
   AzureOpenAiAssistantProvider,
@@ -14,7 +16,8 @@ import {
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
-import { CohereChatCompletionProvider } from './providers/cohere';
+import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
+import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
 import {
   HuggingfaceFeatureExtractionProvider,
@@ -56,16 +59,17 @@ import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WebhookProvider } from './providers/webhook';
+import RedteamCrescendoProvider from './redteam/providers/crescendo';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
+import type { TestSuiteConfig } from './types';
 import type {
   ApiProvider,
   EnvOverrides,
   ProviderOptions,
   ProviderOptionsMap,
-  TestSuiteConfig,
-} from './types';
+} from './types/providers';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -88,17 +92,24 @@ export async function loadApiProvider(
   let ret: ApiProvider;
   if (
     providerPath.startsWith('file://') &&
-    (providerPath.endsWith('.yaml') || providerPath.endsWith('.yml'))
+    (providerPath.endsWith('.yaml') ||
+      providerPath.endsWith('.yml') ||
+      providerPath.endsWith('.json'))
   ) {
     const filePath = providerPath.slice('file://'.length);
     const modulePath = path.isAbsolute(filePath)
       ? filePath
       : path.join(basePath || process.cwd(), filePath);
-    const yamlContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-    invariant(yamlContent, `Provider config ${filePath} is undefined`);
-    invariant(yamlContent.id, `Provider config ${filePath} must have an id`);
-    logger.info(`Loaded provider ${yamlContent.id} from ${filePath}`);
-    ret = await loadApiProvider(yamlContent.id, { ...context, options: yamlContent });
+    let fileContent: ProviderOptions;
+    if (providerPath.endsWith('.json')) {
+      fileContent = JSON.parse(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+    } else {
+      fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+    }
+    invariant(fileContent, `Provider config ${filePath} is undefined`);
+    invariant(fileContent.id, `Provider config ${filePath} must have an id`);
+    logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
+    ret = await loadApiProvider(fileContent.id, { ...context, options: fileContent });
   } else if (providerPath === 'echo') {
     ret = {
       id: () => 'echo',
@@ -134,9 +145,11 @@ export async function loadApiProvider(
     } else if (modelType === 'image') {
       ret = new OpenAiImageProvider(modelName, providerOptions);
     } else {
-      throw new Error(
-        `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
+      // Assume user did not provide model type, and it's a chat model
+      logger.warn(
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
       );
+      ret = new OpenAiChatCompletionProvider(modelType, providerOptions);
     }
   } else if (providerPath.startsWith('azureopenai:')) {
     // Load Azure OpenAI module
@@ -325,8 +338,21 @@ export async function loadApiProvider(
     const modelName = providerPath.split(':')[1];
     ret = new MistralChatCompletionProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('cohere:')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new CohereChatCompletionProvider(modelName, providerOptions);
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits.slice(2).join(':');
+
+    if (modelType === 'embedding' || modelType === 'embeddings') {
+      ret = new CohereEmbeddingProvider(modelName, providerOptions);
+    } else if (modelType === 'chat' || modelType === undefined) {
+      ret = new CohereChatCompletionProvider(modelName || modelType, providerOptions);
+    } else {
+      // Default to chat provider for any other model type
+      ret = new CohereChatCompletionProvider(
+        providerPath.substring('cohere:'.length),
+        providerOptions,
+      );
+    }
   } else if (providerPath.startsWith('localai:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
@@ -348,9 +374,17 @@ export async function loadApiProvider(
   } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
     ret = new RedteamIterativeTreeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
-    ret = new RedteamImageIterativeProvider();
+    ret = new RedteamImageIterativeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:crescendo') {
+    ret = new RedteamCrescendoProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
+  } else if (providerPath.startsWith('groq:')) {
+    const modelName = providerPath.split(':')[1];
+    ret = new GroqProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('ai21:')) {
+    const modelName = providerPath.split(':')[1];
+    ret = new AI21ChatCompletionProvider(modelName, providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
@@ -376,7 +410,8 @@ export async function loadApiProviders(
     env?: EnvOverrides;
   } = {},
 ): Promise<ApiProvider[]> {
-  const { basePath, env } = options;
+  const { basePath } = options;
+  const env = options.env || cliState.config?.env;
   if (typeof providerPaths === 'string') {
     return [await loadApiProvider(providerPaths, { basePath, env })];
   } else if (typeof providerPaths === 'function') {
@@ -427,5 +462,6 @@ export default {
   LocalAiChatProvider,
   BAMChatProvider,
   BAMEmbeddingProvider,
+  GroqProvider,
   loadApiProvider,
 };

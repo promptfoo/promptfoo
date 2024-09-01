@@ -1,5 +1,5 @@
 import confirm from '@inquirer/confirm';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import logger from '../logger';
 import { createDummyFiles } from '../onboarding';
 import telemetry from '../telemetry';

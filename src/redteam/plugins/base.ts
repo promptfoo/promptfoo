@@ -1,31 +1,40 @@
+import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import cliState from '../../cliState';
 import logger from '../../logger';
-import type { ApiProvider, Assertion, TestCase } from '../../types';
+import { matchesLlmRubric } from '../../matchers';
+import type { ApiProvider, Assertion, AssertionValue, TestCase } from '../../types';
+import type { AtomicTestCase, GradingResult } from '../../types';
+import { maybeLoadFromExternalFile } from '../../util';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { getNunjucksEngine } from '../../util/templates';
-import { retryWithDeduplication, sampleArray } from '../util';
+import { loadRedteamProvider } from '../providers/shared';
+import { removePrefix } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
-export default abstract class PluginBase {
-  /**
-   * Template string used to generate prompts.
-   */
-  protected abstract template: string;
-
+export abstract class PluginBase {
   /**
    * Creates an instance of PluginBase.
    * @param provider - The API provider used for generating prompts.
    * @param purpose - The purpose of the plugin.
    * @param injectVar - The variable name to inject the generated prompt into.
+   * @param modifiers - An optional object of modifiers to append to the template.
    */
   constructor(
     protected provider: ApiProvider,
     protected purpose: string,
     protected injectVar: string,
+    protected modifiers: Record<string, string> = {},
   ) {
     logger.debug(`PluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }
+
+  /**
+   * Template string used to generate prompts.
+   */
+  protected abstract getTemplate(): Promise<string>;
 
   /**
    * Abstract method to get assertions for a given prompt.
@@ -48,33 +57,140 @@ export default abstract class PluginBase {
      * @param currentPrompts - The current list of prompts.
      * @returns A promise that resolves to an array of new prompts.
      */
-    const generatePrompts = async (currentPrompts: string[]): Promise<string[]> => {
+    const generatePrompts = async (
+      currentPrompts: { prompt: string }[],
+    ): Promise<{ prompt: string }[]> => {
       const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
-      logger.debug(`Generating batch of ${currentBatchSize} prompts`);
 
+      logger.debug(`Generating batch of ${currentBatchSize} prompts`);
       const nunjucks = getNunjucksEngine();
-      const { output: generatedPrompts } = await this.provider.callApi(
-        nunjucks.renderString(this.template, {
-          purpose: this.purpose,
-          n: currentBatchSize,
-        }),
-      );
+      const renderedTemplate = nunjucks.renderString(await this.getTemplate(), {
+        purpose: this.purpose,
+        n: currentBatchSize,
+      });
+
+      const finalTemplate = this.appendModifiers(renderedTemplate);
+      const { output: generatedPrompts } = await this.provider.callApi(finalTemplate);
 
       invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
-      return generatedPrompts
-        .split('\n')
-        .filter((line) => line.includes('Prompt:'))
-        .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
+      return this.parseGeneratedPrompts(generatedPrompts);
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
     const prompts = sampleArray(allPrompts, n);
-    logger.debug(`Generating test cases from ${prompts.length} prompts`);
+    logger.debug(`${this.constructor.name} generating test cases from ${prompts.length} prompts`);
+    return this.promptsToTestCases(prompts);
+  }
+
+  /**
+   * Converts an array of { prompt: string } objects into an array of test cases.
+   * @param prompts - An array of { prompt: string } objects.
+   * @returns An array of test cases.
+   */
+  protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
     return prompts.sort().map((prompt) => ({
       vars: {
-        [this.injectVar]: prompt,
+        [this.injectVar]: prompt.prompt,
       },
-      assert: this.getAssertions(prompt),
+      assert: this.getAssertions(prompt.prompt),
     }));
+  }
+
+  /**
+   * Parses the LLM response of generated prompts into an array of objects.
+   *
+   * @param generatedPrompts - The LLM response of generated prompts.
+   * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
+   */
+  protected parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
+    return generatedPrompts
+      .split('\n')
+      .filter((line: string) => line.includes('Prompt:'))
+      .map((line: string) => {
+        line = removePrefix(line, 'Prompt');
+        return { prompt: line };
+      });
+  }
+
+  private appendModifiers(template: string): string {
+    if (
+      Object.keys(this.modifiers).length === 0 ||
+      Object.values(this.modifiers).every((value) => typeof value === 'undefined' || value === '')
+    ) {
+      return template;
+    }
+
+    const modifierSection = Object.entries(this.modifiers)
+      .filter(([key, value]) => typeof value !== 'undefined' && value !== '')
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+
+    return dedent`
+      ${template.trim()}
+
+      CRITICAL: Ensure all generated prompts strictly follow these requirements:
+      <Modifiers>
+      ${modifierSection}
+      </Modifiers>
+      Rewrite ALL prompts to fully comply with the above modifiers.
+    `.trim();
+  }
+}
+
+/**
+ * Base class for all redteam graders.
+ *
+ * Each grader should implement an id (e.g. `promptfoo:redteam:foo`) and a rubric (grading prompt).
+ * By default, the rubric is passed to `llm-rubric` grader.
+ *
+ * But if you'd like, you can override the `getResult` method to use a different grading method.
+ */
+export abstract class RedteamModelGrader {
+  abstract id: string;
+  abstract rubric: string;
+
+  async getResult(
+    prompt: string,
+    llmOutput: string,
+    test: AtomicTestCase,
+    provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string }> {
+    invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+    const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
+    const vars = {
+      ...test.metadata,
+      prompt,
+      entities: test.metadata?.entities ?? [],
+      tools: maybeLoadFromExternalFile(provider?.config?.tools),
+      value: renderedValue,
+    };
+    let finalRubric: string;
+    try {
+      finalRubric = nunjucks.renderString(this.rubric, vars);
+    } catch (error) {
+      const err = error as Error;
+      logger.debug(`Error rendering rubric template: ${err.message}`);
+      logger.debug(`Template: ${this.rubric}`);
+      logger.debug(`Variables: ${JSON.stringify(vars)}`);
+      throw new Error(dedent`
+        Error rendering rubric template: ${err.message}
+
+        Variables: ${JSON.stringify(vars, null, 2)}
+      `);
+    }
+    const grade = await matchesLlmRubric(finalRubric, llmOutput, {
+      ...test.options,
+      provider: await loadRedteamProvider({
+        provider:
+          // First try loading the provider from defaultTest, otherwise fall back to the default red team provider.
+          cliState.config?.defaultTest?.provider ||
+          cliState.config?.defaultTest?.options?.provider?.text ||
+          cliState.config?.defaultTest?.options?.provider,
+        jsonOnly: true,
+      }),
+    });
+    logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
+    return { grade, rubric: finalRubric };
   }
 }

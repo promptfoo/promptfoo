@@ -41,7 +41,7 @@ Define one or more language model providers to use. For example, here we compare
 
 ```yaml
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
   - openai:gpt-4o
 ```
 
@@ -159,7 +159,7 @@ prompts:
     Only output SQL code.
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 
 tests:
   - vars:

@@ -1,5 +1,6 @@
 // https://supabase.com/docs/guides/auth/auth-helpers/nextjs
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 /*
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';

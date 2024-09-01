@@ -14,11 +14,11 @@ export OPENAI_API_KEY=your_api_key_here
 
 The OpenAI provider supports the following model formats:
 
-- `openai:chat` - defaults to `gpt-3.5-turbo`
+- `openai:chat` - defaults to `gpt-4o-mini`
 - `openai:completion` - defaults to `text-davinci-003`
 - `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
 - `openai:chat:<model name>` - uses any model name against the `/v1/chat/completions` endpoint
-- `openai:chat:ft:gpt-3.5-turbo-0613:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:chat:ft:gpt-4o-mini:company-name:ID` - example of a fine-tuned chat completion model
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:assistant:<assistant id>` - use an assistant
@@ -48,7 +48,7 @@ The `providers` list takes a `config` key that allows you to set parameters like
 
 ```yaml
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     config:
       temperature: 0
       max_tokens: 128
@@ -91,28 +91,20 @@ interface OpenAiConfig {
   frequency_penalty?: number;
   presence_penalty?: number;
   best_of?: number;
-  functions?: {
-    name: string;
-    description?: string;
-    parameters: any;
-  }[];
+  functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: {
-    type: string;
-    function: {
-      name: string;
-      description?: string;
-      parameters: any;
-    };
-  }[];
-  tool_choice?:
-    | 'none'
-    | 'auto'
-    | { type: 'function'; function?: { name: string } }
-    | { type: 'file_search' };
+  tools?: OpenAiTool[];
+  tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
+  response_format?: { type: 'json_object' | 'json_schema'; json_schema?: object };
   stop?: string[];
-  response_format?: { type: string };
   seed?: number;
+  passthrough?: object;
+
+  // Function tool callbacks
+  functionToolCallbacks?: Record<
+    OpenAI.FunctionDefinition['name'],
+    (arg: string) => Promise<string>
+  >;
 
   // General OpenAI parameters
   apiKey?: string;
@@ -206,7 +198,7 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. Add your 
 ```yaml
 prompts: [prompt.txt]
 providers:
-  - id: openai:chat:gpt-3.5-turbo-0613
+  - id: openai:chat:gpt-4o-mini
     // highlight-start
     config:
       tools: [
@@ -323,7 +315,7 @@ Use the `functions` config to define custom functions. Each function should be a
 ```yaml
 prompts: [prompt.txt]
 providers:
-  - id: openai:chat:gpt-3.5-turbo-0613
+  - id: openai:chat:gpt-4o-mini
     // highlight-start
     config:
       functions:
@@ -376,7 +368,7 @@ tests:
 
   - vars:
       city: New York
-    # transform returns only the 'name' property for this testcase
+    # transform returns only the 'name' property for this test case
     transform: output.name
     assert:
       - type: is-json
@@ -395,10 +387,17 @@ providers:
   - file://./path/to/provider_with_function.yaml
 ```
 
+You can also use a pattern to load multiple files:
+
+```yaml
+providers:
+  - file://./path/to/provider_*.yaml
+```
+
 Here's an example of how your `provider_with_function.yaml` might look:
 
 ```yaml
-id: openai:chat:gpt-3.5-turbo-0613
+id: openai:chat:gpt-4o-mini
 config:
   functions:
     - name: get_current_weather
@@ -417,6 +416,44 @@ config:
             description: The unit in which to return the temperature
         required:
           - location
+```
+
+## Using `response_format`
+
+Promptfoo supports the `response_format` parameter, which allows you to specify the expected output format.
+
+`response_format` can be included in the provider config, or in the prompt config.
+
+#### Prompt config example
+
+```yaml
+prompts:
+  - label: 'Prompt #1'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
+
+#### Provider config example
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4o-mini
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
+
+#### External file references
+
+To make it easier to manage large JSON schemas, external file references are supported:
+
+```yaml
+config:
+  response_format: file://./path/to/response_format.json
 ```
 
 ## Supported environment variables

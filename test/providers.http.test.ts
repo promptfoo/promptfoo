@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../src/cache';
-import { HttpProvider } from '../src/providers/http';
+import { HttpProvider, processBody } from '../src/providers/http';
 
 jest.mock('../src/cache', () => ({
   fetchWithCache: jest.fn(),
@@ -62,6 +62,7 @@ describe('HttpProvider', () => {
       config: {
         method: 'GET',
         headers: { Authorization: 'Bearer token' },
+        body: { key: '{{ prompt }}' },
         responseParser: (data: any) => data,
       },
     });
@@ -74,6 +75,7 @@ describe('HttpProvider', () => {
       expect.objectContaining({
         method: 'GET',
         headers: { Authorization: 'Bearer token' },
+        body: JSON.stringify({ key: 'test prompt' }),
       }),
       expect.any(Number),
       'json',
@@ -88,7 +90,10 @@ describe('HttpProvider', () => {
   testCases.forEach(({ parser, expected }) => {
     it(`should handle response parser type: ${parser}`, async () => {
       provider = new HttpProvider(mockUrl, {
-        config: { responseParser: parser },
+        config: {
+          body: { key: '{{ prompt }}' },
+          responseParser: parser,
+        },
       });
       const mockResponse = { data: { result: 'parsed', custom: 'parsed' }, cached: false };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
@@ -140,29 +145,104 @@ describe('HttpProvider', () => {
     expect(fetchWithCache).toHaveBeenCalledWith(
       mockUrl,
       expect.objectContaining({
-        body: JSON.stringify({ key: '{"key": "value"}' }),
+        body: JSON.stringify({ key: { key: 'value' } }),
       }),
       expect.any(Number),
       'json',
     );
   });
 
-  it('should handle invalid JSON in config', async () => {
-    const invalidConfig = '{invalid:json}';
-    provider = new HttpProvider(mockUrl, {
-      config: invalidConfig as any,
-    });
-
-    await expect(provider.callApi('test prompt')).rejects.toThrow(
-      new Error("Cannot read properties of undefined (reading 'data')"),
+  it('should throw an error when creating HttpProvider with invalid config', () => {
+    const invalidConfig = 'this isnt json';
+    expect(() => {
+      new HttpProvider(mockUrl, {
+        config: invalidConfig as any,
+      });
+    }).toThrow(
+      new Error(
+        'Invariant failed: Expected HTTP provider http://example.com/api to have a config containing {body}, but instead got "this isnt json"',
+      ),
     );
   });
 
   it('should return provider id and string representation', () => {
     provider = new HttpProvider(mockUrl, {
-      config: {},
+      config: { body: 'yo mama' },
     });
     expect(provider.id()).toBe(mockUrl);
     expect(provider.toString()).toBe(`[HTTP Provider ${mockUrl}]`);
+  });
+
+  describe('processBody', () => {
+    it('should process simple key-value pairs', () => {
+      const body = { key: 'value', prompt: '{{ prompt }}' };
+      const vars = { prompt: 'test prompt' };
+      const result = processBody(body, vars);
+      expect(result).toEqual({ key: 'value', prompt: 'test prompt' });
+    });
+
+    it('should process nested objects', () => {
+      const body = {
+        outer: {
+          inner: '{{ prompt }}',
+          static: 'value',
+        },
+      };
+      const vars = { prompt: 'test prompt' };
+      const result = processBody(body, vars);
+      expect(result).toEqual({
+        outer: {
+          inner: 'test prompt',
+          static: 'value',
+        },
+      });
+    });
+
+    it('should process arrays', () => {
+      const body = {
+        list: ['{{ prompt }}', 'static', '{{ prompt }}'],
+      };
+      const vars = { prompt: 'test prompt' };
+      const result = processBody(body, vars);
+      expect(result).toEqual({
+        list: ['test prompt', 'static', 'test prompt'],
+      });
+    });
+
+    it('should handle JSON strings', () => {
+      const body = {
+        jsonString: '{"key": "{{ prompt }}"}',
+      };
+      const vars = { prompt: 'test prompt' };
+      const result = processBody(body, vars);
+      expect(result).toEqual({
+        jsonString: { key: 'test prompt' },
+      });
+    });
+
+    it('should handle empty vars', () => {
+      const body = { key: '{{ prompt }}' };
+      const result = processBody(body, {});
+      expect(result).toEqual({ key: '' });
+    });
+
+    it('should handle complex nested structures', () => {
+      const body = {
+        outer: {
+          inner: ['{{ prompt }}', { nestedKey: '{{ prompt }}' }],
+          static: 'value',
+        },
+        jsonArray: '[1, 2, "{{ prompt }}"]',
+      };
+      const vars = { prompt: 'test prompt' };
+      const result = processBody(body, vars);
+      expect(result).toEqual({
+        outer: {
+          inner: ['test prompt', { nestedKey: 'test prompt' }],
+          static: 'value',
+        },
+        jsonArray: [1, 2, 'test prompt'],
+      });
+    });
   });
 });

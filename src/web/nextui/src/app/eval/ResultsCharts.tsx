@@ -92,7 +92,7 @@ function HistogramChart({ table }: ChartProps) {
     const range = Math.ceil(maxScore) - Math.floor(minScore); // Adjust the range to be between whole numbers
     const binSize = range / 10; // Define the size of each bin
     const bins = Array.from({ length: 11 }, (_, i) =>
-      parseFloat((Math.floor(minScore) + i * binSize).toFixed(2)),
+      Number.parseFloat((Math.floor(minScore) + i * binSize).toFixed(2)),
     );
 
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
@@ -125,11 +125,11 @@ function HistogramChart({ table }: ChartProps) {
           },
           tooltip: {
             callbacks: {
-              title: function (context) {
+              title(context) {
                 const datasetIndex = context[0].datasetIndex;
                 return `Column ${datasetIndex + 1}`;
               },
-              label: function (context) {
+              label(context) {
                 const labelIndex = context.dataIndex;
                 const lowerBound = bins[labelIndex];
                 const upperBound = bins[labelIndex + 1];
@@ -265,7 +265,7 @@ function ScatterChart({ table }: ChartProps) {
           },
           tooltip: {
             callbacks: {
-              label: function (tooltipItem: TooltipItem<'scatter'>) {
+              label(tooltipItem: TooltipItem<'scatter'>) {
                 const row = table.body[tooltipItem.dataIndex];
                 let prompt1Text = row.outputs[0].text;
                 let prompt2Text = row.outputs[1].text;
@@ -287,7 +287,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${xAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback: function (value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: any[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -302,7 +302,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${yAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback: function (value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: any[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -395,7 +395,7 @@ function MetricChart({ table }: ChartProps) {
           },
           y: {
             ticks: {
-              callback: function (value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: any[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -408,10 +408,10 @@ function MetricChart({ table }: ChartProps) {
         plugins: {
           tooltip: {
             callbacks: {
-              title: function (tooltipItem: TooltipItem<'bar'>[]) {
+              title(tooltipItem: TooltipItem<'bar'>[]) {
                 return tooltipItem[0].dataset.label;
               },
-              label: function (tooltipItem: TooltipItem<'bar'>) {
+              label(tooltipItem: TooltipItem<'bar'>) {
                 const value = tooltipItem.parsed.y;
                 return `${labels[tooltipItem.dataIndex]}: ${(value * 100).toFixed(2)}% pass rate`;
               },
