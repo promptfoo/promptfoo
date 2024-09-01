@@ -407,6 +407,10 @@ export default function Dashboard() {
                   <canvas ref={overallPassRateChartRef}></canvas>
                 </Paper>
               </Grid>
+              {/* Emerging Risks */}
+              <Grid item xs={12} md={12}>
+                <EmergingRisks evals={evals} />
+              </Grid>
               {/* Recent Evals */}
               <Grid item xs={12} md={6}>
                 <Paper
@@ -416,7 +420,7 @@ export default function Dashboard() {
                   <RecentEvals evals={evals} />
                 </Paper>
               </Grid>
-              {/* New panel: Top Failing Categories */}
+              {/* Top Failing Categories */}
               <Grid item xs={12} md={6}>
                 <Paper
                   elevation={3}
@@ -424,10 +428,6 @@ export default function Dashboard() {
                 >
                   <TopFailingCategories evals={evals} />
                 </Paper>
-              </Grid>
-              {/* New panel: Emerging Risks */}
-              <Grid item xs={12} md={12}>
-                <EmergingRisks evals={evals} />
               </Grid>
               {/* Category Breakdown */}
               <Grid item xs={12}>
