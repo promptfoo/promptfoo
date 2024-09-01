@@ -1,12 +1,30 @@
 import React from 'react';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import TrendingFlatIcon from '@mui/icons-material/TrendingFlat';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import { Paper, Typography, Box } from '@mui/material';
 
 interface MetricCardProps {
   title: string;
   value: string;
+  trend?: 'up' | 'down' | 'flat';
+  trendValue?: string;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ title, value }) => {
+const MetricCard: React.FC<MetricCardProps> = ({ title, value, trend, trendValue }) => {
+  const getTrendIcon = () => {
+    switch (trend) {
+      case 'up':
+        return <TrendingUpIcon sx={{ color: 'success.main' }} />;
+      case 'down':
+        return <TrendingDownIcon sx={{ color: 'error.main' }} />;
+      case 'flat':
+        return <TrendingFlatIcon sx={{ color: 'text.secondary' }} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <Paper
       elevation={3}
@@ -23,10 +41,28 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value }) => {
       <Typography variant="h6" gutterBottom>
         {title}
       </Typography>
-      <Box sx={{ mt: 2 }}>
+      <Box
+        sx={{
+          mt: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
           {value}
         </Typography>
+        {trend && (
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+            {getTrendIcon()}
+            {trendValue && (
+              <Typography variant="body2" sx={{ ml: 0.5 }}>
+                {trendValue}
+              </Typography>
+            )}
+          </Box>
+        )}
       </Box>
     </Paper>
   );

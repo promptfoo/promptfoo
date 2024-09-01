@@ -18,6 +18,7 @@ import MetricCard from './MetricCard';
 import RecentEvals from './RecentEvals';
 import Sidebar from './Sidebar';
 import TopFailingCategories from './TopFailingCategories';
+import { calculateTrend } from './utils';
 
 Chart.register(...registerables);
 
@@ -225,6 +226,54 @@ export default function Dashboard() {
         : 0
       : 0;
 
+  const calculateMetricTrends = () => {
+    const currentPassRate = latestPassRate * 100;
+    const previousPassRate =
+      evals.length > 1 && evals[1].metrics?.testPassCount && evals[1].metrics?.testFailCount
+        ? (evals[1].metrics.testPassCount /
+            (evals[1].metrics.testPassCount + evals[1].metrics.testFailCount)) *
+          100
+        : currentPassRate;
+
+    const passRateTrend = calculateTrend(currentPassRate, previousPassRate);
+
+    const currentTotalTests = totalTests;
+    const previousTotalTests =
+      evals.length > 1
+        ? evals
+            .slice(1)
+            .reduce(
+              (sum, eval_) =>
+                sum + (eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0),
+              0,
+            )
+        : currentTotalTests;
+
+    const totalTestsTrend = calculateTrend(currentTotalTests, previousTotalTests);
+
+    // Calculate average pass rate trend by looking at the average pass rate of the last half of the evals
+    const currentAveragePassRate = averagePassRate * 100;
+    const previousAveragePassRate =
+      evals.length > 1
+        ? (evals.slice(Math.floor(evals.length / 2)).reduce((sum, eval_) => {
+            const passRate =
+              eval_.metrics?.testPassCount && eval_.metrics?.testFailCount
+                ? eval_.metrics.testPassCount /
+                  (eval_.metrics.testPassCount + eval_.metrics.testFailCount)
+                : 0;
+            return sum + passRate;
+          }, 0) /
+            Math.floor(evals.length / 2)) *
+          100
+        : currentAveragePassRate;
+
+    const averagePassRateTrend = calculateTrend(currentAveragePassRate, previousAveragePassRate);
+
+    return { passRateTrend, totalTestsTrend, averagePassRateTrend };
+  };
+
+  const { passRateTrend, totalTestsTrend, averagePassRateTrend } = calculateMetricTrends();
+
   return (
     <Box
       sx={{
@@ -299,21 +348,30 @@ export default function Dashboard() {
             </Box>
           ) : (
             <Grid container spacing={3}>
-              {/* Add these new metric cards */}
+              {/* Metric cards */}
               <Grid item xs={12} md={4}>
                 <MetricCard
                   title="Current Pass Rate"
                   value={`${(latestPassRate * 100).toFixed(2)}%`}
+                  trend={passRateTrend.direction}
+                  trendValue={`${passRateTrend.value.toFixed(2)}%`}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
                 <MetricCard
                   title="Average Pass Rate"
                   value={`${(averagePassRate * 100).toFixed(2)}%`}
+                  trend={averagePassRateTrend.direction}
+                  trendValue={`${averagePassRateTrend.value.toFixed(2)}%`}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
-                <MetricCard title="Total Probes" value={totalTests.toLocaleString()} />
+                <MetricCard
+                  title="Total Probes"
+                  value={totalTests.toLocaleString()}
+                  trend={totalTestsTrend.direction}
+                  trendValue={`${totalTestsTrend.value.toFixed(2)}%`}
+                />
               </Grid>
 
               {/* Pass Rate Over Time Chart */}
