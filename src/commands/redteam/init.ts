@@ -11,21 +11,21 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getUserEmail, setUserEmail } from '../accounts';
-import { getEnvString } from '../envars';
-import { readGlobalConfig, writeGlobalConfigPartial } from '../globalConfig';
-import logger from '../logger';
+import { getUserEmail, setUserEmail } from '../../accounts';
+import { getEnvString } from '../../envars';
+import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig';
+import logger from '../../logger';
 import {
   ADDITIONAL_STRATEGIES,
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   subCategoryDescriptions,
-} from '../redteam/constants';
-import telemetry, { type EventValue } from '../telemetry';
-import type { RedteamPluginObject } from '../types';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../util/templates';
-import { doGenerateRedteam } from './generate/redteam';
+} from '../../redteam/constants';
+import telemetry, { type EventValue } from '../../telemetry';
+import type { RedteamPluginObject } from '../../types';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+import { doGenerateRedteam } from './generate';
 
 const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
 # Docs: https://promptfoo.dev/docs/red-team/configuration
@@ -605,28 +605,6 @@ export function initCommand(program: Command) {
         } else {
           throw err;
         }
-      }
-    });
-}
-
-export function pluginsCommand(program: Command) {
-  program
-    .command('plugins')
-    .description('List all available plugins')
-    .option('--ids-only', 'Show only plugin IDs without descriptions')
-    .option('--default', 'Show only the default plugins')
-    .action(async (options) => {
-      const pluginsToShow = options.default ? DEFAULT_PLUGINS : ALL_PLUGINS;
-
-      if (options.idsOnly) {
-        pluginsToShow.forEach((plugin) => {
-          logger.info(plugin);
-        });
-      } else {
-        pluginsToShow.forEach((plugin) => {
-          const description = subCategoryDescriptions[plugin] || 'No description available';
-          logger.info(`${chalk.blue.bold(plugin)}: ${description}`);
-        });
       }
     });
 }

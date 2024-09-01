@@ -9,14 +9,12 @@ import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
 import { generateDatasetCommand } from './commands/generate/dataset';
-import { generateRedteamCommand } from './commands/generate/redteam';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
-import {
-  initCommand as redteamInitCommand,
-  pluginsCommand as redteamPluginsCommand,
-} from './commands/redteam';
+import { generateRedteamCommand } from './commands/redteam/generate';
+import { initCommand as redteamInitCommand } from './commands/redteam/init';
+import { pluginsCommand as redteamPluginsCommand } from './commands/redteam/plugins';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { versionCommand } from './commands/version';
