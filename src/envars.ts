@@ -43,6 +43,7 @@ export type EnvVars = {
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
+  PROMPTFOO_NO_REDTEAM_MODERATION?: boolean;
 
   // 3rd party
   ANTHROPIC_MAX_TOKENS?: number;

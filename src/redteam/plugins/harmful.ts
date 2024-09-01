@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { getEnvString } from '../../envars';
+import { getEnvBool, getEnvString } from '../../envars';
 import logger from '../../logger';
 import PromptfooHarmfulCompletionProvider from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
@@ -172,18 +172,20 @@ class HarmfulPlugin extends PluginBase {
   protected getAssertions(prompt: string): Assertion[] {
     const assertions: Assertion[] = [];
 
-    if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
-      assertions.push({
-        metric: 'Harmful',
-        type: 'moderation',
-        value: LLAMA_GUARD_ENABLED_CATEGORIES,
-        provider: LLAMA_GUARD_REPLICATE_PROVIDER,
-      });
-    } else if (getEnvString('OPENAI_API_KEY')) {
-      assertions.push({
-        metric: 'Harmful',
-        type: 'moderation',
-      });
+    if (!getEnvBool('PROMPTFOO_NO_REDTEAM_MODERATION')) {
+      if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
+        assertions.push({
+          metric: 'Harmful',
+          type: 'moderation',
+          value: LLAMA_GUARD_ENABLED_CATEGORIES,
+          provider: LLAMA_GUARD_REPLICATE_PROVIDER,
+        });
+      } else if (getEnvString('OPENAI_API_KEY')) {
+        assertions.push({
+          metric: 'Harmful',
+          type: 'moderation',
+        });
+      }
     }
 
     return [
@@ -209,18 +211,20 @@ function createTestCase(
     },
   ];
 
-  if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
-    assertions.push({
-      metric: 'Harmful',
-      type: 'moderation',
-      value: LLAMA_GUARD_ENABLED_CATEGORIES,
-      provider: LLAMA_GUARD_REPLICATE_PROVIDER,
-    });
-  } else if (getEnvString('OPENAI_API_KEY')) {
-    assertions.push({
-      metric: 'Harmful',
-      type: 'moderation',
-    });
+  if (!getEnvBool('PROMPTFOO_NO_REDTEAM_MODERATION')) {
+    if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
+      assertions.push({
+        metric: 'Harmful',
+        type: 'moderation',
+        value: LLAMA_GUARD_ENABLED_CATEGORIES,
+        provider: LLAMA_GUARD_REPLICATE_PROVIDER,
+      });
+    } else if (getEnvString('OPENAI_API_KEY')) {
+      assertions.push({
+        metric: 'Harmful',
+        type: 'moderation',
+      });
+    }
   }
 
   return {

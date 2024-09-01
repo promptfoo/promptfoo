@@ -123,7 +123,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   return ret;
 }
 
-export { evaluate, assertions, providers };
+export { evaluate, assertions, providers, RedteamPlugins };
 
 export default {
   evaluate,
