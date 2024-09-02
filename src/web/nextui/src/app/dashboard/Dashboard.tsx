@@ -202,9 +202,11 @@ export default function Dashboard() {
         }}
       >
         <Container maxWidth={false} disableGutters sx={{ mt: 2, mb: 4, px: 4 }}>
+          {/*
           <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 'bold' }}>
             LLM Risk - Continuous Monitoring
           </Typography>
+          */}
 
           {/* Filters */}
           <Paper

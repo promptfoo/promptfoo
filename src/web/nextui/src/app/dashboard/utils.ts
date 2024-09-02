@@ -3,9 +3,9 @@ export function calculateTrend(current: number, previous: number) {
   const percentChange = difference / previous;
 
   let direction: 'up' | 'down' | 'flat';
-  if (percentChange > 1) {
+  if (percentChange > 0.01) {
     direction = 'up';
-  } else if (percentChange < -1) {
+  } else if (percentChange < -0.01) {
     direction = 'down';
   } else {
     direction = 'flat';
