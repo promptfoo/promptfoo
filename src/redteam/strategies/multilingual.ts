@@ -1,5 +1,7 @@
+import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import type { TestCase } from '../../types';
 import { ATTACKER_MODEL, TEMPERATURE } from '../providers/constants';
@@ -36,6 +38,19 @@ export async function addMultilingual(
   );
 
   const translatedTestCases: TestCase[] = [];
+  const totalOperations = testCases.length * languages.length;
+
+  let progressBar: SingleBar | undefined;
+  if (logger.level !== 'debug') {
+    progressBar = new SingleBar(
+      {
+        format: 'Generating Multilingual {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
+        hideCursor: true,
+      },
+      Presets.shades_classic,
+    );
+    progressBar.start(totalOperations, 0);
+  }
 
   for (const testCase of testCases) {
     const originalText = String(testCase.vars![injectVar]);
@@ -54,7 +69,17 @@ export async function addMultilingual(
           [injectVar]: translatedText,
         },
       });
+
+      if (progressBar) {
+        progressBar.increment(1);
+      } else {
+        logger.debug(`Translated to ${lang}: ${translatedTestCases.length} of ${totalOperations}`);
+      }
     }
+  }
+
+  if (progressBar) {
+    progressBar.stop();
   }
 
   return translatedTestCases;
