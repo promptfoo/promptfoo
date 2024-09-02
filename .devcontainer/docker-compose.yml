@@ -3,17 +3,12 @@ services:
     build:
       context: ..
       dockerfile: ./.devcontainer/Dockerfile.dev
-    network_mode: 'host'
     volumes:
-      - ..:/workspace:Z
-      - /workspace/node_modules
-      - promptfoo_npm_global:/home/promptfoo/.npm-global
-      - promptfoo_cache:/home/promptfoo/.cache/promptfoo
-    user: promptfoo
-    command: /bin/zsh -c "while true; do sleep 1; done"
-    environment:
-      - SHELL=/bin/zsh
+      - ..:/workspace:cached
+      - promptfoo_cache:/home/node/.promptfoo/
+      - promptfoo_npm_global:/home/node/.npm-global
+    command: sleep infinity
 
 volumes:
-  promptfoo_npm_global:
   promptfoo_cache:
+  promptfoo_npm_global:

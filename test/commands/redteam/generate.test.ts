@@ -1,9 +1,9 @@
 import fs from 'fs';
-import { doGenerateRedteam } from '../../../src/commands/generate/redteam';
+import { doGenerateRedteam } from '../../../src/commands/redteam/generate';
 import * as configModule from '../../../src/config';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
-import type { RedteamGenerateOptions } from '../../../src/types/redteam';
+import type { RedteamCliGenerateOptions } from '../../../src/types/redteam';
 import { writePromptfooConfig } from '../../../src/util/config';
 
 jest.mock('fs');
@@ -45,7 +45,7 @@ describe('doGenerateRedteam', () => {
       },
     ] as any);
 
-    const options: RedteamGenerateOptions = {
+    const options: RedteamCliGenerateOptions = {
       output: 'output.yaml',
       config: 'config.yaml',
       cache: true,
@@ -108,11 +108,10 @@ describe('doGenerateRedteam', () => {
       }),
       'output.yaml',
     );
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Wrote 1 new test cases'));
   });
 
   it('should write to config file when write option is true', async () => {
-    const options: RedteamGenerateOptions = {
+    const options: RedteamCliGenerateOptions = {
       config: 'config.yaml',
       cache: true,
       defaultConfig: {},
@@ -156,7 +155,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should use purpose when no config is provided', async () => {
-    const options: RedteamGenerateOptions = {
+    const options: RedteamCliGenerateOptions = {
       purpose: 'Test purpose',
       cache: true,
       defaultConfig: {},

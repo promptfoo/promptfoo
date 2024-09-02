@@ -28,6 +28,7 @@ export default function Careers(): JSX.Element {
         <ul>
           <li>Engineering</li>
           <li>Developer Relations</li>
+          <li>Founding Sales</li>
         </ul>
         <p>
           If you're a self-driven generalist who can build and ship quickly, aggressively

@@ -20,12 +20,12 @@ import {
 import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
 import type { RedteamStrategyObject, SynthesizeOptions } from '../../types/redteam';
-import type { RedteamConfig, RedteamGenerateOptions } from '../../types/redteam';
+import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../../types/redteam';
 import { printBorder, setupEnv } from '../../util';
 import { writePromptfooConfig } from '../../util/config';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 
-export async function doGenerateRedteam(options: RedteamGenerateOptions) {
+export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled.');
@@ -33,7 +33,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   }
 
   let testSuite: TestSuite;
-  let redteamConfig: RedteamConfig | undefined;
+  let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
   if (configPath) {
     const resolved = await resolveConfigs(
@@ -71,9 +71,9 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   if (!process.env.OPENAI_API_KEY && !redteamConfig?.provider) {
     logger.warn(
       dedent`\n${chalk.bold('Warning: OPENAI_API_KEY environment variable is not set.')}
-      
+
       Please set this environment variable in order to generate tests.
-      
+
       For more info on configuring custom providers, see the documentation: https://www.promptfoo.dev/docs/red-team/configuration/\n
       `,
     );
@@ -105,8 +105,13 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     typeof s === 'string' ? { id: s } : s,
   );
 
-  logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
-  logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
+  try {
+    logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
+    logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
+  } catch (error) {
+    logger.error('Error logging plugins and strategies. One did not have a valid id.');
+    logger.error(error);
+  }
 
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
@@ -117,6 +122,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
     strategies: strategyObjs,
+    delay: redteamConfig?.delay || options.delay,
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
@@ -135,6 +141,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     numTests: config.numTests,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
     maxConcurrency: config.maxConcurrency,
+    delay: config.delay,
   } as SynthesizeOptions);
 
   const updatedRedteamConfig = {
@@ -232,8 +239,8 @@ export function generateRedteamCommand(
     )
     .option(
       '--plugins <plugins>',
-      dedent`Comma-separated list of plugins to use. Use 'default' to include default plugins. 
-      
+      dedent`Comma-separated list of plugins to use. Use 'default' to include default plugins.
+
         Defaults to:
         - default (includes: ${Array.from(REDTEAM_DEFAULT_PLUGINS).sort().join(', ')})
 
@@ -244,8 +251,8 @@ export function generateRedteamCommand(
     )
     .option(
       '--strategies <strategies>',
-      dedent`Comma-separated list of strategies to use. Use 'default' to include default strategies. 
-      
+      dedent`Comma-separated list of strategies to use. Use 'default' to include default strategies.
+
         Defaults to:
         - default (includes: ${Array.from(DEFAULT_STRATEGIES).sort().join(', ')})
 
@@ -272,9 +279,12 @@ export function generateRedteamCommand(
       (val) => Number.parseInt(val, 10),
       defaultConfig.evaluateOptions?.maxConcurrency,
     )
-    .action((opts: Partial<RedteamGenerateOptions>): void => {
+    .option('--delay <number>', 'Delay in milliseconds between plugin API calls', (val) =>
+      Number.parseInt(val, 10),
+    )
+    .action((opts: Partial<RedteamCliGenerateOptions>): void => {
       try {
-        let overrides: Record<string, any> = {};
+        let overrides: Partial<RedteamFileConfig> = {};
         if (opts.plugins && opts.plugins.length > 0) {
           const parsed = RedteamConfigSchema.safeParse({
             plugins: opts.plugins,
@@ -296,10 +306,9 @@ export function generateRedteamCommand(
         }
         const validatedOpts = RedteamGenerateOptionsSchema.parse({
           ...opts,
+          ...overrides,
           defaultConfig,
           defaultConfigPath,
-          ...(overrides.plugins ? { plugins: overrides.plugins } : {}),
-          ...(overrides.strategies ? { strategies: overrides.strategies } : {}),
         });
         doGenerateRedteam(validatedOpts);
       } catch (error) {

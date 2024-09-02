@@ -5,6 +5,7 @@ import dedent from 'dedent';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
+import cliState from '../cliState';
 import { resolveConfigs } from '../config';
 import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
@@ -64,6 +65,7 @@ export async function doEval(
     }
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
+    cliState.config = config;
 
     let maxConcurrency = Number.parseInt(cmdObj.maxConcurrency || '', 10);
     const delay = Number.parseInt(cmdObj.delay || '', 0);
@@ -204,6 +206,7 @@ export async function doEval(
       name: 'eval',
       watch: Boolean(cmdObj.watch),
       duration: Math.round((Date.now() - startTime) / 1000),
+      isRedteam: Boolean(testSuite.redteam),
     });
     await telemetry.send();
 

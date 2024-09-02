@@ -48,7 +48,8 @@ import {
   type TestCase,
   isGradingResult,
 } from './types';
-import { extractJsonObjects, isJavascriptFile } from './util';
+import { isJavascriptFile } from './util';
+import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
@@ -181,7 +182,7 @@ export function containsXml(
   for (const xmlMatch of xmlMatches) {
     const { isValid, reason } = validateXml(xmlMatch, requiredElements);
     if (isValid) {
-      return { isValid: true, reason: reason };
+      return { isValid: true, reason };
     }
   }
 
@@ -1358,8 +1359,13 @@ ${
     const grader = getGraderById(baseType);
     invariant(grader, `Unknown promptfoo grader: ${baseType}`);
     invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
-
-    const { grade, rubric } = await grader.getResult(prompt, outputString, test, provider);
+    const { grade, rubric } = await grader.getResult(
+      prompt,
+      outputString,
+      test,
+      provider,
+      renderedValue,
+    );
     return {
       assertion: {
         ...assertion,

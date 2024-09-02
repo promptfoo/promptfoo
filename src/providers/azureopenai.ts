@@ -349,7 +349,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
     }
     const body = {
       model: this.deploymentName,
-      messages: messages,
+      messages,
       max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
       temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
       top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),

@@ -2,17 +2,20 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import * as fs from 'fs';
+import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
-import { loadApiProvider } from '../providers';
 import type { TestCaseWithPlugin } from '../types';
-import { isApiProvider, isProviderOptions, type ApiProvider } from '../types';
 import type { SynthesizeOptions } from '../types/redteam';
+import { maybeLoadFromExternalFile } from '../util';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
+import { HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
+import { CustomPlugin } from './plugins/custom';
+import { loadRedteamProvider } from './providers/shared';
 import { Strategies, validateStrategies } from './strategies';
 
 /**
@@ -70,6 +73,37 @@ function generateReport(
   return `\nTest Generation Report:\n${table.toString()}`;
 }
 
+/**
+ * Resolves top-level file paths in the plugin configuration.
+ * @param config - The plugin configuration to resolve.
+ * @returns The resolved plugin configuration.
+ */
+export function resolvePluginConfig(config: Record<string, any> | undefined): Record<string, any> {
+  if (!config) {
+    return {};
+  }
+
+  for (const key in config) {
+    const value = config[key];
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const filePath = value.slice('file://'.length);
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`File not found: ${filePath}`);
+      }
+
+      if (filePath.endsWith('.yaml')) {
+        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
+      } else if (filePath.endsWith('.json')) {
+        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      } else {
+        config[key] = fs.readFileSync(filePath, 'utf8');
+      }
+    }
+  }
+  return config;
+}
+
 const categories = {
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
@@ -98,6 +132,7 @@ export async function synthesize({
   provider,
   purpose: purposeOverride,
   strategies,
+  delay,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -106,18 +141,13 @@ export async function synthesize({
   if (prompts.length === 0) {
     throw new Error('Prompts array cannot be empty');
   }
+  if (delay && maxConcurrency > 1) {
+    maxConcurrency = 1;
+    logger.warn('Delay is enabled, setting max concurrency to 1.');
+  }
   validateStrategies(strategies);
 
-  let redteamProvider: ApiProvider;
-  if (isApiProvider(provider)) {
-    redteamProvider = provider;
-  } else if (isProviderOptions(provider)) {
-    redteamProvider = await loadApiProvider(provider.id || REDTEAM_MODEL, provider);
-  } else {
-    redteamProvider = await loadApiProvider(REDTEAM_MODEL, {
-      options: { config: { temperature: 0.5 } },
-    });
-  }
+  const redteamProvider = await loadRedteamProvider({ provider });
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
@@ -155,26 +185,33 @@ export async function synthesize({
       `\n• Plugin tests: ${chalk.cyan(totalPluginTests)}` +
       `\n• Plugins: ${chalk.cyan(plugins.length)}` +
       `\n• Strategies: ${chalk.cyan(strategies.length)}` +
-      `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n`,
+      `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n` +
+      (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
   );
-
-  let progressBar: cliProgress.SingleBar | null = null;
-  if (logger.level !== 'debug') {
-    progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-    progressBar.start(totalPluginTests + 2, 0);
-  }
 
   if (typeof injectVar !== 'string') {
     const parsedVars = extractVariablesFromTemplates(prompts);
     if (parsedVars.length > 1) {
       logger.warn(
-        `Multiple variables found in prompts: ${parsedVars.join(', ')}. Using the first one.`,
+        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}". Override this selection with --injectVar`,
       );
     } else if (parsedVars.length === 0) {
       logger.warn('No variables found in prompts. Using "query" as the inject variable.');
     }
-    injectVar = parsedVars[0] || 'query';
+    // Odds are that the last variable is the user input since the user input usually goes at the end of the prompt
+    injectVar = parsedVars[parsedVars.length - 1] || 'query';
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
+  }
+
+  let progressBar: cliProgress.SingleBar | null = null;
+  if (process.env.LOG_LEVEL !== 'debug') {
+    progressBar = new cliProgress.SingleBar(
+      {
+        format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
+      },
+      cliProgress.Presets.shades_classic,
+    );
+    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
   }
 
   for (const [category, categoryPlugins] of Object.entries(categories)) {
@@ -218,28 +255,44 @@ export async function synthesize({
 
   plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
 
+  progressBar?.increment(1, { task: 'Extracting system purpose' });
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
-  progressBar?.increment();
+
+  progressBar?.increment(1, { task: 'Extracting entities' });
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
     : await extractEntities(redteamProvider, prompts);
-  progressBar?.increment();
 
   logger.debug(`System purpose: ${purpose}`);
 
-  const pluginResults: Record<string, { requested: number; generated: number }> = {};
-  const strategyResults: Record<string, { requested: number; generated: number }> = {};
+  for (const plugin of plugins) {
+    const { validate } = Plugins.find((p) => p.key === plugin.id) || {};
+    if (validate) {
+      validate({
+        language,
+        ...resolvePluginConfig(plugin.config),
+      });
+    }
+  }
 
+  const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+    progressBar?.update({ task: plugin.id });
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
-      progressBar?.increment(plugin.numTests);
       logger.debug(`Generating tests for ${plugin.id}...`);
-      const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
-        language,
-        ...(plugin.config || {}),
-      });
+      const pluginTests = await action(
+        redteamProvider,
+        purpose,
+        injectVar,
+        plugin.numTests,
+        delay || 0,
+        {
+          language,
+          ...resolvePluginConfig(plugin.config),
+        },
+      );
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,
@@ -249,8 +302,33 @@ export async function synthesize({
           },
         })),
       );
+      progressBar?.increment(plugin.numTests);
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
+    } else if (plugin.id.startsWith('file://')) {
+      logger.debug(`Loading custom plugin from ${plugin.id}`);
+      const filePath = plugin.id.slice('file://'.length);
+
+      const definition = maybeLoadFromExternalFile(filePath) as {
+        generator: string;
+        grader: string;
+      };
+
+      logger.debug(`Custom plugin definition: ${JSON.stringify(definition, null, 2)}`);
+
+      const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, definition);
+      const customTests = await customPlugin.generateTests(plugin.numTests, delay);
+      testCases.push(
+        ...customTests.map((t) => ({
+          ...t,
+          metadata: {
+            ...(t.metadata || {}),
+            pluginId: plugin.id,
+          },
+        })),
+      );
+      logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
+      pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
@@ -258,12 +336,9 @@ export async function synthesize({
     }
   });
 
-  if (progressBar) {
-    progressBar.stop();
-  }
-
   const newTestCases: TestCaseWithPlugin[] = [];
 
+  const strategyResults: Record<string, { requested: number; generated: number }> = {};
   if (strategies.length > 0) {
     const existingTestCount = testCases.length;
     const totalStrategyTests = existingTestCount * strategies.length;
@@ -276,11 +351,13 @@ export async function synthesize({
         `\n• Expected new tests: ${chalk.cyan(totalStrategyTests)}` +
         `\n• Total expected tests: ${chalk.cyan(existingTestCount + totalStrategyTests)}`,
     );
-  }
 
-  for (const { key, action } of Strategies) {
-    const strategy = strategies.find((s) => s.id === key);
-    if (strategy) {
+    for (const { key, action } of Strategies) {
+      const strategy = strategies.find((s) => s.id === key);
+      if (!strategy) {
+        continue;
+      }
+      progressBar?.update({ task: `Applying strategy: ${key}` });
       logger.debug(`Generating ${key} tests`);
       const strategyTestCases = await action(testCases, injectVar, strategy.config || {});
       newTestCases.push(
@@ -298,9 +375,13 @@ export async function synthesize({
         generated: strategyTestCases.length,
       };
     }
+
+    testCases.push(...newTestCases);
   }
 
-  testCases.push(...newTestCases);
+  progressBar?.update({ task: 'Done.' });
+  progressBar?.stop();
+
   logger.info(generateReport(pluginResults, strategyResults));
 
   return { purpose, entities, testCases };

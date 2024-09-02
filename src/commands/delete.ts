@@ -57,7 +57,7 @@ export function deleteCommand(program: Command) {
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'delete eval',
-        evalId: evalId,
+        evalId,
       });
       await telemetry.send();
 

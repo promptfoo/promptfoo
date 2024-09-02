@@ -59,7 +59,7 @@ class PromptfooHarmfulCompletionProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        throw new Error(`API call failed with status ${response.status}`);
+        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
       }
 
       const data = await response.json();

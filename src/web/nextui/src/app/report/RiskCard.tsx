@@ -11,6 +11,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { Gauge } from '@mui/x-charts/Gauge';
+import RiskCategoryDrawer from './RiskCategoryDrawer';
 import { categoryAliases, displayNameOverrides, subCategoryDescriptions } from './constants';
 import { useReportStore } from './store';
 import './RiskCard.css';
@@ -21,12 +22,25 @@ const RiskCard: React.FC<{
   progressValue: number;
   numTestsPassed: number;
   numTestsFailed: number;
-  testTypes: { name: string; passed: boolean; percentage: number; total: number }[];
-}> = ({ title, subtitle, progressValue, numTestsPassed, numTestsFailed, testTypes }) => {
+  testTypes: { name: string; categoryPassed: boolean; numPassed: number; numFailed: number }[];
+  evalId: string;
+  failuresByPlugin: Record<string, { prompt: string; output: string }[]>;
+}> = ({
+  title,
+  subtitle,
+  progressValue,
+  numTestsPassed,
+  numTestsFailed,
+  testTypes,
+  evalId,
+  failuresByPlugin,
+}) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [selectedCategory, setSelectedCategory] = React.useState('');
 
   // Hide risk cards with no tests
-  const filteredTestTypes = testTypes.filter((test) => test.total > 0);
+  const filteredTestTypes = testTypes.filter((test) => test.numPassed + test.numFailed > 0);
   if (filteredTestTypes.length === 0) {
     return null;
   }
@@ -91,60 +105,68 @@ const RiskCard: React.FC<{
           </Grid>
           <Grid item xs={6} md={4}>
             <List dense>
-              {filteredTestTypes.map((test, index) => (
-                <Tooltip
-                  key={index}
-                  title={subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions]}
-                  placement="left"
-                  arrow
-                >
-                  <ListItem
-                    className="risk-card-list-item"
-                    onClick={(event) => {
-                      const searchParams = new URLSearchParams(window.location.search);
-                      const evalId = searchParams.get('evalId');
-                      const descriptiveName =
-                        categoryAliases[test.name as keyof typeof categoryAliases];
-                      const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${descriptiveName}|metric=${descriptiveName})`)}`;
-                      if (event.ctrlKey || event.metaKey) {
-                        window.open(url, '_blank');
-                      } else {
-                        window.location.href = url;
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
+              {filteredTestTypes.map((test, index) => {
+                const percentage = test.numPassed / (test.numPassed + test.numFailed);
+                return (
+                  <Tooltip
+                    key={index}
+                    title={
+                      subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions]
+                    }
+                    placement="left"
+                    arrow
                   >
-                    <ListItemText
-                      primary={
-                        displayNameOverrides[test.name as keyof typeof displayNameOverrides] ||
-                        categoryAliases[test.name as keyof typeof categoryAliases]
-                      }
-                      primaryTypographyProps={{ variant: 'body2' }}
-                    />
-                    {showPercentagesOnRiskCards ? (
-                      <Typography
-                        variant="body2"
-                        className={`risk-card-percentage ${
-                          test.percentage >= 0.8
-                            ? 'risk-card-percentage-high'
-                            : test.percentage >= 0.5
-                              ? 'risk-card-percentage-medium'
-                              : 'risk-card-percentage-low'
-                        }`}
-                      >
-                        {`${Math.round(test.percentage * 100)}%`}
-                      </Typography>
-                    ) : test.percentage >= pluginPassRateThreshold ? (
-                      <CheckCircleIcon className="risk-card-icon-passed" />
-                    ) : (
-                      <CancelIcon className="risk-card-icon-failed" />
-                    )}
-                  </ListItem>
-                </Tooltip>
-              ))}
+                    <ListItem
+                      className="risk-card-list-item"
+                      onClick={() => {
+                        setSelectedCategory(test.name);
+                        setDrawerOpen(true);
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <ListItemText
+                        primary={
+                          displayNameOverrides[test.name as keyof typeof displayNameOverrides] ||
+                          categoryAliases[test.name as keyof typeof categoryAliases]
+                        }
+                        primaryTypographyProps={{ variant: 'body2' }}
+                      />
+                      {showPercentagesOnRiskCards ? (
+                        <Typography
+                          variant="body2"
+                          className={`risk-card-percentage ${
+                            percentage >= 0.8
+                              ? 'risk-card-percentage-high'
+                              : percentage >= 0.5
+                                ? 'risk-card-percentage-medium'
+                                : 'risk-card-percentage-low'
+                          }`}
+                        >
+                          {`${Math.round(percentage * 100)}%`}
+                        </Typography>
+                      ) : percentage >= pluginPassRateThreshold ? (
+                        <CheckCircleIcon className="risk-card-icon-passed" />
+                      ) : (
+                        <CancelIcon className="risk-card-icon-failed" />
+                      )}
+                    </ListItem>
+                  </Tooltip>
+                );
+              })}
             </List>
           </Grid>
         </Grid>
+        {selectedCategory && (
+          <RiskCategoryDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            category={selectedCategory}
+            failures={failuresByPlugin[selectedCategory] || []}
+            evalId={evalId}
+            numPassed={testTypes.find((t) => t.name === selectedCategory)?.numPassed || 0}
+            numFailed={testTypes.find((t) => t.name === selectedCategory)?.numFailed || 0}
+          />
+        )}
       </CardContent>
     </Card>
   );

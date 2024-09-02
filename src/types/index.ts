@@ -11,7 +11,7 @@ import {
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
-import type { RedteamAssertionTypes, RedteamConfig } from './redteam';
+import type { RedteamAssertionTypes, RedteamFileConfig } from './redteam';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
 export * from './prompts';
@@ -425,6 +425,7 @@ export const TestCaseSchema = z.object({
 
   // Key-value pairs to substitute in the prompt
   vars: VarsSchema.optional(),
+
   // Override the provider.
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
@@ -520,6 +521,9 @@ export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
+  // Optional tags to describe the test suite
+  tags: z.record(z.string(), z.string()).optional(),
+
   // Optional description of what your LLM is trying to do
   description: z.string().optional(),
 
@@ -554,13 +558,16 @@ export const TestSuiteSchema = z.object({
   extensions: z.array(z.string()).optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: z.custom<RedteamConfig>().optional(),
+  redteam: z.custom<RedteamFileConfig>().optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export const TestSuiteConfigSchema = z.object({
+  // Optional tags to describe the test suite
+  tags: z.record(z.string(), z.string()).optional(),
+
   // Optional description of what you're trying to test
   description: z.string().optional(),
 
@@ -623,7 +630,7 @@ export const TestSuiteConfigSchema = z.object({
   metadata: MetadataSchema.optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: z.custom<RedteamConfig>().optional(),
+  redteam: z.custom<RedteamFileConfig>().optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;

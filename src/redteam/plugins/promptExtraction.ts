@@ -66,7 +66,7 @@ export class PromptExtractionPlugin extends PluginBase {
     ];
   }
 
-  async generateTests(n: number): Promise<TestCase[]> {
+  async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
     const tests = await super.generateTests(n);
     return tests.map((test) => ({
       ...test,
@@ -125,6 +125,7 @@ export class PromptExtractionGrader extends RedteamModelGrader {
         },
       },
       provider,
+      undefined,
     );
   }
 }

@@ -185,7 +185,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     const body = {
       model: this.modelName,
-      messages: messages,
+      messages,
       temperature: this.config?.temperature,
       top_p: this.config?.top_p || 1,
       max_tokens: this.config?.max_tokens || 1024,

@@ -307,6 +307,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
 
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
+    tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
     description: configs.map((config) => config.description).join(', '),
     providers,
     prompts,
@@ -393,6 +394,7 @@ export async function resolveConfigs(
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
+    tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
     providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers || [],
@@ -449,7 +451,6 @@ export async function resolveConfigs(
         scenario.tests = parsedScenarioTests;
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
-      console.error(`scenario: ${JSON.stringify(scenario)}`);
       const filteredTests = await filterTests(
         {
           ...(scenario ?? {}),
@@ -488,6 +489,7 @@ export async function resolveConfigs(
 
   const testSuite: TestSuite = {
     description: config.description,
+    tags: config.tags,
     prompts: parsedPrompts,
     providers: parsedProviders,
     providerPromptMap: parsedProviderPromptMap,

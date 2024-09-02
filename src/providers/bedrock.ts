@@ -411,7 +411,7 @@ export const BEDROCK_MODEL = {
   LLAMA3: getLlamaModelHandler(LlamaVersion.V3), // Prompt format of llama3 instruct differs from llama2.
   COHERE_COMMAND: {
     params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
-      const params: any = { prompt: prompt };
+      const params: any = { prompt };
       addConfigParam(params, 'temperature', config?.temperature, process.env.COHERE_TEMPERATURE, 0);
       addConfigParam(params, 'p', config?.p, process.env.COHERE_P, 1);
       addConfigParam(params, 'k', config?.k, process.env.COHERE_K, 0);
@@ -462,7 +462,7 @@ export const BEDROCK_MODEL = {
   },
   MISTRAL: {
     params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => {
-      const params: any = { prompt: prompt, stop: stop };
+      const params: any = { prompt, stop };
       addConfigParam(
         params,
         'max_tokens',

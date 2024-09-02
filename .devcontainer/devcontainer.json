@@ -1,60 +1,27 @@
 {
   "name": "promptfoo_dev",
   "dockerComposeFile": ["docker-compose.yml"],
+  "service": "promptfoo_dev",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "node",
   "customizations": {
     "vscode": {
       "settings": {
-        "editor.tabSize": 4,
         "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "eslint.format.enable": true,
-        "eslint.alwaysShowStatus": true,
-        "typescript.validate.enable": true,
-        "editor.detectIndentation": true,
         "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
           "source.organizeImports": "never",
           "source.trimTrailingWhitespace": "always",
           "source.trimAutoWhitespace": "always"
         },
-        "[json][yaml]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
         "[typescript]": {
           "editor.defaultFormatter": "esbenp.prettier-vscode",
           "editor.inlayHints.enabled": "on"
         },
-        "[typescriptreact]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "terminal.integrated.defaultProfile.linux": "zsh",
-        "terminal.integrated.profiles.linux": {
-          "zsh": {
-            "path": "zsh"
-          }
-        },
-        "workbench.iconTheme": "vscode-icons",
-        "files.watcherExclude": {
-          "**/.git/objects/**": true,
-          "**/node_modules/**": true
-        }
+        "terminal.integrated.defaultProfile.linux": "zsh"
       },
-      "extensions": [
-        "esbenp.prettier-vscode",
-        "firsttris.vscode-jest-runner",
-        "dbaeumer.vscode-eslint",
-        "wix.vscode-import-cost",
-        "oderwat.indent-rainbow",
-        "ms-azuretools.vscode-docker",
-        "bierner.markdown-preview-github-styles",
-        "GitHub.copilot"
-      ]
+      "extensions": ["esbenp.prettier-vscode", "dbaeumer.vscode-eslint", "GitHub.copilot"]
     }
   },
-  "service": "promptfoo_dev",
-  "workspaceFolder": "/workspace",
-  "userEnvProbe": "loginInteractiveShell",
-  "remoteUser": "promptfoo",
-  "mounts": [
-    "source=${localWorkspaceFolder}/node_modules,target=/workspace/node_modules,type=volume"
-  ]
+  "postCreateCommand": "npm ci && npm run build && npm link"
 }

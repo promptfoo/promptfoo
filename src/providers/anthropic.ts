@@ -72,6 +72,7 @@ interface AnthropicMessageOptions {
     | Anthropic.MessageCreateParams.ToolChoiceAny
     | Anthropic.MessageCreateParams.ToolChoiceAuto
     | Anthropic.MessageCreateParams.ToolChoiceTool;
+  headers?: Record<string, string>;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -112,6 +113,7 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
 interface AnthropicMessageInput {
   role: 'user' | 'assistant' | 'system';
   content: string | Array<Anthropic.ImageBlockParam | Anthropic.TextBlockParam>;
+  cache_control?: { type: 'ephemeral' };
 }
 
 export function parseMessages(messages: string) {
@@ -241,7 +243,9 @@ export class AnthropicMessagesProvider implements ApiProvider {
     }
 
     try {
-      const response = await this.anthropic.messages.create(params);
+      const response = await this.anthropic.messages.create(params, {
+        ...(this.config.headers ? { headers: this.config.headers } : {}),
+      });
 
       logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
 

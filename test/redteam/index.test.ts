@@ -1,14 +1,15 @@
 import cliProgress from 'cli-progress';
+import * as fs from 'fs';
+import yaml from 'js-yaml';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
 import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
-import { synthesize } from '../../src/redteam/index';
+import { synthesize, resolvePluginConfig } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
 import { Strategies } from '../../src/redteam/strategies';
 import { validateStrategies } from '../../src/redteam/strategies';
-import { extractVariablesFromTemplates } from '../../src/util/templates';
 
 jest.mock('cli-progress');
 jest.mock('../../src/logger');
@@ -129,22 +130,6 @@ describe('synthesize', () => {
         'Prompt 3',
       ]);
     });
-
-    it('should use default injectVar when no variables found in prompts', async () => {
-      jest.mocked(extractVariablesFromTemplates).mockReturnValue([]);
-
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-      });
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        'No variables found in prompts. Using "query" as the inject variable.',
-      );
-    });
   });
 
   // API provider tests
@@ -165,20 +150,6 @@ describe('synthesize', () => {
       });
 
       expect(loadApiProvider).not.toHaveBeenCalled();
-    });
-
-    it('should load the default provider if not provided', async () => {
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-      });
-
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4o', {
-        options: { config: { temperature: 0.5 } },
-      });
     });
   });
 
@@ -262,52 +233,12 @@ describe('synthesize', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('test-plugin'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('mockStrategy'));
     });
-
-    it('should handle errors when executing invalid plugins', async () => {
-      jest.spyOn(Plugins, 'find').mockReturnValue(undefined);
-
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'invalid-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-      });
-
-      expect(logger.warn).toHaveBeenCalledWith('Plugin invalid-plugin not registered, skipping');
-    });
   });
 
-  // Progress bar tests
-  describe('Progress bar', () => {
-    it('should use the progress bar', async () => {
-      const mockProgressBar = {
-        increment: jest.fn(),
-        start: jest.fn(),
-        stop: jest.fn(),
-        update: jest.fn(),
-      };
-      jest.mocked(cliProgress.SingleBar).mockReturnValue(mockProgressBar as any);
-
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-      });
-
-      expect(mockProgressBar.start).toHaveBeenCalledWith(expect.any(Number), 0);
-      expect(mockProgressBar.increment).toHaveBeenCalledWith(1);
-      expect(mockProgressBar.stop).toHaveBeenCalledWith();
-    });
-  });
-
-  // Logger tests
   describe('Logger', () => {
-    it('should handle different logger levels appropriately', async () => {
-      const originalLevel = logger.level;
-      logger.level = 'debug';
+    it('debug log level hides progress bar', async () => {
+      const originalLogLevel = process.env.LOG_LEVEL;
+      process.env.LOG_LEVEL = 'debug';
 
       await synthesize({
         language: 'en',
@@ -319,7 +250,102 @@ describe('synthesize', () => {
 
       expect(cliProgress.SingleBar).not.toHaveBeenCalled();
 
-      logger.level = originalLevel;
+      process.env.LOG_LEVEL = originalLogLevel;
+    });
+  });
+});
+
+jest.mock('fs');
+jest.mock('js-yaml');
+
+describe('resolvePluginConfig', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should return an empty object if config is undefined', () => {
+    const result = resolvePluginConfig(undefined);
+    expect(result).toEqual({});
+  });
+
+  it('should return the original config if no file references are present', () => {
+    const config = { key: 'value' };
+    const result = resolvePluginConfig(config);
+    expect(result).toEqual(config);
+  });
+
+  it('should resolve YAML file references', () => {
+    const config = { key: 'file://test.yaml' };
+    const yamlContent = { nested: 'value' };
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const result = resolvePluginConfig(config);
+
+    expect(result).toEqual({ key: yamlContent });
+    expect(fs.existsSync).toHaveBeenCalledWith('test.yaml');
+    expect(fs.readFileSync).toHaveBeenCalledWith('test.yaml', 'utf8');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+  });
+
+  it('should resolve JSON file references', () => {
+    const config = { key: 'file://test.json' };
+    const jsonContent = { nested: 'value' };
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(jsonContent));
+
+    const result = resolvePluginConfig(config);
+
+    expect(result).toEqual({ key: jsonContent });
+    expect(fs.existsSync).toHaveBeenCalledWith('test.json');
+    expect(fs.readFileSync).toHaveBeenCalledWith('test.json', 'utf8');
+  });
+
+  it('should resolve text file references', () => {
+    const config = { key: 'file://test.txt' };
+    const fileContent = 'text content';
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
+
+    const result = resolvePluginConfig(config);
+
+    expect(result).toEqual({ key: fileContent });
+    expect(fs.existsSync).toHaveBeenCalledWith('test.txt');
+    expect(fs.readFileSync).toHaveBeenCalledWith('test.txt', 'utf8');
+  });
+
+  it('should throw an error if the file does not exist', () => {
+    const config = { key: 'file://nonexistent.yaml' };
+    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    expect(() => resolvePluginConfig(config)).toThrow('File not found: nonexistent.yaml');
+  });
+
+  it('should handle multiple file references', () => {
+    const config = {
+      yaml: 'file://test.yaml',
+      json: 'file://test.json',
+      txt: 'file://test.txt',
+    };
+    const yamlContent = { nested: 'yaml' };
+    const jsonContent = { nested: 'json' };
+    const txtContent = 'text content';
+
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest
+      .spyOn(fs, 'readFileSync')
+      .mockReturnValueOnce('yaml content')
+      .mockReturnValueOnce(JSON.stringify(jsonContent))
+      .mockReturnValueOnce(txtContent);
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const result = resolvePluginConfig(config);
+
+    expect(result).toEqual({
+      yaml: yamlContent,
+      json: jsonContent,
+      txt: txtContent,
     });
   });
 });

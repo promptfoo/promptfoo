@@ -57,7 +57,7 @@ export function exportCommand(program: Command) {
 
         telemetry.record('command_used', {
           name: 'export',
-          evalId: evalId,
+          evalId,
         });
         await telemetry.send();
       } catch (error) {

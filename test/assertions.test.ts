@@ -2310,8 +2310,8 @@ describe('runAssertion', () => {
     // Expect test to pass because assertion grader takes priority
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      assertion: assertion,
-      test: test,
+      assertion,
+      test,
       providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
@@ -3139,7 +3139,7 @@ describe('runAssertion', () => {
         pass: false,
         score: 0,
         reason: expect.stringMatching(/XML parsing failed/),
-        assertion: assertion,
+        assertion,
       });
     });
 
@@ -3186,7 +3186,7 @@ describe('runAssertion', () => {
         pass: false,
         score: 0,
         reason: 'XML is missing required elements: analysis.color',
-        assertion: assertion,
+        assertion,
       });
     });
 
@@ -3364,7 +3364,7 @@ describe('runAssertion', () => {
         pass: false,
         score: 0,
         reason: 'No XML content found in the output',
-        assertion: assertion,
+        assertion,
       });
     });
 
@@ -3411,7 +3411,7 @@ describe('runAssertion', () => {
         pass: false,
         score: 0,
         reason: 'No valid XML content found matching the requirements',
-        assertion: assertion,
+        assertion,
       });
     });
 
