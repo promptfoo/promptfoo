@@ -131,8 +131,10 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 <summary>Show example YAML</summary>
 
 ```yaml
-prompts: [prompts.txt]
-providers: [openai:gpt-4o-mini]
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4o-mini
 tests:
   - description: First test case - automatic review
     vars:
@@ -177,10 +179,13 @@ Here is the configuration:
 
 ```yaml title=promptfooconfig.yaml
 # Load prompts
-prompts: [prompt1.txt, prompt2.txt]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 
 # Set an LLM
-providers: [openai:gpt-4-0613]
+providers:
+  - openai:gpt-4o-mini
 
 # These test properties are applied to every test
 defaultTest:
@@ -252,10 +257,14 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-vs-4), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
 
 ```yaml title=promptfooconfig.yaml
-prompts: [prompt1.txt, prompt2.txt]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 
 # Set the LLMs we want to test
-providers: [openai:gpt-4o-mini, openai:gpt-4]
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:

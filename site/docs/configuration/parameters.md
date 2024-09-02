@@ -316,7 +316,7 @@ In this example, the `body` variable is passed through the `allcaps` filter befo
 
 If you have a lot of tests, you can optionally keep them separate from the main config file.
 
-The easiest way to do this is by creating `tests.yaml` that contains a list of tests. Then, include it in your `promptfooconfig.yaml` like so:
+The easiest way to do this is by creating a `tests.yaml` file that contains a list of tests. Then, include it in your `promptfooconfig.yaml` like so:
 
 ```yaml
 prompts:
@@ -325,16 +325,16 @@ prompts:
 providers:
   # ...
 
-tests: tests.yaml
+tests: file://path/to/tests.yaml
 ```
 
 You can even break it into multiple files or globs:
 
 ```yaml
 tests:
-  - normal_test.yaml
-  - special_test.yaml
-  - path/to/more_tests/*.yaml
+  - file://relative/path/to/normal_test.yaml
+  - file://relative/path/to/special_test.yaml
+  - file:///absolute/path/to/more_tests/*.yaml
 ```
 
 ### Import from CSV
