@@ -136,21 +136,20 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
     default: prompt,
   });
   prompt = prompt.replace(NOTE, '');
-  let variables = extractVariablesFromTemplate(prompt);
-  while (variables.length < numVariablesRequired) {
+  const variables = extractVariablesFromTemplate(prompt);
+  if (variables.length < numVariablesRequired) {
+    // Give the user another chance to edit their prompt
     logger.info(
       chalk.red(
-        `For real though, your prompt must include ${numVariablesRequired} ${
+        `Your prompt must include ${numVariablesRequired} ${
           numVariablesRequired === 1 ? 'variable' : 'variables'
-        } like "{{query}}" as a placeholder for user input`,
+        } like "{{query}}" as a placeholder for user input.`,
       ),
     );
     prompt = await editor({
       message: 'Enter the prompt you want to test against:',
       default: prompt,
     });
-
-    variables = extractVariablesFromTemplate(prompt);
   }
 
   return prompt;
@@ -185,7 +184,6 @@ export async function redteamInit(directory: string | undefined) {
   recordOnboardingStep('choose app type', { value: redTeamChoice });
 
   const prompts: string[] = [];
-  let defaultPromptUsed = false;
   let purpose: string | undefined;
 
   const useCustomProvider = redTeamChoice === 'rag' || redTeamChoice === 'agent';
@@ -217,13 +215,11 @@ export async function redteamInit(directory: string | undefined) {
     if (promptChoice === 'now') {
       prompt = await getSystemPrompt();
     } else {
-      defaultPromptUsed = true;
       prompt = defaultPrompt;
       deferGeneration = true;
     }
     prompts.push(prompt);
   } else {
-    defaultPromptUsed = true;
     prompts.push(
       'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}',
     );
@@ -339,9 +335,9 @@ export async function redteamInit(directory: string | undefined) {
     });
   }
 
-  // Handle policy plugin
+  // Plugins that require additional configuration
+
   if (plugins.includes('policy')) {
-    // Remove the original 'policy' string if it exists
     const policyIndex = plugins.indexOf('policy');
     if (policyIndex !== -1) {
       plugins.splice(policyIndex, 1);
@@ -362,107 +358,38 @@ export async function redteamInit(directory: string | undefined) {
     }
   }
 
-  // Handle prompt extraction plugin
   if (plugins.includes('prompt-extraction')) {
-    const promptExtractionIdx = plugins.indexOf('prompt-extraction');
-    if (promptExtractionIdx !== -1) {
-      plugins.splice(promptExtractionIdx, 1);
-    }
-
-    if (defaultPromptUsed) {
-      recordOnboardingStep('collect system prompt');
-      const systemPrompt = await getSystemPrompt();
-      recordOnboardingStep('choose system prompt', { value: systemPrompt.length });
-
-      if (systemPrompt.trim() !== '') {
-        plugins.push({
-          id: 'prompt-extraction',
-          config: { systemPrompt: dedent(systemPrompt.trim()) },
-        } as RedteamPluginObject);
-
-        prompts[0] = systemPrompt;
-      }
-    } else {
-      plugins.push({
-        id: 'prompt-extraction',
-        config: { systemPrompt: prompts[0] },
-      } as RedteamPluginObject);
-    }
+    plugins.push({
+      id: 'prompt-extraction',
+      config: { systemPrompt: prompts[0] },
+    } as RedteamPluginObject);
   }
 
-  // Handle prompt extraction plugin
   if (plugins.includes('indirect-prompt-injection')) {
+    recordOnboardingStep('choose indirect prompt injection variable');
     logger.info(chalk.bold('Indirect Prompt Injection Configuration\n'));
-    logger.info(
-      chalk.yellow(
-        'This plugin tests if the prompt is vulnerable to instructions injected into the prompt.\n',
-      ),
-    );
-    logger.info(
-      chalk.yellow(
-        'This plugin requires two pieces of information:\n' +
-          '1. The system prompt: This is the template that includes variables where content will be injected.\n' +
-          '2. The indirectInjectionVarName: This is the name of the variable in your system prompt where untrusted content will be injected.\n\n' +
-          'These are needed to test if the model is vulnerable to instructions injected into the prompt through this variable.\n',
-      ),
-    );
-    await input({
-      message: 'Read the above and Press Enter to continue setting up the plugin.',
-    });
-
-    const promptExtractionIdx = plugins.indexOf('indirect-prompt-injection');
-    if (promptExtractionIdx !== -1) {
-      plugins.splice(promptExtractionIdx, 1);
-    }
-
-    if (defaultPromptUsed) {
-      const systemPrompt = await getSystemPrompt(2);
-      const variables = extractVariablesFromTemplate(systemPrompt);
-      let indirectInjectionVar = variables[0].trim();
-      indirectInjectionVar = await input({
-        message: `What is the name of the variable where content will be injected into the prompt? (e.g. "name")`,
-        default: indirectInjectionVar,
+    const variables = extractVariablesFromTemplate(prompts[0]);
+    if (variables.length > 1) {
+      const indirectInjectionVar = await select({
+        message: 'Which variable would you like to test for indirect prompt injection?',
+        choices: variables.sort().map((variable) => ({
+          name: variable,
+          value: variable,
+        })),
       });
+      recordOnboardingStep('chose indirect prompt injection variable');
 
-      indirectInjectionVar = indirectInjectionVar.trim();
-
-      if (!variables.includes(indirectInjectionVar)) {
-        logger.info(
-          chalk.red(
-            `The variable ${indirectInjectionVar} is not found in the prompt. Please go back and edit your prompt to add the variable to your prompt`,
-          ),
-        );
-        await input({
-          message: 'Press Enter to continue...',
-        });
-      }
-      if (indirectInjectionVar === variables[variables.length - 1]) {
-        logger.info(
-          chalk.red(
-            `The variable ${indirectInjectionVar} is the last variable in the prompt. This might cause some issues with the plugin since we assume the last variable is the main injectVar. Please make sure you set injectVar properly in your config.`,
-          ),
-        );
-        await input({
-          message: 'Press Enter to continue...',
-        });
-      }
-
-      if (systemPrompt.trim() !== '') {
-        plugins.push({
-          id: 'indirect-prompt-injection',
-          config: {
-            systemPrompt: dedent(systemPrompt.trim()),
-            indirectInjectionVar: indirectInjectionVar.trim(),
-          },
-        } as RedteamPluginObject);
-
-        prompts[0] = systemPrompt;
-      }
-    } else {
       plugins.push({
-        id: 'prompt-extraction',
-        config: { systemPrompt: prompts[0] },
+        id: 'indirect-prompt-injection',
+        config: {
+          indirectInjectionVar,
+        },
       } as RedteamPluginObject);
+    } else {
+      recordOnboardingStep('skip indirect prompt injection');
+      logger.warn(
+        `Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt. Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection/`,
+      );
     }
   }
 
