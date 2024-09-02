@@ -369,21 +369,28 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose indirect prompt injection variable');
     logger.info(chalk.bold('Indirect Prompt Injection Configuration\n'));
     const variables = extractVariablesFromTemplate(prompts[0]);
-    const indirectInjectionVar = await select({
-      message: 'Which variable would you like to test for indirect prompt injection?',
-      choices: variables.sort().map((variable) => ({
-        name: variable,
-        value: variable,
-      })),
-    });
-    recordOnboardingStep('chose indirect prompt injection variable');
+    if (variables.length > 1) {
+      const indirectInjectionVar = await select({
+        message: 'Which variable would you like to test for indirect prompt injection?',
+        choices: variables.sort().map((variable) => ({
+          name: variable,
+          value: variable,
+        })),
+      });
+      recordOnboardingStep('chose indirect prompt injection variable');
 
-    plugins.push({
-      id: 'indirect-prompt-injection',
-      config: {
-        indirectInjectionVar,
-      },
-    } as RedteamPluginObject);
+      plugins.push({
+        id: 'indirect-prompt-injection',
+        config: {
+          indirectInjectionVar,
+        },
+      } as RedteamPluginObject);
+    } else {
+      recordOnboardingStep('skip indirect prompt injection');
+      logger.warn(
+        `Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt. Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection/`,
+      );
+    }
   }
 
   console.clear();
