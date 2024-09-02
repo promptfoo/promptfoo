@@ -31,7 +31,7 @@ const RecentEvals: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
           <TableRow>
             <TableCell>Eval ID</TableCell>
             <TableCell>Date</TableCell>
-            <TableCell>Type</TableCell>
+            <TableCell>Trigger</TableCell>
             <TableCell align="right">Pass Rate</TableCell>
           </TableRow>
         </TableHead>
