@@ -184,7 +184,6 @@ export async function redteamInit(directory: string | undefined) {
   recordOnboardingStep('choose app type', { value: redTeamChoice });
 
   const prompts: string[] = [];
-  let defaultPromptUsed = false;
   let purpose: string | undefined;
 
   const useCustomProvider = redTeamChoice === 'rag' || redTeamChoice === 'agent';
@@ -216,13 +215,11 @@ export async function redteamInit(directory: string | undefined) {
     if (promptChoice === 'now') {
       prompt = await getSystemPrompt();
     } else {
-      defaultPromptUsed = true;
       prompt = defaultPrompt;
       deferGeneration = true;
     }
     prompts.push(prompt);
   } else {
-    defaultPromptUsed = true;
     prompts.push(
       'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}',
     );
