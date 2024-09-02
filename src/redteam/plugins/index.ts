@@ -1,4 +1,7 @@
 import invariant from 'tiny-invariant';
+import { fetchWithCache } from '../../cache';
+import { getEnvBool } from '../../envars';
+import logger from '../../logger';
 import type { ApiProvider, PluginConfig, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS } from '../constants';
 import { type PluginBase } from './base';
@@ -43,6 +46,43 @@ type PluginClass<T extends PluginConfig> = new (
   config: T,
 ) => PluginBase;
 
+async function fetchRemoteTestCases(
+  key: string,
+  purpose: string,
+  injectVar: string,
+  n: number,
+  config?: PluginConfig,
+): Promise<TestCase[]> {
+  invariant(
+    !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
+    'Remote generation is disabled, fetchRemoteTestCases should never be called',
+  );
+
+  const body = JSON.stringify({
+    task: key,
+    purpose,
+    injectVar,
+    n,
+    config,
+  });
+  logger.debug(`Using remote redteam generation for ${key}:\n${body}`);
+  const { data } = await fetchWithCache(
+    // FIXME: update
+    'http://localhost:8080',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body,
+    },
+    30_000,
+  );
+  const ret = (data as { results: TestCase[] }).results;
+  logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
+  return ret;
+}
+
 function createPluginFactory<T extends PluginConfig>(
   PluginClass: PluginClass<T>,
   key: string,
@@ -51,8 +91,14 @@ function createPluginFactory<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: (provider, purpose, injectVar, n, delayMs, config) =>
-      new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs),
+    action: async (provider, purpose, injectVar, n, delayMs, config) => {
+      const useLocal = getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+      if (useLocal) {
+        logger.debug(`Using local redteam generation for ${key}`);
+        return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
+      }
+      return fetchRemoteTestCases(key, purpose, injectVar, n, config);
+    },
   };
 }
 
@@ -97,14 +143,26 @@ const pluginFactories: PluginFactory[] = [
 
 const harmPlugins: PluginFactory[] = Object.keys(HARM_PLUGINS).map((category) => ({
   key: category,
-  action: (provider, purpose, injectVar, n, delayMs) =>
-    getHarmfulTests(provider, purpose, injectVar, [category], n, delayMs),
+  action: async (provider, purpose, injectVar, n, delayMs) => {
+    const useLocal = getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+    if (useLocal) {
+      logger.debug(`Using local redteam generation for ${category}`);
+      return getHarmfulTests(provider, purpose, injectVar, [category], n, delayMs);
+    }
+    return fetchRemoteTestCases(category, purpose, injectVar, n);
+  },
 }));
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category) => ({
   key: category,
-  action: (provider, purpose, injectVar, n) =>
-    getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
+  action: async (provider, purpose, injectVar, n) => {
+    const useLocal = getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+    if (useLocal) {
+      logger.debug(`Using local redteam generation for ${category}`);
+      return getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n);
+    }
+    return fetchRemoteTestCases(category, purpose, injectVar, n);
+  },
 }));
 
 export const Plugins: PluginFactory[] = [...pluginFactories, ...harmPlugins, ...piiPlugins];
