@@ -2,8 +2,9 @@ import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginConfig, TestCase } from '../../types';
-import { HARM_PLUGINS, PII_PLUGINS } from '../constants';
+import { HARM_PLUGINS, PII_PLUGINS, REMOTE_GENERATION_URL } from '../constants';
 import { type PluginBase } from './base';
 import { BflaPlugin } from './bfla';
 import { BolaPlugin } from './bola';
@@ -55,7 +56,7 @@ async function fetchRemoteTestCases(
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
-    'Remote generation is disabled, fetchRemoteTestCases should never be called',
+    'fetchRemoteTestCases should never be called when remote generation is disabled',
   );
 
   const body = JSON.stringify({
@@ -67,8 +68,7 @@ async function fetchRemoteTestCases(
   });
   logger.debug(`Using remote redteam generation for ${key}:\n${body}`);
   const { data } = await fetchWithCache(
-    // FIXME: update
-    'http://localhost:8080',
+    REMOTE_GENERATION_URL,
     {
       method: 'POST',
       headers: {
@@ -76,7 +76,7 @@ async function fetchRemoteTestCases(
       },
       body,
     },
-    30_000,
+    REQUEST_TIMEOUT_MS,
   );
   const ret = (data as { results: TestCase[] }).results;
   logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
