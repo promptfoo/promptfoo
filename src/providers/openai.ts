@@ -495,7 +495,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.stop ? { stop: this.config.stop } : {}),
       ...(this.config.passthrough || {}),
     };
-    //logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
+    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
     let data,
       cached = false;
@@ -520,7 +520,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    //logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
     if (data.error) {
       return {
         error: formatOpenAiError(data),
