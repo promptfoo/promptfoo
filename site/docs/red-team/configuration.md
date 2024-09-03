@@ -335,6 +335,12 @@ Note that this is separate from the "target" model(s), which are set in the top-
 
 A common use case is to use a [custom HTTP endpoint](/docs/providers/http/) or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
 
+:::info
+By default, Promptfoo uses your local OpenAI key to perform attack generation. If you do not have a key, it will use our API to generate adversarial inputs.
+
+You can fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
+:::
+
 ### Changing the model
 
 To use the `openai:chat:gpt-4o-mini` model, you can override the provider on the command line:
