@@ -337,11 +337,15 @@ A common use case is to use an alternative platform like [Azure](/docs/providers
 
 You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementations](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
 
-:::info
-By default, Promptfoo uses your local OpenAI key to perform attack generation. If you do not have a key, it will use our API to generate adversarial inputs.
-
-You can fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
+:::warning
+Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4o.
 :::
+
+### How attacks are generated
+
+By default, Promptfoo uses your local OpenAI key to perform attack generation. If you do not have a key, it will use our API to generate initial inputs, but the actual attacks are still performed locally.
+
+You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
 
 ### Changing the model
 
