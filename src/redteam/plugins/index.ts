@@ -79,7 +79,7 @@ async function fetchRemoteTestCases(
     },
     REQUEST_TIMEOUT_MS,
   );
-  const ret = (data as { results: TestCase[] }).results;
+  const ret = (data as { result: TestCase[] }).result;
   logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
   return ret;
 }
