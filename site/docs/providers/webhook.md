@@ -9,7 +9,8 @@ The webhook provider can be useful for triggering more complex flows or prompt c
 It is specified like so:
 
 ```yaml
-providers: [webhook:http://example.com/webhook]
+providers:
+  - webhook:http://example.com/webhook
 ```
 
 promptfoo will send an HTTP POST request with the following JSON payload:

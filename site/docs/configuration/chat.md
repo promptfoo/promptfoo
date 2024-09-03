@@ -30,9 +30,11 @@ Most providers support full "multishot" chat conversations, including multiple a
 One way to do this, if you are using the OpenAI format, is by creating a list of `{role, content}` objects. Here's an example:
 
 ```yaml
-prompts: [prompt.json]
+prompts:
+  - file://prompt.json
 
-providers: [openai:gpt-4o-mini]
+providers:
+  - openai:gpt-4o-mini
 
 tests:
   - vars:
@@ -240,8 +242,10 @@ Here's an example that prompts OpenAI with a JSON object of the structure `{quer
 Here's the associated config:
 
 ```yaml
-prompts: [prompt.json]
-providers: [openai:gpt-4o-mini]
+prompts:
+  - file://prompt.json
+providers:
+  - openai:gpt-4o-mini
 tests:
   - vars:
       query: how you doing

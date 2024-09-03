@@ -121,7 +121,9 @@ tests:
     // highlight-start
     assert:
       - type: icontains-any
-        value: [1, one]
+        value:
+          - 1
+          - one
     // highlight-end
   - vars:
       question: If you place an orange below a plate in the living room, and then move the plate to the kitchen, where is the orange now?

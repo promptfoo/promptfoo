@@ -38,8 +38,11 @@ providers:
                   description: 'The city and state, e.g. San Francisco, CA'
                 unit:
                   type: string
-                  enum: [celsius, fahrenheit]
-              required: [location]
+                  enum:
+                    - celsius
+                    - fahrenheit
+              required:
+                - location
       tool_choice: auto
 ```
 
@@ -110,8 +113,11 @@ providers:
                   description: 'The city and state, e.g. San Francisco, CA'
                 unit:
                   type: string
-                  enum: [celsius, fahrenheit]
-              required: [location]
+                  enum:
+                    - celsius
+                    - fahrenheit
+              required:
+                - location
       tool_choice: auto
 ```
 

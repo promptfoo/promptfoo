@@ -168,7 +168,9 @@ Prompt functions allow you to incorporate custom logic in your prompts. These fu
 To specify a prompt function in `promptfooconfig.yaml`, reference the file directly. For example:
 
 ```yaml
-prompts: ['prompt.js', 'prompt.py']
+prompts:
+  - file://prompt.js
+  - file://prompt.py
 ```
 
 In the prompt function, you can access the test case variables and provider information via the context. The function will have access to a `vars` object and `provider` object. Having access to the provider object allows you to dynamically generate prompts for different providers with different formats.
@@ -294,8 +296,10 @@ module.exports = function (str) {
 To use a custom Nunjucks filter in Promptfoo, add it to your configuration file (`promptfooconfig.yaml`). The `nunjucksFilters` field should contain a mapping of filter names to the paths of the JavaScript files that define them:
 
 ```yaml
-prompts: [prompts.txt]
-providers: [openai:gpt-4o-mini]
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4o-mini
 // highlight-start
 nunjucksFilters:
   allcaps: ./allcaps.js
