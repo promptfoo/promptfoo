@@ -118,8 +118,12 @@ export default function Dashboard() {
     ]);
   }, [evals]);
 
-  const totalTests = evals.reduce(
+  const totalProbes = evals.reduce(
     (sum, eval_) => sum + (eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0),
+    0,
+  );
+  const totalSuccessfulAttacks = evals.reduce(
+    (sum, eval_) => sum + (eval_.metrics?.testFailCount || 0),
     0,
   );
   const averageAttackSuccessRate =
@@ -133,21 +137,48 @@ export default function Dashboard() {
           return sum + attackSuccessRate;
         }, 0) / evals.length
       : 0;
-  const latestAttackSuccessRate =
-    evals.length > 0
-      ? evals[0].metrics?.testFailCount && evals[0].metrics?.testPassCount
-        ? evals[0].metrics.testFailCount /
-          (evals[0].metrics.testPassCount + evals[0].metrics.testFailCount)
-        : 0
-      : 0;
+  const latestAttackSuccessRate = (() => {
+    if (evals.length === 0) {
+      return 0;
+    }
+    const latestEval = evals[evals.length - 1];
+    if (latestEval.metrics?.testFailCount && latestEval.metrics?.testPassCount) {
+      return (
+        latestEval.metrics.testFailCount /
+        (latestEval.metrics.testPassCount + latestEval.metrics.testFailCount)
+      );
+    }
+    return 0;
+  })();
 
   const calculateMetricTrends = () => {
+    if (evals.length < 2) {
+      const flatTrend = {
+        direction: 'flat' as const,
+        sentiment: 'flat' as const,
+        value: 0,
+      };
+      return {
+        attackSuccessRateTrend: flatTrend,
+        totalSuccessfulAttacksTrend: flatTrend,
+        averageAttackSuccessRateTrend: flatTrend,
+      };
+    }
+
     const currentAttackSuccessRate = latestAttackSuccessRate;
-    const previousAttackSuccessRate =
-      evals.length > 1 && evals[1].metrics?.testFailCount && evals[1].metrics?.testPassCount
-        ? evals[1].metrics.testFailCount /
-          (evals[1].metrics.testPassCount + evals[1].metrics.testFailCount)
-        : currentAttackSuccessRate;
+    const previousAttackSuccessRate = (() => {
+      if (evals.length <= 1) {
+        return currentAttackSuccessRate;
+      }
+      const previousEval = evals[evals.length - 2];
+      if (previousEval.metrics?.testFailCount && previousEval.metrics?.testPassCount) {
+        return (
+          previousEval.metrics.testFailCount /
+          (previousEval.metrics.testPassCount + previousEval.metrics.testFailCount)
+        );
+      }
+      return currentAttackSuccessRate;
+    })();
 
     const attackSuccessRateTrend = calculateTrend(
       currentAttackSuccessRate,
@@ -155,22 +186,16 @@ export default function Dashboard() {
       true, // increase is bad
     );
 
-    const currentTotalTests = totalTests;
-    const previousTotalTests =
+    const currentTotalSuccessfulAttacks = totalSuccessfulAttacks;
+    const previousTotalSuccessfulAttacks =
       evals.length > 1
-        ? evals
-            .slice(1)
-            .reduce(
-              (sum, eval_) =>
-                sum + (eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0),
-              0,
-            )
-        : currentTotalTests;
+        ? evals.slice(1).reduce((sum, eval_) => sum + (eval_.metrics?.testFailCount || 0), 0)
+        : currentTotalSuccessfulAttacks;
 
-    const totalTestsTrend = calculateTrend(
-      currentTotalTests,
-      previousTotalTests,
-      false /* increase is good */,
+    const totalSuccessfulAttacksTrend = calculateTrend(
+      currentTotalSuccessfulAttacks,
+      previousTotalSuccessfulAttacks,
+      true /* increase is bad */,
     );
 
     // Calculate average attack success rate trend by looking at the average attack success rate of the last half of the evals
@@ -193,11 +218,22 @@ export default function Dashboard() {
       true, // increase is bad
     );
 
-    return { attackSuccessRateTrend, totalTestsTrend, averageAttackSuccessRateTrend };
+    return { attackSuccessRateTrend, totalSuccessfulAttacksTrend, averageAttackSuccessRateTrend };
   };
 
-  const { attackSuccessRateTrend, totalTestsTrend, averageAttackSuccessRateTrend } =
+  const { attackSuccessRateTrend, totalSuccessfulAttacksTrend, averageAttackSuccessRateTrend } =
     calculateMetricTrends();
+
+  const latestEvalDate = evals.length > 0 ? new Date(evals[evals.length - 1].createdAt) : null;
+  const formattedLatestEvalDate = latestEvalDate
+    ? latestEvalDate.toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : 'N/A';
 
   return (
     <Box
@@ -284,6 +320,21 @@ export default function Dashboard() {
                     minimumFractionDigits: 1,
                     maximumFractionDigits: 1,
                   })}`}
+                  subtitle={`As of ${formattedLatestEvalDate}`}
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <MetricCard
+                  title="Total Successful Attacks"
+                  value={totalSuccessfulAttacks.toLocaleString()}
+                  trend={totalSuccessfulAttacksTrend.direction}
+                  sentiment={totalSuccessfulAttacksTrend.sentiment}
+                  trendValue={`${totalSuccessfulAttacksTrend.value.toLocaleString(undefined, {
+                    style: 'percent',
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  })}`}
+                  subtitle={`Out of ${totalProbes.toLocaleString()} total`}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
@@ -297,19 +348,6 @@ export default function Dashboard() {
                   trend={averageAttackSuccessRateTrend.direction}
                   sentiment={averageAttackSuccessRateTrend.sentiment}
                   trendValue={`${averageAttackSuccessRateTrend.value.toLocaleString(undefined, {
-                    style: 'percent',
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1,
-                  })}`}
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <MetricCard
-                  title="Total Probes"
-                  value={totalTests.toLocaleString()}
-                  trend={totalTestsTrend.direction}
-                  sentiment={totalTestsTrend.sentiment}
-                  trendValue={`${totalTestsTrend.value.toLocaleString(undefined, {
                     style: 'percent',
                     minimumFractionDigits: 1,
                     maximumFractionDigits: 1,

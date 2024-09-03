@@ -12,9 +12,17 @@ interface MetricCardProps {
   trend?: 'up' | 'down' | 'flat';
   trendValue?: string;
   sentiment?: 'good' | 'bad' | 'flat';
+  subtitle?: string; // Add this line
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ title, value, trend, trendValue, sentiment }) => {
+const MetricCard: React.FC<MetricCardProps> = ({
+  title,
+  value,
+  trend,
+  trendValue,
+  sentiment,
+  subtitle,
+}) => {
   const getTrendIcon = () => {
     switch (trend) {
       case 'up':
@@ -48,6 +56,11 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, trend, trendValue
       <Typography variant="h6" gutterBottom>
         {title}
       </Typography>
+      {subtitle && ( // Add this block
+        <Typography variant="caption" color="text.secondary" gutterBottom>
+          {subtitle}
+        </Typography>
+      )}
       <Box
         sx={{
           mt: 2,
