@@ -974,6 +974,7 @@ export type StandaloneEval = CompletedPrompt & {
   description: string | null;
   datasetId: string | null;
   promptId: string | null;
+  isRedteam: boolean;
   createdAt: number;
 };
 
@@ -1004,6 +1005,7 @@ export function getStandaloneEvals({
       datasetId: evalsToDatasets.datasetId,
       tagName: tags.name,
       tagValue: tags.value,
+      isRedteam: sql`json_extract(evals.config, '$.redteam') IS NOT NULL`.as('isRedteam'),
     })
     .from(evals)
     .leftJoin(evalsToPrompts, eq(evals.id, evalsToPrompts.evalId))
@@ -1023,6 +1025,7 @@ export function getStandaloneEvals({
       promptId,
       datasetId,
       results: { table },
+      isRedteam,
     } = result;
     return table.head.prompts.map((col) => ({
       evalId,
@@ -1030,6 +1033,7 @@ export function getStandaloneEvals({
       promptId,
       datasetId,
       createdAt,
+      isRedteam: isRedteam as boolean,
       ...col,
     }));
   });

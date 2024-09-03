@@ -88,6 +88,8 @@ export default function Dashboard() {
     // Prepare data for Recharts
     const attackSuccessRateOverTime = evals
       .sort((a, b) => a.createdAt - b.createdAt)
+      // Redteams only
+      .filter((eval_) => eval_.isRedteam)
       .map((eval_) => ({
         date: new Date(eval_.createdAt).toLocaleDateString(),
         attackSuccessRate:
@@ -96,8 +98,7 @@ export default function Dashboard() {
                 (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
               100
             : 0,
-      }))
-      .filter((item) => item.attackSuccessRate);
+      }));
 
     setAttackSuccessRateData(attackSuccessRateOverTime);
 

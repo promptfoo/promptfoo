@@ -54,7 +54,7 @@ const TopFailingCategories: React.FC<TopFailingCategoriesProps> = ({ evals }) =>
   return (
     <>
       <Typography variant="h6" gutterBottom>
-        Top Failing Probes
+        Weakest Areas
       </Typography>
       <List>
         {topFailingCategories.map((category, index) => {
