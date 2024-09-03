@@ -25,7 +25,7 @@ import {
   subCategoryDescriptions,
 } from '../../redteam/constants';
 import telemetry, { type EventValue } from '../../telemetry';
-import type { RedteamPluginObject } from '../../types';
+import type { ProviderOptions, RedteamPluginObject } from '../../types';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { doGenerateRedteam } from './generate';
 
@@ -51,7 +51,15 @@ providers:
   # Providers are red team targets. To talk directly to your application, use a custom provider.
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
   {% for provider in providers -%}
+  {% if provider is string -%}
   - {{ provider }}
+  {% else -%}
+  - id: {{ provider.id }}
+    config:
+      {% for k, v in provider.config -%}
+      {{ k }}: {{ v | dump }}
+      {% endfor -%}
+  {% endif -%}
   {% endfor %}
 
 redteam:
@@ -175,6 +183,7 @@ export async function redteamInit(directory: string | undefined) {
     choices: [
       { name: 'Not sure yet', value: 'not_sure' },
       { name: 'Red team a prompt, model, or chatbot', value: 'prompt_model_chatbot' },
+      { name: 'Red team an HTTP endpoint', value: 'http_endpoint' },
       { name: 'Red team a RAG', value: 'rag' },
       { name: 'Red team an Agent', value: 'agent' },
     ],
@@ -186,7 +195,8 @@ export async function redteamInit(directory: string | undefined) {
   const prompts: string[] = [];
   let purpose: string | undefined;
 
-  const useCustomProvider = redTeamChoice === 'rag' || redTeamChoice === 'agent';
+  const useCustomProvider =
+    redTeamChoice === 'rag' || redTeamChoice === 'agent' || redTeamChoice === 'http_endpoint';
   let deferGeneration = useCustomProvider;
   const defaultPrompt =
     'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}';
@@ -225,9 +235,27 @@ export async function redteamInit(directory: string | undefined) {
     );
   }
 
-  let providers: string[];
+  let providers: (string | ProviderOptions)[];
   if (useCustomProvider) {
-    providers = ['python:chat.py'];
+    if (redTeamChoice === 'http_endpoint') {
+      providers = [
+        {
+          id: 'https://example.com/generate',
+          config: {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: {
+              myPrompt: '{{prompt}}',
+            },
+            responseParser: 'json.output',
+          },
+        },
+      ];
+    } else {
+      providers = ['python:chat.py'];
+    }
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
