@@ -33,6 +33,7 @@ describe('System Purpose Extractor', () => {
   });
 
   it('should use remote generation when enabled', async () => {
+    process.env.OPENAI_API_KEY = undefined;
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
     jest.mocked(fetchWithCache).mockResolvedValue({
       data: { task: 'purpose', result: 'Remote extracted purpose' },

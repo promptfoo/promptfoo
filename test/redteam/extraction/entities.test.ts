@@ -40,6 +40,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should use remote generation when enabled', async () => {
+    process.env.OPENAI_API_KEY = undefined;
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
     jest.mocked(fetchWithCache).mockResolvedValue({
       data: { task: 'entities', result: ['Apple', 'Google'] },
@@ -61,6 +62,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should fall back to local extraction when remote generation fails', async () => {
+    process.env.OPENAI_API_KEY = undefined;
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
     jest.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
 
