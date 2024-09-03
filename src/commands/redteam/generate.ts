@@ -290,9 +290,9 @@ export function generateRedteamCommand(
         cliState.remote = true;
       }
       if (shouldGenerateRemote()) {
-        logger.info('Remote inference enabled');
+        logger.debug('Remote generation enabled');
       } else {
-        logger.info('Remote inference disabled');
+        logger.debug('Remote generation disabled');
       }
 
       try {
