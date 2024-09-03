@@ -30,14 +30,14 @@ import Sidebar from './Sidebar';
 import TopFailingCategories from './TopFailingCategories';
 import { calculateTrend } from './utils';
 
-interface OverallPassRateDataPoint {
+interface OverallAttackSuccessRateDataPoint {
   name: string;
   value: number;
 }
 
-interface PassRateDataPoint {
+interface AttackSuccessRateDataPoint {
   date: string;
-  passRate: number;
+  attackSuccessRate: number;
 }
 
 export default function Dashboard() {
@@ -47,8 +47,12 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [passRateData, setPassRateData] = useState<PassRateDataPoint[]>([]);
-  const [overallPassRateData, setOverallPassRateData] = useState<OverallPassRateDataPoint[]>([]);
+  const [attackSuccessRateData, setAttackSuccessRateData] = useState<AttackSuccessRateDataPoint[]>(
+    [],
+  );
+  const [overallAttackSuccessRateData, setOverallAttackSuccessRateData] = useState<
+    OverallAttackSuccessRateDataPoint[]
+  >([]);
 
   const fetchEvals = async () => {
     setIsLoading(true);
@@ -82,32 +86,32 @@ export default function Dashboard() {
     }
 
     // Prepare data for Recharts
-    const passRateOverTime = evals
+    const attackSuccessRateOverTime = evals
       .sort((a, b) => a.createdAt - b.createdAt)
       .map((eval_) => ({
         date: new Date(eval_.createdAt).toLocaleDateString(),
-        passRate:
-          eval_.metrics?.testPassCount && eval_.metrics?.testFailCount
-            ? (eval_.metrics.testPassCount /
+        attackSuccessRate:
+          eval_.metrics?.testFailCount && eval_.metrics?.testPassCount
+            ? (eval_.metrics.testFailCount /
                 (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
               100
             : 0,
       }))
-      .filter((item) => item.passRate);
+      .filter((item) => item.attackSuccessRate);
 
-    setPassRateData(passRateOverTime);
+    setAttackSuccessRateData(attackSuccessRateOverTime);
 
-    const overallPassRate =
-      evals.reduce((sum, eval_) => sum + (eval_.metrics?.testPassCount || 0), 0) /
+    const overallAttackSuccessRate =
+      evals.reduce((sum, eval_) => sum + (eval_.metrics?.testFailCount || 0), 0) /
       evals.reduce(
         (sum, eval_) =>
           sum + ((eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0)),
         0,
       );
 
-    setOverallPassRateData([
-      { name: 'Pass', value: overallPassRate * 100 },
-      { name: 'Fail', value: (1 - overallPassRate) * 100 },
+    setOverallAttackSuccessRateData([
+      { name: 'Success', value: overallAttackSuccessRate },
+      { name: 'Fail', value: 1 - overallAttackSuccessRate },
     ]);
   }, [evals]);
 
@@ -115,34 +119,38 @@ export default function Dashboard() {
     (sum, eval_) => sum + (eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0),
     0,
   );
-  const averagePassRate =
+  const averageAttackSuccessRate =
     evals.length > 0
       ? evals.reduce((sum, eval_) => {
-          const passRate =
-            eval_.metrics?.testPassCount && eval_.metrics?.testFailCount
-              ? eval_.metrics.testPassCount /
+          const attackSuccessRate =
+            eval_.metrics?.testFailCount && eval_.metrics?.testPassCount
+              ? eval_.metrics.testFailCount /
                 (eval_.metrics.testPassCount + eval_.metrics.testFailCount)
               : 0;
-          return sum + passRate;
+          return sum + attackSuccessRate;
         }, 0) / evals.length
       : 0;
-  const latestPassRate =
+  const latestAttackSuccessRate =
     evals.length > 0
-      ? evals[0].metrics?.testPassCount && evals[0].metrics?.testFailCount
-        ? evals[0].metrics.testPassCount /
+      ? evals[0].metrics?.testFailCount && evals[0].metrics?.testPassCount
+        ? evals[0].metrics.testFailCount /
           (evals[0].metrics.testPassCount + evals[0].metrics.testFailCount)
         : 0
       : 0;
 
   const calculateMetricTrends = () => {
-    const currentPassRate = latestPassRate;
-    const previousPassRate =
-      evals.length > 1 && evals[1].metrics?.testPassCount && evals[1].metrics?.testFailCount
-        ? evals[1].metrics.testPassCount /
+    const currentAttackSuccessRate = latestAttackSuccessRate;
+    const previousAttackSuccessRate =
+      evals.length > 1 && evals[1].metrics?.testFailCount && evals[1].metrics?.testPassCount
+        ? evals[1].metrics.testFailCount /
           (evals[1].metrics.testPassCount + evals[1].metrics.testFailCount)
-        : currentPassRate;
+        : currentAttackSuccessRate;
 
-    const passRateTrend = calculateTrend(currentPassRate, previousPassRate);
+    const attackSuccessRateTrend = calculateTrend(
+      currentAttackSuccessRate,
+      previousAttackSuccessRate,
+      true, // increase is bad
+    );
 
     const currentTotalTests = totalTests;
     const previousTotalTests =
@@ -156,28 +164,37 @@ export default function Dashboard() {
             )
         : currentTotalTests;
 
-    const totalTestsTrend = calculateTrend(currentTotalTests, previousTotalTests);
+    const totalTestsTrend = calculateTrend(
+      currentTotalTests,
+      previousTotalTests,
+      false /* increase is good */,
+    );
 
-    // Calculate average pass rate trend by looking at the average pass rate of the last half of the evals
-    const currentAveragePassRate = averagePassRate;
-    const previousAveragePassRate =
+    // Calculate average attack success rate trend by looking at the average attack success rate of the last half of the evals
+    const currentAverageAttackSuccessRate = averageAttackSuccessRate;
+    const previousAverageAttackSuccessRate =
       evals.length > 1
         ? evals.slice(Math.floor(evals.length / 2)).reduce((sum, eval_) => {
-            const passRate =
-              eval_.metrics?.testPassCount && eval_.metrics?.testFailCount
-                ? eval_.metrics.testPassCount /
+            const attackSuccessRate =
+              eval_.metrics?.testFailCount && eval_.metrics?.testPassCount
+                ? eval_.metrics.testFailCount /
                   (eval_.metrics.testPassCount + eval_.metrics.testFailCount)
                 : 0;
-            return sum + passRate;
+            return sum + attackSuccessRate;
           }, 0) / Math.floor(evals.length / 2)
-        : currentAveragePassRate;
+        : currentAverageAttackSuccessRate;
 
-    const averagePassRateTrend = calculateTrend(currentAveragePassRate, previousAveragePassRate);
+    const averageAttackSuccessRateTrend = calculateTrend(
+      currentAverageAttackSuccessRate,
+      previousAverageAttackSuccessRate,
+      true, // increase is bad
+    );
 
-    return { passRateTrend, totalTestsTrend, averagePassRateTrend };
+    return { attackSuccessRateTrend, totalTestsTrend, averageAttackSuccessRateTrend };
   };
 
-  const { passRateTrend, totalTestsTrend, averagePassRateTrend } = calculateMetricTrends();
+  const { attackSuccessRateTrend, totalTestsTrend, averageAttackSuccessRateTrend } =
+    calculateMetricTrends();
 
   return (
     <Box
@@ -251,14 +268,15 @@ export default function Dashboard() {
               {/* Metric cards */}
               <Grid item xs={12} md={4}>
                 <MetricCard
-                  title="Current Pass Rate"
-                  value={`${latestPassRate.toLocaleString(undefined, {
+                  title="Current Attack Success Rate"
+                  value={`${latestAttackSuccessRate.toLocaleString(undefined, {
                     style: 'percent',
                     minimumFractionDigits: 1,
                     maximumFractionDigits: 1,
                   })}`}
-                  trend={passRateTrend.direction}
-                  trendValue={`${passRateTrend.value.toLocaleString(undefined, {
+                  trend={attackSuccessRateTrend.direction}
+                  sentiment={attackSuccessRateTrend.sentiment}
+                  trendValue={`${attackSuccessRateTrend.value.toLocaleString(undefined, {
                     style: 'percent',
                     minimumFractionDigits: 1,
                     maximumFractionDigits: 1,
@@ -267,14 +285,15 @@ export default function Dashboard() {
               </Grid>
               <Grid item xs={12} md={4}>
                 <MetricCard
-                  title="Average Pass Rate"
-                  value={`${averagePassRate.toLocaleString(undefined, {
+                  title="Average Attack Success Rate"
+                  value={`${averageAttackSuccessRate.toLocaleString(undefined, {
                     style: 'percent',
                     minimumFractionDigits: 1,
                     maximumFractionDigits: 1,
                   })}`}
-                  trend={averagePassRateTrend.direction}
-                  trendValue={`${averagePassRateTrend.value.toLocaleString(undefined, {
+                  trend={averageAttackSuccessRateTrend.direction}
+                  sentiment={averageAttackSuccessRateTrend.sentiment}
+                  trendValue={`${averageAttackSuccessRateTrend.value.toLocaleString(undefined, {
                     style: 'percent',
                     minimumFractionDigits: 1,
                     maximumFractionDigits: 1,
@@ -286,6 +305,7 @@ export default function Dashboard() {
                   title="Total Probes"
                   value={totalTests.toLocaleString()}
                   trend={totalTestsTrend.direction}
+                  sentiment={totalTestsTrend.sentiment}
                   trendValue={`${totalTestsTrend.value.toLocaleString(undefined, {
                     style: 'percent',
                     minimumFractionDigits: 1,
@@ -294,7 +314,7 @@ export default function Dashboard() {
                 />
               </Grid>
 
-              {/* Pass Rate Over Time Chart */}
+              {/* Attack Success Rate Over Time Chart */}
               <Grid item xs={12} md={8} lg={9}>
                 <Paper
                   elevation={3}
@@ -307,10 +327,10 @@ export default function Dashboard() {
                   }}
                 >
                   <Typography variant="h6" mb={4}>
-                    Pass Rate Over Time
+                    Attack Success
                   </Typography>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={passRateData}>
+                    <AreaChart data={attackSuccessRateData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                       <YAxis
@@ -327,30 +347,30 @@ export default function Dashboard() {
                                 maximumFractionDigits: 1,
                               }) + '%'
                             : value,
-                          'Pass Rate:',
+                          'Attack Success Rate:',
                         ]}
                       />
                       <defs>
-                        <linearGradient id="passRateGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#2196f3" stopOpacity={0.8} />
-                          <stop offset="95%" stopColor="#2196f3" stopOpacity={0.1} />
+                        <linearGradient id="attackSuccessRateGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f44336" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#f44336" stopOpacity={0.1} />
                         </linearGradient>
                       </defs>
                       <Area
                         type="monotone"
-                        dataKey="passRate"
-                        stroke="#0d47a1"
+                        dataKey="attackSuccessRate"
+                        stroke="#f44336"
                         strokeWidth={2}
                         fillOpacity={1}
-                        fill="url(#passRateGradient)"
+                        fill="url(#attackSuccessRateGradient)"
                         dot={false}
-                        activeDot={{ r: 6, fill: '#0d47a1', stroke: '#fff', strokeWidth: 2 }}
+                        activeDot={{ r: 6, fill: '#d32f2f', stroke: '#fff', strokeWidth: 2 }}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
                 </Paper>
               </Grid>
-              {/* Overall Pass Rate */}
+              {/* Overall Attack Success Rate */}
               <Grid item xs={12} md={4} lg={3}>
                 <Paper
                   elevation={3}
@@ -363,17 +383,17 @@ export default function Dashboard() {
                   }}
                 >
                   <Typography variant="h6" gutterBottom>
-                    Overall Pass Rate
+                    Attack Efficacy
                   </Typography>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={overallPassRateData}
+                        data={overallAttackSuccessRateData}
                         cx="50%"
                         cy="50%"
                         innerRadius={60}
                         outerRadius={80}
-                        fill="#2196f3"
+                        fill="#f44336"
                         paddingAngle={5}
                         dataKey="value"
                         label={({ name, percent }) =>
@@ -385,8 +405,8 @@ export default function Dashboard() {
                         }
                         labelLine={false}
                       >
-                        {overallPassRateData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={index === 0 ? '#2196f3' : '#f44336'} />
+                        {overallAttackSuccessRateData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={index === 0 ? '#f44336' : '#4caf50'} />
                         ))}
                       </Pie>
                       <Tooltip

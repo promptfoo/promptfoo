@@ -1,4 +1,4 @@
-export function calculateTrend(current: number, previous: number) {
+export function calculateTrend(current: number, previous: number, increaseIsBad: boolean) {
   const difference = current - previous;
   const percentChange = difference / previous;
 
@@ -11,8 +11,16 @@ export function calculateTrend(current: number, previous: number) {
     direction = 'flat';
   }
 
+  let sentiment: 'good' | 'bad' | 'flat';
+  if (increaseIsBad) {
+    sentiment = direction === 'up' ? 'bad' : direction === 'down' ? 'good' : 'flat';
+  } else {
+    sentiment = direction === 'up' ? 'good' : direction === 'down' ? 'bad' : 'flat';
+  }
+
   return {
     direction,
     value: Math.abs(percentChange),
+    sentiment,
   };
 }

@@ -90,7 +90,7 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
   return (
     <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
       <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
-        Emerging Risks
+        Trending Risks
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
         {emergingRisks.map((risk, index) => {
@@ -157,7 +157,7 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                       minimumFractionDigits: 1,
                       maximumFractionDigits: 1,
                     })}{' '}
-                    ({risk.recentFails}/{risk.recentTotal} runs)
+                    failed runs
                   </Typography>
                   <Typography variant="body2">
                     Historical:{' '}
@@ -166,7 +166,7 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                       minimumFractionDigits: 1,
                       maximumFractionDigits: 1,
                     })}{' '}
-                    ({risk.historicalFails}/{risk.historicalTotal} runs)
+                    failed runs
                   </Typography>
                   <Typography variant="body2" color="error">
                     {risk.increaseFactor.toLocaleString(undefined, {

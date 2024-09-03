@@ -11,15 +11,20 @@ interface MetricCardProps {
   value: string;
   trend?: 'up' | 'down' | 'flat';
   trendValue?: string;
+  sentiment?: 'good' | 'bad' | 'flat';
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ title, value, trend, trendValue }) => {
+const MetricCard: React.FC<MetricCardProps> = ({ title, value, trend, trendValue, sentiment }) => {
   const getTrendIcon = () => {
     switch (trend) {
       case 'up':
-        return <TrendingUpIcon sx={{ color: 'success.main' }} />;
+        return (
+          <TrendingUpIcon sx={{ color: sentiment === 'good' ? 'success.main' : 'error.main' }} />
+        );
       case 'down':
-        return <TrendingDownIcon sx={{ color: 'error.main' }} />;
+        return (
+          <TrendingDownIcon sx={{ color: sentiment === 'bad' ? 'error.main' : 'success.main' }} />
+        );
       case 'flat':
         return <TrendingFlatIcon sx={{ color: 'text.secondary' }} />;
       default:
