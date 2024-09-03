@@ -155,7 +155,10 @@ export async function getPiiLeakTestsForCategory(
   );
 
   const { output: generatedPrompts } = piiLeakPrompts;
-  invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
+  invariant(
+    typeof generatedPrompts === 'string',
+    `Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`,
+  );
 
   const prompts = generatedPrompts
     .split('\n')

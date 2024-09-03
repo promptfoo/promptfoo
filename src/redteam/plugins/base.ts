@@ -78,7 +78,10 @@ export abstract class PluginBase {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
 
-      invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
+      invariant(
+        typeof generatedPrompts === 'string',
+        `Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`,
+      );
       return this.parseGeneratedPrompts(generatedPrompts);
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);

@@ -75,7 +75,7 @@ describe('PluginBase', () => {
     jest.mocked(provider.callApi).mockResolvedValue({ output: 123 });
 
     await expect(plugin.generateTests(2)).rejects.toThrow(
-      'Expected generatedPrompts to be a string',
+      'Expected generatedPrompts to be a string, got number: 123',
     );
   });
 
