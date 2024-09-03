@@ -1,3 +1,4 @@
+import cliState from '../cliState';
 import { getEnvBool, getEnvString } from '../envars';
 
 const REFUSAL_PREFIXES = [
@@ -24,7 +25,9 @@ const REFUSAL_SUBSTRINGS = [
 export function shouldGenerateRemote(): boolean {
   // Generate remotely when the user has not disabled it and does not have an OpenAI key.
   return (
-    !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION') && !getEnvString('OPENAI_API_KEY')
+    (!getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION') &&
+      !getEnvString('OPENAI_API_KEY')) ||
+    (cliState.remote ?? false)
   );
 }
 
