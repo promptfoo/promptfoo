@@ -99,6 +99,14 @@ export type EnvVars = {
 type EnvVarKey = keyof EnvVars;
 
 /**
+ * Provider env keys that are required to be set either in env or in config to interact with provider services.
+ */
+export enum ProvidersRequiringAPIKeysEnvKeys {
+  OPENAI_API_KEY = 'OPENAI_API_KEY',
+  ANTHROPIC_API_KEY = 'ANTHROPIC_API_KEY',
+}
+
+/**
  * Get an environment variable.
  * @param key The name of the environment variable.
  * @param defaultValue Optional default value if the environment variable is not set.

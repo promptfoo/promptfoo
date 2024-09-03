@@ -1,10 +1,11 @@
 import checkbox from '@inquirer/checkbox';
 import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
+import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 import { redteamInit } from './commands/redteam/init';
-import { getEnvString } from './envars';
+import { getEnvString, ProvidersRequiringAPIKeysEnvKeys } from './envars';
 import logger from './logger';
 import telemetry, { type EventValue } from './telemetry';
 import { getNunjucksEngine } from './util/templates';
@@ -228,12 +229,77 @@ promptfoo eval
 Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
-function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+function recordOnboardingStep(step: string, properties: any = {}) {
   telemetry.recordAndSend('funnel', {
     type: 'eval onboarding',
     step,
     ...properties,
   });
+}
+
+/**
+ * Iterate through user choices and determine if the user has selected a provider that needs an API key
+ * but has not set and API key in their enviorment.
+ */
+export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[]): string[] {
+  // Dictionary of what warnings may have already been printed for the user.
+  const shownWarnings = new Map([
+    [ProvidersRequiringAPIKeysEnvKeys.OPENAI_API_KEY.valueOf(), false],
+    [ProvidersRequiringAPIKeysEnvKeys.ANTHROPIC_API_KEY.valueOf(), false],
+  ]);
+  const choices = providerChoices.map((choice) => {
+    // Map and only return the provider id strings.
+    switch (typeof choice) {
+      case 'object':
+        // TODO(should use a rigid interface in the future).
+        return (choice as any).id;
+      case 'string':
+      default:
+        return choice;
+    }
+  });
+  const warnings: string[] = [];
+  for (const choice of choices) {
+    // Iterate through the list and determine if the user has selected a provider that
+    // requires an API key for interaction.
+    if (!choice.includes(':')) {
+      // Avoid splitting on a symbol that may not exist in the future.
+      continue;
+    }
+    // Use the prefix id to create a string that works as the key of the associated env override.
+    const chosenProvider: string = `${choice.split(':')[0].toUpperCase()}_API_KEY`;
+    if (
+      ProvidersRequiringAPIKeysEnvKeys[
+        chosenProvider as keyof typeof ProvidersRequiringAPIKeysEnvKeys
+      ]
+    ) {
+      let apiKeyEnvIdentifer: string | null = null;
+      switch (chosenProvider) {
+        case ProvidersRequiringAPIKeysEnvKeys.OPENAI_API_KEY.valueOf():
+          if (!getEnvString(chosenProvider as keyof typeof ProvidersRequiringAPIKeysEnvKeys)) {
+            apiKeyEnvIdentifer = chosenProvider;
+          }
+          break;
+        case ProvidersRequiringAPIKeysEnvKeys.ANTHROPIC_API_KEY.valueOf():
+          if (!getEnvString(chosenProvider as keyof typeof ProvidersRequiringAPIKeysEnvKeys)) {
+            apiKeyEnvIdentifer = chosenProvider;
+          }
+          break;
+        default:
+      }
+      if (apiKeyEnvIdentifer !== null) {
+        // Check to make sure we haven't already displayed a warning for the given provider.
+        if (!shownWarnings.get(chosenProvider)) {
+          shownWarnings.set(chosenProvider, true);
+          warnings.push(dedent`\n${chalk.bold(`Warning: ${chosenProvider} environment variable is not set.`)}
+
+            Please set this environment variable like: export ${chosenProvider}=<my-api-key>\n
+            `);
+        }
+      }
+    }
+  }
+  return warnings;
 }
 
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
@@ -384,16 +450,28 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
       },
     ];
-    const providerChoices: (string | object)[] = await checkbox({
-      message: 'Which model providers would you like to use? (press enter to skip)',
-      choices,
-    });
+
+    /**
+     * The potential of the object type here is given by the agent action conditional
+     * for openai as a value choice
+     */
+    const providerChoices: (string | Object)[] = (
+      await checkbox({
+        message:
+          'Which model providers would you like to use? (press space to select, enter to complete selection)',
+        choices,
+        required: true,
+      })
+    ).flat();
 
     recordOnboardingStep('choose providers', {
       value: providerChoices.map((choice) =>
         typeof choice === 'string' ? choice : JSON.stringify(choice),
       ),
     });
+
+    // Tell the user if they have providers selected without relevant API keys set in env.
+    reportProviderAPIKeyWarnings(providerChoices).map((warningText) => logger.warn(warningText));
 
     if (providerChoices.length > 0) {
       const flatProviders = providerChoices.flat();
