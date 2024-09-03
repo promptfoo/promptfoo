@@ -38,6 +38,7 @@ interface OverallAttackSuccessRateDataPoint {
 interface AttackSuccessRateDataPoint {
   date: string;
   attackSuccessRate: number;
+  successfulAttacks: number;
 }
 
 export default function Dashboard() {
@@ -98,6 +99,7 @@ export default function Dashboard() {
                 (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
               100
             : 0,
+        successfulAttacks: eval_.metrics?.testFailCount || 0,
       }));
 
     setAttackSuccessRateData(attackSuccessRateOverTime);
@@ -111,8 +113,8 @@ export default function Dashboard() {
       );
 
     setOverallAttackSuccessRateData([
-      { name: 'Success', value: overallAttackSuccessRate },
-      { name: 'Fail', value: 1 - overallAttackSuccessRate },
+      { name: 'Succeeded', value: overallAttackSuccessRate },
+      { name: 'Defended', value: 1 - overallAttackSuccessRate },
     ]);
   }, [evals]);
 
@@ -316,7 +318,7 @@ export default function Dashboard() {
               </Grid>
 
               {/* Attack Success Rate Over Time Chart */}
-              <Grid item xs={12} md={8} lg={9}>
+              <Grid item xs={12} md={7} lg={8}>
                 <Paper
                   elevation={3}
                   sx={{
@@ -335,21 +337,35 @@ export default function Dashboard() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                       <YAxis
+                        yAxisId="left"
                         width={40}
                         domain={[0, 100]}
                         tickFormatter={(value) => `${value}%`}
                         tick={{ fontSize: 12 }}
                       />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        width={40}
+                        tick={{ fontSize: 12 }}
+                      />
                       <Tooltip
-                        formatter={(value: number | string) => [
-                          typeof value === 'number'
-                            ? value.toLocaleString(undefined, {
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
-                              }) + '%'
-                            : value,
-                          'Attack Success Rate:',
-                        ]}
+                        formatter={(value: number | string, name: string) => {
+                          if (name === 'attackSuccessRate') {
+                            return [
+                              typeof value === 'number'
+                                ? value.toLocaleString(undefined, {
+                                    minimumFractionDigits: 1,
+                                    maximumFractionDigits: 1,
+                                  }) + '%'
+                                : value,
+                              'Attack Success Rate:',
+                            ];
+                          } else if (name === 'successfulAttacks') {
+                            return [value, 'Successful Attacks:'];
+                          }
+                          return [value, name];
+                        }}
                       />
                       <defs>
                         <linearGradient id="attackSuccessRateGradient" x1="0" y1="0" x2="0" y2="1">
@@ -358,6 +374,7 @@ export default function Dashboard() {
                         </linearGradient>
                       </defs>
                       <Area
+                        yAxisId="left"
                         type="monotone"
                         dataKey="attackSuccessRate"
                         stroke="#f44336"
@@ -367,12 +384,25 @@ export default function Dashboard() {
                         dot={false}
                         activeDot={{ r: 6, fill: '#d32f2f', stroke: '#fff', strokeWidth: 2 }}
                       />
+                      {/* 
+                      <Area
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="successfulAttacks"
+                        stroke="#2196f3"
+                        strokeWidth={2}
+                        fill="#2196f3"
+                        fillOpacity={0.3}
+                        dot={false}
+                        activeDot={{ r: 6, fill: '#1976d2', stroke: '#fff', strokeWidth: 2 }}
+                      />
+                      */}
                     </AreaChart>
                   </ResponsiveContainer>
                 </Paper>
               </Grid>
               {/* Overall Attack Success Rate */}
-              <Grid item xs={12} md={4} lg={3}>
+              <Grid item xs={12} md={5} lg={4}>
                 <Paper
                   elevation={3}
                   sx={{
@@ -390,10 +420,8 @@ export default function Dashboard() {
                     <PieChart>
                       <Pie
                         data={overallAttackSuccessRateData}
-                        cx="50%"
-                        cy="50%"
                         innerRadius={60}
-                        outerRadius={80}
+                        outerRadius={90}
                         fill="#f44336"
                         paddingAngle={5}
                         dataKey="value"
