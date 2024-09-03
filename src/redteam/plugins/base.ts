@@ -72,10 +72,15 @@ export abstract class PluginBase {
       });
 
       const finalTemplate = this.appendModifiers(renderedTemplate);
-      const { output: generatedPrompts } = await this.provider.callApi(finalTemplate);
+      const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
+      if (error) {
+        logger.error(`Error generating prompts for ${this.constructor.name}: ${error}`);
+        throw new Error(`Error generating prompts for ${this.constructor.name}: ${error}`);
       }
 
       invariant(
