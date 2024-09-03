@@ -58,7 +58,8 @@ providers:
                   enum:
                     - celsius
                     - fahrenheit
-              required: ['location']
+              required:
+                - 'location'
       tool_choice: auto
 
 prompts:

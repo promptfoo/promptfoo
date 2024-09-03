@@ -19,7 +19,8 @@ providers:
                 expression:
                   type: string
                   description: 'The mathematical expression to evaluate'
-              required: ['expression']
+              required:
+                - 'expression'
       tool_choice: auto
 
 tests:

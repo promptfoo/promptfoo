@@ -50,8 +50,11 @@ assert:
 You can incorporate test variables into your LLM rubric. This is particularly useful for detecting hallucinations or ensuring the output addresses specific aspects of the input. Here's an example:
 
 ```yaml
-providers: [openai:gpt-4o]
-prompts: [prompt1.txt, prompt2.txt]
+providers:
+  - openai:gpt-4o
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 defaultTest:
   assert:
     - type: llm-rubric

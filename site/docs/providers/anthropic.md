@@ -90,7 +90,8 @@ providers:
     config:
       temperature: 0.0
       max_tokens: 512
-prompts: [prompt.json]
+prompts:
+  - file://prompt.json
 ```
 
 ### Tool Use

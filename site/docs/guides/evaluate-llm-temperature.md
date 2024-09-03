@@ -107,7 +107,10 @@ tests:
     message: Generate a list of potential risks for a space mission.
   assert:
     - type: icontains-all
-      value: ['radiation', 'isolation', 'environment']
+      value:
+        - 'radiation'
+        - 'isolation'
+        - 'environment'
 ```
 
 In this case, a higher temperature leads to more creative results, but also leads to a mention of "as an AI language model":

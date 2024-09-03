@@ -196,7 +196,8 @@ OpenAI tools and functions are supported. See [OpenAI tools example](https://git
 To set `tools` on an OpenAI provider, use the provider's `config` key. Add your function definitions under this key.
 
 ```yaml
-prompts: [prompt.txt]
+prompts:
+  - file://prompt.txt
 providers:
   - id: openai:chat:gpt-4o-mini
     // highlight-start
@@ -313,7 +314,8 @@ They can also include functions that dynamically reference vars:
 Use the `functions` config to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
 ```yaml
-prompts: [prompt.txt]
+prompts:
+  - file://prompt.txt
 providers:
   - id: openai:chat:gpt-4o-mini
     // highlight-start

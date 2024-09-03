@@ -14,8 +14,12 @@ Assertions are _optional_. Many people get value out of reviewing outputs manual
 Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-3.5 and Gemini, substituting `language` and `input` variables:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-pro
 tests:
   - vars:
       language: French
@@ -38,8 +42,12 @@ Running `promptfoo eval` over this config will result in a _matrix view_ that yo
 Next, let's add an assertion. This automatically rejects any outputs that don't contain JSON:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-pro
 tests:
   - vars:
       language: French
@@ -58,8 +66,12 @@ We can create additional tests. Let's add a couple other [types of assertions](/
 In this example, the `javascript` assertion runs Javascript against the LLM output. The `similar` assertion checks for semantic similarity using embeddings:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-pro
 tests:
   - vars:
       language: French
@@ -135,7 +147,10 @@ tests: tests/*
 Or a list of paths:
 
 ```yaml
-tests: ['tests/accuracy', 'tests/creativity', 'tests/hallucination']
+tests:
+  - 'tests/accuracy'
+  - 'tests/creativity'
+  - 'tests/hallucination'
 ```
 
 :::tip
@@ -328,8 +343,14 @@ providers:
 tests:
   - vars:
       // highlight-start
-      language: [French, German, Spanish]
-      input: ['Hello world', 'Good morning', 'How are you?']
+      language:
+        - French
+        - German
+        - Spanish
+      input:
+        - 'Hello world'
+        - 'Good morning'
+        - 'How are you?'
       // highlight-end
     assert:
       - type: similar
@@ -345,7 +366,10 @@ Vars can also be imported from globbed filepaths. They are automatically expande
 
 ```yaml
   - vars:
-      language: [French, German, Spanish]
+      language:
+        - French
+        - German
+        - Spanish
       // highlight-start
       input: file://path/to/inputs/*.txt
       // highlight-end

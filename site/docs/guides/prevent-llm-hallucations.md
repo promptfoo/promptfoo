@@ -115,8 +115,11 @@ The example pictured above includes 150 examples of hallucination-prone question
 To set this up, we use the `defaultTest` property to set a requirement on every test:
 
 ```yaml
-providers: [openai:gpt-4o-mini]
-prompts: [prompt1.txt, prompt2.txt]
+providers:
+  - openai:gpt-4o-mini
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 // highlight-start
 defaultTest:
   assert:
@@ -203,7 +206,8 @@ We use LangChain in this example because it's a popular library, but any custom 
 Then, we can use this provider in our evaluation and compare the results:
 
 ```yaml
-prompts: [prompt1.txt]
+prompts:
+  - file://prompt1.txt
 // highlight-start
 providers:
   - openai:gpt-4o-mini
@@ -228,7 +232,8 @@ Suppose you spent some time fine-tuning a model and wanted to compare different 
 In this example, we use the Ollama provider to test two versions of Meta's Llama 2 model that are fine-tuned on different data:
 
 ```yaml
-prompts: [prompt1.txt]
+prompts:
+  - file://prompt1.txt
 providers:
   - ollama:llama2
   - ollama:llama2-uncensored

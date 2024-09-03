@@ -35,7 +35,10 @@ tests:
       question: How has Apple's revenue from iPhone sales fluctuated across quarters?
     assert:
       - type: icontains-all
-        value: ['2023', '2022', '2021']
+        value:
+          - '2023'
+          - '2022'
+          - '2021'
   - vars:
       question: Can any trends be identified in Apple's Services segment revenue over the reported periods?
     assert:

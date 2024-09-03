@@ -24,7 +24,9 @@ tests:
       - type: is-json
         # Optional JSON schema
         value:
-          required: ['color', 'countries']
+          required:
+            - 'color'
+            - 'countries'
           type: object
           properties:
             color:
@@ -38,7 +40,11 @@ tests:
         value: output.color === 'purple' && output.countries.includes('Brazil')
       - type: contains-any
         transform: output.countries
-        value: [Guatemala, Costa Rica, India, Indonesia]
+        value:
+          - Guatemala
+          - Costa Rica
+          - India
+          - Indonesia
 # Uncomment to parse JSON outputs for ALL tests
 # defaultTest:
 #   options:

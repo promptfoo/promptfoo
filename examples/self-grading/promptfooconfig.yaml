@@ -1,5 +1,7 @@
-prompts: [prompts.txt]
-providers: [openai:gpt-4-0613]
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4-0613
 defaultTest:
   assert:
     - type: llm-rubric
