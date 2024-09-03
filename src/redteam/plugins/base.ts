@@ -79,14 +79,18 @@ export abstract class PluginBase {
       }
 
       if (error) {
-        logger.error(`Error generating prompts for ${this.constructor.name}: ${error}`);
-        throw new Error(`Error generating prompts for ${this.constructor.name}: ${error}`);
+        logger.error(
+          `Error from API provider, skipping generation for ${this.constructor.name}: ${error}`,
+        );
+        return [];
       }
 
-      invariant(
-        typeof generatedPrompts === 'string',
-        `Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`,
-      );
+      if (typeof generatedPrompts !== 'string') {
+        logger.error(
+          `Malformed response from API provider: Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`,
+        );
+        return [];
+      }
       return this.parseGeneratedPrompts(generatedPrompts);
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
