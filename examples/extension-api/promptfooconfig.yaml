@@ -16,7 +16,10 @@ tests:
       language: 'Norwegian'
     assert:
       - type: contains-any
-        value: ['Hallo', 'Hei', 'Hå']
+        value:
+          - 'Hallo'
+          - 'Hei'
+          - 'Hå'
       - type: not-contains
         value: 'Hello'
   - vars:

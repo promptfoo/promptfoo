@@ -1,9 +1,18 @@
-prompts: ['file://prompts.txt']
-providers: [openai:gpt-3.5-turbo, openai:gpt-4]
+prompts:
+  - 'file://prompts.txt'
+providers:
+  - openai:gpt-3.5-turbo
+  - openai:gpt-4
 tests:
   - vars:
-      language: [French, German, Spanish]
-      input: ['Hello world', 'Good morning', 'How are you?']
+      language:
+        - French
+        - German
+        - Spanish
+      input:
+        - 'Hello world'
+        - 'Good morning'
+        - 'How are you?'
       # You can also import vars from file. For example:
       # input: 'file://vars/*.txt'
     assert:

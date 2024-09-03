@@ -1,4 +1,5 @@
-prompts: [prompts.txt]
+prompts:
+  - file://prompts.txt
 
 providers:
   - bedrock:anthropic.claude-v2

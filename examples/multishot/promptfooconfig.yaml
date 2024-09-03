@@ -1,5 +1,8 @@
-prompts: [prompt1.json, prompt2.json]
-providers: [openai:gpt-4o-mini]
+prompts:
+  - file://prompt1.json
+  - file://prompt2.json
+providers:
+  - openai:gpt-4o-mini
 tests:
   - vars:
       year: 1950
