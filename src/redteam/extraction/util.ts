@@ -4,8 +4,7 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
-
-export const REMOTE_GENERATION_URL = 'https://api.promptfoo.dev/v1/generate';
+import { REMOTE_GENERATION_URL } from '../constants';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
