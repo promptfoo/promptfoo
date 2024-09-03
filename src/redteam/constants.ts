@@ -1,4 +1,9 @@
-export const REMOTE_GENERATION_URL = 'https://api.promptfoo.dev/v1/generate';
+import { getEnvString } from '../envars';
+
+export const REMOTE_GENERATION_URL = getEnvString(
+  'PROMPTFOO_REMOTE_GENERATION_URL',
+  'https://api.promptfoo.dev/v1/generate',
+);
 
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
