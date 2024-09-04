@@ -185,7 +185,7 @@ export async function matchesSimilarity(
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (cliState.config?.redteam && shouldGenerateRemote()) {
     const payload = {
-      task: 'similarity',
+      task: 'similar',
       expected,
       output,
       threshold,
