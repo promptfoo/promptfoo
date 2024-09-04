@@ -254,6 +254,27 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     directory = '.';
   }
 
+  // Check for existing files and prompt for overwrite
+  const filesToCheck = ['promptfooconfig.yaml', 'README.md'];
+  for (const file of filesToCheck) {
+    const filePath = path.join(process.cwd(), directory, file);
+    if (fs.existsSync(filePath)) {
+      const overwrite = await confirm({
+        message: `${file} already exists in ${directory} Do you want to overwrite it?`,
+        default: false,
+      });
+      if (!overwrite) {
+        logger.info(`Skipped writing ${file}`);
+        logger.info(
+          chalk.red(
+            `Please rerun the command in a different directory or add a directory path to the command.`
+          )
+        );
+        process.exit(1);
+      }
+    }
+  }
+
   const prompts: string[] = [];
   const providers: (string | object)[] = [];
   let action: string;
@@ -474,22 +495,18 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     language,
   });
 
-  // Check for existing files and prompt for overwrite
-  const filesToCheck = ['promptfooconfig.yaml', 'README.md'];
+  // Write files if not skipped
   for (const file of filesToCheck) {
     const filePath = path.join(process.cwd(), directory, file);
-    if (fs.existsSync(filePath)) {
-      const overwrite = await confirm({
-        message: `${file} already exists. Do you want to overwrite it?`,
-        default: false,
-      });
-      if (!overwrite) {
-        logger.info(`Skipped writing ${file}`);
-        continue;
-      }
+    if (!fs.existsSync(filePath) || (await confirm({
+      message: `${file} already exists. Do you want to overwrite it?`,
+      default: false,
+    }))) {
+      fs.writeFileSync(filePath, file === 'promptfooconfig.yaml' ? config : DEFAULT_README);
+      logger.info(`⌛ Wrote ${file}`);
+    } else {
+      logger.info(`Skipped writing ${file}`);
     }
-    fs.writeFileSync(filePath, file === 'promptfooconfig.yaml' ? config : DEFAULT_README);
-    logger.info(`⌛ Wrote ${file}`);
   }
 
   const isNpx = getEnvString('npm_execpath')?.includes('npx');
