@@ -20,7 +20,8 @@ To use a script provider, you need to create an executable that takes a prompt a
 Here is an example of how to use a script provider:
 
 ```yaml
-providers: ['exec: python chain.py']
+providers:
+  - 'exec: python chain.py'
 ```
 
 Or in the CLI:

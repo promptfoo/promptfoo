@@ -35,6 +35,14 @@ function getStrategyIdFromMetric(metric: string): string | null {
       return 'crescendo';
     } else if (metricSuffix === 'Injection') {
       return 'prompt-injection';
+    } else if (metricSuffix === 'Rot13') {
+      return 'rot13';
+    } else if (metricSuffix === 'Base64') {
+      return 'base64';
+    } else if (metricSuffix === 'Leetspeak') {
+      return 'leetspeak';
+    } else if (metricSuffix.startsWith('Multilingual')) {
+      return 'multilingual';
     }
   }
   return null;

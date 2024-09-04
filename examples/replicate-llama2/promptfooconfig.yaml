@@ -1,4 +1,5 @@
-prompts: [prompts.txt]
+prompts:
+  - file://prompts.txt
 providers:
   - replicate:meta/llama-2-70b-chat:2d19859030ff705a87c746f7e96eea03aefb71f166725aee39692f1476566d48
 tests:

@@ -1,5 +1,6 @@
 import Clone from 'rfdc';
 import { getCache, isCacheEnabled } from '../cache';
+import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
@@ -12,7 +13,7 @@ import type {
   TokenUsage,
 } from '../types';
 import { getNunjucksEngine } from '../util/templates';
-import { parseChatPrompt } from './shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import type { GeminiErrorResponse, Palm2ApiResponse } from './vertexUtil';
 import {
   getGoogleClient,
@@ -268,12 +269,12 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (isCacheEnabled()) {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
-        logger.debug(`Returning cached response for prompt: ${prompt}`);
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
         }
+        logger.debug(`Returning cached response: ${cachedResponse}`);
         return { ...parsedCachedResponse, cached: true };
       }
     }
@@ -288,6 +289,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         url,
         method: 'POST',
         data: body,
+        timeout: REQUEST_TIMEOUT_MS,
       });
       data = res.data as GeminiApiResponse;
       logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
@@ -335,10 +337,28 @@ export class VertexChatProvider extends VertexGenericProvider {
             output += JSON.stringify(part);
           }
         } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
+          if (cliState.config?.redteam) {
+            // Refusals are not errors during redteams, they're actually successes.
+            return {
+              output: 'Content was blocked due to safety settings.',
+            };
+          }
           return {
-            error: 'Content was blocked due to safety concerns.',
+            error: 'Content was blocked due to safety settings.',
           };
         }
+      }
+
+      if ('promptFeedback' in data[0] && data[0].promptFeedback?.blockReason) {
+        if (cliState.config?.redteam) {
+          // Refusals are not errors during redteams, they're actually successes.
+          return {
+            output: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
+          };
+        }
+        return {
+          error: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
+        };
       }
 
       if (!output) {
@@ -405,12 +425,12 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (isCacheEnabled()) {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
-        logger.debug(`Returning cached response for prompt: ${prompt}`);
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
         }
+        logger.debug(`Returning cached response: ${cachedResponse}`);
         return { ...parsedCachedResponse, cached: true };
       }
     }
@@ -428,6 +448,7 @@ export class VertexChatProvider extends VertexGenericProvider {
           'Content-Type': 'application/json',
         },
         data: body,
+        timeout: REQUEST_TIMEOUT_MS,
       });
       data = res.data;
     } catch (err) {

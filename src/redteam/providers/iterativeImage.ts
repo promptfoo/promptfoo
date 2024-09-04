@@ -10,6 +10,7 @@ import type {
   NunjucksFilterMap,
   RedteamFileConfig,
 } from '../../types';
+import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { loadRedteamProvider } from './shared';
 
@@ -122,10 +123,10 @@ async function runRedteamConversation({
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
     );
-    const { improvement, prompt: newInjectVar } = JSON.parse(redteamResp.output) as {
+    const { improvement, prompt: newInjectVar } = extractFirstJsonObject<{
       improvement: string;
       prompt: string;
-    };
+    }>(redteamResp.output);
 
     logger.debug(`Iteration ${i + 1}: Redteam response: ${redteamResp.output}`);
 
@@ -154,7 +155,7 @@ async function runRedteamConversation({
     ]);
     const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-    const isOnTopic = JSON.parse(isOnTopicResp.output).isOnTopic;
+    const { isOnTopic } = extractFirstJsonObject<{ isOnTopic: boolean }>(isOnTopicResp.output);
     logger.debug(`Iteration ${i + 1}: On-topic response: ${isOnTopicResp.output}`);
 
     let targetResponse;
@@ -210,7 +211,7 @@ async function runRedteamConversation({
     ]);
     const judgeResp = await redteamProvider.callApi(judgeBody);
     invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
-    const { rating: score } = JSON.parse(judgeResp.output);
+    const { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
     logger.debug(`Iteration ${i + 1}: Judge response: ${judgeResp.output}, Score: ${score}`);
 
     if (score > highestScore) {

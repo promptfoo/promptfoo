@@ -371,7 +371,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      seed: this.config.seed || 0,
+      seed: this.config.seed,
       max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
       temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
       top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
@@ -466,7 +466,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       messages,
-      seed: this.config.seed || 0,
+      seed: this.config.seed,
       max_tokens:
         this.config.max_tokens ?? Number.parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature:
@@ -495,7 +495,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.stop ? { stop: this.config.stop } : {}),
       ...(this.config.passthrough || {}),
     };
-    //logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
+    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
     let data,
       cached = false;
@@ -520,7 +520,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    //logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
     if (data.error) {
       return {
         error: formatOpenAiError(data),

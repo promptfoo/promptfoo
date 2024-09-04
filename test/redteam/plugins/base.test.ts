@@ -70,15 +70,6 @@ describe('PluginBase', () => {
     );
   });
 
-  it('should throw an error if generatedPrompts is not a string', async () => {
-    expect.assertions(1);
-    jest.mocked(provider.callApi).mockResolvedValue({ output: 123 });
-
-    await expect(plugin.generateTests(2)).rejects.toThrow(
-      'Expected generatedPrompts to be a string',
-    );
-  });
-
   it('should filter and process prompts correctly', async () => {
     expect.assertions(1);
     const tests = await plugin.generateTests(2);

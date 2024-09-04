@@ -72,13 +72,25 @@ export abstract class PluginBase {
       });
 
       const finalTemplate = this.appendModifiers(renderedTemplate);
-      const { output: generatedPrompts } = await this.provider.callApi(finalTemplate);
+      const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
 
-      invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
+      if (error) {
+        logger.error(
+          `Error from API provider, skipping generation for ${this.constructor.name}: ${error}`,
+        );
+        return [];
+      }
+
+      if (typeof generatedPrompts !== 'string') {
+        logger.error(
+          `Malformed response from API provider: Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`,
+        );
+        return [];
+      }
       return this.parseGeneratedPrompts(generatedPrompts);
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
@@ -166,25 +178,11 @@ export abstract class RedteamModelGrader {
   abstract id: string;
   abstract rubric: string;
 
-  async getResult(
-    prompt: string,
-    llmOutput: string,
-    test: AtomicTestCase,
-    provider: ApiProvider | undefined,
-    renderedValue: AssertionValue | undefined,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
-    invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+  renderRubric(vars: Record<string, any>): string {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
-    const vars = {
-      ...test.metadata,
-      prompt,
-      entities: test.metadata?.entities ?? [],
-      tools: maybeLoadFromExternalFile(provider?.config?.tools),
-      value: renderedValue,
-    };
-    let finalRubric: string;
+
     try {
-      finalRubric = nunjucks.renderString(this.rubric, vars);
+      return nunjucks.renderString(this.rubric, vars);
     } catch (error) {
       const err = error as Error;
       logger.debug(`Error rendering rubric template: ${err.message}`);
@@ -196,6 +194,25 @@ export abstract class RedteamModelGrader {
         Variables: ${JSON.stringify(vars, null, 2)}
       `);
     }
+  }
+
+  async getResult(
+    prompt: string,
+    llmOutput: string,
+    test: AtomicTestCase,
+    provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string }> {
+    invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+    const vars = {
+      ...test.metadata,
+      prompt,
+      entities: test.metadata?.entities ?? [],
+      tools: maybeLoadFromExternalFile(provider?.config?.tools),
+      value: renderedValue,
+    };
+    const finalRubric = this.renderRubric(vars);
+
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
       provider: await loadRedteamProvider({

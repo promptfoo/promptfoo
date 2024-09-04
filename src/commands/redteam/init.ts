@@ -16,14 +16,16 @@ import { getEnvString } from '../../envars';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig';
 import logger from '../../logger';
 import {
+  type Plugin,
   ADDITIONAL_STRATEGIES,
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
+  type Strategy,
   subCategoryDescriptions,
 } from '../../redteam/constants';
 import telemetry, { type EventValue } from '../../telemetry';
-import type { RedteamPluginObject } from '../../types';
+import type { ProviderOptions, RedteamPluginObject } from '../../types';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { doGenerateRedteam } from './generate';
 
@@ -32,9 +34,6 @@ const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
 
 description: "My first red team"
 
-{% if purpose is defined -%}
-purpose: {{ purpose | dump }}
-{% endif %}
 prompts:
   {% for prompt in prompts -%}
   - {{ prompt | dump }}
@@ -49,10 +48,21 @@ providers:
   # Providers are red team targets. To talk directly to your application, use a custom provider.
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
   {% for provider in providers -%}
+  {% if provider is string -%}
   - {{ provider }}
+  {% else -%}
+  - id: {{ provider.id }}
+    config:
+      {% for k, v in provider.config -%}
+      {{ k }}: {{ v | dump }}
+      {% endfor -%}
+  {% endif -%}
   {% endfor %}
 
 redteam:
+  {% if purpose is defined -%}
+  purpose: {{ purpose | dump }}
+  {% endif %}
   # Default number of inputs to generate for each plugin.
   # The total number of tests will be (numTests * plugins.length * (1 + strategies.length))
   numTests: {{numTests}}
@@ -134,21 +144,20 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
     default: prompt,
   });
   prompt = prompt.replace(NOTE, '');
-  let variables = extractVariablesFromTemplate(prompt);
-  while (variables.length < numVariablesRequired) {
+  const variables = extractVariablesFromTemplate(prompt);
+  if (variables.length < numVariablesRequired) {
+    // Give the user another chance to edit their prompt
     logger.info(
       chalk.red(
-        `For real though, your prompt must include ${numVariablesRequired} ${
+        `Your prompt must include ${numVariablesRequired} ${
           numVariablesRequired === 1 ? 'variable' : 'variables'
-        } like "{{query}}" as a placeholder for user input`,
+        } like "{{query}}" as a placeholder for user input.`,
       ),
     );
     prompt = await editor({
       message: 'Enter the prompt you want to test against:',
       default: prompt,
     });
-
-    variables = extractVariablesFromTemplate(prompt);
   }
 
   return prompt;
@@ -174,6 +183,7 @@ export async function redteamInit(directory: string | undefined) {
     choices: [
       { name: 'Not sure yet', value: 'not_sure' },
       { name: 'Red team a prompt, model, or chatbot', value: 'prompt_model_chatbot' },
+      { name: 'Red team an HTTP endpoint', value: 'http_endpoint' },
       { name: 'Red team a RAG', value: 'rag' },
       { name: 'Red team an Agent', value: 'agent' },
     ],
@@ -183,10 +193,10 @@ export async function redteamInit(directory: string | undefined) {
   recordOnboardingStep('choose app type', { value: redTeamChoice });
 
   const prompts: string[] = [];
-  let defaultPromptUsed = false;
   let purpose: string | undefined;
 
-  const useCustomProvider = redTeamChoice === 'rag' || redTeamChoice === 'agent';
+  const useCustomProvider =
+    redTeamChoice === 'rag' || redTeamChoice === 'agent' || redTeamChoice === 'http_endpoint';
   let deferGeneration = useCustomProvider;
   const defaultPrompt =
     'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}';
@@ -215,21 +225,37 @@ export async function redteamInit(directory: string | undefined) {
     if (promptChoice === 'now') {
       prompt = await getSystemPrompt();
     } else {
-      defaultPromptUsed = true;
       prompt = defaultPrompt;
       deferGeneration = true;
     }
     prompts.push(prompt);
   } else {
-    defaultPromptUsed = true;
     prompts.push(
       'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}',
     );
   }
 
-  let providers: string[];
+  let providers: (string | ProviderOptions)[];
   if (useCustomProvider) {
-    providers = ['python:chat.py'];
+    if (redTeamChoice === 'http_endpoint') {
+      providers = [
+        {
+          id: 'https://example.com/generate',
+          config: {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: {
+              myPrompt: '{{prompt}}',
+            },
+            responseParser: 'json.output',
+          },
+        },
+      ];
+    } else {
+      providers = ['python:chat.py'];
+    }
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
@@ -292,31 +318,54 @@ export async function redteamInit(directory: string | undefined) {
 
   recordOnboardingStep('begin plugin & strategy selection');
 
-  logger.info(chalk.bold('Plugin Configuration\n'));
+  logger.info(chalk.bold('Plugin Configuration'));
+  logger.info('Plugins generate adversarial inputs.\n');
 
-  const pluginChoices = Array.from(ALL_PLUGINS)
-    .sort()
-    .map((plugin) => ({
-      name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description'}`,
-      value: plugin,
-      checked: DEFAULT_PLUGINS.has(plugin),
-    }));
-
-  const plugins: (string | RedteamPluginObject)[] = await checkbox({
-    message: `Plugins generate adversarial inputs. Select the ones you want to use. Don't worry, you can change this later:`,
-    choices: pluginChoices,
-    pageSize: process.stdout.rows - 6,
-    loop: false,
-    validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
+  const pluginConfigChoice = await select({
+    message: 'How would you like to configure plugins?',
+    choices: [
+      { name: 'Use the defaults (configure later)', value: 'default' },
+      { name: 'Manually select', value: 'manual' },
+    ],
   });
 
-  recordOnboardingStep('choose plugins', {
-    value: plugins.map((p) => (typeof p === 'string' ? p : p.id)),
-  });
+  recordOnboardingStep('choose plugin config method', { value: pluginConfigChoice });
 
-  // Handle policy plugin
+  let plugins: (Plugin | RedteamPluginObject)[];
+
+  if (pluginConfigChoice === 'default') {
+    if (redTeamChoice === 'rag') {
+      plugins = Array.from(DEFAULT_PLUGINS);
+    } else if (redTeamChoice === 'agent') {
+      plugins = [...DEFAULT_PLUGINS, 'rbac', 'bola', 'bfla', 'ssrf'];
+    } else {
+      plugins = Array.from(DEFAULT_PLUGINS);
+    }
+  } else {
+    const pluginChoices = Array.from(ALL_PLUGINS)
+      .sort()
+      .map((plugin) => ({
+        name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description'}`,
+        value: plugin,
+        checked: DEFAULT_PLUGINS.has(plugin),
+      }));
+
+    plugins = await checkbox({
+      message: `Select the plugins you want to use. Don't worry, you can change this later:`,
+      choices: pluginChoices,
+      pageSize: process.stdout.rows - 6,
+      loop: false,
+      validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
+    });
+
+    recordOnboardingStep('choose plugins', {
+      value: plugins.map((p) => (typeof p === 'string' ? p : p.id)),
+    });
+  }
+
+  // Plugins that require additional configuration
+
   if (plugins.includes('policy')) {
-    // Remove the original 'policy' string if it exists
     const policyIndex = plugins.indexOf('policy');
     if (policyIndex !== -1) {
       plugins.splice(policyIndex, 1);
@@ -337,133 +386,89 @@ export async function redteamInit(directory: string | undefined) {
     }
   }
 
-  // Handle prompt extraction plugin
   if (plugins.includes('prompt-extraction')) {
-    const promptExtractionIdx = plugins.indexOf('prompt-extraction');
-    if (promptExtractionIdx !== -1) {
-      plugins.splice(promptExtractionIdx, 1);
-    }
-
-    if (defaultPromptUsed) {
-      recordOnboardingStep('collect system prompt');
-      const systemPrompt = await getSystemPrompt();
-      recordOnboardingStep('choose system prompt', { value: systemPrompt.length });
-
-      if (systemPrompt.trim() !== '') {
-        plugins.push({
-          id: 'prompt-extraction',
-          config: { systemPrompt: dedent(systemPrompt.trim()) },
-        } as RedteamPluginObject);
-
-        prompts[0] = systemPrompt;
-      }
-    } else {
-      plugins.push({
-        id: 'prompt-extraction',
-        config: { systemPrompt: prompts[0] },
-      } as RedteamPluginObject);
-    }
+    plugins.push({
+      id: 'prompt-extraction',
+      config: { systemPrompt: prompts[0] },
+    } as RedteamPluginObject);
   }
 
-  // Handle prompt extraction plugin
   if (plugins.includes('indirect-prompt-injection')) {
+    recordOnboardingStep('choose indirect prompt injection variable');
     logger.info(chalk.bold('Indirect Prompt Injection Configuration\n'));
-    logger.info(
-      chalk.yellow(
-        'This plugin tests if the prompt is vulnerable to instructions injected into the prompt.\n',
-      ),
-    );
-    logger.info(
-      chalk.yellow(
-        'This plugin requires two pieces of information:\n' +
-          '1. The system prompt: This is the template that includes variables where content will be injected.\n' +
-          '2. The indirectInjectionVarName: This is the name of the variable in your system prompt where untrusted content will be injected.\n\n' +
-          'These are needed to test if the model is vulnerable to instructions injected into the prompt through this variable.\n',
-      ),
-    );
-    await input({
-      message: 'Read the above and Press Enter to continue setting up the plugin.',
-    });
-
-    const promptExtractionIdx = plugins.indexOf('indirect-prompt-injection');
-    if (promptExtractionIdx !== -1) {
-      plugins.splice(promptExtractionIdx, 1);
-    }
-
-    if (defaultPromptUsed) {
-      const systemPrompt = await getSystemPrompt(2);
-      const variables = extractVariablesFromTemplate(systemPrompt);
-      let indirectInjectionVar = variables[0].trim();
-      indirectInjectionVar = await input({
-        message: `What is the name of the variable where content will be injected into the prompt? (e.g. "name")`,
-        default: indirectInjectionVar,
+    const variables = extractVariablesFromTemplate(prompts[0]);
+    if (variables.length > 1) {
+      const indirectInjectionVar = await select({
+        message: 'Which variable would you like to test for indirect prompt injection?',
+        choices: variables.sort().map((variable) => ({
+          name: variable,
+          value: variable,
+        })),
       });
+      recordOnboardingStep('chose indirect prompt injection variable');
 
-      indirectInjectionVar = indirectInjectionVar.trim();
-
-      if (!variables.includes(indirectInjectionVar)) {
-        logger.info(
-          chalk.red(
-            `The variable ${indirectInjectionVar} is not found in the prompt. Please go back and edit your prompt to add the variable to your prompt`,
-          ),
-        );
-        await input({
-          message: 'Press Enter to continue...',
-        });
-      }
-      if (indirectInjectionVar === variables[variables.length - 1]) {
-        logger.info(
-          chalk.red(
-            `The variable ${indirectInjectionVar} is the last variable in the prompt. This might cause some issues with the plugin since we assume the last variable is the main injectVar. Please make sure you set injectVar properly in your config.`,
-          ),
-        );
-        await input({
-          message: 'Press Enter to continue...',
-        });
-      }
-
-      if (systemPrompt.trim() !== '') {
-        plugins.push({
-          id: 'indirect-prompt-injection',
-          config: {
-            systemPrompt: dedent(systemPrompt.trim()),
-            indirectInjectionVar: indirectInjectionVar.trim(),
-          },
-        } as RedteamPluginObject);
-
-        prompts[0] = systemPrompt;
-      }
-    } else {
       plugins.push({
-        id: 'prompt-extraction',
-        config: { systemPrompt: prompts[0] },
+        id: 'indirect-prompt-injection',
+        config: {
+          indirectInjectionVar,
+        },
       } as RedteamPluginObject);
+    } else {
+      recordOnboardingStep('skip indirect prompt injection');
+      logger.warn(
+        `Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt. Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection/`,
+      );
     }
   }
 
   console.clear();
-  logger.info(chalk.bold('Strategy Configuration\n'));
 
-  const strategyChoices = [
-    ...Array.from(DEFAULT_STRATEGIES).sort(),
-    new Separator(),
-    ...Array.from(ADDITIONAL_STRATEGIES).sort(),
-  ].map((strategy) =>
-    typeof strategy === 'string'
-      ? {
-          name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description'}`,
-          value: strategy,
-          checked: DEFAULT_STRATEGIES.includes(strategy as any),
-        }
-      : strategy,
-  );
+  logger.info(chalk.bold('Strategy Configuration'));
+  logger.info('Strategies are attack methods.\n');
 
-  const strategies = await checkbox({
-    message: `Strategies are attack methods. Select the ones you want to use. Don't worry, you can change this later:`,
-    choices: strategyChoices,
-    pageSize: process.stdout.rows - 6,
-    loop: false,
+  const strategyConfigChoice = await select({
+    message: 'How would you like to configure strategies?',
+    choices: [
+      { name: 'Use the defaults (configure later)', value: 'default' },
+      { name: 'Manually select', value: 'manual' },
+    ],
   });
+
+  recordOnboardingStep('choose strategy config method', { value: strategyConfigChoice });
+
+  let strategies: Strategy[];
+
+  if (strategyConfigChoice === 'default') {
+    // TODO(ian): Differentiate strategies
+    if (redTeamChoice === 'rag') {
+      strategies = Array.from(DEFAULT_STRATEGIES);
+    } else if (redTeamChoice === 'agent') {
+      strategies = Array.from(DEFAULT_STRATEGIES);
+    } else {
+      strategies = Array.from(DEFAULT_STRATEGIES);
+    }
+  } else {
+    const strategyChoices = [
+      ...Array.from(DEFAULT_STRATEGIES).sort(),
+      new Separator(),
+      ...Array.from(ADDITIONAL_STRATEGIES).sort(),
+    ].map((strategy) =>
+      typeof strategy === 'string'
+        ? {
+            name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description'}`,
+            value: strategy,
+            checked: DEFAULT_STRATEGIES.includes(strategy as any),
+          }
+        : strategy,
+    );
+
+    strategies = await checkbox({
+      message: `Select the ones you want to use. Don't worry, you can change this later:`,
+      choices: strategyChoices,
+      pageSize: process.stdout.rows - 6,
+      loop: false,
+    });
+  }
 
   recordOnboardingStep('choose strategies', {
     value: strategies,

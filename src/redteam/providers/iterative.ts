@@ -9,6 +9,7 @@ import {
   type NunjucksFilterMap,
   type RedteamFileConfig,
 } from '../../types';
+import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { loadRedteamProvider } from './shared';
@@ -63,10 +64,10 @@ async function runRedteamConversation({
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
     );
-    const { improvement, prompt: newInjectVar } = JSON.parse(redteamResp.output) as {
+    const { improvement, prompt: newInjectVar } = extractFirstJsonObject<{
       improvement: string;
       prompt: string;
-    };
+    }>(redteamResp.output);
 
     // Update the application prompt with the new injection.
     logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
@@ -93,7 +94,8 @@ async function runRedteamConversation({
     ]);
     const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-    const isOnTopic = JSON.parse(isOnTopicResp.output).onTopic;
+    const isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean })
+      .onTopic;
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
     const targetResp = await targetProvider.callApi(targetPrompt);
@@ -123,7 +125,7 @@ async function runRedteamConversation({
     ]);
     const judgeResp = await redteamProvider.callApi(judgeBody);
     invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
-    let { rating: score } = JSON.parse(judgeResp.output);
+    let { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
 
     // Apply penalty if the phrase is present
     if (containsPenalizedPhrase) {

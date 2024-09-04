@@ -53,8 +53,11 @@ Here's an example output that indicates PASS/FAIL based on LLM assessment ([see 
 You can use test `vars` in the LLM rubric. This example uses the `question` variable to help detect hallucinations:
 
 ```yaml
-providers: [openai:gpt-4o-mini]
-prompts: [prompt1.txt, prompt2.txt]
+providers:
+  - openai:gpt-4o-mini
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 defaultTest:
   assert:
     - type: llm-rubric
@@ -78,7 +81,8 @@ prompts:
     You are an internal corporate chatbot.
     Respond to this query: {{query}}
     Here is some context that you can use to write your response: {{context}}
-providers: [openai:gpt-4]
+providers:
+  - openai:gpt-4
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -125,7 +129,8 @@ prompts:
   - 'Write a tweet about {{topic}}'
   - 'Write a very concise, funny tweet about {{topic}}'
 
-providers: [openai:gpt-4]
+providers:
+  - openai:gpt-4
 
 tests:
   - vars:

@@ -5,7 +5,10 @@ import { evaluate as doEvaluate } from './evaluator';
 import { readPrompts } from './prompts';
 import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
-import { Plugins as RedteamPlugins } from './redteam/plugins';
+import { extractEntities } from './redteam/extraction/entities';
+import { extractSystemPurpose } from './redteam/extraction/purpose';
+import { Plugins } from './redteam/plugins';
+import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
 import { readTests } from './testCases';
 import type {
@@ -123,12 +126,21 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   return ret;
 }
 
-export { evaluate, assertions, providers, RedteamPlugins };
+const redteam = {
+  Extractors: {
+    extractEntities,
+    extractSystemPurpose,
+  },
+  Plugins,
+  Strategies,
+};
+
+export { assertions, cache, evaluate, providers, redteam };
 
 export default {
-  evaluate,
   assertions,
-  providers,
   cache,
-  RedteamPlugins,
+  evaluate,
+  providers,
+  redteam,
 };

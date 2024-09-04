@@ -53,9 +53,12 @@ tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsK
 The `outputPath` parameter (`--output` or `-o` on the command line) supports Google Sheets URLs. In order to write, Default Application Credentials must be configured with a service account that has write access.
 
 ```yaml
-prompts: [...]
-providers: [...]
-tests: [...]
+prompts:
+  - ...
+providers:
+  - ...
+tests:
+  - ...
 // highlight-start
 outputPath: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 // highlight-end

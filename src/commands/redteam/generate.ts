@@ -7,6 +7,7 @@ import path from 'path';
 import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { disableCache } from '../../cache';
+import cliState from '../../cliState';
 import { resolveConfigs } from '../../config';
 import logger from '../../logger';
 import { synthesize } from '../../redteam';
@@ -17,6 +18,7 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
+import { shouldGenerateRemote } from '../../redteam/util';
 import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
 import type { RedteamStrategyObject, SynthesizeOptions } from '../../types/redteam';
@@ -28,7 +30,7 @@ import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validat
 export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
   setupEnv(options.envFile);
   if (!options.cache) {
-    logger.info('Cache is disabled.');
+    logger.info('Cache is disabled');
     disableCache();
   }
 
@@ -282,7 +284,17 @@ export function generateRedteamCommand(
     .option('--delay <number>', 'Delay in milliseconds between plugin API calls', (val) =>
       Number.parseInt(val, 10),
     )
+    .option('--remote', 'Force remote inference wherever possible', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
+      if (opts.remote) {
+        cliState.remote = true;
+      }
+      if (shouldGenerateRemote()) {
+        logger.debug('Remote generation enabled');
+      } else {
+        logger.debug('Remote generation disabled');
+      }
+
       try {
         let overrides: Partial<RedteamFileConfig> = {};
         if (opts.plugins && opts.plugins.length > 0) {

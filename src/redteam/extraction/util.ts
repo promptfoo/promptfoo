@@ -1,11 +1,12 @@
 import dedent from 'dedent';
+import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { fetchWithCache } from '../../cache';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
-
-export const REMOTE_GENERATION_URL = 'https://api.promptfoo.dev/v1/generate';
+import { REMOTE_GENERATION_URL } from '../constants';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
@@ -32,6 +33,10 @@ export async function fetchRemoteGeneration(
   task: RedTeamTask,
   prompts: string[],
 ): Promise<string | string[]> {
+  invariant(
+    !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
+    'fetchRemoteGeneration should never be called when remote generation is disabled',
+  );
   try {
     const body = {
       task,

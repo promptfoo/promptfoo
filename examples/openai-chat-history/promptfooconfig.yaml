@@ -1,5 +1,7 @@
-prompts: [prompt.json]
-providers: [openai:gpt-3.5-turbo]
+prompts:
+  - file://prompt.json
+providers:
+  - openai:gpt-3.5-turbo
 
 # Set up the conversation history
 defaultTest:

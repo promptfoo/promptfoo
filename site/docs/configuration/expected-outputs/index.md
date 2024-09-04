@@ -307,8 +307,12 @@ assertionTemplates:
     value: output.toLowerCase().includes('mental health')
 // highlight-end
 
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, localai:chat:vicuna]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - localai:chat:vicuna
 tests:
   - vars:
       input: Tell me about the benefits of exercise.

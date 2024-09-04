@@ -92,8 +92,12 @@ The YAML configuration format runs each prompt through a series of example input
 See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/guide) for a detailed guide.
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, ollama:llama2:70b]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - ollama:llama2:70b
 tests:
   - description: 'Test translation to French'
     vars:
@@ -173,8 +177,10 @@ Every test type can be negated by prepending `not-`. For example, `not-equals` o
 Some people prefer to configure their LLM tests in a CSV. In that case, the config is pretty simple:
 
 ```yaml
-prompts: [prompts.txt]
-providers: [openai:gpt-4o-mini]
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4o-mini
 tests: tests.csv
 ```
 
