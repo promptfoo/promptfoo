@@ -183,6 +183,43 @@ export async function matchesSimilarity(
   inverse: boolean = false,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
+  if (cliState.config?.redteam && shouldGenerateRemote()) {
+    const payload = {
+      task: 'similarity',
+      expected,
+      output,
+      threshold,
+      inverse,
+    };
+
+    try {
+      const body = JSON.stringify(payload);
+      logger.debug(`Performing remote grading for similarity: ${body}`);
+      const response = await fetch(REMOTE_GENERATION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body,
+      });
+
+      if (!response.ok) {
+        return fail(`Could not perform remote grading for similarity (1): ${response.statusText}`);
+      }
+
+      const { result } = (await response.json()) as { result: GradingResult };
+      logger.debug(`Got remote similarity grading result: ${JSON.stringify(result)}`);
+      return {
+        pass: result.pass,
+        score: result.score,
+        reason: result.reason,
+        tokensUsed: result.tokensUsed,
+      };
+    } catch (error) {
+      return fail(`Could not perform remote grading for similarity (2): ${error}`);
+    }
+  }
+
   const finalProvider = (await getAndCheckProvider(
     'embedding',
     grading?.provider,
