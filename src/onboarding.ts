@@ -1,6 +1,6 @@
 import checkbox from '@inquirer/checkbox';
-import rawlist from '@inquirer/rawlist';
 import confirm from '@inquirer/confirm';
+import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
@@ -238,47 +238,48 @@ function recordOnboardingStep(step: string, properties: Record<string, EventValu
 }
 
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
-  if (
-    directory && // Make the directory if it doesn't exist
-    !fs.existsSync(directory)
-  ) {
+  if (directory && !fs.existsSync(directory)) {
     fs.mkdirSync(directory);
   }
 
-  if (directory) {
-    if (!fs.existsSync(directory)) {
-      logger.info(`Creating directory ${directory} ...`);
-      fs.mkdirSync(directory);
-    }
-  } else {
-    directory = '.';
-  }
+  directory = directory || '.';
 
   // Check for existing files and prompt for overwrite
   const filesToCheck = ['promptfooconfig.yaml', 'README.md'];
+  const filesToOverwrite = new Set<string>();
+
   for (const file of filesToCheck) {
     const filePath = path.join(process.cwd(), directory, file);
     if (fs.existsSync(filePath)) {
       const overwrite = await confirm({
-        message: `${file} already exists in ${directory} Do you want to overwrite it?`,
+        message: `${file} already exists${directory === '.' ? '' : ` in ${directory}`}. Do you want to overwrite it?`,
         default: false,
       });
-      if (!overwrite) {
-        logger.info(`Skipped writing ${file}`);
-        logger.info(
-          chalk.red(
-            `Please rerun the command in a different directory or add a directory path to the command.`
-          )
-        );
-        process.exit(1);
+      if (overwrite) {
+        filesToOverwrite.add(file);
+      } else {
+        logger.info(`Will skip writing ${file}`);
       }
+    } else {
+      filesToOverwrite.add(file);
     }
   }
 
+  if (filesToOverwrite.size === 0) {
+    logger.info(
+      chalk.red(
+        `No files will be written. Please rerun the command in a different directory or add a directory path to the command.`,
+      ),
+    );
+    process.exit(1);
+  }
+
+  // Rest of the onboarding flow
   const prompts: string[] = [];
   const providers: (string | object)[] = [];
   let action: string;
   let language: string;
+
   if (interactive) {
     recordOnboardingStep('start');
 
@@ -497,11 +498,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
   // Write files if not skipped
   for (const file of filesToCheck) {
-    const filePath = path.join(process.cwd(), directory, file);
-    if (!fs.existsSync(filePath) || (await confirm({
-      message: `${file} already exists. Do you want to overwrite it?`,
-      default: false,
-    }))) {
+    if (filesToOverwrite.has(file)) {
+      const filePath = path.join(process.cwd(), directory, file);
       fs.writeFileSync(filePath, file === 'promptfooconfig.yaml' ? config : DEFAULT_README);
       logger.info(`⌛ Wrote ${file}`);
     } else {
