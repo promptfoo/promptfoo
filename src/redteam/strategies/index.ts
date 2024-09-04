@@ -10,7 +10,7 @@ import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
 
-interface Strategy {
+export interface Strategy {
   key: string;
   action: (
     testCases: TestCaseWithPlugin[],

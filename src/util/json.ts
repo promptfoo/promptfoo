@@ -1,3 +1,5 @@
+import invariant from 'tiny-invariant';
+
 export function isValidJson(str: string): boolean {
   try {
     JSON.parse(str);
@@ -54,6 +56,12 @@ export function extractJsonObjects(str: string): object[] {
     }
   }
   return jsonObjects;
+}
+
+export function extractFirstJsonObject<T>(str: string): T {
+  const jsonObjects = extractJsonObjects(str);
+  invariant(jsonObjects.length >= 1, `Expected a JSON object, but got ${str}`);
+  return jsonObjects[0] as T;
 }
 
 /**

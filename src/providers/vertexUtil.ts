@@ -55,7 +55,25 @@ export interface GeminiResponseData {
   usageMetadata?: GeminiUsageMetadata;
 }
 
-export type GeminiApiResponse = (GeminiResponseData | GeminiErrorResponse)[];
+interface GeminiPromptFeedback {
+  blockReason?: 'PROHIBITED_CONTENT';
+}
+
+interface GeminiUsageMetadata {
+  promptTokenCount: number;
+  totalTokenCount: number;
+}
+
+interface GeminiBlockedResponse {
+  promptFeedback: GeminiPromptFeedback;
+  usageMetadata: GeminiUsageMetadata;
+}
+
+export type GeminiApiResponse = (
+  | GeminiResponseData
+  | GeminiErrorResponse
+  | GeminiBlockedResponse
+)[];
 
 export interface Palm2ApiResponse {
   error?: {

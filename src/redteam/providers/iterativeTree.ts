@@ -24,6 +24,7 @@ import type {
   Prompt,
   NunjucksFilterMap,
 } from '../../types';
+import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
@@ -99,7 +100,7 @@ export async function evaluateResponse(
   ]);
   const judgeResp = await redteamProvider.callApi(judgeBody);
   invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
-  let { rating: score } = JSON.parse(judgeResp.output);
+  let { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
 
   // Apply penalty if the phrase is present
   if (containsPenalizedPhrase) {
@@ -125,7 +126,7 @@ export async function getNewPrompt(
     typeof redteamResp.output === 'string',
     `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
   );
-  return JSON.parse(redteamResp.output) as { improvement: string; prompt: string };
+  return extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output);
 }
 
 /**
@@ -152,7 +153,7 @@ export async function checkIfOnTopic(
   ]);
   const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
   invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-  const { onTopic } = JSON.parse(isOnTopicResp.output);
+  const { onTopic } = extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output);
   invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
   return onTopic;
 }

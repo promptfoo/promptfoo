@@ -1,5 +1,6 @@
 import Clone from 'rfdc';
 import { getCache, isCacheEnabled } from '../cache';
+import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
@@ -335,10 +336,28 @@ export class VertexChatProvider extends VertexGenericProvider {
             output += JSON.stringify(part);
           }
         } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
+          if (cliState.config?.redteam) {
+            // Refusals are not errors during redteams, they're actually successes.
+            return {
+              output: 'Content was blocked due to safety settings.',
+            };
+          }
           return {
-            error: 'Content was blocked due to safety concerns.',
+            error: 'Content was blocked due to safety settings.',
           };
         }
+      }
+
+      if ('promptFeedback' in data[0] && data[0].promptFeedback?.blockReason) {
+        if (cliState.config?.redteam) {
+          // Refusals are not errors during redteams, they're actually successes.
+          return {
+            output: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
+          };
+        }
+        return {
+          error: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
+        };
       }
 
       if (!output) {
