@@ -7,6 +7,7 @@ import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
+import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
 import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
@@ -133,6 +134,7 @@ const redteam = {
   },
   Plugins,
   Strategies,
+  Graders: GRADERS,
 };
 
 export { assertions, cache, evaluate, providers, redteam };
