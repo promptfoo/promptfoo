@@ -923,7 +923,15 @@ export async function deleteEval(evalId: string) {
 
 export async function deleteAllEvals() {
   const db = getDb();
-  await db.delete(evals).run();
+  await db.transaction(async (tx) => {
+    // Delete related records first
+    await tx.delete(evalsToPrompts).run();
+    await tx.delete(evalsToDatasets).run();
+    await tx.delete(evalsToTags).run();
+
+    // Now delete all evals
+    await tx.delete(evals).run();
+  });
 }
 
 export async function readFilters(
