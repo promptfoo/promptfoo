@@ -244,8 +244,14 @@ function recordOnboardingStep(step: string, properties: any = {}) {
 export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[]): string[] {
   // Dictionary of what warnings may have already been printed for the user.
   const shownWarnings = new Map([
-    [ProvidersRequiringAPIKeysEnvKeys.OPENAI_API_KEY.valueOf(), false],
-    [ProvidersRequiringAPIKeysEnvKeys.ANTHROPIC_API_KEY.valueOf(), false],
+    [
+      ProvidersRequiringAPIKeysEnvKeys.OPENAI_API_KEY as keyof typeof ProvidersRequiringAPIKeysEnvKeys,
+      false,
+    ],
+    [
+      ProvidersRequiringAPIKeysEnvKeys.ANTHROPIC_API_KEY as keyof typeof ProvidersRequiringAPIKeysEnvKeys,
+      false,
+    ],
   ]);
   const choices = providerChoices.map((choice) => {
     // Map and only return the provider id strings.
@@ -267,35 +273,16 @@ export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[
       continue;
     }
     // Use the prefix id to create a string that works as the key of the associated env override.
-    const chosenProvider: string = `${choice.split(':')[0].toUpperCase()}_API_KEY`;
-    if (
-      ProvidersRequiringAPIKeysEnvKeys[
-        chosenProvider as keyof typeof ProvidersRequiringAPIKeysEnvKeys
-      ]
-    ) {
-      let apiKeyEnvIdentifer: string | null = null;
-      switch (chosenProvider) {
-        case ProvidersRequiringAPIKeysEnvKeys.OPENAI_API_KEY.valueOf():
-          if (!getEnvString(chosenProvider as keyof typeof ProvidersRequiringAPIKeysEnvKeys)) {
-            apiKeyEnvIdentifer = chosenProvider;
-          }
-          break;
-        case ProvidersRequiringAPIKeysEnvKeys.ANTHROPIC_API_KEY.valueOf():
-          if (!getEnvString(chosenProvider as keyof typeof ProvidersRequiringAPIKeysEnvKeys)) {
-            apiKeyEnvIdentifer = chosenProvider;
-          }
-          break;
-        default:
-      }
-      if (apiKeyEnvIdentifer !== null) {
-        // Check to make sure we haven't already displayed a warning for the given provider.
-        if (!shownWarnings.get(chosenProvider)) {
-          shownWarnings.set(chosenProvider, true);
-          warnings.push(dedent`\n${chalk.bold(`Warning: ${chosenProvider} environment variable is not set.`)}
+    const chosenProviderEnumKey =
+      `${choice.split(':')[0].toUpperCase()}_API_KEY` as keyof typeof ProvidersRequiringAPIKeysEnvKeys;
+    if (ProvidersRequiringAPIKeysEnvKeys[chosenProviderEnumKey]) {
+      // Check to make sure we haven't already generated a warning for the given provider.
+      if (!shownWarnings.get(chosenProviderEnumKey)) {
+        shownWarnings.set(chosenProviderEnumKey, true);
+        warnings.push(dedent`\n${chalk.bold(`Warning: ${chosenProviderEnumKey} environment variable is not set.`)}
 
-            Please set this environment variable like: export ${chosenProvider}=<my-api-key>\n
-            `);
-        }
+          Please set this environment variable like: export ${chosenProviderEnumKey}=<my-api-key>\n
+          `);
       }
     }
   }
