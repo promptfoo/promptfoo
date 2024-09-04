@@ -1,5 +1,6 @@
 import checkbox from '@inquirer/checkbox';
 import rawlist from '@inquirer/rawlist';
+import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
@@ -260,6 +261,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   if (interactive) {
     recordOnboardingStep('start');
 
+    console.clear();
     // Choose use case
     action = await rawlist({
       message: 'What would you like to do?',
@@ -303,7 +305,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
-      { name: 'Choose later', value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
+      { name: `I'll choose later`, value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
       {
         name: '[OpenAI] GPT 4o, GPT 4o-mini, GPT-3.5, ...',
         value:
@@ -387,6 +389,9 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     const providerChoices: (string | object)[] = await checkbox({
       message: 'Which model providers would you like to use? (press enter to skip)',
       choices,
+      loop: false,
+      required: true,
+      pageSize: process.stdout.rows - 6,
     });
 
     recordOnboardingStep('choose providers', {
@@ -468,8 +473,24 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     type: action,
     language,
   });
-  fs.writeFileSync(path.join(process.cwd(), directory, 'promptfooconfig.yaml'), config);
-  fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
+
+  // Check for existing files and prompt for overwrite
+  const filesToCheck = ['promptfooconfig.yaml', 'README.md'];
+  for (const file of filesToCheck) {
+    const filePath = path.join(process.cwd(), directory, file);
+    if (fs.existsSync(filePath)) {
+      const overwrite = await confirm({
+        message: `${file} already exists. Do you want to overwrite it?`,
+        default: false,
+      });
+      if (!overwrite) {
+        logger.info(`Skipped writing ${file}`);
+        continue;
+      }
+    }
+    fs.writeFileSync(filePath, file === 'promptfooconfig.yaml' ? config : DEFAULT_README);
+    logger.info(`⌛ Wrote ${file}`);
+  }
 
   const isNpx = getEnvString('npm_execpath')?.includes('npx');
   const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
