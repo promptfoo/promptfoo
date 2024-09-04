@@ -116,6 +116,33 @@ describe('json utilities', () => {
       const expectedOutput = [{ key2: 'value2' }];
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
     });
+
+    it('should handle incomplete JSON', () => {
+      const input = `{
+  "incomplete": "object"`;
+      expect(extractJsonObjects(input)).toEqual([]);
+    });
+
+    it('should handle string containing incomplete JSON', () => {
+      const input = `{
+  "key1": "value1",
+  "key2": {
+    "nested": "value2"
+  },
+  "key3": "value3"
+}
+{
+  "incomplete": "object"`;
+      expect(extractJsonObjects(input)).toEqual([
+        {
+          key1: 'value1',
+          key2: {
+            nested: 'value2',
+          },
+          key3: 'value3',
+        },
+      ]);
+    });
   });
 
   describe('orderKeys', () => {
