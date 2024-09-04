@@ -1,4 +1,5 @@
 import invariant from 'tiny-invariant';
+import { fetchWithCache } from './cache';
 import cliState from './cliState';
 import logger from './logger';
 import {
@@ -16,6 +17,7 @@ import {
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
+import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { REMOTE_GENERATION_URL } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/util';
 import type {
@@ -176,6 +178,42 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
   };
 }
 
+type RemoteGradingPayload = {
+  task: string;
+  [key: string]: unknown;
+};
+
+async function doRemoteGrading(
+  payload: RemoteGradingPayload,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  try {
+    const body = JSON.stringify(payload);
+    logger.debug(`Performing remote grading: ${body}`);
+    const { data } = await fetchWithCache(
+      REMOTE_GENERATION_URL,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body,
+      },
+      REQUEST_TIMEOUT_MS,
+    );
+
+    const { result } = data as { result: GradingResult };
+    logger.debug(`Got remote grading result: ${JSON.stringify(result)}`);
+    return {
+      pass: result.pass,
+      score: result.score,
+      reason: result.reason,
+      tokensUsed: result.tokensUsed,
+    };
+  } catch (error) {
+    return fail(`Could not perform remote grading: ${error}`);
+  }
+}
+
 export async function matchesSimilarity(
   expected: string,
   output: string,
@@ -184,40 +222,13 @@ export async function matchesSimilarity(
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (cliState.config?.redteam && shouldGenerateRemote()) {
-    const payload = {
+    return doRemoteGrading({
       task: 'similar',
       expected,
       output,
       threshold,
       inverse,
-    };
-
-    try {
-      const body = JSON.stringify(payload);
-      logger.debug(`Performing remote grading for similarity: ${body}`);
-      const response = await fetch(REMOTE_GENERATION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body,
-      });
-
-      if (!response.ok) {
-        return fail(`Could not perform remote grading for similarity (1): ${response.statusText}`);
-      }
-
-      const { result } = (await response.json()) as { result: GradingResult };
-      logger.debug(`Got remote similarity grading result: ${JSON.stringify(result)}`);
-      return {
-        pass: result.pass,
-        score: result.score,
-        reason: result.reason,
-        tokensUsed: result.tokensUsed,
-      };
-    } catch (error) {
-      return fail(`Could not perform remote grading for similarity (2): ${error}`);
-    }
+    });
   }
 
   const finalProvider = (await getAndCheckProvider(
@@ -365,39 +376,12 @@ export async function matchesLlmRubric(
   }
 
   if (cliState.config?.redteam && shouldGenerateRemote()) {
-    const payload = {
+    return doRemoteGrading({
       task: 'llm-rubric',
       rubric,
       output: llmOutput,
       vars: vars || {},
-    };
-
-    try {
-      const body = JSON.stringify(payload);
-      logger.debug(`Performing remote grading for llm-rubric: ${body}`);
-      const response = await fetch(REMOTE_GENERATION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body,
-      });
-
-      if (!response.ok) {
-        return fail(`Could not perform remote grading for llm-rubric (1): ${response.statusText}`);
-      }
-
-      const { result } = (await response.json()) as { result: GradingResult };
-      logger.debug(`Got remote llm-rubric grading result: ${JSON.stringify(result)}`);
-      return {
-        pass: result.pass,
-        score: result.score,
-        reason: result.reason,
-        tokensUsed: result.tokensUsed,
-      };
-    } catch (error) {
-      return fail(`Could not perform remote grading for llm-rubric (2): ${error}`);
-    }
+    });
   }
 
   const rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
