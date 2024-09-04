@@ -34,11 +34,14 @@ export function calculateTrend(current: number, previous: number, increaseIsBad:
 }
 
 export interface CategoryData {
-  passCount: number;
-  totalCount: number;
-  failCount: number;
+  currentPassCount: number;
+  currentTotalCount: number;
+  currentFailCount: number;
+  historicalPassCount: number;
+  historicalTotalCount: number;
+  historicalFailCount: number;
   severity: Severity;
-  historicalChange?: number;
+  historicalChange: number;
 }
 
 export function processCategoryData(evals: StandaloneEval[]): Record<string, CategoryData> {
@@ -50,35 +53,43 @@ export function processCategoryData(evals: StandaloneEval[]): Record<string, Cat
       const relevantEvals = evals.filter(
         (eval_) => eval_.metrics?.namedScores && scoreName in eval_.metrics.namedScores,
       );
-      const passCount = relevantEvals.reduce(
+
+      // Split evals into historical and current
+      const halfIndex = Math.floor(relevantEvals.length / 2);
+      const currentEvals = relevantEvals.slice(halfIndex);
+      const historicalEvals = relevantEvals.slice(0, halfIndex);
+
+      // Calculate counts for current data
+      const currentPassCount = currentEvals.reduce(
         (sum, eval_) => sum + ((eval_.metrics?.namedScores[scoreName] || 0) > 0 ? 1 : 0),
         0,
       );
-      const totalCount = relevantEvals.length;
-      const failCount = totalCount - passCount;
+      const currentTotalCount = currentEvals.length;
+      const currentFailCount = currentTotalCount - currentPassCount;
+
+      // Calculate counts for historical data
+      const historicalPassCount = historicalEvals.reduce(
+        (sum, eval_) => sum + ((eval_.metrics?.namedScores[scoreName] || 0) > 0 ? 1 : 0),
+        0,
+      );
+      const historicalTotalCount = historicalEvals.length;
+      const historicalFailCount = historicalTotalCount - historicalPassCount;
+
       const severity = riskCategorySeverityMap[scoreName] || Severity.Low;
 
       // Calculate historical change
-      const halfIndex = Math.floor(relevantEvals.length / 2);
-      const recentEvals = relevantEvals.slice(halfIndex);
-      const historicalEvals = relevantEvals.slice(0, halfIndex);
-
-      const recentFailCount = recentEvals.reduce(
-        (sum, eval_) => sum + ((eval_.metrics?.namedScores[scoreName] || 0) > 0 ? 0 : 1),
-        0,
-      );
-      const historicalFailCount = historicalEvals.reduce(
-        (sum, eval_) => sum + ((eval_.metrics?.namedScores[scoreName] || 0) > 0 ? 0 : 1),
-        0,
-      );
-
       const historicalChange =
-        historicalFailCount > 0 ? (recentFailCount - historicalFailCount) / historicalFailCount : 0;
+        historicalFailCount > 0
+          ? (currentFailCount - historicalFailCount) / historicalFailCount
+          : 0;
 
       categoryData[subCategory] = {
-        passCount,
-        totalCount,
-        failCount,
+        currentPassCount,
+        currentTotalCount,
+        currentFailCount,
+        historicalPassCount,
+        historicalTotalCount,
+        historicalFailCount,
         severity,
         historicalChange,
       };

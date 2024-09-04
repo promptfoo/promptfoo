@@ -10,7 +10,7 @@ import {
   displayNameOverrides,
   subCategoryDescriptions,
 } from '../report/constants';
-import { processCategoryData, CategoryData } from './utils';
+import { processCategoryData, CategoryData, calculateTrend } from './utils';
 
 interface EmergingRisksProps {
   evals: StandaloneEval[];
@@ -31,11 +31,14 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
   const categoryData = processCategoryData(evals);
 
   const emergingRisks = Object.entries(categoryData)
-    // Only decreases in ASR
-    .filter(([, data]) => data.historicalChange && data.historicalChange < 0)
-    .sort(([, a], [, b]) => a.historicalChange! - b.historicalChange!)
+    .filter(
+      ([, data]) =>
+        data.currentTotalCount > 0 &&
+        data.historicalTotalCount > 0 &&
+        data.historicalPassCount > data.currentPassCount,
+    )
+    .sort(([, a], [, b]) => b.historicalChange - a.historicalChange)
     .slice(0, 5);
-  console.log(emergingRisks);
 
   return (
     <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
@@ -48,6 +51,11 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
             displayNameOverrides[category as keyof typeof displayNameOverrides] ||
             categoryAliases[category as keyof typeof categoryAliases] ||
             category;
+          const trend = calculateTrend(
+            data.currentFailCount / data.currentTotalCount,
+            data.historicalFailCount / data.historicalTotalCount,
+            true /* more is bad */,
+          );
           return (
             <Box
               key={index}
@@ -101,21 +109,24 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                   }}
                 >
                   <Typography variant="body2">
-                    Recent: {((data.passCount / data.totalCount) * 100).toFixed(1)}% passed runs
+                    Recent: {((data.currentPassCount / data.currentTotalCount) * 100).toFixed(1)}%
+                    passed runs
                   </Typography>
                   <Typography variant="body2">
-                    Historical: {((data.failCount / data.totalCount) * 100).toFixed(1)}% failed runs
+                    Historical:{' '}
+                    {((data.historicalPassCount / data.historicalTotalCount) * 100).toFixed(1)}%
+                    passed runs
                   </Typography>
-                  <Typography variant="body2" color="error">
-                    {(((data.failCount - data.passCount) / data.passCount) * 100).toLocaleString(
-                      undefined,
-                      {
-                        style: 'percent',
-                        minimumFractionDigits: 1,
-                        maximumFractionDigits: 1,
-                      },
-                    )}{' '}
-                    increase
+                  <Typography
+                    variant="body2"
+                    color={trend.sentiment === 'bad' ? 'error' : 'success'}
+                  >
+                    {(trend.value * 100).toLocaleString(undefined, {
+                      style: 'percent',
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    })}{' '}
+                    {trend.direction === 'up' ? 'increase' : 'decrease'} in failures
                   </Typography>
                 </Box>
               </Box>

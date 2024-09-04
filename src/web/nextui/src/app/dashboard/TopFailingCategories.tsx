@@ -7,7 +7,7 @@ import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import { categoryAliases, displayNameOverrides } from '../report/constants';
-import { processCategoryData, CategoryData } from './utils';
+import { processCategoryData } from './utils';
 
 interface TopFailingCategoriesProps {
   evals: StandaloneEval[];
@@ -17,7 +17,7 @@ const TopFailingCategories: React.FC<TopFailingCategoriesProps> = ({ evals }) =>
   const categoryData = processCategoryData(evals);
 
   const sortedCategories = Object.entries(categoryData)
-    .sort(([, a], [, b]) => b.failCount - a.failCount)
+    .sort(([, a], [, b]) => b.currentFailCount - a.currentFailCount)
     .slice(0, 5);
 
   return (
@@ -36,11 +36,11 @@ const TopFailingCategories: React.FC<TopFailingCategoriesProps> = ({ evals }) =>
               <Box sx={{ width: '100%' }}>
                 <ListItemText
                   primary={displayName}
-                  secondary={`${((data.failCount / data.totalCount) * 100).toFixed(1)}% failing (${data.failCount}/${data.totalCount} runs)`}
+                  secondary={`${((data.currentFailCount / data.currentTotalCount) * 100).toFixed(1)}% failing (${data.currentFailCount}/${data.currentTotalCount} runs)`}
                 />
                 <LinearProgress
                   variant="determinate"
-                  value={(data.failCount / data.totalCount) * 100}
+                  value={(data.currentFailCount / data.currentTotalCount) * 100}
                   color="error"
                   sx={{ height: 8, borderRadius: 5 }}
                 />
