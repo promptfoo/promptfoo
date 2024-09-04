@@ -5,12 +5,12 @@ describe('index.ts exports', () => {
     'assertions',
     'cache',
     'evaluate',
-    'providers',
-    'redteam',
     'generateTable',
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',
+    'providers',
+    'redteam',
   ];
 
   const expectedSchemaExports = [
@@ -46,20 +46,27 @@ describe('index.ts exports', () => {
   });
 
   it('should not have unexpected exports', () => {
-    const actualExports = Object.keys(index).filter((key) => key !== 'default');
-    const expectedExports = [...expectedNamedExports, ...expectedSchemaExports];
+    const actualExports = Object.keys(index)
+      .filter((key) => key !== 'default')
+      .sort();
+    const expectedExports = [...expectedNamedExports, ...expectedSchemaExports].sort();
     expect(actualExports).toHaveLength(expectedExports.length);
-    expect(actualExports).toEqual(expect.arrayContaining(expectedExports));
+    expect(actualExports).toEqual(expectedExports);
   });
 
   it('redteam should have expected properties', () => {
-    expect(index.redteam).toHaveProperty('Extractors');
-    expect(index.redteam).toHaveProperty('Plugins');
-    expect(index.redteam).toHaveProperty('Strategies');
-    expect(index.redteam).toHaveProperty('extractEntities');
-    expect(index.redteam).toHaveProperty('extractSystemPurpose');
-    expect(index.redteam.Extractors).toHaveProperty('extractEntities');
-    expect(index.redteam.Extractors).toHaveProperty('extractSystemPurpose');
+    expect(index.redteam).toEqual(
+      expect.objectContaining({
+        Extractors: expect.objectContaining({
+          extractEntities: expect.anything(),
+          extractSystemPurpose: expect.anything(),
+        }),
+        Plugins: expect.anything(),
+        Strategies: expect.anything(),
+        extractEntities: expect.anything(),
+        extractSystemPurpose: expect.anything(),
+      }),
+    );
   });
 
   it('default export should match named exports', () => {
