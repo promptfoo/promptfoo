@@ -141,22 +141,21 @@ function ResultsTable({
   const { showToast } = useToast();
 
   const generateRowLink = useCallback((rowId: string, additionalParams = {}) => {
-    const currentUrl = new URL(window.location.href);  // Get the full current URL
-    const params = new URLSearchParams(currentUrl.search);  // Get the existing query parameters
-  
+    const currentUrl = new URL(window.location.href); // Get the full current URL
+    const params = new URLSearchParams(currentUrl.search); // Get the existing query parameters
+
     Object.entries(additionalParams).forEach(([key, value]) => {
       params.set(key, (value as string).toString());
     });
-  
+
     params.set('row-id', rowId);
-  
+
     currentUrl.search = params.toString();
-  
+
     currentUrl.hash = `row-${rowId}`;
-  
-    return currentUrl.toString();  // Return the full URL with the updated search and hash
+
+    return currentUrl.toString(); // Return the full URL with the updated search and hash
   }, []);
-  
 
   // Function to copy the link to the clipboard
   const copyToClipboard = useCallback(
