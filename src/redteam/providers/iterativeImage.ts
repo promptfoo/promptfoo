@@ -155,7 +155,7 @@ async function runRedteamConversation({
     ]);
     const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-    const { onTopic } = extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output);
+    const { isOnTopic } = extractFirstJsonObject<{ isOnTopic: boolean }>(isOnTopicResp.output);
     logger.debug(`Iteration ${i + 1}: On-topic response: ${isOnTopicResp.output}`);
 
     let targetResponse;
@@ -226,7 +226,7 @@ async function runRedteamConversation({
     redteamHistory.push({
       role: 'user',
       content: `IMAGE MODEL OUTPUT: ${imageDescription || targetResponse}\n\nOBJECTIVE: ${goal}\n\nSCORE: ${score} ${
-        onTopic ? '' : '(your prompt was off-topic)'
+        isOnTopic ? '' : '(your prompt was off-topic)'
       }`,
     });
   }
