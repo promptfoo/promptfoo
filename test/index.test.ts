@@ -56,7 +56,8 @@ describe('index.ts exports', () => {
     expect(index.redteam).toHaveProperty('Extractors');
     expect(index.redteam).toHaveProperty('Plugins');
     expect(index.redteam).toHaveProperty('Strategies');
-
+    expect(index.redteam).toHaveProperty('extractEntities');
+    expect(index.redteam).toHaveProperty('extractSystemPurpose');
     expect(index.redteam.Extractors).toHaveProperty('extractEntities');
     expect(index.redteam.Extractors).toHaveProperty('extractSystemPurpose');
   });
