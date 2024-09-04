@@ -350,7 +350,7 @@ export async function matchesLlmRubric(
         return fail(`Could not perform remote grading for llm-rubric (1): ${response.statusText}`);
       }
 
-      const result = (await response.json()) as GradingResult;
+      const { result } = (await response.json()) as { result: GradingResult };
       logger.debug(`Got remote llm-rubric grading result: ${JSON.stringify(result)}`);
       return {
         pass: result.pass,
