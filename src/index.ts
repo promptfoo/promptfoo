@@ -7,7 +7,8 @@ import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
-import { Plugins as RedteamPlugins } from './redteam/plugins';
+import { Plugins } from './redteam/plugins';
+import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
 import { readTests } from './testCases';
 import type {
@@ -128,7 +129,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 const redteam = {
   extractEntities,
   extractSystemPurpose,
-  Plugins: RedteamPlugins,
+  Plugins,
+  Strategies,
 };
 
 export { assertions, cache, evaluate, providers, redteam };
