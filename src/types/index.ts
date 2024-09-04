@@ -631,6 +631,9 @@ export const TestSuiteConfigSchema = z.object({
 
   // Redteam configuration - used only when generating redteam tests
   redteam: z.custom<RedteamFileConfig>().optional(),
+
+  // Write results to disk so they can be viewed in web viewer
+  writeLatestResults: z.boolean().optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
