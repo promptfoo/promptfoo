@@ -127,14 +127,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 }
 
 const redteam = {
-  /**
-   * @deprecated This export will be removed in a future version. Please use redteam.Extractors.extractEntities instead.
-   */
-  extractEntities,
-  /**
-   * @deprecated This export will be removed in a future version. Please use redteam.Extractors.extractSystemPurpose instead.
-   */
-  extractSystemPurpose,
   Extractors: {
     extractEntities,
     extractSystemPurpose,

@@ -63,8 +63,6 @@ describe('index.ts exports', () => {
         }),
         Plugins: expect.anything(),
         Strategies: expect.anything(),
-        extractEntities: expect.anything(),
-        extractSystemPurpose: expect.anything(),
       }),
     );
   });
