@@ -46,23 +46,19 @@ describe('index.ts exports', () => {
   });
 
   it('should not have unexpected exports', () => {
-    const actualExports = Object.keys(index).filter(key => key !== 'default');
+    const actualExports = Object.keys(index).filter((key) => key !== 'default');
     const expectedExports = [...expectedNamedExports, ...expectedSchemaExports];
     expect(actualExports).toHaveLength(expectedExports.length);
     expect(actualExports).toEqual(expect.arrayContaining(expectedExports));
   });
 
   it('redteam should have expected properties', () => {
-    const expectedRedteamProps = [
-      'extractEntities',
-      'extractSystemPurpose',
-      'Plugins',
-      'Strategies',
-    ];
+    expect(index.redteam).toHaveProperty('Extractors');
+    expect(index.redteam).toHaveProperty('Plugins');
+    expect(index.redteam).toHaveProperty('Strategies');
 
-    expectedRedteamProps.forEach((prop) => {
-      expect(index.redteam).toHaveProperty(prop);
-    });
+    expect(index.redteam.Extractors).toHaveProperty('extractEntities');
+    expect(index.redteam.Extractors).toHaveProperty('extractSystemPurpose');
   });
 
   it('default export should match named exports', () => {
