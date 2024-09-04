@@ -508,5 +508,6 @@ export async function resolveConfigs(
     validateAssertions(testSuite.tests);
   }
 
+  cliState.config = config;
   return { config, testSuite, basePath };
 }
