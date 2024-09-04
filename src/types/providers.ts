@@ -160,5 +160,10 @@ export function isApiProvider(provider: any): provider is ApiProvider {
 }
 
 export function isProviderOptions(provider: any): provider is ProviderOptions {
-  return !isApiProvider(provider) && typeof provider === 'object' && provider != null;
+  return (
+    typeof provider === 'object' &&
+    provider != null &&
+    'id' in provider &&
+    typeof provider.id === 'string'
+  );
 }

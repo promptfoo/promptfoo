@@ -65,7 +65,6 @@ export async function doEval(
     }
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
-    cliState.config = config;
 
     let maxConcurrency = Number.parseInt(cmdObj.maxConcurrency || '', 10);
     const delay = Number.parseInt(cmdObj.delay || '', 0);
