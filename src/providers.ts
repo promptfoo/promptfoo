@@ -71,6 +71,14 @@ import type {
   ProviderOptionsMap,
 } from './types/providers';
 
+/**
+ * Provider env keys that are required to be set either in env or in config to interact with provider services.
+ */
+export enum ProvidersRequiringAPIKeysEnvKeys {
+  OPENAI_API_KEY = 'OPENAI_API_KEY',
+  ANTHROPIC_API_KEY = 'ANTHROPIC_API_KEY',
+}
+
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
   providerPath: string,
@@ -79,7 +87,7 @@ export async function loadApiProvider(
     basePath?: string;
     env?: EnvOverrides;
   } = {},
-): Promise<ApiProvider> {
+): Promise {
   const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
     id: options.id,
@@ -409,7 +417,7 @@ export async function loadApiProviders(
     basePath?: string;
     env?: EnvOverrides;
   } = {},
-): Promise<ApiProvider[]> {
+): Promise {
   const { basePath } = options;
   const env = options.env || cliState.config?.env;
   if (typeof providerPaths === 'string') {

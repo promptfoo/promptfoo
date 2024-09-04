@@ -5,8 +5,9 @@ import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 import { redteamInit } from './commands/redteam/init';
-import { getEnvString, ProvidersRequiringAPIKeysEnvKeys } from './envars';
+import { getEnvString } from './envars';
 import logger from './logger';
+import { ProvidersRequiringAPIKeysEnvKeys } from './providers';
 import telemetry, { type EventValue } from './telemetry';
 import { getNunjucksEngine } from './util/templates';
 
@@ -239,20 +240,14 @@ function recordOnboardingStep(step: string, properties: any = {}) {
 
 /**
  * Iterate through user choices and determine if the user has selected a provider that needs an API key
- * but has not set and API key in their enviorment.
+ * but has not set an API key in their environment.
  */
 export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[]): string[] {
-  // Dictionary of what warnings may have already been printed for the user.
-  const shownWarnings = new Map([
-    [
-      ProvidersRequiringAPIKeysEnvKeys.OPENAI_API_KEY as keyof typeof ProvidersRequiringAPIKeysEnvKeys,
-      false,
-    ],
-    [
-      ProvidersRequiringAPIKeysEnvKeys.ANTHROPIC_API_KEY as keyof typeof ProvidersRequiringAPIKeysEnvKeys,
-      false,
-    ],
-  ]);
+  // Dictionary of what warnings may have already been genereated for the user.
+  const generatedWarnings = new Map<string, boolean>();
+  for (const key of Object.keys(ProvidersRequiringAPIKeysEnvKeys)) {
+    generatedWarnings.set(key, false);
+  }
   const choices = providerChoices.map((choice) => {
     // Map and only return the provider id strings.
     switch (typeof choice) {
@@ -277,8 +272,8 @@ export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[
       `${choice.split(':')[0].toUpperCase()}_API_KEY` as keyof typeof ProvidersRequiringAPIKeysEnvKeys;
     if (ProvidersRequiringAPIKeysEnvKeys[chosenProviderEnumKey]) {
       // Check to make sure we haven't already generated a warning for the given provider.
-      if (!shownWarnings.get(chosenProviderEnumKey)) {
-        shownWarnings.set(chosenProviderEnumKey, true);
+      if (!generatedWarnings.get(chosenProviderEnumKey)) {
+        generatedWarnings.set(chosenProviderEnumKey, true);
         warnings.push(dedent`\n${chalk.bold(`Warning: ${chosenProviderEnumKey} environment variable is not set.`)}
 
           Please set this environment variable like: export ${chosenProviderEnumKey}=<my-api-key>\n
