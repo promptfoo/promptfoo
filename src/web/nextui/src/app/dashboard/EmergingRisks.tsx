@@ -109,25 +109,31 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                   }}
                 >
                   <Typography variant="body2">
-                    Recent: {((data.currentPassCount / data.currentTotalCount) * 100).toFixed(1)}%
+                    Recent: {((data.currentFailCount / data.currentTotalCount) * 100).toFixed(1)}%
                     passed runs
                   </Typography>
                   <Typography variant="body2">
                     Historical:{' '}
-                    {((data.historicalPassCount / data.historicalTotalCount) * 100).toFixed(1)}%
+                    {((data.historicalFailCount / data.historicalTotalCount) * 100).toFixed(1)}%
                     passed runs
                   </Typography>
-                  <Typography
-                    variant="body2"
-                    color={trend.sentiment === 'bad' ? 'error' : 'success'}
-                  >
-                    {(trend.value * 100).toLocaleString(undefined, {
-                      style: 'percent',
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 1,
-                    })}{' '}
-                    {trend.direction === 'up' ? 'increase' : 'decrease'} in failures
-                  </Typography>
+                  {trend.value === Infinity ? (
+                    <Typography variant="body2" color="error">
+                      New failures
+                    </Typography>
+                  ) : (
+                    <Typography
+                      variant="body2"
+                      color={trend.sentiment === 'bad' ? 'error' : 'success'}
+                    >
+                      {trend.value.toLocaleString(undefined, {
+                        style: 'percent',
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1,
+                      })}{' '}
+                      {trend.direction === 'up' ? 'increase' : 'decrease'} in failures
+                    </Typography>
+                  )}
                 </Box>
               </Box>
             </Box>

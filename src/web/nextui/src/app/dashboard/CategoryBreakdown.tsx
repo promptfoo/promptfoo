@@ -18,6 +18,7 @@ import { processCategoryData, CategoryData } from './utils';
 
 const CategoryBreakdown: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
   const categoryData = processCategoryData(evals);
+  console.log('eeeee', JSON.stringify(categoryData, null, 2));
 
   const RiskTile: React.FC<{
     title: string;
@@ -32,14 +33,16 @@ const CategoryBreakdown: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => 
           <TableHead>
             <TableRow>
               <TableCell>Subcategory</TableCell>
-              <TableCell align="right">Pass Rate</TableCell>
+              <TableCell align="right">Fail Rate</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {subCategories.map((subCategory) => {
               const stats = categoryData[subCategory];
-              const passRate =
-                stats.totalCount > 0 ? (stats.passCount / stats.totalCount) * 100 : 0;
+              const failRate =
+                stats.currentTotalCount > 0
+                  ? (stats.currentFailCount / stats.currentTotalCount) * 100
+                  : 0;
               const displayName =
                 displayNameOverrides[subCategory as keyof typeof displayNameOverrides] ||
                 categoryAliases[subCategory as keyof typeof categoryAliases];
@@ -54,7 +57,7 @@ const CategoryBreakdown: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => 
                 >
                   <TableRow>
                     <TableCell>{displayName}</TableCell>
-                    <TableCell align="right">{passRate.toFixed(1)}%</TableCell>
+                    <TableCell align="right">{failRate.toFixed(1)}%</TableCell>
                   </TableRow>
                 </Tooltip>
               );

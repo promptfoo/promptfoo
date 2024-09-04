@@ -34,16 +34,17 @@ const RecentEvals: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
             <TableCell style={{ whiteSpace: 'nowrap' }}>Eval ID</TableCell>
             <TableCell>Date</TableCell>
             <TableCell>Trigger</TableCell>
-            <TableCell align="right">Pass Rate</TableCell>
+            <TableCell># Compromised</TableCell>
+            <TableCell align="right">Fail Rate</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {evalDisplay
             .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
             .map((eval_, index) => {
-              const passRate =
-                eval_.metrics?.testPassCount && eval_.metrics?.testFailCount
-                  ? (eval_.metrics.testPassCount /
+              const attackSuccessRate =
+                eval_.metrics?.testFailCount && eval_.metrics?.testPassCount
+                  ? (eval_.metrics.testFailCount /
                       (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
                     100
                   : 0;
@@ -57,7 +58,7 @@ const RecentEvals: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
                       maxWidth: '150px',
                     }}
                   >
-                    <Link href={`/eval?evalId=${eval_.evalId}`}>
+                    <Link href={`/report?evalId=${eval_.evalId}`}>
                       {eval_.description || eval_.evalId}
                     </Link>
                   </TableCell>
@@ -72,7 +73,11 @@ const RecentEvals: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
                     {new Date(eval_.createdAt).toLocaleString()}
                   </TableCell>
                   <TableCell>Manual</TableCell>
-                  <TableCell align="right">{passRate.toFixed(1)}%</TableCell>
+                  <TableCell>
+                    {eval_.metrics?.testFailCount || 0} /{' '}
+                    {(eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0)}
+                  </TableCell>
+                  <TableCell align="right">{attackSuccessRate.toFixed(1)}%</TableCell>
                 </TableRow>
               );
             })}

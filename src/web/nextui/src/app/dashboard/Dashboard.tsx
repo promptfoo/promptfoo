@@ -73,7 +73,7 @@ export default function Dashboard() {
     const response = await fetch(`/api/progress?${queryParams}`);
     const data = await response.json();
     if (data && data.data) {
-      setEvals(data.data);
+      setEvals(data.data.filter((eval_: StandaloneEval) => eval_.isRedteam));
     }
     setIsLoading(false);
   };
@@ -90,8 +90,6 @@ export default function Dashboard() {
     // Prepare data for Recharts
     const attackSuccessRateOverTime = evals
       .sort((a, b) => a.createdAt - b.createdAt)
-      // Redteams only
-      .filter((eval_) => eval_.isRedteam)
       .map((eval_) => ({
         date: new Date(eval_.createdAt).toLocaleDateString(),
         attackSuccessRate:
@@ -247,7 +245,7 @@ export default function Dashboard() {
     };
 
     Object.values(categoryData).forEach((data) => {
-      if (data.failCount > 0) {
+      if (data.currentFailCount > 0) {
         severityCounts[data.severity]++;
       }
     });
@@ -334,7 +332,7 @@ export default function Dashboard() {
               {/* Metric cards */}
               <Grid item xs={12} md={4}>
                 <MetricCard
-                  title="Current Attack Success Rate"
+                  title="Attack Success Rate"
                   value={`${latestAttackSuccessRate.toLocaleString(undefined, {
                     style: 'percent',
                     minimumFractionDigits: 1,
@@ -352,7 +350,7 @@ export default function Dashboard() {
               </Grid>
               <Grid item xs={12} md={4}>
                 <MetricCard
-                  title="Total Successful Attacks"
+                  title="Successful Attacks"
                   value={totalSuccessfulAttacks.toLocaleString()}
                   trend={totalSuccessfulAttacksTrend.direction}
                   sentiment={totalSuccessfulAttacksTrend.sentiment}
@@ -366,14 +364,14 @@ export default function Dashboard() {
               </Grid>
               <Grid item xs={12} md={4}>
                 <MetricCard
-                  title="Severity Summary"
+                  title="Open Issues"
                   value={`${totalIssues} Issues`}
                   trend={highestSeverity.toLowerCase() as 'up' | 'down' | 'flat'}
                   sentiment={
                     highestSeverity === Severity.Low
                       ? 'good'
                       : highestSeverity === Severity.Medium
-                        ? 'neutral'
+                        ? 'flat'
                         : 'bad'
                   }
                   trendValue={highestSeverity}
@@ -394,7 +392,7 @@ export default function Dashboard() {
                   }}
                 >
                   <Typography variant="h6" mb={4}>
-                    Attack Success
+                    Attack Success Trend
                   </Typography>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={attackSuccessRateData}>
