@@ -269,12 +269,12 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (isCacheEnabled()) {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
-        logger.debug(`Returning cached response for prompt: ${prompt}`);
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
         }
+        logger.debug(`Returning cached response: ${cachedResponse}`);
         return { ...parsedCachedResponse, cached: true };
       }
     }
@@ -425,12 +425,12 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (isCacheEnabled()) {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
-        logger.debug(`Returning cached response for prompt: ${prompt}`);
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
         }
+        logger.debug(`Returning cached response: ${cachedResponse}`);
         return { ...parsedCachedResponse, cached: true };
       }
     }
@@ -448,6 +448,7 @@ export class VertexChatProvider extends VertexGenericProvider {
           'Content-Type': 'application/json',
         },
         data: body,
+        timeout: REQUEST_TIMEOUT_MS,
       });
       data = res.data;
     } catch (err) {
