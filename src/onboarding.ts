@@ -492,16 +492,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     language,
   });
 
-  // Write files if not skipped
-  for (const file of filesToCheck) {
-    if (existingFiles.includes(file)) {
-      const filePath = path.join(process.cwd(), directory, file);
-      fs.writeFileSync(filePath, file === 'promptfooconfig.yaml' ? config : DEFAULT_README);
-      logger.info(`⌛ Wrote ${file}`);
-    } else {
-      logger.info(`Skipped writing ${file}`);
-    }
-  }
+  fs.writeFileSync(path.join(process.cwd(), directory, 'promptfooconfig.yaml'), config);
+  fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
   const isNpx = getEnvString('npm_execpath')?.includes('npx');
   const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
