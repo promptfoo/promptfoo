@@ -1,19 +1,24 @@
+import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import { fetchWithRetries } from '../fetch';
 import logger from '../logger';
+import { REMOTE_GENERATION_URL } from '../redteam/constants';
 import type {
   ApiProvider,
   ProviderResponse,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
 } from '../types';
+import { OpenAiChatCompletionProvider, OpenAiCompletionOptions } from './openai';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   purpose: string;
   harmCategory: string;
 }
 
-class PromptfooHarmfulCompletionProvider implements ApiProvider {
+export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   purpose: string;
   harmCategory: string;
 
@@ -75,4 +80,56 @@ class PromptfooHarmfulCompletionProvider implements ApiProvider {
   }
 }
 
-export default PromptfooHarmfulCompletionProvider;
+export class PromptfooChatCompletionProvider implements ApiProvider {
+  constructor(private options: { id?: string; env?: EnvOverrides } = {}) {}
+
+  id(): string {
+    return this.options.id || 'promptfoo:chatcompletion';
+  }
+
+  toString(): string {
+    return `[Promptfoo Chat Completion Provider]`;
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const body = {
+      task: '...',
+      step: '...',
+      messages: [{ role: 'user', content: prompt }],
+    };
+
+    try {
+      const { data } = await fetchWithCache(
+        REMOTE_GENERATION_URL,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${process.env.PROMPTFOO_API_KEY}`,
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+
+      const { result } = data;
+
+      if (!result.choices || result.choices.length === 0) {
+        throw new Error('No choices returned from API');
+      }
+
+      return {
+        output: result.choices[0].message.content,
+        tokenUsage: result.usage,
+      };
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+  }
+}

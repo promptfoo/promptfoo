@@ -114,7 +114,7 @@ interface OpenAiSharedOptions {
   headers?: { [key: string]: string };
 }
 
-type OpenAiCompletionOptions = OpenAiSharedOptions & {
+export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_tokens?: number;
   top_p?: number;

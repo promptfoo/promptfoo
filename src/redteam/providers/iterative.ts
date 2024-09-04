@@ -1,6 +1,8 @@
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import { OpenAiChatCompletionProvider } from '../../providers/openai';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -11,6 +13,7 @@ import {
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { shouldGenerateRemote } from '../util';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { loadRedteamProvider } from './shared';
 
@@ -167,7 +170,12 @@ class RedteamIterativeProvider implements ApiProvider {
     this.injectVar = config.injectVar;
 
     // Redteam provider can be set from the config.
-    this.redteamProvider = config.redteamProvider;
+
+    if (shouldGenerateRemote()) {
+      this.redteamProvider = new PromptfooChatCompletionProvider();
+    } else {
+      this.redteamProvider = config.redteamProvider;
+    }
   }
 
   id() {

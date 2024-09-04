@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { getEnvBool, getEnvString } from '../../envars';
 import logger from '../../logger';
-import PromptfooHarmfulCompletionProvider from '../../providers/promptfoo';
+import { PromptfooHarmfulCompletionProvider } from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
