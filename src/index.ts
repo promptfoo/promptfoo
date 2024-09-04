@@ -7,7 +7,8 @@ import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
-import { Plugins as RedteamPlugins } from './redteam/plugins';
+import { Plugins } from './redteam/plugins';
+import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
 import { readTests } from './testCases';
 import type {
@@ -126,9 +127,20 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 }
 
 const redteam = {
+  /**
+   * @deprecated This export will be removed in a future version. Please use redteam.Extractors.extractEntities instead.
+   */
   extractEntities,
+  /**
+   * @deprecated This export will be removed in a future version. Please use redteam.Extractors.extractSystemPurpose instead.
+   */
   extractSystemPurpose,
-  Plugins: RedteamPlugins,
+  Extractors: {
+    extractEntities,
+    extractSystemPurpose,
+  },
+  Plugins,
+  Strategies,
 };
 
 export { assertions, cache, evaluate, providers, redteam };
