@@ -13,7 +13,7 @@ import type {
   TokenUsage,
 } from '../types';
 import { getNunjucksEngine } from '../util/templates';
-import { parseChatPrompt } from './shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import type { GeminiErrorResponse, Palm2ApiResponse } from './vertexUtil';
 import {
   getGoogleClient,
@@ -289,6 +289,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         url,
         method: 'POST',
         data: body,
+        timeout: REQUEST_TIMEOUT_MS,
       });
       data = res.data as GeminiApiResponse;
       logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
