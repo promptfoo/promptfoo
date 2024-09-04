@@ -22,13 +22,14 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import { Severity, riskCategorySeverityMap } from '../report/constants';
 import CategoryBreakdown from './CategoryBreakdown';
 import EmergingRisks from './EmergingRisks';
 import MetricCard from './MetricCard';
 import RecentEvals from './RecentEvals';
 import Sidebar from './Sidebar';
 import TopFailingCategories from './TopFailingCategories';
-import { calculateTrend } from './utils';
+import { calculateTrend, processCategoryData, CategoryData } from './utils';
 
 interface OverallAttackSuccessRateDataPoint {
   name: string;
@@ -235,6 +236,32 @@ export default function Dashboard() {
       })
     : 'N/A';
 
+  const categoryData = processCategoryData(evals);
+
+  const calculateSeveritySummary = () => {
+    const severityCounts = {
+      [Severity.Critical]: 0,
+      [Severity.High]: 0,
+      [Severity.Medium]: 0,
+      [Severity.Low]: 0,
+    };
+
+    Object.values(categoryData).forEach((data) => {
+      if (data.failCount > 0) {
+        severityCounts[data.severity]++;
+      }
+    });
+
+    const totalIssues = Object.values(severityCounts).reduce((a, b) => a + b, 0);
+    const highestSeverity =
+      Object.keys(severityCounts).find((severity) => severityCounts[severity as Severity] > 0) ||
+      Severity.Low;
+
+    return { severityCounts, totalIssues, highestSeverity };
+  };
+
+  const { severityCounts, totalIssues, highestSeverity } = calculateSeveritySummary();
+
   return (
     <Box
       sx={{
@@ -339,19 +366,18 @@ export default function Dashboard() {
               </Grid>
               <Grid item xs={12} md={4}>
                 <MetricCard
-                  title="Average Attack Success Rate"
-                  value={`${averageAttackSuccessRate.toLocaleString(undefined, {
-                    style: 'percent',
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1,
-                  })}`}
-                  trend={averageAttackSuccessRateTrend.direction}
-                  sentiment={averageAttackSuccessRateTrend.sentiment}
-                  trendValue={`${averageAttackSuccessRateTrend.value.toLocaleString(undefined, {
-                    style: 'percent',
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1,
-                  })}`}
+                  title="Severity Summary"
+                  value={`${totalIssues} Issues`}
+                  trend={highestSeverity.toLowerCase() as 'up' | 'down' | 'flat'}
+                  sentiment={
+                    highestSeverity === Severity.Low
+                      ? 'good'
+                      : highestSeverity === Severity.Medium
+                        ? 'neutral'
+                        : 'bad'
+                  }
+                  trendValue={highestSeverity}
+                  subtitle={`Critical: ${severityCounts[Severity.Critical]}, High: ${severityCounts[Severity.High]}, Medium: ${severityCounts[Severity.Medium]}, Low: ${severityCounts[Severity.Low]}`}
                 />
               </Grid>
 

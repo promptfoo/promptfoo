@@ -10,6 +10,7 @@ import {
   displayNameOverrides,
   subCategoryDescriptions,
 } from '../report/constants';
+import { processCategoryData, CategoryData } from './utils';
 
 interface EmergingRisksProps {
   evals: StandaloneEval[];
@@ -27,65 +28,14 @@ interface CategoryRisk {
 }
 
 const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
-  const calculateEmergingRisks = (): CategoryRisk[] => {
-    const recentEvals = evals.slice(0, Math.ceil(evals.length / 3));
-    const historicalEvals = evals.slice(Math.ceil(evals.length / 3));
+  const categoryData = processCategoryData(evals);
 
-    const calculateFailureRate = (evalSet: StandaloneEval[]) => {
-      const categoryFailures: { [key: string]: { fails: number; total: number } } = {};
-
-      evalSet.forEach((eval_) => {
-        Object.entries(eval_.metrics?.namedScores || {}).forEach(([scoreName, score]) => {
-          const category = Object.keys(categoryAliases).find(
-            (key) => categoryAliases[key as keyof typeof categoryAliases] === scoreName,
-          );
-          if (category) {
-            if (!categoryFailures[category]) {
-              categoryFailures[category] = { fails: 0, total: 0 };
-            }
-            categoryFailures[category].total++;
-            if (score <= 0) {
-              categoryFailures[category].fails++;
-            }
-          }
-        });
-      });
-
-      return categoryFailures;
-    };
-
-    const recentFailures = calculateFailureRate(recentEvals);
-    const historicalFailures = calculateFailureRate(historicalEvals);
-
-    const emergingRisks = Object.keys(recentFailures).map((category) => {
-      const recentFails = recentFailures[category].fails;
-      const recentTotal = recentFailures[category].total;
-      const historicalFails = historicalFailures[category]?.fails || 0;
-      const historicalTotal = historicalFailures[category]?.total || 1;
-
-      const recentFailureRate = recentFails / recentTotal;
-      const historicalFailureRate = historicalFails / historicalTotal;
-
-      return {
-        category,
-        recentFailureRate,
-        historicalFailureRate,
-        increaseFactor:
-          (recentFailureRate - historicalFailureRate) / (historicalFailureRate || 0.01),
-        recentFails,
-        recentTotal,
-        historicalFails,
-        historicalTotal,
-      };
-    });
-
-    return emergingRisks
-      .filter((risk) => risk.increaseFactor > 0.1) // Only show risks with at least 10% increase
-      .sort((a, b) => b.increaseFactor - a.increaseFactor)
-      .slice(0, 5);
-  };
-
-  const emergingRisks = calculateEmergingRisks();
+  const emergingRisks = Object.entries(categoryData)
+    // Only decreases in ASR
+    .filter(([, data]) => data.historicalChange && data.historicalChange < 0)
+    .sort(([, a], [, b]) => a.historicalChange! - b.historicalChange!)
+    .slice(0, 5);
+  console.log(emergingRisks);
 
   return (
     <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
@@ -93,11 +43,11 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
         Trending Risks
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-        {emergingRisks.map((risk, index) => {
+        {emergingRisks.map(([category, data], index) => {
           const displayName =
-            displayNameOverrides[risk.category as keyof typeof displayNameOverrides] ||
-            categoryAliases[risk.category as keyof typeof categoryAliases] ||
-            risk.category;
+            displayNameOverrides[category as keyof typeof displayNameOverrides] ||
+            categoryAliases[category as keyof typeof categoryAliases] ||
+            category;
           return (
             <Box
               key={index}
@@ -122,7 +72,7 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                 <Box display="flex" alignItems="center" mb={1}>
                   <Tooltip
                     title={
-                      subCategoryDescriptions[risk.category as keyof typeof subCategoryDescriptions]
+                      subCategoryDescriptions[category as keyof typeof subCategoryDescriptions]
                     }
                     arrow
                   >
@@ -151,29 +101,20 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                   }}
                 >
                   <Typography variant="body2">
-                    Recent:{' '}
-                    {risk.recentFailureRate.toLocaleString(undefined, {
-                      style: 'percent',
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 1,
-                    })}{' '}
-                    failed runs
+                    Recent: {((data.passCount / data.totalCount) * 100).toFixed(1)}% passed runs
                   </Typography>
                   <Typography variant="body2">
-                    Historical:{' '}
-                    {risk.historicalFailureRate.toLocaleString(undefined, {
-                      style: 'percent',
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 1,
-                    })}{' '}
-                    failed runs
+                    Historical: {((data.failCount / data.totalCount) * 100).toFixed(1)}% failed runs
                   </Typography>
                   <Typography variant="body2" color="error">
-                    {risk.increaseFactor.toLocaleString(undefined, {
-                      style: 'percent',
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 1,
-                    })}{' '}
+                    {(((data.failCount - data.passCount) / data.passCount) * 100).toLocaleString(
+                      undefined,
+                      {
+                        style: 'percent',
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1,
+                      },
+                    )}{' '}
                     increase
                   </Typography>
                 </Box>

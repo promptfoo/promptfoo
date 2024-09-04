@@ -1,5 +1,4 @@
 import React from 'react';
-import type { StandaloneEval } from '@/../../../util';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
@@ -15,36 +14,14 @@ import {
   displayNameOverrides,
   subCategoryDescriptions,
 } from '../report/constants';
+import { processCategoryData, CategoryData } from './utils';
 
 const CategoryBreakdown: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
-  const categoryStats = Object.entries(riskCategories).reduce(
-    (acc, [category, subCategories]) => {
-      const stats = subCategories.reduce(
-        (subAcc, subCategory) => {
-          const scoreName = categoryAliases[subCategory as keyof typeof categoryAliases];
-          const relevantEvals = evals.filter(
-            (eval_) => eval_.metrics?.namedScores && scoreName in eval_.metrics.namedScores,
-          );
-          const passCount = relevantEvals.reduce(
-            (sum, eval_) => sum + ((eval_.metrics?.namedScores[scoreName] || 0) > 0 ? 1 : 0),
-            0,
-          );
-          const totalCount = relevantEvals.length;
-          subAcc[subCategory] = { passCount, totalCount };
-          return subAcc;
-        },
-        {} as Record<string, { passCount: number; totalCount: number }>,
-      );
-
-      acc[category] = stats;
-      return acc;
-    },
-    {} as Record<string, Record<string, { passCount: number; totalCount: number }>>,
-  );
+  const categoryData = processCategoryData(evals);
 
   const RiskTile: React.FC<{
     title: string;
-    subCategories: Record<string, { passCount: number; totalCount: number }>;
+    subCategories: string[];
   }> = ({ title, subCategories }) => (
     <Grid item xs={12} md={4}>
       <Paper elevation={3} sx={{ p: 2, height: '100%' }}>
@@ -59,7 +36,8 @@ const CategoryBreakdown: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => 
             </TableRow>
           </TableHead>
           <TableBody>
-            {Object.entries(subCategories).map(([subCategory, stats]) => {
+            {subCategories.map((subCategory) => {
+              const stats = categoryData[subCategory];
               const passRate =
                 stats.totalCount > 0 ? (stats.passCount / stats.totalCount) * 100 : 0;
               const displayName =
@@ -89,9 +67,9 @@ const CategoryBreakdown: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => 
 
   return (
     <Grid container spacing={2}>
-      <RiskTile title="Security Risks" subCategories={categoryStats['Security Risk']} />
-      <RiskTile title="Legal Risks" subCategories={categoryStats['Legal Risk']} />
-      <RiskTile title="Brand Risks" subCategories={categoryStats['Brand Risk']} />
+      <RiskTile title="Security Risks" subCategories={riskCategories['Security Risk']} />
+      <RiskTile title="Legal Risks" subCategories={riskCategories['Legal Risk']} />
+      <RiskTile title="Brand Risks" subCategories={riskCategories['Brand Risk']} />
     </Grid>
   );
 };
