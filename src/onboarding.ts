@@ -1,5 +1,6 @@
 import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
+import { ExitPromptError } from '@inquirer/core';
 import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
 import fs from 'fs';
@@ -527,4 +528,28 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     action,
     language,
   };
+}
+
+export async function initializeProject(directory: string | null, interactive: boolean = true) {
+  try {
+    return await createDummyFiles(directory, interactive);
+  } catch (err) {
+    if (err instanceof ExitPromptError) {
+      const isNpx = getEnvString('npm_execpath')?.includes('npx');
+      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
+      logger.info(
+        '\n' +
+          chalk.blue('Initialization paused. To continue setup later, use the command: ') +
+          chalk.bold(runCommand),
+      );
+      logger.info(
+        chalk.blue('For help or feedback, visit ') +
+          chalk.green('https://www.promptfoo.dev/contact/'),
+      );
+      await recordOnboardingStep('early exit');
+      process.exit(130);
+    } else {
+      throw err;
+    }
+  }
 }
