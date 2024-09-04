@@ -238,6 +238,8 @@ function recordOnboardingStep(step: string, properties: Record<string, EventValu
 }
 
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
+  console.clear();
+
   if (directory && !fs.existsSync(directory)) {
     fs.mkdirSync(directory);
   }
@@ -246,32 +248,26 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
   // Check for existing files and prompt for overwrite
   const filesToCheck = ['promptfooconfig.yaml', 'README.md'];
-  const filesToOverwrite = new Set<string>();
+  const existingFiles = filesToCheck.filter((file) =>
+    fs.existsSync(path.join(process.cwd(), directory, file)),
+  );
 
-  for (const file of filesToCheck) {
-    const filePath = path.join(process.cwd(), directory, file);
-    if (fs.existsSync(filePath)) {
-      const overwrite = await confirm({
-        message: `${file} already exists${directory === '.' ? '' : ` in ${directory}`}. Do you want to overwrite it?`,
-        default: false,
-      });
-      if (overwrite) {
-        filesToOverwrite.add(file);
-      } else {
-        logger.info(`Will skip writing ${file}`);
-      }
-    } else {
-      filesToOverwrite.add(file);
+  if (existingFiles.length > 0) {
+    const fileList = existingFiles.join(' and ');
+    const overwrite = await confirm({
+      message: `${fileList} already exist${existingFiles.length > 1 ? '' : 's'}${directory === '.' ? '' : ` in ${directory}`}. Do you want to overwrite ${existingFiles.length > 1 ? 'them' : 'it'}?`,
+      default: false,
+    });
+    if (!overwrite) {
+      const isNpx = getEnvString('npm_execpath')?.includes('npx');
+      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
+      logger.info(
+        chalk.red(
+          `Please run \`${runCommand}\` in a different directory or use \`${runCommand} <directory>\` to specify a new location.`,
+        ),
+      );
+      process.exit(1);
     }
-  }
-
-  if (filesToOverwrite.size === 0) {
-    logger.info(
-      chalk.red(
-        `No files will be written. Please rerun the command in a different directory or add a directory path to the command.`,
-      ),
-    );
-    process.exit(1);
   }
 
   // Rest of the onboarding flow
@@ -283,7 +279,6 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   if (interactive) {
     recordOnboardingStep('start');
 
-    console.clear();
     // Choose use case
     action = await rawlist({
       message: 'What would you like to do?',
@@ -496,8 +491,16 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     language,
   });
 
-  fs.writeFileSync(path.join(process.cwd(), directory, 'promptfooconfig.yaml'), config);
-  fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
+  // Write files if not skipped
+  for (const file of filesToCheck) {
+    if (existingFiles.includes(file)) {
+      const filePath = path.join(process.cwd(), directory, file);
+      fs.writeFileSync(filePath, file === 'promptfooconfig.yaml' ? config : DEFAULT_README);
+      logger.info(`⌛ Wrote ${file}`);
+    } else {
+      logger.info(`Skipped writing ${file}`);
+    }
+  }
 
   const isNpx = getEnvString('npm_execpath')?.includes('npx');
   const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
