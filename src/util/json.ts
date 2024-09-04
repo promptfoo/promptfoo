@@ -60,7 +60,7 @@ export function extractJsonObjects(str: string): object[] {
 
 export function extractFirstJsonObject<T>(str: string): T {
   const jsonObjects = extractJsonObjects(str);
-  invariant(jsonObjects.length < 1, `Expected a JSON object, but got ${str}`);
+  invariant(jsonObjects.length >= 1, `Expected a JSON object, but got ${str}`);
   return jsonObjects[0] as T;
 }
 
