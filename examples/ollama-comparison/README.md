@@ -1,4 +1,4 @@
-To get started, set your OPENAI_API_KEY environment variable and start Ollama.
+To get started, start Ollama.
 
 Next, change a few of the prompts in prompts.txt and edit promptfooconfig.yaml.
 
