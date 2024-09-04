@@ -371,7 +371,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      seed: this.config.seed || 0,
+      seed: this.config.seed,
       max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
       temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
       top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
@@ -466,7 +466,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       messages,
-      seed: this.config.seed || 0,
+      seed: this.config.seed,
       max_tokens:
         this.config.max_tokens ?? Number.parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature:
