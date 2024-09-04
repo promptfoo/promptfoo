@@ -36,7 +36,9 @@ export function extractJsonObjects(str: string): object[] {
   let closeBracket = str.indexOf('}', openBracket);
   // Iterate over the string until we find a valid JSON-like pattern
   // Iterate over all trailing } until the contents parse as json
-  while (openBracket !== -1) {
+  const MAX_ATTEMPTS = 10;
+  let openBracketAttempts = 0;
+  while (openBracket !== -1 && openBracketAttempts < MAX_ATTEMPTS) {
     const jsonStr = str.slice(openBracket, closeBracket + 1);
     try {
       jsonObjects.push(JSON.parse(jsonStr));
@@ -47,20 +49,27 @@ export function extractJsonObjects(str: string): object[] {
     } catch (err) {
       // Not a valid object, move on to the next closing bracket
       closeBracket = str.indexOf('}', closeBracket + 1);
-      while (closeBracket === -1) {
+      let closeBracketAttempts = 0;
+      while (closeBracket === -1 && closeBracketAttempts < MAX_ATTEMPTS) {
         // No closing brackets made a valid json object, so
         // start looking with the next opening bracket
         openBracket = str.indexOf('{', openBracket + 1);
         closeBracket = str.indexOf('}', openBracket);
+        closeBracketAttempts++;
+      }
+      if (closeBracketAttempts >= MAX_ATTEMPTS) {
+        // If we've reached the maximum number of attempts, break out of the loop
+        break;
       }
     }
+    openBracketAttempts++;
   }
   return jsonObjects;
 }
 
 export function extractFirstJsonObject<T>(str: string): T {
   const jsonObjects = extractJsonObjects(str);
-  invariant(jsonObjects.length >= 1, `Expected a JSON object, but got ${str}`);
+  invariant(jsonObjects.length >= 1, `Expected a JSON object, but got ${JSON.stringify(str)}`);
   return jsonObjects[0] as T;
 }
 
