@@ -68,20 +68,25 @@ async function fetchRemoteTestCases(
     config,
   });
   logger.debug(`Using remote redteam generation for ${key}:\n${body}`);
-  const { data } = await fetchWithCache(
-    REMOTE_GENERATION_URL,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+  try {
+    const { data } = await fetchWithCache(
+      REMOTE_GENERATION_URL,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body,
       },
-      body,
-    },
-    REQUEST_TIMEOUT_MS,
-  );
-  const ret = (data as { result: TestCase[] }).result;
-  logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
-  return ret;
+      REQUEST_TIMEOUT_MS,
+    );
+    const ret = (data as { result: TestCase[] }).result;
+    logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
+    return ret;
+  } catch (err) {
+    logger.error(`Error generating test cases for ${key}: ${err}`);
+    return [];
+  }
 }
 
 function createPluginFactory<T extends PluginConfig>(

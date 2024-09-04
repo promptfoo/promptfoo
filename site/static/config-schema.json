@@ -60,13 +60,19 @@
                         "env": {
                           "type": "object",
                           "properties": {
+                            "AI21_API_BASE_URL": {
+                              "type": "string"
+                            },
+                            "AI21_API_KEY": {
+                              "type": "string"
+                            },
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
-                            "BAM_API_KEY": {
+                            "AWS_BEDROCK_REGION": {
                               "type": "string"
                             },
-                            "BAM_API_HOST": {
+                            "AZURE_OPENAI_API_BASE_URL": {
                               "type": "string"
                             },
                             "AZURE_OPENAI_API_HOST": {
@@ -75,25 +81,52 @@
                             "AZURE_OPENAI_API_KEY": {
                               "type": "string"
                             },
-                            "AZURE_OPENAI_API_BASE_URL": {
-                              "type": "string"
-                            },
                             "AZURE_OPENAI_BASE_URL": {
                               "type": "string"
                             },
-                            "AWS_BEDROCK_REGION": {
+                            "BAM_API_HOST": {
+                              "type": "string"
+                            },
+                            "BAM_API_KEY": {
+                              "type": "string"
+                            },
+                            "CLOUDFLARE_ACCOUNT_ID": {
+                              "type": "string"
+                            },
+                            "CLOUDFLARE_API_KEY": {
                               "type": "string"
                             },
                             "COHERE_API_KEY": {
                               "type": "string"
                             },
-                            "OPENAI_API_KEY": {
+                            "GOOGLE_API_HOST": {
+                              "type": "string"
+                            },
+                            "GOOGLE_API_KEY": {
+                              "type": "string"
+                            },
+                            "GROQ_API_KEY": {
+                              "type": "string"
+                            },
+                            "LOCALAI_BASE_URL": {
+                              "type": "string"
+                            },
+                            "MISTRAL_API_BASE_URL": {
+                              "type": "string"
+                            },
+                            "MISTRAL_API_HOST": {
+                              "type": "string"
+                            },
+                            "MISTRAL_API_KEY": {
+                              "type": "string"
+                            },
+                            "OPENAI_API_BASE_URL": {
                               "type": "string"
                             },
                             "OPENAI_API_HOST": {
                               "type": "string"
                             },
-                            "OPENAI_API_BASE_URL": {
+                            "OPENAI_API_KEY": {
                               "type": "string"
                             },
                             "OPENAI_BASE_URL": {
@@ -102,55 +135,31 @@
                             "OPENAI_ORGANIZATION": {
                               "type": "string"
                             },
+                            "PALM_API_HOST": {
+                              "type": "string"
+                            },
+                            "PALM_API_KEY": {
+                              "type": "string"
+                            },
                             "REPLICATE_API_KEY": {
                               "type": "string"
                             },
                             "REPLICATE_API_TOKEN": {
                               "type": "string"
                             },
-                            "LOCALAI_BASE_URL": {
-                              "type": "string"
-                            },
-                            "MISTRAL_API_HOST": {
-                              "type": "string"
-                            },
-                            "MISTRAL_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "PALM_API_KEY": {
-                              "type": "string"
-                            },
-                            "PALM_API_HOST": {
-                              "type": "string"
-                            },
-                            "GOOGLE_API_KEY": {
-                              "type": "string"
-                            },
-                            "GOOGLE_API_HOST": {
+                            "VERTEX_API_HOST": {
                               "type": "string"
                             },
                             "VERTEX_API_KEY": {
                               "type": "string"
                             },
-                            "VERTEX_API_HOST": {
-                              "type": "string"
-                            },
                             "VERTEX_PROJECT_ID": {
-                              "type": "string"
-                            },
-                            "VERTEX_REGION": {
                               "type": "string"
                             },
                             "VERTEX_PUBLISHER": {
                               "type": "string"
                             },
-                            "MISTRAL_API_KEY": {
-                              "type": "string"
-                            },
-                            "CLOUDFLARE_API_KEY": {
-                              "type": "string"
-                            },
-                            "CLOUDFLARE_ACCOUNT_ID": {
+                            "VERTEX_REGION": {
                               "type": "string"
                             }
                           },

@@ -2,19 +2,13 @@ import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import type { TestCase } from '../../types';
-import { ATTACKER_MODEL, TEMPERATURE } from '../providers/constants';
+import { loadRedteamProvider } from '../providers/shared';
 
 const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
 export async function translate(text: string, lang: string): Promise<string> {
-  const redteamProvider = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
-    config: {
-      temperature: TEMPERATURE,
-      response_format: { type: 'json_object' },
-    },
-  });
+  const redteamProvider = await loadRedteamProvider({ jsonOnly: true });
 
   const result = await redteamProvider.callApi(
     dedent`Translate the <Text> below to language '${lang}'. Respond with JSON object containing {translation: string}.

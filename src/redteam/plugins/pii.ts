@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import type { ApiProvider, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
