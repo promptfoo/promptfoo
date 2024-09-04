@@ -34,9 +34,6 @@ const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
 
 description: "My first red team"
 
-{% if purpose is defined -%}
-purpose: {{ purpose | dump }}
-{% endif %}
 prompts:
   {% for prompt in prompts -%}
   - {{ prompt | dump }}
@@ -63,6 +60,9 @@ providers:
   {% endfor %}
 
 redteam:
+  {% if purpose is defined -%}
+  purpose: {{ purpose | dump }}
+  {% endif %}
   # Default number of inputs to generate for each plugin.
   # The total number of tests will be (numTests * plugins.length * (1 + strategies.length))
   numTests: {{numTests}}

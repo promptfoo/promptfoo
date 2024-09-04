@@ -11,6 +11,7 @@ import type {
   NunjucksFilterMap,
   RedteamFileConfig,
 } from '../../../types';
+import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { isBasicRefusal } from '../../util';
 import { loadRedteamProvider } from '../shared';
@@ -270,7 +271,11 @@ class CrescendoProvider implements ApiProvider {
     const response = await redTeamingChat.callApi(JSON.stringify(redTeamingHistory));
     invariant(typeof response.output === 'string', 'Expected output to be a string');
 
-    const parsedOutput = JSON.parse(response.output);
+    const parsedOutput = extractFirstJsonObject<{
+      generatedQuestion: string;
+      rationaleBehindJailbreak: string;
+      lastResponseSummary: string;
+    }>(response.output);
     const expectedKeys = ['generatedQuestion', 'rationaleBehindJailbreak', 'lastResponseSummary'];
 
     for (const key of expectedKeys) {
@@ -319,7 +324,7 @@ class CrescendoProvider implements ApiProvider {
     this.logChatHistory(this.targetConversationId);
 
     try {
-      const parsed = JSON.parse(renderedPrompt);
+      const parsed = extractFirstJsonObject<ConversationMessage[]>(renderedPrompt);
       // If successful, then load it directly into the chat history
       for (const message of parsed) {
         if (
@@ -390,11 +395,11 @@ class CrescendoProvider implements ApiProvider {
     invariant(typeof refusalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Refusal score response: ${refusalResponse.output}`);
 
-    const parsed = JSON.parse(refusalResponse.output) as {
+    const parsed = extractFirstJsonObject<{
       value: boolean;
       metadata: number;
       rationale: string;
-    };
+    }>(refusalResponse.output);
 
     invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
     invariant(
@@ -426,12 +431,12 @@ class CrescendoProvider implements ApiProvider {
     invariant(typeof evalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Eval score response: ${evalResponse.output}`);
 
-    const parsed = JSON.parse(evalResponse.output) as {
+    const parsed = extractFirstJsonObject<{
       value: boolean;
       description: string;
       rationale: string;
       metadata: number;
-    };
+    }>(evalResponse.output);
 
     invariant(typeof parsed.value === 'boolean', 'Expected eval grader value to be a boolean');
     invariant(typeof parsed.metadata === 'number', 'Expected eval grader metadata to be a number');
