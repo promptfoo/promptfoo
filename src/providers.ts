@@ -87,7 +87,7 @@ export async function loadApiProvider(
     basePath?: string;
     env?: EnvOverrides;
   } = {},
-): Promise {
+): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
     id: options.id,
@@ -417,7 +417,7 @@ export async function loadApiProviders(
     basePath?: string;
     env?: EnvOverrides;
   } = {},
-): Promise {
+): Promise<ApiProvider[]> {
   const { basePath } = options;
   const env = options.env || cliState.config?.env;
   if (typeof providerPaths === 'string') {
