@@ -58,15 +58,15 @@ You can specify your redteam configuration directly in `promptfooconfig.yaml`. S
 Then create adversarial test cases:
 
 ```sh
-npx promptfoo@latest redteam generate -w
+npx promptfoo@latest redteam generate
 ```
 
-The `-w` option overwrites the `promptfooconfig.yaml` file to include the newly generated test cases.
+This will create a file `redteam.yaml` with the test cases.
 
 Run the eval:
 
 ```
-npx promptfoo@latest eval
+npx promptfoo@latest eval -c redteam.yaml
 ```
 
 And view the results:
@@ -74,6 +74,8 @@ And view the results:
 ```sh
 npx promptfoo@latest view
 ```
+
+By default, this will open the eval logs. Click "Vulnerability Report" in the top right corner to see the report view.
 
 Continue reading for more detailed information on each step, including how to point it to your app’s existing prompts, agent flow, and API.
 
