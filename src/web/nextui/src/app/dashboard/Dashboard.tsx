@@ -21,6 +21,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  Legend,
 } from 'recharts';
 import { Severity, riskCategorySeverityMap } from '../report/constants';
 import CategoryBreakdown from './CategoryBreakdown';
@@ -421,7 +422,7 @@ export default function Dashboard() {
                                     maximumFractionDigits: 1,
                                   }) + '%'
                                 : value,
-                              'Attack Success Rate:',
+                              'Attack Success Rate',
                             ];
                           } else if (name === 'successfulAttacks') {
                             return [value, 'Successful Attacks:'];
@@ -463,7 +464,7 @@ export default function Dashboard() {
                   </ResponsiveContainer>
                 </Paper>
               </Grid>
-              {/* Overall Attack Success Rate */}
+              {/* Attack Severity Breakdown */}
               <Grid item xs={12} md={5} lg={4}>
                 <Paper
                   elevation={3}
@@ -476,40 +477,52 @@ export default function Dashboard() {
                   }}
                 >
                   <Typography variant="h6" gutterBottom>
-                    Attack Efficacy
+                    Issues by Severity
                   </Typography>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={overallAttackSuccessRateData}
-                        innerRadius={60}
-                        outerRadius={90}
-                        fill="#f44336"
-                        paddingAngle={5}
-                        dataKey="value"
-                        label={({ name, percent }) =>
-                          `${name} ${percent.toLocaleString(undefined, {
-                            style: 'percent',
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 0,
-                          })}`
-                        }
-                        labelLine={false}
+                        data={[
+                          { severity: 'Critical', count: severityCounts[Severity.Critical] },
+                          { severity: 'High', count: severityCounts[Severity.High] },
+                          { severity: 'Medium', count: severityCounts[Severity.Medium] },
+                          { severity: 'Low', count: severityCounts[Severity.Low] },
+                        ].filter((item) => item.count > 0)} // Only include non-zero counts
+                        dataKey="count"
+                        nameKey="severity"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={4}
                       >
-                        {overallAttackSuccessRateData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={index === 0 ? '#f44336' : '#4caf50'} />
+                        {[
+                          { severity: 'Critical', color: '#f44336' },
+                          { severity: 'High', color: '#4caf50' },
+                          { severity: 'Medium', color: '#ff9800' },
+                          { severity: 'Low', color: '#f44336' },
+                        ].map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value: number | string) =>
-                          typeof value === 'number'
-                            ? value.toLocaleString(undefined, {
-                                style: 'percent',
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
-                              })
-                            : value
-                        }
+                        formatter={(value, name) => [`${value} attack types`, `Severity ${name}`]}
+                        contentStyle={{
+                          backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                          backdropFilter: 'blur(4px)',
+                          border: 'none',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                        }}
+                      />
+                      <Legend
+                        verticalAlign="bottom"
+                        height={36}
+                        iconType="circle"
+                        iconSize={10}
+                        formatter={(value) => (
+                          <span style={{ color: '#666', fontSize: '12px' }}>{value}</span>
+                        )}
                       />
                     </PieChart>
                   </ResponsiveContainer>
