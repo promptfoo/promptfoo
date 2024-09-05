@@ -16,27 +16,16 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts';
-import {
   Severity,
   categoryAliases,
   riskCategories,
   riskCategorySeverityMap,
 } from '../report/constants';
 import CategoryBreakdown from './CategoryBreakdown';
+import DashboardCharts from './DashboardCharts';
 import EmergingRisks from './EmergingRisks';
 import HighestSeverityCategories from './HighestSeverityCategories';
+import IssuesBySeverity from './IssuesBySeverity';
 import MetricCard from './MetricCard';
 import RecentEvals from './RecentEvals';
 import Sidebar from './Sidebar';
@@ -490,216 +479,18 @@ export default function Dashboard() {
               </Grid>
               */}
 
-              {/* Attack Success Rate Over Time Chart */}
+              {/* Dashboard Charts */}
               <Grid item xs={12} md={7} lg={8}>
-                <Paper
-                  elevation={3}
-                  sx={{
-                    p: 3,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    height: 350,
-                    borderRadius: 2,
-                  }}
-                >
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      mb: 2,
-                    }}
-                  >
-                    <Typography variant="h6">
-                      {activeChart === 'attackSuccess'
-                        ? 'Attack Success Over Time'
-                        : 'Issues Resolved Over Time'}
-                    </Typography>
-                    <ToggleButtonGroup
-                      value={activeChart}
-                      exclusive
-                      onChange={(event, newValue) => {
-                        if (newValue !== null) {
-                          setActiveChart(newValue);
-                        }
-                      }}
-                      size="small"
-                    >
-                      <ToggleButton value="attackSuccess">Attack Success</ToggleButton>
-                      <ToggleButton value="issuesResolved">Issues Resolved</ToggleButton>
-                    </ToggleButtonGroup>
-                  </Box>
-                  <ResponsiveContainer width="100%" height="100%">
-                    {activeChart === 'attackSuccess' ? (
-                      <AreaChart data={attackSuccessRateData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                        <YAxis
-                          yAxisId="left"
-                          width={40}
-                          domain={[0, 100]}
-                          tickFormatter={(value) => `${value}%`}
-                          tick={{ fontSize: 12 }}
-                        />
-                        <YAxis
-                          yAxisId="right"
-                          orientation="right"
-                          width={40}
-                          tick={{ fontSize: 12 }}
-                        />
-                        <Tooltip
-                          formatter={(value: number | string, name: string) => {
-                            if (name === 'attackSuccessRate') {
-                              return [
-                                typeof value === 'number'
-                                  ? value.toLocaleString(undefined, {
-                                      minimumFractionDigits: 1,
-                                      maximumFractionDigits: 1,
-                                    }) + '%'
-                                  : value,
-                                'Attack Success Rate',
-                              ];
-                            } else if (name === 'successfulAttacks') {
-                              return [value, 'Successful Attacks:'];
-                            }
-                            return [value, name];
-                          }}
-                        />
-                        <defs>
-                          <linearGradient
-                            id="attackSuccessRateGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1"
-                          >
-                            <stop offset="5%" stopColor="#f44336" stopOpacity={0.8} />
-                            <stop offset="95%" stopColor="#f44336" stopOpacity={0.1} />
-                          </linearGradient>
-                        </defs>
-                        <Area
-                          yAxisId="left"
-                          type="monotone"
-                          dataKey="attackSuccessRate"
-                          stroke="#f44336"
-                          strokeWidth={2}
-                          fillOpacity={1}
-                          fill="url(#attackSuccessRateGradient)"
-                          dot={false}
-                          activeDot={{ r: 6, fill: '#d32f2f', stroke: '#fff', strokeWidth: 2 }}
-                        />
-                        {/* 
-                      <Area
-                        yAxisId="right"
-                        type="monotone"
-                        dataKey="successfulAttacks"
-                        stroke="#2196f3"
-                        strokeWidth={2}
-                        fill="#2196f3"
-                        fillOpacity={0.3}
-                        dot={false}
-                        activeDot={{ r: 6, fill: '#1976d2', stroke: '#fff', strokeWidth: 2 }}
-                      />
-                      */}
-                      </AreaChart>
-                    ) : (
-                      <AreaChart data={issuesResolvedData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                        <YAxis width={40} tick={{ fontSize: 12 }} />
-                        <Tooltip formatter={(value: number) => [value, 'Issues Resolved']} />
-                        <defs>
-                          <linearGradient id="issuesResolvedGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#4caf50" stopOpacity={0.8} />
-                            <stop offset="95%" stopColor="#4caf50" stopOpacity={0.1} />
-                          </linearGradient>
-                        </defs>
-                        <Area
-                          type="monotone"
-                          dataKey="resolved"
-                          stroke="#4caf50"
-                          strokeWidth={2}
-                          fillOpacity={1}
-                          fill="url(#issuesResolvedGradient)"
-                          dot={false}
-                          activeDot={{ r: 6, fill: '#2e7d32', stroke: '#fff', strokeWidth: 2 }}
-                        />
-                      </AreaChart>
-                    )}
-                  </ResponsiveContainer>
-                </Paper>
+                <DashboardCharts
+                  attackSuccessRateData={attackSuccessRateData}
+                  issuesResolvedData={issuesResolvedData}
+                  activeChart={activeChart}
+                  setActiveChart={setActiveChart}
+                />
               </Grid>
               {/* Attack Severity Breakdown */}
               <Grid item xs={12} md={5} lg={4}>
-                <Paper
-                  elevation={3}
-                  sx={{
-                    p: 3,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    height: 350,
-                    borderRadius: 2,
-                  }}
-                >
-                  <Typography variant="h6" gutterBottom>
-                    Issues by Severity
-                  </Typography>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { severity: 'Critical', count: severityCounts[Severity.Critical] },
-                          { severity: 'High', count: severityCounts[Severity.High] },
-                          { severity: 'Medium', count: severityCounts[Severity.Medium] },
-                          { severity: 'Low', count: severityCounts[Severity.Low] },
-                        ].filter((item) => item.count > 0)} // Only include non-zero counts
-                        dataKey="count"
-                        nameKey="severity"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={4}
-                      >
-                        {[
-                          { severity: 'Critical', color: '#f44336' },
-                          { severity: 'High', color: '#4caf50' },
-                          { severity: 'Medium', color: '#ff9800' },
-                          { severity: 'Low', color: '#f44336' },
-                        ].map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value, name) => [`${value} attack types`, `Severity ${name}`]}
-                        contentStyle={{
-                          backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                          backdropFilter: 'blur(4px)',
-                          border: 'none',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                        }}
-                      />
-                      <Legend
-                        verticalAlign="bottom"
-                        height={36}
-                        iconType="circle"
-                        iconSize={10}
-                        formatter={(value) => (
-                          <span style={{ color: '#666', fontSize: '12px' }}>{value}</span>
-                        )}
-                      />
-                      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                        <tspan x="50%" dy="-1em" fontSize="24" fontWeight="bold">
-                          {totalIssues}
-                        </tspan>
-                        <tspan x="50%" dy="1.2em" fontSize="14">
-                          total
-                        </tspan>
-                      </text>
-                    </PieChart>
-                  </ResponsiveContainer>
-                </Paper>
+                <IssuesBySeverity severityCounts={severityCounts} totalIssues={totalIssues} />
               </Grid>
               <Grid item xs={12} md={6}>
                 <Paper
