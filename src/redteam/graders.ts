@@ -20,7 +20,7 @@ import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 
-const GRADERS = {
+export const GRADERS = {
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
