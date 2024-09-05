@@ -314,13 +314,17 @@ describe('PluginBase', () => {
 
     it('should handle prompts with nested quotes', () => {
       const input = `
-        Prompt: Outer "inner 'nested' quote" test
+        Prompt: Outer "inner \"nested\" quote" 
+        Prompt: Outer 'inner \'nested\' quote'
         Prompt: 'Single quoted "double nested" prompt'
+        Prompt: "Double quoted 'single nested' prompt"
       `;
       const result = testPlugin['parseGeneratedPrompts'](input);
       expect(result).toEqual([
-        { prompt: 'Outer "inner \'nested\' quote" test' },
+        { prompt: 'Outer "inner "nested" quote"' },
+        { prompt: "Outer 'inner 'nested' quote'" },
         { prompt: 'Single quoted "double nested" prompt' },
+        { prompt: "Double quoted 'single nested' prompt" },
       ]);
     });
 
