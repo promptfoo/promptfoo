@@ -1,20 +1,8 @@
-let apiBaseUrl: string | undefined;
-let fetchPromise: Promise<string | undefined> | undefined;
+export function getApiBaseUrl(): string {
+  return process.env.PROMPTFOO_REMOTE_API_BASE_URL || 'http://localhost:15500';
+}
 
-export async function getApiBaseUrl(): Promise<string> {
-  if (!apiBaseUrl) {
-    if (!fetchPromise) {
-      fetchPromise = fetch('/api/config')
-        .then((response) => response.json())
-        .then((config) => {
-          apiBaseUrl = config.apiBaseUrl;
-          return apiBaseUrl;
-        });
-    }
-    await fetchPromise;
-  }
-  if (apiBaseUrl === undefined) {
-    throw new Error('API base URL is undefined');
-  }
-  return apiBaseUrl;
+export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
+  const apiBaseUrl = getApiBaseUrl();
+  return fetch(`${apiBaseUrl}/api${path}`, options);
 }

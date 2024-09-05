@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore as useMainStore } from '@/state/evalConfig';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
@@ -174,7 +174,7 @@ export default function ResultsView({
   const handleComparisonEvalSelected = async (compareEvalId: string) => {
     setAnchorEl(null);
     try {
-      const response = await fetch(`${await getApiBaseUrl()}/api/results/${compareEvalId}`, {
+      const response = await callApi(`/results/${compareEvalId}`, {
         cache: 'no-store',
       });
       const body = await response.json();
@@ -302,7 +302,7 @@ export default function ResultsView({
     if (newDescription !== null && newDescription !== config.description) {
       const newConfig = { ...config, description: newDescription };
       try {
-        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${evalId}`, {
+        const response = await callApi(`/api/eval/${evalId}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -322,7 +322,7 @@ export default function ResultsView({
   const handleDeleteEvalClick = async () => {
     if (window.confirm('Are you sure you want to delete this evaluation?')) {
       try {
-        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${evalId}`, {
+        const response = await callApi(`/eval/${evalId}`, {
           method: 'DELETE',
         });
         if (!response.ok) {

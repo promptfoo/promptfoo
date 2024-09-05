@@ -9,6 +9,7 @@ console.log('**************************************************');
 const nextConfig = {
   output: outputType,
   trailingSlash: true,
+  customServer: true,
   webpack: (config, { isServer }) => {
     config.externals.push({
       'utf-8-validate': 'commonjs utf-8-validate',

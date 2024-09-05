@@ -5,7 +5,7 @@ import type {
   SharedResults,
   UnifiedConfig,
 } from '@/../../../types';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -35,10 +35,9 @@ export default async function Page({ params }: { params: { id: string } }) {
   const decodedId = decodeURIComponent(params.id);
   if (decodedId.startsWith('local:')) {
     // Load local file and list of recent files in parallel
-    const apiBaseUrl = await getApiBaseUrl();
     const [response, response2] = await Promise.all([
-      fetch(`${apiBaseUrl}/api/results/${decodedId.slice(6)}`),
-      fetch(`${apiBaseUrl}/api/results`),
+      callApi(`/results/${decodedId.slice(6)}`),
+      callApi(`/api/results`),
     ]);
 
     if (!response.ok) {

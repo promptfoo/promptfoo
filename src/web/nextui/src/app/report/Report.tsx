@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@/api';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
@@ -93,7 +93,7 @@ const App: React.FC = () => {
 
   React.useEffect(() => {
     const fetchEvalById = async (id: string) => {
-      const resp = await fetch(`${await getApiBaseUrl()}/api/results/${id}`, {
+      const resp = await callApi(`/results/${id}`, {
         cache: 'no-store',
       });
       const body = (await resp.json()) as SharedResults;

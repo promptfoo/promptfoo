@@ -49,7 +49,7 @@ export enum BrowserBehavior {
   SKIP = 2,
 }
 
-export async function startServer(
+export function startServer(
   port = 15500,
   apiBaseUrl = '',
   browserBehavior = BrowserBehavior.ASK,
@@ -71,7 +71,9 @@ export async function startServer(
     },
   });
 
-  await migrateResultsFromFileSystemToDatabase();
+  migrateResultsFromFileSystemToDatabase().then(() => {
+    logger.info('Migrated results from file system to database');
+  });
 
   const watchFilePath = getDbSignalPath();
   const watcher = debounce(async (curr: Stats, prev: Stats) => {
