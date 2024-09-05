@@ -10,7 +10,6 @@ import type {
   CallApiOptionsParams,
   EnvOverrides,
 } from '../types';
-import { OpenAiChatCompletionProvider, OpenAiCompletionOptions } from './openai';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {

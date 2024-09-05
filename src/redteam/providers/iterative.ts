@@ -1,7 +1,6 @@
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
   type ApiProvider,
