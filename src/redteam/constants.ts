@@ -102,6 +102,7 @@ export const ADDITIONAL_PLUGINS = [
   'shell-injection',
   'sql-injection',
   'indirect-prompt-injection',
+  'ascii-smuggling',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -400,4 +401,5 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
   'indirect-prompt-injection':
     'Tests if the prompt is vulnerable to instructions injected into variables in the prompt',
+  'ascii-smuggling': 'Tests for hidden malicious instructions using Unicode tag characters',
 };
