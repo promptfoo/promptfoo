@@ -4,10 +4,13 @@ import React, { useEffect, useState } from 'react';
 import type { StandaloneEval } from '@/../../../util';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import {
@@ -23,7 +26,12 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { Severity, riskCategorySeverityMap } from '../report/constants';
+import {
+  Severity,
+  categoryAliases,
+  riskCategories,
+  riskCategorySeverityMap,
+} from '../report/constants';
 import CategoryBreakdown from './CategoryBreakdown';
 import EmergingRisks from './EmergingRisks';
 import MetricCard from './MetricCard';
@@ -245,10 +253,19 @@ export default function Dashboard() {
       [Severity.Low]: 0,
     };
 
-    Object.values(categoryData).forEach((data) => {
-      if (data.currentFailCount > 0) {
-        severityCounts[data.severity]++;
-      }
+    evals.forEach((eval_) => {
+      Object.entries(riskCategories).forEach(([category, subCategories]) => {
+        subCategories.forEach((subCategory) => {
+          const scoreName = categoryAliases[subCategory as keyof typeof categoryAliases];
+          if (eval_.metrics?.namedScores && scoreName in eval_.metrics.namedScores) {
+            const score = eval_.metrics.namedScores[scoreName];
+            if (score <= 0) {
+              const severity = riskCategorySeverityMap[subCategory] || Severity.Low;
+              severityCounts[severity]++;
+            }
+          }
+        });
+      });
     });
 
     const totalIssues = Object.values(severityCounts).reduce((a, b) => a + b, 0);
@@ -284,6 +301,12 @@ export default function Dashboard() {
         }}
       >
         <Container maxWidth={false} disableGutters sx={{ mt: 2, mb: 4, px: 4 }}>
+          {/*
+          <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 'bold' }}>
+            LLM Risk - Continuous Monitoring
+          </Typography>
+          */}
+
           {/*
           <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 'bold' }}>
             LLM Risk - Continuous Monitoring
@@ -330,15 +353,54 @@ export default function Dashboard() {
             </Box>
           ) : (
             <Grid container spacing={3}>
-              {/* Metric cards */}
+              {/* Severity Cards */}
+              <Grid item xs={12}>
+                <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
+                  {[Severity.Critical, Severity.High, Severity.Medium, Severity.Low].map(
+                    (severity) => (
+                      <Box key={severity} flex={1}>
+                        <Card
+                          className={`severity-card card-${severity.toLowerCase()}`}
+                          sx={{
+                            transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+                            '&:hover': {
+                              transform: 'translateY(-5px)',
+                              boxShadow: '0 8px 16px rgba(0, 0, 0, 0.1)',
+                              '[data-theme="dark"] &': {
+                                boxShadow: 'none',
+                              },
+                            },
+                            borderLeft: '5px solid',
+                            borderLeftColor: {
+                              critical: '#ff1744',
+                              high: '#ff9100',
+                              medium: '#ffc400',
+                              low: '#00e676',
+                            }[severity.toLowerCase()],
+                          }}
+                        >
+                          <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                              {severity}
+                            </Typography>
+                            <Typography variant="h4" color="text.primary">
+                              {severityCounts[severity]}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              issues
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      </Box>
+                    ),
+                  )}
+                </Stack>
+              </Grid>
+
               <Grid item xs={12} md={4}>
                 <MetricCard
                   title="Attack Success Rate"
-                  value={`${latestAttackSuccessRate.toLocaleString(undefined, {
-                    style: 'percent',
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1,
-                  })}`}
+                  value={`${(latestAttackSuccessRate * 100).toFixed(1)}%`}
                   trend={attackSuccessRateTrend.direction}
                   sentiment={attackSuccessRateTrend.sentiment}
                   trendValue={`${attackSuccessRateTrend.value.toLocaleString(undefined, {
@@ -346,7 +408,7 @@ export default function Dashboard() {
                     minimumFractionDigits: 1,
                     maximumFractionDigits: 1,
                   })}`}
-                  subtitle={`As of ${formattedLatestEvalDate}`}
+                  subtitle={`Updated ${formattedLatestEvalDate}`}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
