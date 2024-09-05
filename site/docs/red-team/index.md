@@ -35,15 +35,28 @@ Once a process is set up, it can be applied in two primary ways:
 - **One-off runs**: Generate a comprehensive report that allows you to examine vulnerabilities and suggested mitigations.
 - **CI/CD integration**: Continuously monitor for vulnerabilities in your deployment pipeline, ensuring ongoing safety as your application evolves.
 
-Promptfoo is an open-source tool for red teaming LLMs that supports all the above.
-
 By systematically probing the LLM application, the end result is a report that quantifies the risk of misuse and provides suggestions for mitigation:
 
 ![llm red team report](/img/riskreport-1@2x.png)
 
+### White box vs black box testing
+
+White box testing of LLMs involves having full access to the model's architecture, training data, and internal weights. This enables highly effective attack algorithms like [greedy coordinate descent](https://github.com/llm-attacks/llm-attacks) and [AutoDAN](https://arxiv.org/abs/2310.04451).
+
+The downside of these white box attacks is that they tend to be slow and are adapted to specific characteristics of the model. Additionally, most developers are not building with models that are exposed via their weights, so this approach is not practical for most use cases.
+
+On the other hand, black box testing treats the LLM as a closed system, where only inputs and outputs are observable. This approach simulates real-world scenarios where attackers don't have insider knowledge.
+
+Both methods have their merits in red teaming:
+
+- White box testing can uncover deeper, structural vulnerabilities.
+- Black box testing is more representative of real-world attack scenarios and can reveal unexpected behaviors.
+
+For most developers and AppSec teams, black box testing is the most practical approach, especially because more easily incorporates the real world infra of RAGs and agents.
+
 ### Examples
 
-Promptfoo can generate a wide range of adversarial inputs to test various vulnerabilities:
+Promptfoo is an open-source tool for red teaming LLMs that supports all the above. It can generate a wide range of adversarial inputs to test various vulnerabilities:
 
 - [Harmful content](/docs/red-team/plugins/harmful/#examples): Examples of hate speech, offensive content, and other harmful outputs triggered in leading AI models.
 - [Broken object-level authorization (BOLA)](/docs/red-team/plugins/bola/#example-test-cases): Test cases for unauthorized access to resources belonging to other users.
