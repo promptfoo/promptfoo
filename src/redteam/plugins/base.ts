@@ -9,7 +9,6 @@ import { maybeLoadFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { getNunjucksEngine } from '../../util/templates';
 import { loadRedteamProvider } from '../providers/shared';
-import { removePrefix } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -120,13 +119,29 @@ export abstract class PluginBase {
    * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
    */
   protected parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
-    return generatedPrompts
-      .split('\n')
-      .filter((line: string) => line.includes('Prompt:'))
-      .map((line: string) => {
-        line = removePrefix(line, 'Prompt');
-        return { prompt: line };
-      });
+    const parsePrompt = (line: string): string | null => {
+      const match = line.trim().match(/^prompt:\s*(.*)/i);
+      if (match) {
+        let prompt = match[1];
+        // Handle numbered lists with various formats
+        prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
+        // Handle quotes
+        prompt = prompt.replace(/^["'](.*)["']$/, '$1');
+        // Handle nested quotes
+        prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
+        prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
+        return prompt.trim();
+      }
+      return null;
+    };
+
+    // Split by newline or semicolon
+    const promptLines = generatedPrompts.split(/[\n;]+/);
+
+    return promptLines
+      .map(parsePrompt)
+      .filter((prompt): prompt is string => prompt !== null)
+      .map((prompt) => ({ prompt }));
   }
 
   private appendModifiers(template: string): string {
@@ -134,7 +149,7 @@ export abstract class PluginBase {
     const modifiers: Record<string, string> =
       (this.config.modifiers as Record<string, string>) ?? {};
 
-    // Right now, only preconfigured modifier is language
+    // Right now, only pre-configured modifier is language
     if (this.config.language) {
       invariant(typeof this.config.language === 'string', 'language must be a string');
       modifiers.language = this.config.language;
