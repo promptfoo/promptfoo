@@ -75,7 +75,7 @@ export function processCategoryData(evals: StandaloneEval[]): Record<string, Cat
       const historicalTotalCount = historicalEvals.length;
       const historicalFailCount = historicalTotalCount - historicalPassCount;
 
-      const severity = riskCategorySeverityMap[scoreName] || Severity.Low;
+      const severity = riskCategorySeverityMap[subCategory] || Severity.Low;
 
       // Calculate historical change
       const historicalChange =
