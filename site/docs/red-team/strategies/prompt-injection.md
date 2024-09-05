@@ -18,7 +18,8 @@ By default, it will randomly select a prompt injection from a list of hundreds. 
 ```yaml
 strategies:
   - id: prompt-injection
-    sample: 10
+    config:
+      sample: 10
 ```
 
 Note that this has a multiplicative effect on the number of tests run! It means that for each adversarial input, 10 prompt injections will be tested.
@@ -28,8 +29,9 @@ This strategy also supports a `harmfulOnly` option, which will limit prompt inje
 ```yaml
 strategies:
   - id: prompt-injection
-    sample: 5
-    harmfulOnly: true
+    config:
+      sample: 5
+      harmfulOnly: true
 ```
 
 ## Example Injections
