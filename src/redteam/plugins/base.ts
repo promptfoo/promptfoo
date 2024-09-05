@@ -125,6 +125,12 @@ export abstract class PluginBase {
       .filter((line: string) => line.includes('Prompt:'))
       .map((line: string) => {
         line = removePrefix(line, 'Prompt');
+        line = line.trim();
+        if (line.startsWith('"') && line.endsWith('"')) {
+          line = line.slice(1, -1);
+        }
+        // Remove numbered results
+        line = line.replace(/^\d+\.\s*/, '');
         return { prompt: line };
       });
   }
