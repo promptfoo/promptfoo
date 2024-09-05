@@ -132,9 +132,9 @@ const redteam = {
     extractEntities,
     extractSystemPurpose,
   },
+  Graders: GRADERS,
   Plugins,
   Strategies,
-  Graders: GRADERS,
 };
 
 export { assertions, cache, evaluate, providers, redteam };
