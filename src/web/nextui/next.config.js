@@ -34,6 +34,11 @@ const nextConfig = {
     NEXT_PUBLIC_SUPABASE_URL:
       process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.promptfoo.dev',
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'abc123',
+    NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL:
+      process.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL ||
+      process.env.NODE_ENV === 'development'
+        ? `http://localhost:${process.env.PORT || 15500}`
+        : '',
   },
 };
 
