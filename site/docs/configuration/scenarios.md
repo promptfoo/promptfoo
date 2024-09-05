@@ -82,6 +82,15 @@ Here is the structure of a `Scenario`:
 | config      | `Partial<TestCase>[]` | Yes      | An array of variable sets. Each set will be run through the tests. |
 | tests       | `TestCase[]`          | Yes      | The tests to be run on each set of variables.                      |
 
+Scenarios can also be loaded from external files. To reference an external file, use the `file://` prefix:
+
+```yaml
+scenarios:
+  - file://path/to/your/scenario.yaml
+```
+
+The external file should follow the same structure as inline scenarios.
+
 This functionality allows you to easily run a wide range of tests without having to manually create each one. It also keeps your configuration file cleaner and easier to read.
 
 [1]: https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-translations-scenarios
