@@ -12,6 +12,8 @@ import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import {
   AreaChart,
@@ -65,6 +67,12 @@ export default function Dashboard() {
   const [overallAttackSuccessRateData, setOverallAttackSuccessRateData] = useState<
     OverallAttackSuccessRateDataPoint[]
   >([]);
+  const [issuesResolvedData, setIssuesResolvedData] = useState<
+    { date: string; resolved: number }[]
+  >([]);
+  const [activeChart, setActiveChart] = useState<'attackSuccess' | 'issuesResolved'>(
+    'attackSuccess',
+  );
 
   const fetchEvals = async () => {
     setIsLoading(true);
@@ -125,6 +133,43 @@ export default function Dashboard() {
       { name: 'Succeeded', value: overallAttackSuccessRate },
       { name: 'Defended', value: 1 - overallAttackSuccessRate },
     ]);
+
+    // Calculate issues resolved over time
+    const calculateTotalIssues = (eval_: StandaloneEval) => {
+      let total = 0;
+      Object.entries(riskCategories).forEach(([category, subCategories]) => {
+        subCategories.forEach((subCategory) => {
+          const scoreName = categoryAliases[subCategory as keyof typeof categoryAliases];
+          if (eval_.metrics?.namedScores && scoreName in eval_.metrics.namedScores) {
+            const score = eval_.metrics.namedScores[scoreName];
+            if (score <= 0) {
+              total++;
+            }
+          }
+        });
+      });
+      return total;
+    };
+    const issuesResolved = evals
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .reduce(
+        (acc, eval_, index) => {
+          const date = new Date(eval_.createdAt).toLocaleDateString();
+          const previousIssues = index > 0 ? calculateTotalIssues(evals[index - 1]) : 0;
+          const currentIssues = calculateTotalIssues(eval_);
+          const resolved = Math.max(0, previousIssues - currentIssues); // Ensure we don't have negative resolutions
+
+          if (acc.length > 0 && acc[acc.length - 1].date === date) {
+            acc[acc.length - 1].resolved += resolved;
+          } else {
+            acc.push({ date, resolved });
+          }
+          return acc;
+        },
+        [] as { date: string; resolved: number }[],
+      );
+
+    setIssuesResolvedData(issuesResolved);
   }, [evals]);
 
   const totalProbes = evals.reduce(
@@ -457,62 +502,93 @@ export default function Dashboard() {
                     borderRadius: 2,
                   }}
                 >
-                  <Typography variant="h6" mb={4}>
-                    Attack Success Over Time
-                  </Typography>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      mb: 2,
+                    }}
+                  >
+                    <Typography variant="h6">
+                      {activeChart === 'attackSuccess'
+                        ? 'Attack Success Over Time'
+                        : 'Issues Resolved Over Time'}
+                    </Typography>
+                    <ToggleButtonGroup
+                      value={activeChart}
+                      exclusive
+                      onChange={(event, newValue) => {
+                        if (newValue !== null) {
+                          setActiveChart(newValue);
+                        }
+                      }}
+                      size="small"
+                    >
+                      <ToggleButton value="attackSuccess">Attack Success</ToggleButton>
+                      <ToggleButton value="issuesResolved">Issues Resolved</ToggleButton>
+                    </ToggleButtonGroup>
+                  </Box>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={attackSuccessRateData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                      <YAxis
-                        yAxisId="left"
-                        width={40}
-                        domain={[0, 100]}
-                        tickFormatter={(value) => `${value}%`}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis
-                        yAxisId="right"
-                        orientation="right"
-                        width={40}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <Tooltip
-                        formatter={(value: number | string, name: string) => {
-                          if (name === 'attackSuccessRate') {
-                            return [
-                              typeof value === 'number'
-                                ? value.toLocaleString(undefined, {
-                                    minimumFractionDigits: 1,
-                                    maximumFractionDigits: 1,
-                                  }) + '%'
-                                : value,
-                              'Attack Success Rate',
-                            ];
-                          } else if (name === 'successfulAttacks') {
-                            return [value, 'Successful Attacks:'];
-                          }
-                          return [value, name];
-                        }}
-                      />
-                      <defs>
-                        <linearGradient id="attackSuccessRateGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f44336" stopOpacity={0.8} />
-                          <stop offset="95%" stopColor="#f44336" stopOpacity={0.1} />
-                        </linearGradient>
-                      </defs>
-                      <Area
-                        yAxisId="left"
-                        type="monotone"
-                        dataKey="attackSuccessRate"
-                        stroke="#f44336"
-                        strokeWidth={2}
-                        fillOpacity={1}
-                        fill="url(#attackSuccessRateGradient)"
-                        dot={false}
-                        activeDot={{ r: 6, fill: '#d32f2f', stroke: '#fff', strokeWidth: 2 }}
-                      />
-                      {/* 
+                    {activeChart === 'attackSuccess' ? (
+                      <AreaChart data={attackSuccessRateData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                        <YAxis
+                          yAxisId="left"
+                          width={40}
+                          domain={[0, 100]}
+                          tickFormatter={(value) => `${value}%`}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis
+                          yAxisId="right"
+                          orientation="right"
+                          width={40}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <Tooltip
+                          formatter={(value: number | string, name: string) => {
+                            if (name === 'attackSuccessRate') {
+                              return [
+                                typeof value === 'number'
+                                  ? value.toLocaleString(undefined, {
+                                      minimumFractionDigits: 1,
+                                      maximumFractionDigits: 1,
+                                    }) + '%'
+                                  : value,
+                                'Attack Success Rate',
+                              ];
+                            } else if (name === 'successfulAttacks') {
+                              return [value, 'Successful Attacks:'];
+                            }
+                            return [value, name];
+                          }}
+                        />
+                        <defs>
+                          <linearGradient
+                            id="attackSuccessRateGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop offset="5%" stopColor="#f44336" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#f44336" stopOpacity={0.1} />
+                          </linearGradient>
+                        </defs>
+                        <Area
+                          yAxisId="left"
+                          type="monotone"
+                          dataKey="attackSuccessRate"
+                          stroke="#f44336"
+                          strokeWidth={2}
+                          fillOpacity={1}
+                          fill="url(#attackSuccessRateGradient)"
+                          dot={false}
+                          activeDot={{ r: 6, fill: '#d32f2f', stroke: '#fff', strokeWidth: 2 }}
+                        />
+                        {/* 
                       <Area
                         yAxisId="right"
                         type="monotone"
@@ -525,7 +601,31 @@ export default function Dashboard() {
                         activeDot={{ r: 6, fill: '#1976d2', stroke: '#fff', strokeWidth: 2 }}
                       />
                       */}
-                    </AreaChart>
+                      </AreaChart>
+                    ) : (
+                      <AreaChart data={issuesResolvedData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                        <YAxis width={40} tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(value: number) => [value, 'Issues Resolved']} />
+                        <defs>
+                          <linearGradient id="issuesResolvedGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#4caf50" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#4caf50" stopOpacity={0.1} />
+                          </linearGradient>
+                        </defs>
+                        <Area
+                          type="monotone"
+                          dataKey="resolved"
+                          stroke="#4caf50"
+                          strokeWidth={2}
+                          fillOpacity={1}
+                          fill="url(#issuesResolvedGradient)"
+                          dot={false}
+                          activeDot={{ r: 6, fill: '#2e7d32', stroke: '#fff', strokeWidth: 2 }}
+                        />
+                      </AreaChart>
+                    )}
                   </ResponsiveContainer>
                 </Paper>
               </Grid>
