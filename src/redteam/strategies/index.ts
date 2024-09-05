@@ -31,9 +31,9 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'prompt-injection',
-    action: async (testCases, injectVar) => {
+    action: async (testCases, injectVar, config) => {
       logger.debug('Adding prompt injections to all test cases');
-      const newTestCases = addInjections(testCases, injectVar);
+      const newTestCases = await addInjections(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
       return newTestCases;
     },
