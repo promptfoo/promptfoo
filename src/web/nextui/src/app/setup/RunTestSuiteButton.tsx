@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { callApi } from '@/api';
-import { NEXTJS_BASE_URL, USE_SUPABASE } from '@/constants';
+import { USE_SUPABASE } from '@/constants';
 import { useStore } from '@/state/evalConfig';
 import { Button, CircularProgress } from '@mui/material';
 import { useRouter } from 'next/navigation';

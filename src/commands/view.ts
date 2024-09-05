@@ -1,8 +1,8 @@
 import type { Command } from 'commander';
+import { BrowserBehavior, startServer } from '../server/server';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 import { setConfigDirectoryPath } from '../util/config';
-import { BrowserBehavior, startServer } from '../web/server';
 
 export function viewCommand(program: Command) {
   program
