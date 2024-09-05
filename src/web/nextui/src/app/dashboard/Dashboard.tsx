@@ -397,6 +397,7 @@ export default function Dashboard() {
                 </Stack>
               </Grid>
 
+              {/*
               <Grid item xs={12} md={4}>
                 <MetricCard
                   title="Attack Success Rate"
@@ -441,6 +442,7 @@ export default function Dashboard() {
                   subtitle={`Critical: ${severityCounts[Severity.Critical]}, High: ${severityCounts[Severity.High]}, Medium: ${severityCounts[Severity.Medium]}, Low: ${severityCounts[Severity.Low]}`}
                 />
               </Grid>
+              */}
 
               {/* Attack Success Rate Over Time Chart */}
               <Grid item xs={12} md={7} lg={8}>
@@ -455,7 +457,7 @@ export default function Dashboard() {
                   }}
                 >
                   <Typography variant="h6" mb={4}>
-                    Attack Success Trend
+                    Attack Success Over Time
                   </Typography>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={attackSuccessRateData}>
@@ -586,8 +588,24 @@ export default function Dashboard() {
                           <span style={{ color: '#666', fontSize: '12px' }}>{value}</span>
                         )}
                       />
+                      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
+                        <tspan x="50%" dy="-1em" fontSize="24" fontWeight="bold">
+                          {totalIssues}
+                        </tspan>
+                        <tspan x="50%" dy="1.2em" fontSize="14">
+                          total
+                        </tspan>
+                      </text>
                     </PieChart>
                   </ResponsiveContainer>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Paper
+                  elevation={3}
+                  sx={{ p: 3, display: 'flex', flexDirection: 'column', borderRadius: 2 }}
+                >
+                  <TopFailingCategories evals={evals} />
                 </Paper>
               </Grid>
               {/* Emerging Risks */}
@@ -595,21 +613,12 @@ export default function Dashboard() {
                 <EmergingRisks evals={evals} />
               </Grid>
               {/* Recent Evals */}
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={12}>
                 <Paper
                   elevation={3}
                   sx={{ p: 3, display: 'flex', flexDirection: 'column', borderRadius: 2 }}
                 >
                   <RecentEvals evals={evals} />
-                </Paper>
-              </Grid>
-              {/* Top Failing Categories */}
-              <Grid item xs={12} md={6}>
-                <Paper
-                  elevation={3}
-                  sx={{ p: 3, display: 'flex', flexDirection: 'column', borderRadius: 2 }}
-                >
-                  <TopFailingCategories evals={evals} />
                 </Paper>
               </Grid>
               {/* Category Breakdown */}

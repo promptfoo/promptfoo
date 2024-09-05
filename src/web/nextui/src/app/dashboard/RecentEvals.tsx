@@ -34,8 +34,9 @@ const RecentEvals: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
             <TableCell style={{ whiteSpace: 'nowrap' }}>Eval ID</TableCell>
             <TableCell>Date</TableCell>
             <TableCell>Trigger</TableCell>
-            <TableCell># Compromised</TableCell>
-            <TableCell align="right">Fail Rate</TableCell>
+            <TableCell># Attacks Succeeded</TableCell>
+            <TableCell># Total Attacks</TableCell>
+            <TableCell>Attack Success Rate</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -74,10 +75,13 @@ const RecentEvals: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
                   </TableCell>
                   <TableCell>Manual</TableCell>
                   <TableCell>
+                    {(eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0)}
+                  </TableCell>
+                  <TableCell>
                     {eval_.metrics?.testFailCount || 0} /{' '}
                     {(eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0)}
                   </TableCell>
-                  <TableCell align="right">{attackSuccessRate.toFixed(1)}%</TableCell>
+                  <TableCell>{attackSuccessRate.toFixed(1)}%</TableCell>
                 </TableRow>
               );
             })}
