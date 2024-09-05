@@ -34,6 +34,7 @@ import {
 } from '../report/constants';
 import CategoryBreakdown from './CategoryBreakdown';
 import EmergingRisks from './EmergingRisks';
+import HighestSeverityCategories from './HighestSeverityCategories';
 import MetricCard from './MetricCard';
 import RecentEvals from './RecentEvals';
 import Sidebar from './Sidebar';
@@ -556,7 +557,7 @@ export default function Dashboard() {
                         nameKey="severity"
                         cx="50%"
                         cy="50%"
-                        innerRadius={50}
+                        innerRadius={60}
                         outerRadius={80}
                         paddingAngle={4}
                       >
@@ -606,6 +607,14 @@ export default function Dashboard() {
                   sx={{ p: 3, display: 'flex', flexDirection: 'column', borderRadius: 2 }}
                 >
                   <TopFailingCategories evals={evals} />
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Paper
+                  elevation={3}
+                  sx={{ p: 3, display: 'flex', flexDirection: 'column', borderRadius: 2 }}
+                >
+                  <HighestSeverityCategories evals={evals} />
                 </Paper>
               </Grid>
               {/* Emerging Risks */}

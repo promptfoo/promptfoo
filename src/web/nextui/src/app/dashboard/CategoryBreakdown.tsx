@@ -18,7 +18,6 @@ import { processCategoryData, CategoryData } from './utils';
 
 const CategoryBreakdown: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
   const categoryData = processCategoryData(evals);
-  console.log('eeeee', JSON.stringify(categoryData, null, 2));
 
   const RiskTile: React.FC<{
     title: string;

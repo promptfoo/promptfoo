@@ -53,7 +53,6 @@ export function processCategoryData(evals: StandaloneEval[]): Record<string, Cat
       const relevantEvals = evals.filter(
         (eval_) => eval_.metrics?.namedScores && scoreName in eval_.metrics.namedScores,
       );
-
       // Split evals into historical and current
       const halfIndex = Math.floor(relevantEvals.length / 2);
       const currentEvals = relevantEvals.slice(halfIndex);
