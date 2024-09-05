@@ -96,9 +96,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const body = {
-      task: '...',
+      task: 'iterative',
       step: '...',
-      messages: [{ role: 'user', content: prompt }],
+      prompt,
     };
 
     try {
@@ -108,22 +108,21 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${process.env.PROMPTFOO_API_KEY}`,
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
       );
 
-      const { result } = data;
+      const { result, tokenUsage } = data;
 
-      if (!result.choices || result.choices.length === 0) {
+      if (!result) {
         throw new Error('No choices returned from API');
       }
 
       return {
-        output: result.choices[0].message.content,
-        tokenUsage: result.usage,
+        output: result,
+        tokenUsage,
       };
     } catch (err) {
       return {
