@@ -8,15 +8,13 @@ title: LLM red teaming guide (open source)
 
 LLM red teaming is a proactive approach to finding vulnerabilities in AI systems by simulating malicious inputs.
 
-As of today, there are multiple inherent security challenges with LLM architectures. Depending on your system's design, e.g. [RAG](/docs/red-team/rag/), [LLM agent](/docs/red-team/agents/), or [chatbot](/docs/red-team/llm-vulnerability-types/), you will face different types of vulnerabilities.
+As of today, there are multiple inherent security challenges with LLM architectures. Depending on your system's design, e.g. [RAG](/docs/red-team/rag/), [LLM agent](/docs/red-team/agents/), or [chatbot](/docs/red-team/llm-vulnerability-types/), you'll face different types of vulnerabilities.
 
-Potential vulnerabilities include:
+Almost every LLM app has potential issues with generation of off-topic, inappropriate, or harmful content that breaches business policies or other guidelines. As architectures become more complex, problems can arise in the form of information leakage and access control (RAG architectures), misuse of connected APIs or databases (in agents), and more.
 
-- Information leakage in [RAG applications](/docs/red-team/rag/)
-- Misuse of connected tools or APIs in [LLM agents](/docs/red-team/agents/)
-- Task scope violations
-- Generation of harmful or inappropriate content
-- Breaches of business policies or guidelines
+The purpose of red teaming is to identify and address these vulnerabilities before they make it to production.
+
+In order to do this, we need to systematically generate a wide range of adversarial inputs and evaluate the LLM's responses.
 
 :::tip
 Ready to run a red team? Jump to **[Quickstart](#quickstart)**.
@@ -24,14 +22,13 @@ Ready to run a red team? Jump to **[Quickstart](#quickstart)**.
 
 ## How generative AI red teaming works
 
-The process of red teaming gen AI generally requires some degree of automation for a comprehensive evaluation. This is because LLMs have such a wide attack surface.
+The process of red teaming gen AI generally requires some degree of automation for a comprehensive evaluation. This is because LLMs have such a wide attack surface and are stochastic in nature (i.e. they are not consistent from one generation to the next).
 
-A systematic approach looks like:
+A systematic approach looks like this:
 
-1. Generating a diverse set of adversarial inputs
-2. Running these inputs through your LLM application
-3. Analyzing the outputs for potential vulnerabilities or undesirable behaviors
-4. Providing actionable insights and suggested mitigations
+1. Generate a diverse set of adversarial inputs
+2. Run these inputs through your LLM application
+3. Analyze the outputs for vulnerabilities or undesirable behaviors
 
 Once a process is set up, it can be applied in two primary ways:
 
@@ -57,39 +54,29 @@ See [LLM vulnerability types](/docs/red-team/llm-vulnerability-types/) for more 
 
 ## Red teaming is a core requirement of AI security
 
-Red teaming is different from other AI security approaches because it provides a quantitative measure of risk _before_ deployment. This allows you to build it into your development process and meet AI security standards.
+What's the point of it all? Red teaming is different from other AI security approaches because it provides a quantitative measure of risk _before_ deployment.
 
-#### Quantifying and managing risk
+By running thousands of probes and evaluating the AI's performance, developers can make informed decisions about acceptable risk levels in offline testbeds. Many organizations build this into their development cycle and into processes like CI/CD.
 
-By running thousands of probes and evaluating the AI's performance, developers can make informed decisions about acceptable risk levels in offline testbeds. Remediation occurs before the application is deployed to production.
-
-#### Continuous testing
-
-Like any product, AI products undergo iteration. A red team process that is built into CI/CD and other workflows allows organization to catch issues early.
-
-#### Compliance
-
-New standards are emerging around the world - ranging from OWASP LLM Top 10 to NIST's AI Risk Management Framework and the EU AI Act. Most regulations and standards require a process that quantifies risk and enables automated testing prior to deployment.
+This is an emerging field and new standards are emerging around the world, ranging from OWASP LLM Top 10 to NIST's AI Risk Management Framework and the EU AI Act. From what we've seen so far, most regulations/standards support a systematic benchmarking/red teaming process that quantifies risk via testing prior to deployment.
 
 ### Best practices for LLM red teaming
-
-Gen AI applications have a wide attack surface, so it's important to automate the process of generating and testing attack inputs.
 
 We recommend implementing a systematic process:
 
 1. **Generate diverse adversarial inputs**: Create a wide range of inputs targeting various [vulnerability types](/docs/red-team/llm-vulnerability-types/).
 
-2. **Run these inputs through your application**: Use an evaluation framework to run these inputs through your system.
+2. **Set up routine evaluations**: Use an evaluation framework for LLMs to run these inputs through your system.
 
-3. **Prioritize and address vulnerabilities**: Review flagged issues in the outputs and determine priorities for both the red team and developers based on severity and impact.
+3. **Prioritize and address vulnerabilities**: Set a cadence for reviewing flagged outputs and determine priorities for both the red team and developers based on severity and impact.
 
 Additional best practices to consider:
 
-- **Implement a pre-deployment defense strategy** that quantifies risk before the application is shipped.
+- **Define your pre-deployment vs post-deployment strategies**, typically with a focus on quantifying risk before changes are shipped to production.
 
 - **Integrate red teaming into your development pipeline** to flag vulnerabilities early, meet developers where they are, and address issues before they reach production.
 
-- **Focus on vulnerabilities specific to your application type**, e.g. [RAG](/docs/red-team/rag/), [LLM agents](/docs/red-team/agents/)
+- **Focus on vulnerabilities for your specific application type**, e.g. [RAG](/docs/red-team/rag/), [LLM agents](/docs/red-team/agents/)
 
 - Although industry frameworks are nascent, frameworks like [OWASP LLM Top 10](/docs/red-team/owasp-llm-top-10/) and NIST AI Risk Management Framework can be used as starting points.
 
