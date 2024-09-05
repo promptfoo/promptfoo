@@ -1,4 +1,6 @@
 import checkbox from '@inquirer/checkbox';
+import confirm from '@inquirer/confirm';
+import { ExitPromptError } from '@inquirer/core';
 import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
 import fs from 'fs';
@@ -237,26 +239,44 @@ function recordOnboardingStep(step: string, properties: Record<string, EventValu
 }
 
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
-  if (
-    directory && // Make the directory if it doesn't exist
-    !fs.existsSync(directory)
-  ) {
+  console.clear();
+
+  if (directory && !fs.existsSync(directory)) {
     fs.mkdirSync(directory);
   }
 
-  if (directory) {
-    if (!fs.existsSync(directory)) {
-      logger.info(`Creating directory ${directory} ...`);
-      fs.mkdirSync(directory);
+  directory = directory || '.';
+
+  // Check for existing files and prompt for overwrite
+  const filesToCheck = ['promptfooconfig.yaml', 'README.md'];
+  const existingFiles = filesToCheck.filter((file) =>
+    fs.existsSync(path.join(process.cwd(), directory, file)),
+  );
+
+  if (existingFiles.length > 0) {
+    const fileList = existingFiles.join(' and ');
+    const overwrite = await confirm({
+      message: `${fileList} already exist${existingFiles.length > 1 ? '' : 's'}${directory === '.' ? '' : ` in ${directory}`}. Do you want to overwrite ${existingFiles.length > 1 ? 'them' : 'it'}?`,
+      default: false,
+    });
+    if (!overwrite) {
+      const isNpx = getEnvString('npm_execpath')?.includes('npx');
+      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
+      logger.info(
+        chalk.red(
+          `Please run \`${runCommand}\` in a different directory or use \`${runCommand} <directory>\` to specify a new location.`,
+        ),
+      );
+      process.exit(1);
     }
-  } else {
-    directory = '.';
   }
 
+  // Rest of the onboarding flow
   const prompts: string[] = [];
   const providers: (string | object)[] = [];
   let action: string;
   let language: string;
+
   if (interactive) {
     recordOnboardingStep('start');
 
@@ -303,7 +323,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
-      { name: 'Choose later', value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
+      { name: `I'll choose later`, value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
       {
         name: '[OpenAI] GPT 4o, GPT 4o-mini, GPT-3.5, ...',
         value:
@@ -387,6 +407,9 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     const providerChoices: (string | object)[] = await checkbox({
       message: 'Which model providers would you like to use? (press enter to skip)',
       choices,
+      loop: false,
+      required: true,
+      pageSize: process.stdout.rows - 6,
     });
 
     recordOnboardingStep('choose providers', {
@@ -468,6 +491,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     type: action,
     language,
   });
+
   fs.writeFileSync(path.join(process.cwd(), directory, 'promptfooconfig.yaml'), config);
   fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
@@ -496,4 +520,28 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     action,
     language,
   };
+}
+
+export async function initializeProject(directory: string | null, interactive: boolean = true) {
+  try {
+    return await createDummyFiles(directory, interactive);
+  } catch (err) {
+    if (err instanceof ExitPromptError) {
+      const isNpx = getEnvString('npm_execpath')?.includes('npx');
+      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
+      logger.info(
+        '\n' +
+          chalk.blue('Initialization paused. To continue setup later, use the command: ') +
+          chalk.bold(runCommand),
+      );
+      logger.info(
+        chalk.blue('For help or feedback, visit ') +
+          chalk.green('https://www.promptfoo.dev/contact/'),
+      );
+      await recordOnboardingStep('early exit');
+      process.exit(130);
+    } else {
+      throw err;
+    }
+  }
 }

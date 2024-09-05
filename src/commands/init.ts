@@ -1,7 +1,7 @@
 import confirm from '@inquirer/confirm';
 import type { Command } from 'commander';
 import logger from '../logger';
-import { createDummyFiles } from '../onboarding';
+import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 
 export function initCommand(program: Command) {
@@ -27,7 +27,7 @@ export function initCommand(program: Command) {
         }
       }
 
-      const details = await createDummyFiles(directory, cmdObj.interactive);
+      const details = await initializeProject(directory, cmdObj.interactive);
       telemetry.record('command_used', {
         ...details,
         name: 'init',

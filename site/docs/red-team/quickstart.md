@@ -183,7 +183,7 @@ Promptfoo provides a detailed eval view that lets you dig into specific red team
 
 ![llm red team evals](/img/docs/redteam-results.png)
 
-You also get a view that summarizes your LLM app's vulnerabilities:
+Click "Vulnerability Report" in the top right corner to see the report view:
 
 ![llm red team report](/img/riskreport-1@2x.png)
 

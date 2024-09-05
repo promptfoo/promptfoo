@@ -363,6 +363,21 @@ export async function matchesClassification(
   };
 }
 
+export function renderLlmRubricPrompt(
+  rubric: string,
+  llmOutput: string,
+  grading?: GradingConfig,
+  vars?: Record<string, string | object>,
+) {
+  const rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
+  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  return nunjucks.renderString(rubricPrompt, {
+    output: JSON.stringify(llmOutput).slice(1, -1),
+    rubric: JSON.stringify(rubric).slice(1, -1),
+    ...fromVars(vars),
+  });
+}
+
 export async function matchesLlmRubric(
   rubric: string,
   llmOutput: string,
@@ -386,11 +401,7 @@ export async function matchesLlmRubric(
 
   const rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
   invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
-  const prompt = nunjucks.renderString(rubricPrompt, {
-    output: JSON.stringify(llmOutput).slice(1, -1),
-    rubric: JSON.stringify(rubric).slice(1, -1),
-    ...fromVars(vars),
-  });
+  const prompt = renderLlmRubricPrompt(rubric, llmOutput, grading, vars);
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
