@@ -339,7 +339,7 @@ export async function loadApiProvider(
     const modelType = splits[1];
     const modelName = splits.slice(2).join(':');
     if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new MistralEmbeddingProvider(modelName || 'mistral-embed', providerOptions);
+      ret = new MistralEmbeddingProvider(providerOptions);
     } else {
       ret = new MistralChatCompletionProvider(modelName || modelType, providerOptions);
     }

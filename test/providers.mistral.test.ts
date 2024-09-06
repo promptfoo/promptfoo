@@ -1,10 +1,12 @@
-import { disableCache, enableCache } from '../src/cache';
+import { disableCache, enableCache, getCache, isCacheEnabled } from '../src/cache';
 import { fetchWithCache } from '../src/cache';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from '../src/providers/mistral';
 
 jest.mock('../src/cache', () => ({
   ...jest.requireActual('../src/cache'),
   fetchWithCache: jest.fn(),
+  getCache: jest.fn(),
+  isCacheEnabled: jest.fn(),
 }));
 
 jest.mock('../src/util');
@@ -69,11 +71,12 @@ describe('Mistral', () => {
       });
     });
 
-    it('should use cache by default', async () => {
+    it('should use cache when enabled', async () => {
       const mockResponse = {
         choices: [{ message: { content: 'Cached output' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
+      jest.mocked(isCacheEnabled).mockReturnValue(true);
       jest.mocked(fetchWithCache).mockResolvedValue({ data: mockResponse, cached: true });
 
       const result = await provider.callApi('Test prompt');
@@ -82,28 +85,37 @@ describe('Mistral', () => {
         output: 'Cached output',
         tokenUsage: {
           total: 10,
+          prompt: 5,
+          completion: 5,
           cached: 10,
         },
         cached: true,
         cost: expect.any(Number),
       });
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
     });
 
-    it('should not use cache if caching is disabled', async () => {
-      disableCache();
-
+    it('should not use cache when disabled', async () => {
       const mockResponse = {
         choices: [{ message: { content: 'Fresh output' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
+      jest.mocked(isCacheEnabled).mockReturnValue(false);
       jest.mocked(fetchWithCache).mockResolvedValue({ data: mockResponse, cached: false });
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.cached).toBe(false);
-      expect(result.tokenUsage).not.toHaveProperty('cached');
-
-      enableCache();
+      expect(result).toEqual({
+        output: 'Fresh output',
+        tokenUsage: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+        },
+        cached: false,
+        cost: expect.any(Number),
+      });
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
     });
 
     it('should handle API errors', async () => {
@@ -194,11 +206,59 @@ describe('Mistral', () => {
       expect(result).toEqual({
         embedding: [0.1, 0.2, 0.3],
         tokenUsage: {
-          completion: 0,
           total: 5,
           prompt: 5,
+          completion: 0,
         },
+        cost: expect.any(Number),
       });
+    });
+
+    it('should use cache for embedding when enabled', async () => {
+      const mockResponse = {
+        model: 'mistral-embed',
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: { total_tokens: 5, prompt_tokens: 5 },
+      };
+      jest.mocked(isCacheEnabled).mockReturnValue(true);
+      jest.mocked(fetchWithCache).mockResolvedValue({ data: mockResponse, cached: true });
+
+      const result = await provider.callEmbeddingApi('Test text');
+
+      expect(result).toEqual({
+        embedding: [0.1, 0.2, 0.3],
+        tokenUsage: {
+          total: 5,
+          prompt: 5,
+          completion: 0,
+          cached: 5,
+        },
+        cost: expect.any(Number),
+      });
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
+    });
+
+    it('should not use cache for embedding when disabled', async () => {
+      const mockResponse = {
+        model: 'mistral-embed',
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: { total_tokens: 5, prompt_tokens: 5 },
+      };
+      jest.mocked(isCacheEnabled).mockReturnValue(false);
+      jest.mocked(fetchWithCache).mockResolvedValue({ data: mockResponse, cached: false });
+
+      const result = await provider.callEmbeddingApi('Test text');
+
+      expect(result).toEqual({
+        embedding: [0.1, 0.2, 0.3],
+        tokenUsage: {
+          total: 5,
+          prompt: 5,
+          completion: 0,
+        },
+        cost: expect.any(Number),
+      });
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
     });
 
     it('should handle API errors', async () => {
