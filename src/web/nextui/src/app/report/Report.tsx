@@ -4,6 +4,7 @@ import React from 'react';
 import { getApiBaseUrl } from '@/api';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
+import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
 import List from '@mui/material/List';
@@ -13,6 +14,7 @@ import Modal from '@mui/material/Modal';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { EvaluateResult, ResultsFile, SharedResults } from '../eval/types';
+import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
@@ -20,7 +22,7 @@ import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import TestSuites from './TestSuites';
 import type { categoryAliases } from './constants';
-import { categoryAliasesReverse } from './constants';
+import { ALIASED_PLUGIN_MAPPINGS, categoryAliasesReverse, FRAMEWORK_MAPPINGS } from './constants';
 import './Report.css';
 
 function getStrategyIdFromMetric(metric: string): string | null {
@@ -275,6 +277,7 @@ const App: React.FC = () => {
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} />
+        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
         <StrategyStats strategyStats={strategyStats} />
         <RiskCategories
           categoryStats={categoryStats}

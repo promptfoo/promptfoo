@@ -1,0 +1,93 @@
+.framework-compliance-card {
+  transition: box-shadow 0.3s ease-in-out;
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: #f5f5f5;
+}
+
+.framework-compliance-card:hover {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.compliance-summary {
+  text-align: center;
+  margin-bottom: 32px;
+  padding: 24px;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.framework-grid {
+  margin-top: 24px;
+}
+
+.framework-item {
+  height: 100%;
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.framework-item:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.framework-item.compliant {
+  background-color: #e8f5e9;
+}
+
+.framework-item.non-compliant {
+  background-color: #ffebee;
+}
+
+.icon-compliant {
+  color: #4caf50;
+  font-size: 24px;
+}
+
+.icon-non-compliant {
+  color: #f44336;
+  font-size: 24px;
+}
+
+[data-theme='dark'] .framework-compliance-card {
+  background-color: #1e1e1e;
+}
+
+[data-theme='dark'] .compliance-summary {
+  background-color: #2a2a2a;
+}
+
+[data-theme='dark'] .framework-item.compliant {
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+[data-theme='dark'] .framework-item.non-compliant {
+  background-color: rgba(244, 67, 54, 0.1);
+}
+
+[data-theme='dark'] .framework-compliance-card:hover,
+[data-theme='dark'] .framework-item:hover {
+  box-shadow: 0 8px 16px rgba(255, 255, 255, 0.1);
+}
+
+/* New styles for the non-compliant plugins list */
+.framework-item .MuiList-root {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.framework-item .MuiListItem-root {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.framework-item .MuiListItemIcon-root {
+  min-width: 24px;
+}
+
+.framework-item .MuiListItemText-root {
+  margin-top: 0;
+  margin-bottom: 0;
+}
