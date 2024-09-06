@@ -39,7 +39,7 @@ Here's an example config that compares different Mistral models:
 providers:
   - mistral:mistral-medium-latest
   - mistral:mistral-small-latest
-  - mistral:open-mixtral-8x7b
+  - mistral:open-mistral-nemo
 ```
 
 ## Options
