@@ -1,9 +1,13 @@
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
+import { REMOTE_GENERATION_URL } from '../constants';
 import { loadRedteamProvider } from '../providers/shared';
+import { shouldGenerateRemote } from '../util';
 
 const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
@@ -20,11 +24,48 @@ export async function translate(text: string, lang: string): Promise<string> {
   return (JSON.parse(result.output) as { translation: string }).translation;
 }
 
+export async function generateMultilingual(
+  testCases: TestCase[],
+  injectVar: string,
+  config: Record<string, any>,
+): Promise<TestCase[]> {
+  try {
+    const payload = {
+      task: 'multilingual',
+      testCases,
+      injectVar,
+      config,
+    };
+
+    const { data } = await fetchWithCache(
+      REMOTE_GENERATION_URL,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      },
+      REQUEST_TIMEOUT_MS,
+    );
+
+    logger.debug(`Got remote multilingual generation result: ${JSON.stringify(data)}`);
+    return data.result as TestCase[];
+  } catch (error) {
+    logger.error(`Error in remote multilingual generation: ${error}`);
+    throw new Error(`Could not perform remote multilingual generation: ${error}`);
+  }
+}
+
 export async function addMultilingual(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
+  if (shouldGenerateRemote()) {
+    return generateMultilingual(testCases, injectVar, config);
+  }
+
   const languages = config.languages || DEFAULT_LANGUAGES;
   invariant(
     Array.isArray(languages),
