@@ -16,8 +16,20 @@ describe('Mistral', () => {
     jest.clearAllMocks();
     jest.mocked(fetchWithCache).mockReset();
     jest.mocked(getCache).mockReturnValue({
-      get: jest.fn(),
+      get: jest.fn().mockResolvedValue({
+        output: 'Cached output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        cached: true,
+        cost: 0.000005,
+      }),
       set: jest.fn(),
+      wrap: jest.fn(),
+      del: jest.fn(),
+      reset: jest.fn(),
+      store: {
+        get: jest.fn(),
+        set: jest.fn(),
+      },
     });
   });
 
@@ -85,8 +97,14 @@ describe('Mistral', () => {
           cost: 0.000005,
         }),
         set: jest.fn(),
+        wrap: jest.fn(),
+        del: jest.fn(),
+        reset: jest.fn(),
+        store: {
+          get: jest.fn(),
+          set: jest.fn(),
+        },
       });
-
       const result = await provider.callApi('Test prompt');
 
       expect(result).toEqual({
@@ -123,7 +141,11 @@ describe('Mistral', () => {
         cached: false,
         cost: expect.any(Number),
       });
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+        expect.stringContaining('/chat/completions'),
+        expect.any(Object),
+        expect.any(Number),
+      );
     });
 
     it('should handle API errors', async () => {
@@ -241,7 +263,11 @@ describe('Mistral', () => {
           cached: 5,
         },
       });
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+        expect.stringContaining('/embeddings'),
+        expect.any(Object),
+        expect.any(Number),
+      );
     });
 
     it('should not use cache for embedding when disabled', async () => {
@@ -264,7 +290,11 @@ describe('Mistral', () => {
         },
         cost: expect.any(Number),
       });
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+        expect.stringContaining('/embeddings'),
+        expect.any(Object),
+        expect.any(Number),
+      );
     });
 
     it('should handle API errors', async () => {
