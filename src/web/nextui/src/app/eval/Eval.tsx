@@ -8,10 +8,11 @@ import type {
   ResultLightweightWithLabel,
   ResultsFile,
 } from '@/../../../types';
-import { callApi, getApiBaseUrl } from '@/api';
+import { callApi } from '@/api';
 import { ShiftKeyProvider } from '@/app/contexts/ShiftKeyContext';
 import { ToastProvider } from '@/app/contexts/ToastContext';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
+import useApiConfig from '@/state/apiConfig';
 import type { Database } from '@/types/supabase';
 import CircularProgress from '@mui/material/CircularProgress';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -60,6 +61,7 @@ export default function Eval({
   defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
   const router = useRouter();
+  const { apiBaseUrl } = useApiConfig();
 
   const { table, setTable, config, setConfig, evalId, setEvalId, setAuthor, setInComparisonMode } =
     useStore();
@@ -124,7 +126,6 @@ export default function Eval({
     } else if (fetchId) {
       console.log('Eval init: Fetching eval', fetchId);
       const run = async () => {
-        console.log('Fetching eval from remote server', fetchId);
         let response = await await callApi(`/eval/${fetchId}`);
         if (!response.ok) {
           response = await callApi(`/results/${fetchId}`);
@@ -143,7 +144,7 @@ export default function Eval({
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
 
-      const socket = SocketIOClient(getApiBaseUrl());
+      const socket = SocketIOClient(apiBaseUrl || '');
 
       socket.on('init', (data) => {
         console.log('Initialized socket connection', data);
