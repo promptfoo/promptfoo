@@ -36,7 +36,7 @@ import type {
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 
-const nunjucks = getNunjucksEngine();
+const nunjucks = getNunjucksEngine(undefined, false, true);
 
 function cosineSimilarity(vecA: number[], vecB: number[]) {
   if (vecA.length !== vecB.length) {
