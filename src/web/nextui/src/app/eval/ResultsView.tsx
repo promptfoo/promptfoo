@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
+import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL } from '@/../../../constants';
 import { callApi } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore as useMainStore } from '@/state/evalConfig';
@@ -140,7 +140,7 @@ export default function ResultsView({
     let shareUrl = '';
     try {
       if (IS_RUNNING_LOCALLY) {
-        const response = await fetch(`${REMOTE_API_BASE_URL}/api/eval`, {
+        const response = await fetch(`${SHARE_API_BASE_URL}/api/eval`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -157,7 +157,7 @@ export default function ResultsView({
           }),
         });
         const { id } = await response.json();
-        shareUrl = `${REMOTE_APP_BASE_URL}/eval/${id}`;
+        shareUrl = `${SHARE_VIEW_BASE_URL}/eval/${id}`;
       } else {
         shareUrl = `${window.location.host}/eval/?evalId=${evalId}`;
       }
