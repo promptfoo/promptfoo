@@ -1,7 +1,9 @@
 import Anthropic, { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../cache';
+import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import { maybeLoadFromExternalFile } from '../util';
 import { parseChatPrompt } from './shared';
 
 const ANTHROPIC_MODELS = [
@@ -70,6 +72,7 @@ interface AnthropicMessageOptions {
     | Anthropic.MessageCreateParams.ToolChoiceAny
     | Anthropic.MessageCreateParams.ToolChoiceAuto
     | Anthropic.MessageCreateParams.ToolChoiceTool;
+  headers?: Record<string, string>;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -110,6 +113,7 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
 interface AnthropicMessageInput {
   role: 'user' | 'assistant' | 'system';
   content: string | Array<Anthropic.ImageBlockParam | Anthropic.TextBlockParam>;
+  cache_control?: { type: 'ephemeral' };
 }
 
 export function parseMessages(messages: string) {
@@ -181,7 +185,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
-    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
     this.anthropic = new Anthropic({ apiKey: this.apiKey, baseURL: this.config.apiBaseUrl });
   }
 
@@ -204,12 +208,11 @@ export class AnthropicMessagesProvider implements ApiProvider {
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
-      max_tokens:
-        this.config?.max_tokens || parseInt(process.env.ANTHROPIC_MAX_TOKENS || '1024', 10),
+      max_tokens: this.config?.max_tokens || getEnvInt('ANTHROPIC_MAX_TOKENS', 1024),
       messages: extractedMessages,
       stream: false,
-      temperature: this.config.temperature || parseFloat(process.env.ANTHROPIC_TEMPERATURE || '0'),
-      ...(this.config.tools ? { tools: this.config.tools } : {}),
+      temperature: this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
+      ...(this.config.tools ? { tools: maybeLoadFromExternalFile(this.config.tools) } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
     };
 
@@ -240,7 +243,9 @@ export class AnthropicMessagesProvider implements ApiProvider {
     }
 
     try {
-      const response = await this.anthropic.messages.create(params);
+      const response = await this.anthropic.messages.create(params, {
+        ...(this.config.headers ? { headers: this.config.headers } : {}),
+      });
 
       logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
 
@@ -307,7 +312,7 @@ export class AnthropicCompletionProvider implements ApiProvider {
   ) {
     const { config, id, env } = options;
     this.modelName = modelName;
-    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
     this.anthropic = new Anthropic({ apiKey: this.apiKey });
     this.config = config || {};
     this.id = id ? () => id : this.id;
@@ -330,8 +335,8 @@ export class AnthropicCompletionProvider implements ApiProvider {
 
     let stop: string[];
     try {
-      stop = process.env.ANTHROPIC_STOP
-        ? JSON.parse(process.env.ANTHROPIC_STOP)
+      stop = getEnvString('ANTHROPIC_STOP')
+        ? JSON.parse(getEnvString('ANTHROPIC_STOP') || '')
         : ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`ANTHROPIC_STOP is not a valid JSON string: ${err}`);
@@ -341,8 +346,8 @@ export class AnthropicCompletionProvider implements ApiProvider {
       model: this.modelName,
       prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
       max_tokens_to_sample:
-        this.config?.max_tokens_to_sample || parseInt(process.env.ANTHROPIC_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.ANTHROPIC_TEMPERATURE || '0'),
+        this.config?.max_tokens_to_sample || getEnvInt('ANTHROPIC_MAX_TOKENS', 1024),
+      temperature: this.config.temperature ?? getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       stop_sequences: stop,
     };
 

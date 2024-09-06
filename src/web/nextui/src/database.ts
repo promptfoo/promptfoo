@@ -1,4 +1,4 @@
-import { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
+import type { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
 import type { Database } from '@/types/supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -105,7 +105,7 @@ export async function createResult(
     throw error;
   }
 
-  const { error: jobUpdateError } = await supabase
+  await supabase
     .from('EvaluationJob')
     .update({
       status: SupabaseJobStatus.COMPLETE,

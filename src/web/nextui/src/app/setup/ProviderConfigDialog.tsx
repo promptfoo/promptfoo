@@ -51,7 +51,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           ) {
             if (typeof value === 'number') {
               handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-                setLocalConfig({ ...localConfig, [key]: parseFloat(e.target.value) });
+                setLocalConfig({ ...localConfig, [key]: Number.parseFloat(e.target.value) });
             } else if (typeof value === 'boolean') {
               handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
                 setLocalConfig({ ...localConfig, [key]: e.target.value === 'true' });

@@ -128,7 +128,11 @@ tests:
     // highlight-end
     assert:
       - type: contains-any
-        value: [Guatemala, Costa Rica, India, Indonesia]
+        value:
+          - Guatemala
+          - Costa Rica
+          - India
+          - Indonesia
       - type: llm-rubric
         value: is someplace likely to find {{item}}
 ```

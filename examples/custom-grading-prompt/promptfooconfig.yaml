@@ -1,5 +1,7 @@
-prompts: [prompts.txt]
-providers: [openai:gpt-4o-mini]
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4o-mini
 defaultTest:
   options:
     # ---

@@ -1,5 +1,5 @@
 import invariant from 'tiny-invariant';
-import { Prompt } from '../../types';
+import type { Prompt } from '../../types';
 
 /**
  * Processes a string as a literal prompt.
@@ -15,6 +15,7 @@ export function processString(prompt: Partial<Prompt>): Prompt[] {
     {
       raw: prompt.raw,
       label: prompt.label ?? `${prompt.raw}`,
+      config: prompt.config,
     },
   ];
 }

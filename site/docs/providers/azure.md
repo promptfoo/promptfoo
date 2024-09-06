@@ -24,7 +24,22 @@ providers:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
 
-Additional config parameters are passed like so:
+## Environment Variables
+
+The Azure OpenAI provider uses the following environment variables:
+
+| Variable                    | Description               | Required |
+| --------------------------- | ------------------------- | -------- |
+| `AZURE_OPENAI_API_KEY`      | Your Azure OpenAI API key | Yes      |
+| `AZURE_OPENAI_API_HOST`     | API host                  | No       |
+| `AZURE_OPENAI_API_BASE_URL` | API base URL              | No       |
+| `AZURE_OPENAI_BASE_URL`     | Alternative API base URL  | No       |
+
+Note: You only need to set one of `AZURE_OPENAI_API_HOST`, `AZURE_OPENAI_API_BASE_URL`, or `AZURE_OPENAI_BASE_URL`. If multiple are set, the provider will use them in that order of preference.
+
+## Configuration
+
+The YAML configuration can override environment variables and set additional parameters:
 
 ```yaml
 providers:
@@ -117,6 +132,10 @@ tests:
       - type: llm-rubric
         value: Do not mention that you are an AI or chat assistant
 ```
+
+:::note
+The `maybeEmitAzureOpenAiWarning` function in the implementation will warn you if you're using model-graded assertions with Azure providers without specifying an override.
+:::
 
 ### Similarity
 

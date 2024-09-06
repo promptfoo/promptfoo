@@ -29,6 +29,10 @@ describe('maybeFilePath', () => {
     expect(maybeFilePath('langfuse://path/to/file')).toBe(false);
   });
 
+  it('should return false for strings with "helicone://"', () => {
+    expect(maybeFilePath('helicone://path/to/file')).toBe(false);
+  });
+
   it('should return false for strings without file path indicators', () => {
     expect(maybeFilePath('anotherstring')).toBe(false);
     expect(maybeFilePath('justastring')).toBe(false);

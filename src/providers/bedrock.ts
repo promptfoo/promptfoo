@@ -1,8 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import dedent from 'dedent';
-import { Agent } from 'http';
+import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
+import { getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -11,6 +12,7 @@ import type {
   ProviderResponse,
   ProviderEmbeddingResponse,
 } from '../types';
+import { maybeLoadFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
 
@@ -175,9 +177,12 @@ interface IBedrockModel {
   output: (responseJson: any) => any;
 }
 
-export function parseValue(value: string, defaultValue: any) {
+export function parseValue(value: string | number, defaultValue: any) {
   if (typeof defaultValue === 'number') {
-    return Number.isNaN(parseFloat(value)) ? defaultValue : parseFloat(value);
+    if (typeof value === 'string') {
+      return Number.isNaN(Number.parseFloat(value)) ? defaultValue : Number.parseFloat(value);
+    }
+    return value;
   }
   return value;
 }
@@ -186,12 +191,12 @@ export function addConfigParam(
   params: any,
   key: string,
   configValue: any,
-  envValue?: string | undefined,
+  envValue?: string | number | undefined,
   defaultValue?: any,
 ) {
   if (configValue !== undefined || envValue !== undefined || defaultValue !== undefined) {
     params[key] =
-      configValue ?? (envValue !== undefined ? parseValue(envValue, defaultValue) : defaultValue);
+      configValue ?? (envValue === undefined ? defaultValue : parseValue(envValue, defaultValue));
   }
 }
 
@@ -291,7 +296,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         params,
         'temperature',
         config?.temperature,
-        process.env.AWS_BEDROCK_TEMPERATURE,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
         0.01,
       );
       addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
@@ -299,7 +304,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         params,
         'max_gen_len',
         config?.max_gen_len,
-        process.env.AWS_BEDROCK_MAX_GEN_LEN,
+        getEnvInt('AWS_BEDROCK_MAX_GEN_LEN'),
         1024,
       );
       return params;
@@ -352,7 +357,13 @@ export const BEDROCK_MODEL = {
         undefined,
         'bedrock-2023-05-31',
       );
-      addConfigParam(params, 'tools', config?.tools, undefined, undefined);
+      addConfigParam(
+        params,
+        'tools',
+        maybeLoadFromExternalFile(config?.tools),
+        undefined,
+        undefined,
+      );
       addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
       addConfigParam(params, 'system', system, undefined, undefined);
       return params;
@@ -400,7 +411,7 @@ export const BEDROCK_MODEL = {
   LLAMA3: getLlamaModelHandler(LlamaVersion.V3), // Prompt format of llama3 instruct differs from llama2.
   COHERE_COMMAND: {
     params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
-      const params: any = { prompt: prompt };
+      const params: any = { prompt };
       addConfigParam(params, 'temperature', config?.temperature, process.env.COHERE_TEMPERATURE, 0);
       addConfigParam(params, 'p', config?.p, process.env.COHERE_P, 1);
       addConfigParam(params, 'k', config?.k, process.env.COHERE_K, 0);
@@ -441,7 +452,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', config?.tools);
+      addConfigParam(params, 'tools', maybeLoadFromExternalFile(config?.tools));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
@@ -451,7 +462,7 @@ export const BEDROCK_MODEL = {
   },
   MISTRAL: {
     params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => {
-      const params: any = { prompt: prompt, stop: stop };
+      const params: any = { prompt, stop };
       addConfigParam(
         params,
         'max_tokens',

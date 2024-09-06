@@ -166,7 +166,8 @@ console.log('Was it cached?', cached);
 Include the custom provider in promptfoo config:
 
 ```yaml
-providers: ['file://relative/path/to/customApiProvider.js']
+providers:
+  - 'file://relative/path/to/customApiProvider.js'
 ```
 
 Alternatively, you can pass the path to the custom API provider directly in the CLI:

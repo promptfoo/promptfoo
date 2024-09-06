@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
 import { getApiBaseUrl } from '@/api';
+import { IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore as useMainStore } from '@/state/evalConfig';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -24,7 +25,8 @@ import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
-import Select, { SelectChangeEvent } from '@mui/material/Select';
+import type { SelectChangeEvent } from '@mui/material/Select';
+import Select from '@mui/material/Select';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -78,7 +80,6 @@ export default function ResultsView({
     wordBreak,
     showInferenceDetails,
     evalId,
-    inComparisonMode,
     setInComparisonMode,
     columnStates,
     setColumnState,
@@ -122,6 +123,8 @@ export default function ResultsView({
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
+  const currentEvalId = evalId || defaultEvalId || 'default';
+
   // Handle menu close
   const handleMenuClose = () => {
     setAnchorEl(null);
@@ -134,26 +137,31 @@ export default function ResultsView({
 
   const handleShareButtonClick = async () => {
     setShareLoading(true);
+    let shareUrl = '';
     try {
-      const response = await fetch(`${REMOTE_API_BASE_URL}/api/eval`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          data: {
-            version: 2,
-            createdAt: new Date().toISOString(),
-            results: {
-              table,
-            },
-            config,
+      if (IS_RUNNING_LOCALLY) {
+        const response = await fetch(`${REMOTE_API_BASE_URL}/api/eval`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
-        }),
-      });
+          body: JSON.stringify({
+            data: {
+              version: 2,
+              createdAt: new Date().toISOString(),
+              results: {
+                table,
+              },
+              config,
+            },
+          }),
+        });
+        const { id } = await response.json();
+        shareUrl = `${REMOTE_APP_BASE_URL}/eval/${id}`;
+      } else {
+        shareUrl = `${window.location.host}/eval/?evalId=${evalId}`;
+      }
 
-      const { id } = await response.json();
-      const shareUrl = `${REMOTE_APP_BASE_URL}/eval/${id}`;
       setShareUrl(shareUrl);
       setShareModalOpen(true);
     } catch {
@@ -249,7 +257,6 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const currentEvalId = evalId || defaultEvalId || 'default';
   const currentColumnState = columnStates[currentEvalId] || {
     selectedColumns: [],
     columnVisibility: {},
@@ -408,7 +415,7 @@ export default function ResultsView({
             />
           </>
         )}
-        <Tooltip title={!author ? 'Set eval author with `promptfoo config set email`' : ''}>
+        <Tooltip title={author ? '' : 'Set eval author with `promptfoo config set email`'}>
           <Chip
             size="small"
             label={
@@ -419,6 +426,14 @@ export default function ResultsView({
             sx={{ opacity: 0.7 }}
           />
         </Tooltip>
+        {Object.keys(config?.tags || {}).map((tag) => (
+          <Chip
+            key={tag}
+            size="small"
+            label={`${tag}: ${config?.tags?.[tag]}`}
+            sx={{ opacity: 0.7 }}
+          />
+        ))}
       </ResponsiveStack>
       <ResponsiveStack direction="row" spacing={1} alignItems="center">
         <Box>
@@ -550,7 +565,8 @@ export default function ResultsView({
                 Table Settings
               </Button>
             </Tooltip>
-            {config?.metadata?.redteam && (
+            {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
+            {(config?.redteam || config?.metadata?.redteam) && (
               <Tooltip title="View vulnerability scan report" placement="bottom">
                 <Button
                   color="primary"

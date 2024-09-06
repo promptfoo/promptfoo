@@ -1,11 +1,16 @@
 description: 'Simple test'
 
+tags:
+  env: staging
+  app: footgpt
+  branch: fix/issue-123
+
 prompts:
   - 'Rephrase this in {{language}}: {{body}}'
   - 'Translate this to conversational {{language}}: {{body}}'
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 
 tests:
   - vars:

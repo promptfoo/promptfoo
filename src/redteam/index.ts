@@ -1,239 +1,219 @@
+import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import Table from 'cli-table3';
+import * as fs from 'fs';
+import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
-import { loadApiProvider } from '../providers';
-import type { ApiProvider, TestCase } from '../types';
+import type { TestCaseWithPlugin } from '../types';
+import type { SynthesizeOptions } from '../types/redteam';
+import { maybeLoadFromExternalFile } from '../util';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, INCLUDE_ENTITY_METADATA } from './constants';
+import { HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import CompetitorPlugin from './plugins/competitors';
-import ContractPlugin from './plugins/contracts';
-import DebugAccessPlugin from './plugins/debugAccess';
-import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
-import HallucinationPlugin from './plugins/hallucination';
-import { getHarmfulTests } from './plugins/harmful';
-import HijackingPlugin from './plugins/hijacking';
-import ImitationPlugin from './plugins/imitation';
-import OverreliancePlugin from './plugins/overreliance';
-import { getPiiLeakTestsForCategory } from './plugins/pii';
-import PoliticsPlugin from './plugins/politics';
-import RbacPlugin from './plugins/rbac';
-import ShellInjectionPlugin from './plugins/shellInjection';
-import SqlInjectionPlugin from './plugins/sqlInjection';
-import { addInjections } from './strategies/injections';
-import { addIterativeJailbreaks } from './strategies/iterative';
-import type { SynthesizeOptions } from './types';
+import { Plugins } from './plugins';
+import { CustomPlugin } from './plugins/custom';
+import { loadRedteamProvider } from './providers/shared';
+import { Strategies, validateStrategies } from './strategies';
 
-type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
-
-interface Plugin {
-  key: string;
-  action: (
-    provider: ApiProvider,
-    purpose: string,
-    injectVar: string,
-    n: number,
-  ) => Promise<TestCase[]>;
+/**
+ * Determines the status of test generation based on requested and generated counts.
+ * @param requested - The number of requested tests.
+ * @param generated - The number of generated tests.
+ * @returns A colored string indicating the status.
+ */
+function getStatus(requested: number, generated: number): string {
+  if (generated === 0) {
+    return chalk.red('Failed');
+  }
+  if (generated < requested) {
+    return chalk.yellow('Partial');
+  }
+  return chalk.green('Success');
 }
 
-interface Strategy {
-  key: string;
-  action: (testCases: TestCaseWithPlugin[], injectVar: string) => TestCase[];
+/**
+ * Generates a report of plugin and strategy results.
+ * @param pluginResults - Results from plugin executions.
+ * @param strategyResults - Results from strategy executions.
+ * @returns A formatted string containing the report.
+ */
+function generateReport(
+  pluginResults: Record<string, { requested: number; generated: number }>,
+  strategyResults: Record<string, { requested: number; generated: number }>,
+): string {
+  const table = new Table({
+    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'],
+    colWidths: [5, 10, 40, 12, 12, 14],
+  });
+
+  let rowIndex = 1;
+
+  Object.entries(pluginResults)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .forEach(([id, { requested, generated }]) => {
+      table.push([rowIndex++, 'Plugin', id, requested, generated, getStatus(requested, generated)]);
+    });
+
+  Object.entries(strategyResults)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .forEach(([id, { requested, generated }]) => {
+      table.push([
+        rowIndex++,
+        'Strategy',
+        id,
+        requested,
+        generated,
+        getStatus(requested, generated),
+      ]);
+    });
+
+  return `\nTest Generation Report:\n${table.toString()}`;
 }
 
-const Plugins: Plugin[] = [
-  {
-    key: 'competitors',
-    action: (provider, purpose, injectVar, n) =>
-      new CompetitorPlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  {
-    key: 'contracts',
-    action: (provider, purpose, injectVar, n) =>
-      new ContractPlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  {
-    key: 'excessive-agency',
-    action: (provider, purpose, injectVar, n) =>
-      new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  {
-    key: 'hallucination',
-    action: (provider, purpose, injectVar, n) =>
-      new HallucinationPlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  ...(Object.keys(HARM_PLUGINS).map((category) => ({
-    key: category,
-    action: (provider, purpose, injectVar, n) =>
-      getHarmfulTests(provider, purpose, injectVar, [category], n),
-  })) as Plugin[]),
-  {
-    key: 'hijacking',
-    action: (provider, purpose, injectVar, n) =>
-      new HijackingPlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  {
-    key: 'imitation',
-    action: async (provider, purpose, injectVar, n) => {
-      const plugin = new ImitationPlugin(provider, purpose, injectVar);
-      return plugin.generateTests(n);
-    },
-  },
-  {
-    key: 'overreliance',
-    action: (provider, purpose, injectVar, n) =>
-      new OverreliancePlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  {
-    key: 'sql-injection',
-    action: (provider, purpose, injectVar, n) =>
-      new SqlInjectionPlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  {
-    key: 'shell-injection',
-    action: (provider, purpose, injectVar, n) =>
-      new ShellInjectionPlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  {
-    key: 'debug-access',
-    action: (provider, purpose, injectVar, n) =>
-      new DebugAccessPlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  {
-    key: 'rbac',
-    action: (provider, purpose, injectVar, n) =>
-      new RbacPlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  {
-    key: 'politics',
-    action: (provider, purpose, injectVar, n) =>
-      new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
-  },
-  ...(PII_PLUGINS.map((category) => ({
-    key: category,
-    action: (provider, purpose, injectVar, n) =>
-      getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
-  })) as Plugin[]),
-];
+/**
+ * Resolves top-level file paths in the plugin configuration.
+ * @param config - The plugin configuration to resolve.
+ * @returns The resolved plugin configuration.
+ */
+export function resolvePluginConfig(config: Record<string, any> | undefined): Record<string, any> {
+  if (!config) {
+    return {};
+  }
 
-// These plugins refer to a collection of tests.
+  for (const key in config) {
+    const value = config[key];
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const filePath = value.slice('file://'.length);
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`File not found: ${filePath}`);
+      }
+
+      if (filePath.endsWith('.yaml')) {
+        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
+      } else if (filePath.endsWith('.json')) {
+        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      } else {
+        config[key] = fs.readFileSync(filePath, 'utf8');
+      }
+    }
+  }
+  return config;
+}
+
 const categories = {
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
 } as const;
 
-const Strategies: Strategy[] = [
-  {
-    key: 'jailbreak',
-    action: (testCases, injectVar) => {
-      logger.debug('Adding experimental jailbreaks to all test cases');
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative');
-      logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    key: 'prompt-injection',
-    action: (testCases, injectVar) => {
-      const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
-      logger.debug('Adding prompt injections');
-      const newTestCases = addInjections(harmfulPrompts, injectVar);
-      logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    key: 'jailbreak:tree',
-    action: (testCases, injectVar) => {
-      logger.debug('Adding experimental tree jailbreaks to all test cases');
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree');
-      logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
-      return newTestCases;
-    },
-  },
-];
+/**
+ * Formats the test count for display.
+ * @param numTests - The number of tests.
+ * @returns A formatted string representing the test count.
+ */
+const formatTestCount = (numTests: number): string =>
+  numTests === 1 ? '1 test' : `${numTests} tests`;
 
-function validatePlugins(plugins: { id: string; numTests: number }[]): void {
-  const invalidPlugins = plugins.filter((plugin) => !Plugins.map((p) => p.key).includes(plugin.id));
-  if (invalidPlugins.length > 0) {
-    const validPluginsString = Plugins.map((p) => p.key).join(', ');
-    const invalidPluginsString = invalidPlugins.map((p) => p.id).join(', ');
-    throw new Error(
-      `Invalid plugin(s): ${invalidPluginsString}. Valid plugins are: ${validPluginsString}`,
-    );
-  }
-  const pluginsWithoutNumTests = plugins.filter(
-    (plugin) => !Number.isSafeInteger(plugin.numTests) || plugin.numTests <= 0,
-  );
-  if (pluginsWithoutNumTests.length > 0) {
-    const pluginsWithoutNumTestsString = pluginsWithoutNumTests.map((p) => p.id).join(', ');
-    throw new Error(`Plugins without a numTests: ${pluginsWithoutNumTestsString}`);
-  }
-}
-
-function validateStrategies(strategies: { id: string }[]): void {
-  const invalidStrategies = strategies.filter(
-    (strategy) => !Strategies.map((s) => s.key).includes(strategy.id),
-  );
-  if (invalidStrategies.length > 0) {
-    throw new Error(`Invalid strategy(s): ${invalidStrategies.join(', ')}`);
-  }
-}
-
-const formatTestCount = (numTests: number) => {
-  if (numTests === 1) {
-    return '1 test';
-  }
-  return `${numTests} tests`;
-};
-
+/**
+ * Synthesizes test cases based on provided options.
+ * @param options - The options for test case synthesis.
+ * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
+ */
 export async function synthesize({
+  entities: entitiesOverride,
+  injectVar,
+  language,
+  maxConcurrency = 1,
+  plugins,
   prompts,
   provider,
-  injectVar,
-  numTests,
   purpose: purposeOverride,
   strategies,
-  plugins,
-}: SynthesizeOptions) {
-  validatePlugins(plugins);
+  delay,
+}: SynthesizeOptions): Promise<{
+  purpose: string;
+  entities: string[];
+  testCases: TestCaseWithPlugin[];
+}> {
+  if (prompts.length === 0) {
+    throw new Error('Prompts array cannot be empty');
+  }
+  if (delay && maxConcurrency > 1) {
+    maxConcurrency = 1;
+    logger.warn('Delay is enabled, setting max concurrency to 1.');
+  }
   validateStrategies(strategies);
-  const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
-    options: {
-      config: { temperature: 0.5 },
-    },
-  });
+
+  const redteamProvider = await loadRedteamProvider({ provider });
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
     }...\nUsing plugins:\n\n${chalk.yellow(
       plugins
-        .map((p) => `${p.id} (${formatTestCount(p.numTests)})`)
+        .map(
+          (p) =>
+            `${p.id} (${formatTestCount(p.numTests)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`,
+        )
         .sort()
         .join('\n'),
     )}\n`,
   );
-  logger.info(`Using strategies: ${strategies.map((s) => s.id).join(', ')}`);
-  logger.info('Generating...');
+  if (strategies.length > 0) {
+    const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
+    logger.info(
+      `Using strategies:\n\n${chalk.yellow(
+        strategies
+          .map((s) => `${s.id} (${formatTestCount(totalPluginTests)})`)
+          .sort()
+          .join('\n'),
+      )}\n`,
+    );
+  }
 
-  // Get vars
+  const totalTests =
+    plugins.reduce((sum, p) => sum + (p.numTests || 0), 0) * (strategies.length + 1);
+
+  const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
+
+  logger.info(
+    chalk.bold(`Test Generation Summary:`) +
+      `\n• Total tests: ${chalk.cyan(totalTests)}` +
+      `\n• Plugin tests: ${chalk.cyan(totalPluginTests)}` +
+      `\n• Plugins: ${chalk.cyan(plugins.length)}` +
+      `\n• Strategies: ${chalk.cyan(strategies.length)}` +
+      `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n` +
+      (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
+  );
+
   if (typeof injectVar !== 'string') {
     const parsedVars = extractVariablesFromTemplates(prompts);
     if (parsedVars.length > 1) {
       logger.warn(
-        `Multiple variables found in prompts: ${parsedVars.join(', ')}. Using the first one.`,
+        `\nMultiple variables found in prompts: ${parsedVars.join(', ')}. Using the last one "${parsedVars[parsedVars.length - 1]}". Override this selection with --injectVar`,
       );
     } else if (parsedVars.length === 0) {
       logger.warn('No variables found in prompts. Using "query" as the inject variable.');
     }
-    injectVar = parsedVars[0] || 'query';
+    // Odds are that the last variable is the user input since the user input usually goes at the end of the prompt
+    injectVar = parsedVars[parsedVars.length - 1] || 'query';
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
-  // if a category is included in the user selected plugins, add all of its plugins
+  let progressBar: cliProgress.SingleBar | null = null;
+  if (process.env.LOG_LEVEL !== 'debug') {
+    progressBar = new cliProgress.SingleBar(
+      {
+        format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
+      },
+      cliProgress.Presets.shades_classic,
+    );
+    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
+  }
+
   for (const [category, categoryPlugins] of Object.entries(categories)) {
     const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
@@ -241,84 +221,168 @@ export async function synthesize({
     }
   }
 
-  // Deduplicate, filter out the category names, and sort
-  plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
-
-  // Initialize progress bar
-  const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-  const totalSteps = plugins.length + 2; // +2 for initial setup steps
-  let currentStep = 0;
-
-  if (process.env.LOG_LEVEL !== 'debug') {
-    progressBar.start(100, 0);
-  }
-
-  const updateProgress = () => {
-    currentStep += 1;
-    const progress = Math.floor((currentStep / totalSteps) * 100);
-    progressBar.update(progress);
+  const expandedPlugins: typeof plugins = [];
+  const expandPlugin = (
+    plugin: (typeof plugins)[0],
+    mapping: { plugins: string[]; strategies: string[] },
+  ) => {
+    mapping.plugins.forEach((p: string) =>
+      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
+    );
+    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
   };
 
-  // Get purpose
+  plugins.forEach((plugin) => {
+    const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
+      (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
+    );
+
+    if (mappingKey) {
+      const mapping =
+        ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
+        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((m) =>
+          plugin.id.startsWith(`${mappingKey}:`),
+        );
+      if (mapping) {
+        expandPlugin(plugin, mapping);
+      }
+    } else {
+      expandedPlugins.push(plugin);
+    }
+  });
+
+  plugins = expandedPlugins;
+
+  plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
+
+  progressBar?.increment(1, { task: 'Extracting system purpose' });
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
-  updateProgress();
-  let entities: string[] = [];
-  if (plugins.some((p) => p.id === 'imitation')) {
-    entities = await extractEntities(redteamProvider, prompts);
-  }
-  updateProgress();
+
+  progressBar?.increment(1, { task: 'Extracting entities' });
+  const entities: string[] = Array.isArray(entitiesOverride)
+    ? entitiesOverride
+    : await extractEntities(redteamProvider, prompts);
 
   logger.debug(`System purpose: ${purpose}`);
 
+  for (const plugin of plugins) {
+    const { validate } = Plugins.find((p) => p.key === plugin.id) || {};
+    if (validate) {
+      validate({
+        language,
+        ...resolvePluginConfig(plugin.config),
+      });
+    }
+  }
+
+  const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  for (const { key, action } of Plugins) {
-    const plugin = plugins.find((p) => p.id === key);
-    if (plugin) {
-      updateProgress();
-      logger.debug(`Generating ${key} tests`);
-      const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests);
+  await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+    progressBar?.update({ task: plugin.id });
+    const { action } = Plugins.find((p) => p.key === plugin.id) || {};
+    if (action) {
+      logger.debug(`Generating tests for ${plugin.id}...`);
+      const pluginTests = await action(
+        redteamProvider,
+        purpose,
+        injectVar,
+        plugin.numTests,
+        delay || 0,
+        {
+          language,
+          ...resolvePluginConfig(plugin.config),
+        },
+      );
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,
           metadata: {
             ...(t.metadata || {}),
-            pluginId: key,
-            purpose,
-            ...(INCLUDE_ENTITY_METADATA.includes(key) && entities.length > 0 ? { entities } : {}),
+            pluginId: plugin.id,
           },
         })),
       );
-      logger.debug(`Added ${pluginTests.length} ${key} test cases`);
+      progressBar?.increment(plugin.numTests);
+      logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
+      pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
+    } else if (plugin.id.startsWith('file://')) {
+      logger.debug(`Loading custom plugin from ${plugin.id}`);
+      const filePath = plugin.id.slice('file://'.length);
+
+      const definition = maybeLoadFromExternalFile(filePath) as {
+        generator: string;
+        grader: string;
+      };
+
+      logger.debug(`Custom plugin definition: ${JSON.stringify(definition, null, 2)}`);
+
+      const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, definition);
+      const customTests = await customPlugin.generateTests(plugin.numTests, delay);
+      testCases.push(
+        ...customTests.map((t) => ({
+          ...t,
+          metadata: {
+            ...(t.metadata || {}),
+            pluginId: plugin.id,
+          },
+        })),
+      );
+      logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
+      pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
+    } else {
+      logger.warn(`Plugin ${plugin.id} not registered, skipping`);
+      pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
+      progressBar?.increment(plugin.numTests);
     }
-  }
+  });
 
   const newTestCases: TestCaseWithPlugin[] = [];
 
-  for (const { key, action } of Strategies) {
-    const strategy = strategies.find((s) => s.id === key);
-    if (strategy) {
-      updateProgress();
+  const strategyResults: Record<string, { requested: number; generated: number }> = {};
+  if (strategies.length > 0) {
+    const existingTestCount = testCases.length;
+    const totalStrategyTests = existingTestCount * strategies.length;
+
+    logger.info(
+      chalk.bold(
+        `\nGenerating additional tests using ${strategies.length} strateg${strategies.length === 1 ? 'y' : 'ies'}:`,
+      ) +
+        `\n• Existing tests: ${chalk.cyan(existingTestCount)}` +
+        `\n• Expected new tests: ${chalk.cyan(totalStrategyTests)}` +
+        `\n• Total expected tests: ${chalk.cyan(existingTestCount + totalStrategyTests)}`,
+    );
+
+    for (const { key, action } of Strategies) {
+      const strategy = strategies.find((s) => s.id === key);
+      if (!strategy) {
+        continue;
+      }
+      progressBar?.update({ task: `Applying strategy: ${key}` });
       logger.debug(`Generating ${key} tests`);
-      const strategyTestCases = action(testCases, injectVar);
+      const strategyTestCases = await action(testCases, injectVar, strategy.config || {});
       newTestCases.push(
         ...strategyTestCases.map((t) => ({
           ...t,
           metadata: {
             ...(t.metadata || {}),
-            pluginId: key,
+            pluginId: t.metadata?.pluginId,
+            strategyId: strategy.id,
           },
         })),
       );
+      strategyResults[key] = {
+        requested: testCases.length,
+        generated: strategyTestCases.length,
+      };
     }
+
+    testCases.push(...newTestCases);
   }
 
-  testCases.push(...newTestCases);
+  progressBar?.update({ task: 'Done.' });
+  progressBar?.stop();
 
-  // Finish progress bar
-  if (process.env.LOG_LEVEL !== 'debug') {
-    progressBar.update(100);
-    progressBar.stop();
-  }
+  logger.info(generateReport(pluginResults, strategyResults));
 
-  return testCases;
+  return { purpose, entities, testCases };
 }

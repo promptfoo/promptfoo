@@ -30,7 +30,7 @@ async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string
     data: { user },
   } = await supabase.auth.getUser();
   invariant(user, 'User not logged in');
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from('EvaluationResult')
     .select('id, createdAt')
     .eq('user_id', user.id)
@@ -43,7 +43,7 @@ async function fetchEvalFromSupabase(
   id: string,
 ): Promise<Database['public']['Tables']['EvaluationResult']['Row'] | null> {
   const supabase = createClientComponentClient<Database>();
-  const { data, error } = await supabase.from('EvaluationResult').select('*').eq('id', id).single();
+  const { data } = await supabase.from('EvaluationResult').select('*').eq('id', id).single();
   return data;
 }
 
@@ -122,9 +122,10 @@ export default function Eval({
       setAuthor(preloadedData.data.author || null);
       setLoaded(true);
     } else if (fetchId) {
-      console.log('Eval init: Fetching eval from remote server', fetchId);
+      console.log('Eval init: Fetching eval', fetchId);
       const run = async () => {
-        const url = `${REMOTE_API_BASE_URL}/api/eval/${fetchId}`;
+        const host = IS_RUNNING_LOCALLY ? REMOTE_API_BASE_URL : '';
+        const url = `${host}/api/eval/${fetchId}`;
         console.log('Fetching eval from remote server', url);
         const response = await fetch(url);
         if (!response.ok) {

@@ -14,6 +14,7 @@ This guide shows you how to automatically generate adversarial tests specificall
 - Competitor recommendations (when the LLM suggests alternatives to your business)
 - Unintended contracts (when the LLM makes commitments or agreements on behalf of your business)
 - Political statements
+- Custom policy violations (tailored to your specific use case)
 - Safety risks from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241): violent crimes, non-violent crimes, sex crimes, child exploitation, specialized financial/legal/medical advice, privacy, intellectual property, indiscriminate weapons, hate, self-harm, sexual content.
 - Safety risks from the [HarmBench](https://www.harmbench.org/) framework: Cybercrime & Unauthorized Intrusion, Chemical & Biological Weapons, Illegal Drugs, Copyright Violations, Misinformation & Disinformation, Harassment & Bullying, Illegal Activities, Graphic & age-restricted content, Promotion of unsafe practices, Privacy violations & data exploitation.
 
@@ -57,15 +58,15 @@ You can specify your redteam configuration directly in `promptfooconfig.yaml`. S
 Then create adversarial test cases:
 
 ```sh
-npx promptfoo@latest generate redteam -w
+npx promptfoo@latest redteam generate
 ```
 
-The `-w` option overwrites the `promptfooconfig.yaml` file to include the newly generated test cases.
+This will create a file `redteam.yaml` with the test cases.
 
 Run the eval:
 
 ```
-npx promptfoo@latest eval
+npx promptfoo@latest eval -c redteam.yaml
 ```
 
 And view the results:
@@ -73,6 +74,8 @@ And view the results:
 ```sh
 npx promptfoo@latest view
 ```
+
+By default, this will open the eval logs. Click "Vulnerability Report" in the top right corner to see the report view.
 
 Continue reading for more detailed information on each step, including how to point it to your app’s existing prompts, agent flow, and API.
 
@@ -237,10 +240,10 @@ For more information, see [Overriding the LLM grader](/docs/configuration/expect
 
 ## Step 3: Generate adversarial test cases
 
-Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo generate redteam` command:
+Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo redteam generate` command:
 
 ```sh
-npx promptfoo@latest generate redteam -w
+npx promptfoo@latest redteam generate -w
 ```
 
 This command works by reading your prompts and providers, and then generating a set of adversarial inputs that stress-test your prompts/models in a variety of situations. Test generation usually takes about 5 minutes.
@@ -291,7 +294,7 @@ It also tests for a variety of harmful input and output scenarios from the [ML C
 By default, all of the above will be included in the redteam. To use specific types of tests, use `--plugins`:
 
 ```yaml
-npx promptfoo@latest generate redteam -w --plugins 'harmful,jailbreak,hijacking'
+npx promptfoo@latest redteam generate -w --plugins 'harmful,jailbreak,hijacking'
 ```
 
 The following plugins are enabled by default:

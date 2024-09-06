@@ -19,7 +19,8 @@ interface PythonProviderConfig {
 }
 
 export class PythonProvider implements ApiProvider {
-  private config: PythonProviderConfig;
+  config: PythonProviderConfig;
+
   private scriptPath: string;
   private functionName: string | null;
   public label: string | undefined;
@@ -53,7 +54,7 @@ export class PythonProvider implements ApiProvider {
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
     const cacheKey = `python:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
-    )}`;
+    )}:${JSON.stringify(context?.vars)}`;
     const cache = await getCache();
     let cachedResult;
 

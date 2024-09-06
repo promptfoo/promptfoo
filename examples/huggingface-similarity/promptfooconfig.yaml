@@ -1,11 +1,19 @@
 prompts:
   - "You're a translator.  Translate this into {{language}}: {{input}}"
   - 'Speak in {{language}}: {{input}}'
-providers: [openai:gpt-4o-mini, openai:gpt-4]
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4
 tests:
   - vars:
-      language: [French, German, Spanish]
-      input: ['Hello world', 'Good morning', 'How are you?']
+      language:
+        - French
+        - German
+        - Spanish
+      input:
+        - 'Hello world'
+        - 'Good morning'
+        - 'How are you?'
     assert:
       - type: similar
         value: 'Hello world'

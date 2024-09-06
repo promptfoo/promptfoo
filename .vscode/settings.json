@@ -1,0 +1,25 @@
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "cSpell.words": [
+    "apidevtools",
+    "cybercrime",
+    "Dedup",
+    "deduped",
+    "envars",
+    "Evals",
+    "Groq",
+    "mitigations",
+    "openai",
+    "overreliance",
+    "OWASP",
+    "promptfoo",
+    "promptfooconfig",
+    "rawlist",
+    "redteam",
+    "TEMPLATING",
+    "TESTCASE",
+    "unindented"
+  ],
+  "jest.jestCommandLine": "npm run test --"
+}

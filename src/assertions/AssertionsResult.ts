@@ -1,4 +1,5 @@
-import { AssertionSet, GradingResult } from '../types';
+import { getEnvBool } from '../envars';
+import type { AssertionSet, GradingResult } from '../types';
 
 const DEFAULT_TOKENS_USED = {
   total: 0,
@@ -82,7 +83,7 @@ export class AssertionsResult {
 
     this.failedReason = result.reason;
 
-    if (process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES) {
+    if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
       throw new Error(result.reason);
     }
   }
@@ -95,7 +96,7 @@ export class AssertionsResult {
     const score = this.totalScore / this.totalWeight;
     let pass = !this.failedReason;
 
-    let reason = !this.failedReason ? 'All assertions passed' : this.failedReason;
+    let reason = this.failedReason ? this.failedReason : 'All assertions passed';
 
     if (this.threshold) {
       // Existence of a test threshold overrides the pass/fail status of individual assertions

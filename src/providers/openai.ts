@@ -1,6 +1,7 @@
 import type { Cache } from 'cache-manager';
 import OpenAI from 'openai';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type {
   ApiModerationProvider,
@@ -15,8 +16,9 @@ import type {
   TokenUsage,
 } from '../types';
 import { renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
-import { OpenAiFunction, OpenAiTool } from './openaiUtil';
+import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 // see https://platform.openai.com/docs/models
@@ -193,7 +195,9 @@ export class OpenAiGenericProvider implements ApiProvider {
 
   getOrganization(): string | undefined {
     return (
-      this.config.organization || this.env?.OPENAI_ORGANIZATION || process.env.OPENAI_ORGANIZATION
+      this.config.organization ||
+      this.env?.OPENAI_ORGANIZATION ||
+      getEnvString('OPENAI_ORGANIZATION')
     );
   }
 
@@ -202,7 +206,8 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost = this.config.apiHost || this.env?.OPENAI_API_HOST || process.env.OPENAI_API_HOST;
+    const apiHost =
+      this.config.apiHost || this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
     if (apiHost) {
       return `https://${apiHost}/v1`;
     }
@@ -210,8 +215,8 @@ export class OpenAiGenericProvider implements ApiProvider {
       this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
       this.env?.OPENAI_BASE_URL ||
-      process.env.OPENAI_API_BASE_URL ||
-      process.env.OPENAI_BASE_URL ||
+      getEnvString('OPENAI_API_BASE_URL') ||
+      getEnvString('OPENAI_BASE_URL') ||
       this.getApiUrlDefault()
     );
   }
@@ -224,7 +229,7 @@ export class OpenAiGenericProvider implements ApiProvider {
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.OPENAI_API_KEY ||
-      process.env.OPENAI_API_KEY
+      getEnvString('OPENAI_API_KEY')
     );
   }
 
@@ -357,8 +362,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
     let stop: string;
     try {
-      stop = process.env.OPENAI_STOP
-        ? JSON.parse(process.env.OPENAI_STOP)
+      stop = getEnvString('OPENAI_STOP')
+        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
         : this.config?.stop || ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
@@ -366,15 +371,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      seed: this.config.seed || 0,
-      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
-      presence_penalty:
-        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+      seed: this.config.seed,
+      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+      top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
+      presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty:
-        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
+        this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
+      best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
@@ -461,20 +465,30 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const body = {
       model: this.modelName,
-      messages: messages,
-      seed: this.config.seed || 0,
-      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
+      messages,
+      seed: this.config.seed,
+      max_tokens:
+        this.config.max_tokens ?? Number.parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      temperature:
+        this.config.temperature ?? Number.parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      top_p: this.config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+        this.config.presence_penalty ??
+        Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+        this.config.frequency_penalty ??
+        Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       ...(this.config.functions
-        ? { functions: renderVarsInObject(this.config.functions, context?.vars) }
+        ? {
+            functions: maybeLoadFromExternalFile(
+              renderVarsInObject(this.config.functions, context?.vars),
+            ),
+          }
         : {}),
       ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
-      ...(this.config.tools ? { tools: renderVarsInObject(this.config.tools, context?.vars) } : {}),
+      ...(this.config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+        : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
@@ -639,7 +653,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       assistant_id: this.assistantId,
       model: this.assistantConfig.modelName || undefined,
       instructions: this.assistantConfig.instructions || undefined,
-      tools: renderVarsInObject(this.assistantConfig.tools, context?.vars) || undefined,
+      tools:
+        maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars)) ||
+        undefined,
       metadata: this.assistantConfig.metadata || undefined,
       temperature: this.assistantConfig.temperature || undefined,
       tool_choice: this.assistantConfig.toolChoice || undefined,

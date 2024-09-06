@@ -6,7 +6,7 @@ import FailReasonCarousel from '@/app/eval/FailReasonCarousel';
 import CommentDialog from '@/app/eval/TableCommentDialog';
 import TruncatedText from '@/app/eval/TruncatedText';
 import { useStore as useResultsViewStore } from '@/app/eval/store';
-import { EvaluateTableOutput } from '@/app/eval/types';
+import type { EvaluateTableOutput } from '@/app/eval/types';
 import { useShiftKey } from '@/app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
 import { diffSentences, diffJson, diffWords } from 'diff';
@@ -44,8 +44,7 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, inComparisonMode } =
-    useResultsViewStore();
+  const { renderMarkdown, prettifyJson, showPrompts, showPassFail } = useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -218,8 +217,8 @@ function EvalOutputCell({
   const handleSetScore = React.useCallback(() => {
     const score = prompt('Set test score (0.0 - 1.0):', String(output.score));
     if (score !== null) {
-      const parsedScore = parseFloat(score);
-      if (!isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
+      const parsedScore = Number.parseFloat(score);
+      if (!Number.isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
         onRating(undefined, parsedScore, output.gradingResult?.comment);
       } else {
         alert('Invalid score. Please enter a value between 0.0 and 1.0.');

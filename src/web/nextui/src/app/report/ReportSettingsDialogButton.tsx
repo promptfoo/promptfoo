@@ -7,6 +7,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Slider from '@mui/material/Slider';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useReportStore } from './store';
 
@@ -29,13 +30,11 @@ const ReportSettingsDialogButton: React.FC = () => {
 
   return (
     <>
-      <IconButton
-        onClick={handleOpen}
-        sx={{ position: 'absolute', top: 8, right: 8 }}
-        aria-label="settings"
-      >
-        <SettingsIcon />
-      </IconButton>
+      <Tooltip title="Report Settings" placement="top">
+        <IconButton onClick={handleOpen} aria-label="settings">
+          <SettingsIcon />
+        </IconButton>
+      </Tooltip>
       <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
         <DialogTitle>Report Settings</DialogTitle>
         <DialogContent>

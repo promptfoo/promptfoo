@@ -5,6 +5,11 @@ import { evaluate as doEvaluate } from './evaluator';
 import { readPrompts } from './prompts';
 import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
+import { extractEntities } from './redteam/extraction/entities';
+import { extractSystemPurpose } from './redteam/extraction/purpose';
+import { GRADERS } from './redteam/graders';
+import { Plugins } from './redteam/plugins';
+import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
 import { readTests } from './testCases';
 import type {
@@ -13,6 +18,7 @@ import type {
   EvaluateTestSuite,
   ProviderOptions,
   PromptFunction,
+  Scenario,
 } from './types';
 import {
   readFilters,
@@ -29,6 +35,7 @@ export { generateTable } from './table';
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   const constructedTestSuite: TestSuite = {
     ...testSuite,
+    scenarios: testSuite.scenarios as Scenario[],
     providers: await loadApiProviders(testSuite.providers, {
       env: testSuite.env,
     }),
@@ -120,11 +127,22 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   return ret;
 }
 
-export { evaluate, assertions, providers };
+const redteam = {
+  Extractors: {
+    extractEntities,
+    extractSystemPurpose,
+  },
+  Graders: GRADERS,
+  Plugins,
+  Strategies,
+};
+
+export { assertions, cache, evaluate, providers, redteam };
 
 export default {
-  evaluate,
   assertions,
-  providers,
   cache,
+  evaluate,
+  providers,
+  redteam,
 };

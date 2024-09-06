@@ -2,7 +2,8 @@ import compression from 'compression';
 import cors from 'cors';
 import debounce from 'debounce';
 import express from 'express';
-import fs, { Stats } from 'fs';
+import type { Stats } from 'fs';
+import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -12,7 +13,7 @@ import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
-import promptfoo, {
+import type {
   EvaluateTestSuiteWithEvaluateOptions,
   Job,
   Prompt,
@@ -20,6 +21,7 @@ import promptfoo, {
   TestCase,
   TestSuite,
 } from '../index';
+import promptfoo from '../index';
 import logger from '../logger';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
@@ -29,7 +31,7 @@ import {
   readResult,
   getTestCases,
   updateResult,
-  readLatestResults,
+  getLatestEval,
   migrateResultsFromFileSystemToDatabase,
   getStandaloneEvals,
   deleteEval,
@@ -74,14 +76,14 @@ export async function startServer(
   const watchFilePath = getDbSignalPath();
   const watcher = debounce(async (curr: Stats, prev: Stats) => {
     if (curr.mtime !== prev.mtime) {
-      io.emit('update', await readLatestResults(filterDescription));
+      io.emit('update', await getLatestEval(filterDescription));
       allPrompts = null;
     }
   }, 250);
   fs.watchFile(watchFilePath, watcher);
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await readLatestResults(filterDescription));
+    socket.emit('init', await getLatestEval(filterDescription));
   });
 
   app.get('/api/results', (req, res) => {

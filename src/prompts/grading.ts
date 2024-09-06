@@ -16,7 +16,7 @@ export const DEFAULT_GRADING_PROMPT = JSON.stringify([
 
     Output: Hello world
     Rubric: Content contains a greeting
-    {"reason": "the content contains the word 'world'", "pass": true, "score": 1.0}
+    {"reason": "the content contains the word 'Hello'", "pass": true, "score": 1.0}
 
     Output: Avast ye swabs, repel the invaders!
     Rubric: Does not speak like a pirate

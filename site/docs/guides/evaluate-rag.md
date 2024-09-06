@@ -67,19 +67,27 @@ In the example below, we're evaluating a RAG chat bot used on a corporate intran
 First, create `promptfooconfig.yaml`. We'll use a placeholder prompt with a single `{{ query }}` variable. This file instructs promptfoo to run several test cases through the retrieval script.
 
 ```yaml
-prompts: ['{{ query }}']
-providers: ['python: retrieve.py']
+prompts:
+  - '{{ query }}'
+providers:
+  - 'python: retrieve.py'
 tests:
   - vars:
       query: What is our reimbursement policy?
     assert:
       - type: contains-all
-        value: ['reimbursement.md', 'hr-policies.html', 'Employee Reimbursement Policy']
+        value:
+          - 'reimbursement.md'
+          - 'hr-policies.html'
+          - 'Employee Reimbursement Policy'
   - vars:
       query: How many weeks is maternity leave?
     assert:
       - type: contains-all
-        value: ['parental-leave.md', 'hr-policies.html', 'Maternity Leave']
+        value:
+          - 'parental-leave.md'
+          - 'hr-policies.html'
+          - 'Maternity Leave'
 ```
 
 In the above example, the `contains-all` assertion ensures that the output from `retrieve.py` contains all the listed substrings. The `context-recall` assertions use an LLM model to ensure that the retrieval performs well.
@@ -235,7 +243,9 @@ Think carefully and respond to the user concisely and accurately. For each state
 Now, update the config to list multiple prompts:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 ```
 
 Let's also introduce a metric
@@ -251,7 +261,10 @@ In the above example, both prompts perform well. So we might go with prompt 1, w
 Imagine we're exploring budget and want to compare the performance of GPT-4 vs Llama. Update the `providers` config to list each of the models:
 
 ```yaml
-providers: [openai:gpt-4o-mini, openai:gpt-4o, ollama:llama3.1]
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
+  - ollama:llama3.1
 ```
 
 Let's also add a heuristic that prefers shorter outputs. Using the `defaultTest` directive, we apply this to all RAG tests:

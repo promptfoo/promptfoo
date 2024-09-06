@@ -1,7 +1,8 @@
 import type { VisibilityState } from '@tanstack/table-core';
 import { get, set, del } from 'idb-keyval';
 import { create } from 'zustand';
-import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
+import type { StateStorage } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { EvaluateTable, UnifiedConfig } from './types';
 
 const storage: StateStorage = {

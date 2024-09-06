@@ -120,8 +120,8 @@ export default function Cols() {
         return 0;
       }
       if (sortField === 'passRate') {
-        const aValue = parseFloat(calculatePassRate(a.metrics));
-        const bValue = parseFloat(calculatePassRate(b.metrics));
+        const aValue = Number.parseFloat(calculatePassRate(a.metrics));
+        const bValue = Number.parseFloat(calculatePassRate(b.metrics));
         return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
       } else {
         // Ensure sortField is a key of StandaloneEval
@@ -137,9 +137,6 @@ export default function Cols() {
     });
   }, [filteredCols, sortField, sortOrder]);
 
-  const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setFilter({ ...filter, [event.target.name]: event.target.value });
-  };
   const evalIdOptions = React.useMemo(
     () => Array.from(new Set(cols.map((col) => col.evalId))),
     [cols],

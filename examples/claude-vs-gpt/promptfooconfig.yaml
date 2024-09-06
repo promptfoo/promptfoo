@@ -49,7 +49,9 @@ tests:
         have a mouth, but water kills me. What am I?
     assert:
       - type: icontains-any
-        value: [fire, flame]
+        value:
+          - fire
+          - flame
   - vars:
       riddle: What can travel around the world while staying in a corner?
     assert:

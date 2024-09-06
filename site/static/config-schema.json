@@ -4,6 +4,12 @@
     "PromptfooConfigSchema": {
       "type": "object",
       "properties": {
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "description": {
           "type": "string"
         },
@@ -40,17 +46,10 @@
                         "label": {},
                         "config": {},
                         "prompts": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
-                            }
-                          ]
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         "transform": {
                           "type": "string"
@@ -61,13 +60,19 @@
                         "env": {
                           "type": "object",
                           "properties": {
+                            "AI21_API_BASE_URL": {
+                              "type": "string"
+                            },
+                            "AI21_API_KEY": {
+                              "type": "string"
+                            },
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
-                            "BAM_API_KEY": {
+                            "AWS_BEDROCK_REGION": {
                               "type": "string"
                             },
-                            "BAM_API_HOST": {
+                            "AZURE_OPENAI_API_BASE_URL": {
                               "type": "string"
                             },
                             "AZURE_OPENAI_API_HOST": {
@@ -76,25 +81,52 @@
                             "AZURE_OPENAI_API_KEY": {
                               "type": "string"
                             },
-                            "AZURE_OPENAI_API_BASE_URL": {
-                              "type": "string"
-                            },
                             "AZURE_OPENAI_BASE_URL": {
                               "type": "string"
                             },
-                            "AWS_BEDROCK_REGION": {
+                            "BAM_API_HOST": {
+                              "type": "string"
+                            },
+                            "BAM_API_KEY": {
+                              "type": "string"
+                            },
+                            "CLOUDFLARE_ACCOUNT_ID": {
+                              "type": "string"
+                            },
+                            "CLOUDFLARE_API_KEY": {
                               "type": "string"
                             },
                             "COHERE_API_KEY": {
                               "type": "string"
                             },
-                            "OPENAI_API_KEY": {
+                            "GOOGLE_API_HOST": {
+                              "type": "string"
+                            },
+                            "GOOGLE_API_KEY": {
+                              "type": "string"
+                            },
+                            "GROQ_API_KEY": {
+                              "type": "string"
+                            },
+                            "LOCALAI_BASE_URL": {
+                              "type": "string"
+                            },
+                            "MISTRAL_API_BASE_URL": {
+                              "type": "string"
+                            },
+                            "MISTRAL_API_HOST": {
+                              "type": "string"
+                            },
+                            "MISTRAL_API_KEY": {
+                              "type": "string"
+                            },
+                            "OPENAI_API_BASE_URL": {
                               "type": "string"
                             },
                             "OPENAI_API_HOST": {
                               "type": "string"
                             },
-                            "OPENAI_API_BASE_URL": {
+                            "OPENAI_API_KEY": {
                               "type": "string"
                             },
                             "OPENAI_BASE_URL": {
@@ -103,55 +135,31 @@
                             "OPENAI_ORGANIZATION": {
                               "type": "string"
                             },
+                            "PALM_API_HOST": {
+                              "type": "string"
+                            },
+                            "PALM_API_KEY": {
+                              "type": "string"
+                            },
                             "REPLICATE_API_KEY": {
                               "type": "string"
                             },
                             "REPLICATE_API_TOKEN": {
                               "type": "string"
                             },
-                            "LOCALAI_BASE_URL": {
-                              "type": "string"
-                            },
-                            "MISTRAL_API_HOST": {
-                              "type": "string"
-                            },
-                            "MISTRAL_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "PALM_API_KEY": {
-                              "type": "string"
-                            },
-                            "PALM_API_HOST": {
-                              "type": "string"
-                            },
-                            "GOOGLE_API_KEY": {
-                              "type": "string"
-                            },
-                            "GOOGLE_API_HOST": {
+                            "VERTEX_API_HOST": {
                               "type": "string"
                             },
                             "VERTEX_API_KEY": {
                               "type": "string"
                             },
-                            "VERTEX_API_HOST": {
-                              "type": "string"
-                            },
                             "VERTEX_PROJECT_ID": {
-                              "type": "string"
-                            },
-                            "VERTEX_REGION": {
                               "type": "string"
                             },
                             "VERTEX_PUBLISHER": {
                               "type": "string"
                             },
-                            "MISTRAL_API_KEY": {
-                              "type": "string"
-                            },
-                            "CLOUDFLARE_API_KEY": {
-                              "type": "string"
-                            },
-                            "CLOUDFLARE_ACCOUNT_ID": {
+                            "VERTEX_REGION": {
                               "type": "string"
                             }
                           },
@@ -190,6 +198,24 @@
                       "id": {
                         "type": "string"
                       },
+                      "label": {
+                        "type": "string"
+                      },
+                      "raw": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
                       "raw": {
                         "type": "string"
                       },
@@ -198,9 +224,13 @@
                       },
                       "label": {
                         "type": "string"
-                      }
+                      },
+                      "config": {}
                     },
-                    "required": ["raw", "label"],
+                    "required": [
+                      "raw",
+                      "label"
+                    ],
                     "additionalProperties": false
                   }
                 ]
@@ -243,6 +273,9 @@
                               "type": "number"
                             },
                             {
+                              "type": "boolean"
+                            },
+                            {
                               "type": "array",
                               "items": {
                                 "anyOf": [
@@ -251,6 +284,9 @@
                                   },
                                   {
                                     "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
                                   }
                                 ]
                               }
@@ -348,7 +384,10 @@
                                   "type": "number"
                                 }
                               },
-                              "required": ["type", "assert"],
+                              "required": [
+                                "type",
+                                "assert"
+                              ],
                               "additionalProperties": false
                             },
                             {
@@ -410,7 +449,10 @@
                                           "type": "string"
                                         }
                                       },
-                                      "required": ["role", "content"],
+                                      "required": [
+                                        "role",
+                                        "content"
+                                      ],
                                       "additionalProperties": false
                                     }
                                   }
@@ -496,53 +538,63 @@
         "scenarios": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "description": {
+            "anyOf": [
+              {
                 "type": "string"
               },
-              "config": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "description": {
-                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/description"
-                    },
-                    "vars": {
-                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/vars"
-                    },
-                    "provider": {
-                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
-                    },
-                    "providerOutput": {
-                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
-                    },
-                    "assert": {
-                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
-                    },
-                    "options": {
-                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
-                    },
-                    "threshold": {
-                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
-                    },
-                    "metadata": {
-                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
+              {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "config": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/description"
+                        },
+                        "vars": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/vars"
+                        },
+                        "provider": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
+                        },
+                        "providerOutput": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
+                        },
+                        "assert": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
+                        },
+                        "options": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
+                        },
+                        "threshold": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
+                        },
+                        "metadata": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
+                        }
+                      },
+                      "additionalProperties": false
                     }
                   },
-                  "additionalProperties": false
-                }
-              },
-              "tests": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1"
-                }
+                  "tests": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1"
+                    }
+                  }
+                },
+                "required": [
+                  "config",
+                  "tests"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": ["config", "tests"],
-            "additionalProperties": false
+            ]
           }
         },
         "defaultTest": {
@@ -629,210 +681,51 @@
                 ]
               }
             },
-            "required": ["name", "value"],
+            "required": [
+              "name",
+              "value"
+            ],
             "additionalProperties": false
+          }
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         },
         "metadata": {
           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
         },
-        "redteam": {
-          "type": "object",
-          "properties": {
-            "injectVar": {
-              "type": "string",
-              "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default."
-            },
-            "purpose": {
-              "type": "string",
-              "description": "Purpose override string - describes the prompt templates"
-            },
-            "provider": {
-              "type": "string",
-              "description": "Provider used for generating adversarial inputs"
-            },
-            "numTests": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "default": 5,
-              "description": "Number of tests to generate"
-            },
-            "plugins": {
-              "type": "array",
-              "items": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": [
-                      "competitors",
-                      "contracts",
-                      "debug-access",
-                      "excessive-agency",
-                      "hallucination",
-                      "harmful",
-                      "harmful:chemical-biological-weapons",
-                      "harmful:child-exploitation",
-                      "harmful:copyright-violations",
-                      "harmful:cybercrime",
-                      "harmful:graphic-content",
-                      "harmful:harassment-bullying",
-                      "harmful:hate",
-                      "harmful:illegal-activities",
-                      "harmful:illegal-drugs",
-                      "harmful:indiscriminate-weapons",
-                      "harmful:insults",
-                      "harmful:intellectual-property",
-                      "harmful:misinformation-disinformation",
-                      "harmful:non-violent-crime",
-                      "harmful:privacy",
-                      "harmful:profanity",
-                      "harmful:radicalization",
-                      "harmful:self-harm",
-                      "harmful:sex-crime",
-                      "harmful:sexual-content",
-                      "harmful:specialized-advice",
-                      "harmful:unsafe-practices",
-                      "harmful:violent-crime",
-                      "hijacking",
-                      "imitation",
-                      "overreliance",
-                      "pii",
-                      "pii:api-db",
-                      "pii:direct",
-                      "pii:session",
-                      "pii:social",
-                      "politics",
-                      "rbac",
-                      "shell-injection",
-                      "sql-injection"
-                    ],
-                    "description": "Name of the plugin"
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "enum": [
-                          "competitors",
-                          "contracts",
-                          "debug-access",
-                          "excessive-agency",
-                          "hallucination",
-                          "harmful",
-                          "harmful:chemical-biological-weapons",
-                          "harmful:child-exploitation",
-                          "harmful:copyright-violations",
-                          "harmful:cybercrime",
-                          "harmful:graphic-content",
-                          "harmful:harassment-bullying",
-                          "harmful:hate",
-                          "harmful:illegal-activities",
-                          "harmful:illegal-drugs",
-                          "harmful:indiscriminate-weapons",
-                          "harmful:insults",
-                          "harmful:intellectual-property",
-                          "harmful:misinformation-disinformation",
-                          "harmful:non-violent-crime",
-                          "harmful:privacy",
-                          "harmful:profanity",
-                          "harmful:radicalization",
-                          "harmful:self-harm",
-                          "harmful:sex-crime",
-                          "harmful:sexual-content",
-                          "harmful:specialized-advice",
-                          "harmful:unsafe-practices",
-                          "harmful:violent-crime",
-                          "hijacking",
-                          "imitation",
-                          "overreliance",
-                          "pii",
-                          "pii:api-db",
-                          "pii:direct",
-                          "pii:session",
-                          "pii:social",
-                          "politics",
-                          "rbac",
-                          "shell-injection",
-                          "sql-injection"
-                        ],
-                        "description": "Name of the plugin"
-                      },
-                      "numTests": {
-                        "type": "integer",
-                        "exclusiveMinimum": 0,
-                        "description": "Number of tests to generate for this plugin"
-                      }
-                    },
-                    "required": ["id"],
-                    "additionalProperties": false
-                  }
-                ]
-              },
-              "description": "Plugins to use for redteam generation",
-              "default": []
-            },
-            "strategies": {
-              "type": "array",
-              "items": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": ["jailbreak", "prompt-injection", "jailbreak:tree"],
-                    "description": "Name of the strategy"
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "enum": ["jailbreak", "prompt-injection", "jailbreak:tree"],
-                        "description": "Name of the strategy"
-                      }
-                    },
-                    "required": ["id"],
-                    "additionalProperties": false
-                  }
-                ]
-              },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, prompt-injection\nSupports jailbreak, prompt-injection, jailbreak:tree",
-              "default": [
-                {
-                  "id": "jailbreak"
-                },
-                {
-                  "id": "prompt-injection"
-                }
-              ]
-            }
-          },
-          "additionalProperties": false
+        "redteam": {},
+        "writeLatestResults": {
+          "type": "boolean"
         },
         "evaluateOptions": {
           "type": "object",
           "properties": {
-            "maxConcurrency": {
-              "type": "number"
-            },
-            "showProgressBar": {
+            "cache": {
               "type": "boolean"
-            },
-            "generateSuggestions": {
-              "type": "boolean"
-            },
-            "repeat": {
-              "type": "number"
             },
             "delay": {
               "type": "number"
             },
-            "cache": {
-              "type": "boolean"
-            },
             "eventSource": {
               "type": "string"
             },
+            "generateSuggestions": {
+              "type": "boolean"
+            },
             "interactiveProviders": {
+              "type": "boolean"
+            },
+            "maxConcurrency": {
+              "type": "number"
+            },
+            "repeat": {
+              "type": "number"
+            },
+            "showProgressBar": {
               "type": "boolean"
             }
           },
@@ -841,6 +734,9 @@
         "commandLineOptions": {
           "type": "object",
           "properties": {
+            "description": {
+              "type": "string"
+            },
             "prompts": {
               "type": "array",
               "items": {
@@ -913,9 +809,6 @@
             "watch": {
               "type": "boolean"
             },
-            "interactiveProviders": {
-              "type": "boolean"
-            },
             "filterFailing": {
               "type": "string"
             },
@@ -950,7 +843,10 @@
           "additionalProperties": false
         }
       },
-      "required": ["providers", "prompts", "tests"],
+      "required": [
+        "providers",
+        "prompts"
+      ],
       "additionalProperties": false
     }
   },

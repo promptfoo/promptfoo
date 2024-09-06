@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
@@ -7,7 +7,7 @@ import { resolveConfigs } from '../../config';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCases';
-import { TestSuite, UnifiedConfig } from '../../types';
+import type { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
 
 interface DatasetGenerateOptions {
@@ -55,8 +55,8 @@ async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void>
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
-    numPersonas: parseInt(options.numPersonas, 10),
-    numTestCasesPerPersona: parseInt(options.numTestCasesPerPersona, 10),
+    numPersonas: Number.parseInt(options.numPersonas, 10),
+    numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
     provider: options.provider,
   });
   const configAddition = { tests: results.map((result) => ({ vars: result })) };

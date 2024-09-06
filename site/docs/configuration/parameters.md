@@ -168,7 +168,9 @@ Prompt functions allow you to incorporate custom logic in your prompts. These fu
 To specify a prompt function in `promptfooconfig.yaml`, reference the file directly. For example:
 
 ```yaml
-prompts: ['prompt.js', 'prompt.py']
+prompts:
+  - file://prompt.js
+  - file://prompt.py
 ```
 
 In the prompt function, you can access the test case variables and provider information via the context. The function will have access to a `vars` object and `provider` object. Having access to the provider object allows you to dynamically generate prompts for different providers with different formats.
@@ -257,6 +259,24 @@ In order to see the prompts for each test case, toggle `Table Settings` > `Show 
 
 ![final prompt shown for each test case](/img/docs/final-prompt-for-test-case.png)
 
+### Prompt configs
+
+Prompts can be configured with a `config` object. This object is merged with the provider configuration object and the combined object is used to call the provider API.
+
+A good use case for this is to set the `response_format` for a specific prompt.
+
+#### Example
+
+```yaml
+prompts:
+  - label: 'Prompt #1'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
+
 ### Nunjucks filters
 
 Nunjucks is a templating language with many [built-in filters](https://mozilla.github.io/nunjucks/templating.html#builtin-filters) that can be applied to variables. For example: `{{ varName | capitalize }}`.
@@ -276,8 +296,10 @@ module.exports = function (str) {
 To use a custom Nunjucks filter in Promptfoo, add it to your configuration file (`promptfooconfig.yaml`). The `nunjucksFilters` field should contain a mapping of filter names to the paths of the JavaScript files that define them:
 
 ```yaml
-prompts: [prompts.txt]
-providers: [openai:gpt-4o-mini]
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4o-mini
 // highlight-start
 nunjucksFilters:
   allcaps: ./allcaps.js
@@ -298,7 +320,7 @@ In this example, the `body` variable is passed through the `allcaps` filter befo
 
 If you have a lot of tests, you can optionally keep them separate from the main config file.
 
-The easiest way to do this is by creating `tests.yaml` that contains a list of tests. Then, include it in your `promptfooconfig.yaml` like so:
+The easiest way to do this is by creating a `tests.yaml` file that contains a list of tests. Then, include it in your `promptfooconfig.yaml` like so:
 
 ```yaml
 prompts:
@@ -307,16 +329,16 @@ prompts:
 providers:
   # ...
 
-tests: tests.yaml
+tests: file://path/to/tests.yaml
 ```
 
 You can even break it into multiple files or globs:
 
 ```yaml
 tests:
-  - normal_test.yaml
-  - special_test.yaml
-  - path/to/more_tests/*.yaml
+  - file://relative/path/to/normal_test.yaml
+  - file://relative/path/to/special_test.yaml
+  - file:///absolute/path/to/more_tests/*.yaml
 ```
 
 ### Import from CSV

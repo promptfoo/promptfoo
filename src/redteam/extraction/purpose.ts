@@ -1,11 +1,24 @@
 import dedent from 'dedent';
-import { ApiProvider } from '../../types';
-import { callExtraction, formatPrompts } from './util';
+import logger from '../../logger';
+import type { ApiProvider } from '../../types';
+import { shouldGenerateRemote } from '../util';
+import type { RedTeamTask } from './util';
+import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
 export async function extractSystemPurpose(
   provider: ApiProvider,
   prompts: string[],
 ): Promise<string> {
+  if (shouldGenerateRemote()) {
+    try {
+      const result = await fetchRemoteGeneration('purpose' as RedTeamTask, prompts);
+      return result as string;
+    } catch (error) {
+      logger.warn(`Error using remote generation, falling back to local extraction: ${error}`);
+    }
+  }
+
+  // Fallback to local extraction
   const prompt = dedent`
     The following are prompts that are being used to test an LLM application:
     

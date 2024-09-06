@@ -124,7 +124,9 @@ You may optionally set a `value` as a JSON schema in order to validate the JSON 
 assert:
   - type: contains-json
     value:
-      required: [latitude, longitude]
+      required:
+        - latitude
+        - longitude
       type: object
       properties:
         latitude:
@@ -238,7 +240,9 @@ You may optionally set a `value` as a JSON schema. If set, the output will be va
 assert:
   - type: is-json
     value:
-      required: [latitude, longitude]
+      required:
+        - latitude
+        - longitude
       type: object
       properties:
         latitude:

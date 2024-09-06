@@ -2,7 +2,6 @@ import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import CompareIcon from '@mui/icons-material/Compare';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -14,22 +13,14 @@ import clsx from 'clsx';
 import NewsletterForm from '../components/NewsletterForm';
 import styles from './index.module.css';
 
-function HomepageHeader() {
-  const { siteConfig } = useDocusaurusContext();
+function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1>Find and fix LLM vulnerabilities</h1>
-        <p>Open-source LLM testing used by 25,000+ developers</p>
+        <p>Open-source LLM testing used by 30,000+ developers</p>
         <div className={styles.buttons}>
-          <Link
-            className="button button--primary button--lg"
-            to={
-              typeof window !== 'undefined' && window.location.hash === '#redteam'
-                ? '/docs/red-team'
-                : '/docs/intro'
-            }
-          >
+          <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
           </Link>
           <Link
@@ -110,7 +101,7 @@ function HomepageWalkthrough() {
             <li>Political statements</li>
             <li>Specialized medical and legal advice</li>
             <li>
-              and <Link to="/docs/guides/llm-redteaming">much more</Link>
+              and <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
             </li>
           </ul>
           <p>
@@ -123,7 +114,7 @@ function HomepageWalkthrough() {
     },
     {
       id: 3,
-      caption: 'CI/CD Testing',
+      caption: 'Continuous Monitoring',
       image: '/img/docs/github-action-comment.png',
       image2x: '/img/docs/github-action-comment@2x.png',
       description: (
@@ -133,7 +124,8 @@ function HomepageWalkthrough() {
           </p>
           <p>
             Promptfoo's simple file-based config and local runtime make it easy to set up in{' '}
-            <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI services.
+            <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI/CD
+            services.
           </p>
           <p>
             <Link to="/docs/getting-started">&raquo; See setup docs</Link>
@@ -190,17 +182,24 @@ function HomepageWalkthrough() {
 }
 
 export default function Home(): JSX.Element {
-  const { siteConfig } = useDocusaurusContext();
+  const [getStartedUrl, setGetStartedUrl] = React.useState('/docs/intro');
+
+  React.useEffect(() => {
+    if (window.location.hash === '#redteam') {
+      setGetStartedUrl('/docs/red-team');
+    }
+  }, []);
+
   return (
     <Layout
       title="Secure & reliable LLMs"
-      description="Eliminate risk with AI red-teaming and evals used by 25,000 developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
+      description="Eliminate risk with AI red-teaming and evals used by 30,000 developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
     >
       <Head>
         <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
-      <HomepageHeader />
+      <HomepageHeader getStartedUrl={getStartedUrl} />
       <HomepageWalkthrough />
       <main>
         <section className={styles.logoSection}>
@@ -230,7 +229,7 @@ export default function Home(): JSX.Element {
         <div className={styles.ctaSection}>
           <h2>Make your LLM app reliable & secure</h2>
           <div className={styles.buttons}>
-            <Link className="button button--primary button--lg" to="/docs/intro">
+            <Link className="button button--primary button--lg" to={getStartedUrl}>
               Read Start Guide
             </Link>
             <Link

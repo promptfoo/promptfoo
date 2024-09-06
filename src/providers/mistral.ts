@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
 import logger from '../logger';
-import { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const MISTRAL_CHAT_MODELS = [
@@ -148,14 +149,14 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   getApiUrl(): string {
     const apiHost =
-      this.config.apiHost || this.env?.MISTRAL_API_HOST || process.env.MISTRAL_API_HOST;
+      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
     if (apiHost) {
       return `https://${apiHost}/v1`;
     }
     return (
       this.config.apiBaseUrl ||
       this.env?.MISTRAL_API_BASE_URL ||
-      process.env.MISTRAL_API_BASE_URL ||
+      getEnvString('MISTRAL_API_BASE_URL') ||
       this.getApiUrlDefault()
     );
   }
@@ -169,7 +170,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.MISTRAL_API_KEY ||
-      process.env.MISTRAL_API_KEY
+      getEnvString('MISTRAL_API_KEY')
     );
   }
 
@@ -184,7 +185,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     const body = {
       model: this.modelName,
-      messages: messages,
+      messages,
       temperature: this.config?.temperature,
       top_p: this.config?.top_p || 1,
       max_tokens: this.config?.max_tokens || 1024,

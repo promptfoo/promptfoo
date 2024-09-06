@@ -2,7 +2,13 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import { Response } from 'node-fetch';
 import * as path from 'path';
-import { runAssertions, runAssertion, validateXml, containsXml } from '../src/assertions';
+import {
+  containsXml,
+  createAjv,
+  runAssertion,
+  runAssertions,
+  validateXml,
+} from '../src/assertions';
 import { fetchWithRetries } from '../src/fetch';
 import {
   DefaultGradingJsonProvider,
@@ -68,8 +74,49 @@ jest.mock('../src/database', () => ({
 jest.mock('../src/cliState', () => ({
   basePath: '/config_path',
 }));
+jest.mock('../src/matchers', () => {
+  const actual = jest.requireActual('../src/matchers');
+  return {
+    ...actual,
+    matchesContextRelevance: jest
+      .fn()
+      .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
+    matchesContextFaithfulness: jest
+      .fn()
+      .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
+  };
+});
 
 const Grader = new TestGrader();
+
+describe('createAjv', () => {
+  beforeAll(() => {
+    delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
+    jest.resetModules();
+  });
+
+  afterAll(() => {
+    delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
+  });
+
+  it('should create an Ajv instance with default options', () => {
+    const ajv = createAjv();
+    expect(ajv).toBeDefined();
+    expect(ajv.opts.strictSchema).toBe(true);
+  });
+
+  it('should disable strict mode when PROMPTFOO_DISABLE_AJV_STRICT_MODE is set', () => {
+    process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE = 'true';
+    const ajv = createAjv();
+    expect(ajv.opts.strictSchema).toBe(false);
+  });
+
+  it('should add formats to the Ajv instance', () => {
+    const ajv = createAjv();
+    expect(ajv.formats).toBeDefined();
+    expect(Object.keys(ajv.formats)).not.toHaveLength(0);
+  });
+});
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
@@ -1960,7 +2007,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output to contain all of "option1, option2, option3"',
+      reason: 'Expected output to contain all of [option1, option2, option3]. Missing: [option3]',
     });
   });
 
@@ -1998,7 +2045,8 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output to contain all of "option1, option2, option3, option4"',
+      reason:
+        'Expected output to contain all of [option1, option2, option3, option4]. Missing: [option4]',
     });
   });
 
@@ -2263,8 +2311,8 @@ describe('runAssertion', () => {
     // Expect test to pass because assertion grader takes priority
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      assertion: assertion,
-      test: test,
+      assertion,
+      test,
       providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
@@ -3092,7 +3140,7 @@ describe('runAssertion', () => {
         pass: false,
         score: 0,
         reason: expect.stringMatching(/XML parsing failed/),
-        assertion: assertion,
+        assertion,
       });
     });
 
@@ -3139,7 +3187,7 @@ describe('runAssertion', () => {
         pass: false,
         score: 0,
         reason: 'XML is missing required elements: analysis.color',
-        assertion: assertion,
+        assertion,
       });
     });
 
@@ -3317,7 +3365,7 @@ describe('runAssertion', () => {
         pass: false,
         score: 0,
         reason: 'No XML content found in the output',
-        assertion: assertion,
+        assertion,
       });
     });
 
@@ -3364,7 +3412,7 @@ describe('runAssertion', () => {
         pass: false,
         score: 0,
         reason: 'No valid XML content found matching the requirements',
-        assertion: assertion,
+        assertion,
       });
     });
 
@@ -3430,6 +3478,195 @@ describe('runAssertion', () => {
         reason: 'XML is valid and contains all required elements',
         assertion,
       });
+    });
+  });
+
+  describe('context-relevance assertion', () => {
+    it('should pass when all required vars are present', async () => {
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+      };
+
+      const result = await runAssertion({
+        assertion,
+        test,
+        providerResponse: { output: 'Some output' },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Mocked reason',
+        assertion,
+      });
+    });
+
+    it('should throw an error when vars object is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {};
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-relevance assertion type must have a vars object');
+    });
+
+    it('should throw an error when query var is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          context: 'Paris is the capital of France.',
+        },
+      };
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-relevance assertion type must have a query var');
+    });
+
+    it('should throw an error when context var is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+        },
+      };
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-relevance assertion type must have a context var');
+    });
+  });
+
+  describe('context-faithfulness assertion', () => {
+    it('should pass when all required vars are present', async () => {
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+      };
+
+      const result = await runAssertion({
+        assertion,
+        test,
+        providerResponse: { output: 'The capital of France is Paris.' },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Mocked reason',
+        assertion,
+      });
+    });
+
+    it('should throw an error when vars object is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {};
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-faithfulness assertion type must have a vars object');
+    });
+
+    it('should throw an error when query var is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          context: 'Paris is the capital of France.',
+        },
+      };
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-faithfulness assertion type must have a query var');
+    });
+
+    it('should throw an error when context var is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+        },
+      };
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-faithfulness assertion type must have a context var');
+    });
+
+    it('should throw an error when output is not a string', async () => {
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+      };
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: { some: 'object' } },
+        }),
+      ).rejects.toThrow('context-faithfulness assertion type must have a string output');
     });
   });
 });
