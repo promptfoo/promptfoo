@@ -24,20 +24,6 @@ const MISTRAL_CHAT_MODELS = [
       output: 0.3 / 1000000,
     },
   })),
-  ...['open-mixtral-8x7b', 'mistral-small', 'mistral-small-2312'].map((id) => ({
-    id,
-    cost: {
-      input: 0.7 / 1000000,
-      output: 0.7 / 1000000,
-    },
-  })),
-  ...['open-mixtral-8x22b', 'open-mixtral-8x22b-2404'].map((id) => ({
-    id,
-    cost: {
-      input: 2 / 1000000,
-      output: 6 / 1000000,
-    },
-  })),
   ...['mistral-small-2402', 'mistral-small-latest'].map((id) => ({
     id,
     cost: {
@@ -78,6 +64,20 @@ const MISTRAL_CHAT_MODELS = [
     cost: {
       input: 0.25 / 1000000,
       output: 0.25 / 1000000,
+    },
+  })),
+  ...['open-mixtral-8x7b', 'mistral-small', 'mistral-small-2312'].map((id) => ({
+    id,
+    cost: {
+      input: 0.7 / 1000000,
+      output: 0.7 / 1000000,
+    },
+  })),
+  ...['open-mixtral-8x22b', 'open-mixtral-8x22b-2404'].map((id) => ({
+    id,
+    cost: {
+      input: 2 / 1000000,
+      output: 6 / 1000000,
     },
   })),
   {
