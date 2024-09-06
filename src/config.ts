@@ -266,7 +266,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       }
       return relativePath;
     } else {
-      throw new Error('Invalid prompt object');
+      throw new Error(`Invalid prompt object: ${JSON.stringify(relativePath)}`);
     }
   };
 
