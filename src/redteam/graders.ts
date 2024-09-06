@@ -1,3 +1,4 @@
+import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamModelGrader } from './plugins/base';
 import { BflaGrader } from './plugins/bfla';
 import { BolaGrader } from './plugins/bola';
@@ -20,7 +21,8 @@ import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 
-const GRADERS = {
+export const GRADERS = {
+  'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),

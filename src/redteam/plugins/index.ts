@@ -6,6 +6,7 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginConfig, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS, REMOTE_GENERATION_URL } from '../constants';
 import { shouldGenerateRemote } from '../util';
+import { AsciiSmugglingPlugin } from './asciiSmuggling';
 import { type PluginBase } from './base';
 import { BflaPlugin } from './bfla';
 import { BolaPlugin } from './bola';
@@ -108,6 +109,7 @@ function createPluginFactory<T extends PluginConfig>(
 }
 
 const pluginFactories: PluginFactory[] = [
+  createPluginFactory(AsciiSmugglingPlugin, 'ascii-smuggling'),
   createPluginFactory(CompetitorPlugin, 'competitors'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),

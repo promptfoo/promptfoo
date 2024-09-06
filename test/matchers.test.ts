@@ -24,6 +24,7 @@ import { TestGrader } from './utils';
 
 jest.mock('../src/esm');
 jest.mock('../src/logger');
+jest.mock('../src/cliState');
 
 const Grader = new TestGrader();
 
@@ -186,6 +187,28 @@ describe('matchesSimilarity', () => {
     await expect(async () => {
       await matchesSimilarity(expected, output, threshold, false, grading);
     }).rejects.toThrow('API call failed');
+  });
+
+  it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const expected = 'Expected {{ var }}';
+    const output = 'Output {{ var }}';
+    const threshold = 0.8;
+    const grading: GradingConfig = {
+      provider: DefaultEmbeddingProvider,
+    };
+
+    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      embedding: [1, 2, 3],
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await matchesSimilarity(expected, output, threshold, false, grading);
+
+    expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith('Expected {{ var }}');
+    expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith('Output {{ var }}');
+
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
   });
 });
 
@@ -376,6 +399,35 @@ describe('matchesFactuality', () => {
       'An error occurred',
     );
   });
+
+  it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const input = 'Input {{ var }}';
+    const expected = 'Expected {{ var }}';
+    const output = 'Output {{ var }}';
+    const grading: GradingConfig = {
+      provider: DefaultGradingProvider,
+    };
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: '(A) The submitted answer is correct.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await matchesFactuality(input, expected, output, grading);
+
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Input {{ var }}'),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Expected {{ var }}'),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Output {{ var }}'),
+    );
+
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
+  });
 });
 
 describe('matchesClosedQa', () => {
@@ -473,6 +525,35 @@ describe('matchesClosedQa', () => {
       },
     });
     expect(isJson).toBeTruthy();
+  });
+
+  it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const input = 'Input {{ var }}';
+    const expected = 'Expected {{ var }}';
+    const output = 'Output {{ var }}';
+    const grading: GradingConfig = {
+      provider: DefaultGradingProvider,
+    };
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'Y',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await matchesClosedQa(input, expected, output, grading);
+
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Input {{ var }}'),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Expected {{ var }}'),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Output {{ var }}'),
+    );
+
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
   });
 });
 
