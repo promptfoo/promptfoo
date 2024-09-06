@@ -232,7 +232,7 @@ promptfoo eval
 Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
-function recordOnboardingStep(step: string, properties: any = Record<string, EventValue>) {
+function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
   telemetry.recordAndSend('funnel', {
     type: 'eval onboarding',
     step,
