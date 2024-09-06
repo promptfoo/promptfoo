@@ -133,7 +133,12 @@ function calculateCost(
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
+  if (
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens) ||
+    typeof promptTokens !== 'number' ||
+    typeof completionTokens !== 'number'
+  ) {
     return undefined;
   }
 
@@ -233,16 +238,19 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     const cacheKey = `mistral:${JSON.stringify(params)}`;
     if (isCacheEnabled()) {
-      const cachedResult = await getCache().get<ProviderResponse>(cacheKey);
-      if (cachedResult) {
-        logger.debug(`Returning cached response for ${prompt}: ${JSON.stringify(cachedResult)}`);
-        return {
-          ...cachedResult,
-          tokenUsage: {
-            ...cachedResult.tokenUsage,
-            cached: cachedResult.tokenUsage?.total,
-          },
-        };
+      const cache = getCache();
+      if (cache) {
+        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
+        if (cachedResult) {
+          logger.debug(`Returning cached response for ${prompt}: ${JSON.stringify(cachedResult)}`);
+          return {
+            ...cachedResult,
+            tokenUsage: {
+              ...cachedResult.tokenUsage,
+              cached: cachedResult.tokenUsage?.total,
+            },
+          };
+        }
       }
     }
 

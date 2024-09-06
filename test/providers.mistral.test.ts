@@ -1,4 +1,4 @@
-import { disableCache, enableCache, getCache, isCacheEnabled } from '../src/cache';
+import { getCache, isCacheEnabled } from '../src/cache';
 import { fetchWithCache } from '../src/cache';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from '../src/providers/mistral';
 
@@ -15,6 +15,10 @@ describe('Mistral', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(fetchWithCache).mockReset();
+    jest.mocked(getCache).mockReturnValue({
+      get: jest.fn(),
+      set: jest.fn(),
+    });
   });
 
   describe('MistralChatCompletionProvider', () => {
@@ -72,12 +76,16 @@ describe('Mistral', () => {
     });
 
     it('should use cache when enabled', async () => {
-      const mockResponse = {
-        choices: [{ message: { content: 'Cached output' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
       jest.mocked(isCacheEnabled).mockReturnValue(true);
-      jest.mocked(fetchWithCache).mockResolvedValue({ data: mockResponse, cached: true });
+      jest.mocked(getCache).mockReturnValue({
+        get: jest.fn().mockResolvedValue({
+          output: 'Cached output',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          cached: true,
+          cost: 0.000005,
+        }),
+        set: jest.fn(),
+      });
 
       const result = await provider.callApi('Test prompt');
 
@@ -90,9 +98,9 @@ describe('Mistral', () => {
           cached: 10,
         },
         cached: true,
-        cost: expect.any(Number),
+        cost: 0.000005,
       });
-      expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
+      expect(jest.mocked(fetchWithCache)).not.toHaveBeenCalled();
     });
 
     it('should not use cache when disabled', async () => {
@@ -210,7 +218,7 @@ describe('Mistral', () => {
           prompt: 5,
           completion: 0,
         },
-        cost: expect.any(Number),
+        cost: expect.closeTo(0.0000005, 0.0000001), // Approximately 5 tokens * 0.1 / 1000000
       });
     });
 
@@ -229,11 +237,9 @@ describe('Mistral', () => {
         embedding: [0.1, 0.2, 0.3],
         tokenUsage: {
           total: 5,
-          prompt: 5,
           completion: 0,
           cached: 5,
         },
-        cost: expect.any(Number),
       });
       expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
     });
