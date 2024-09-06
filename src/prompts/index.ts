@@ -1,5 +1,6 @@
 import { globSync } from 'glob';
 import invariant from 'tiny-invariant';
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import type {
   UnifiedConfig,
@@ -9,6 +10,7 @@ import type {
   ProviderOptions,
 } from '../types';
 import { isJavascriptFile, parsePathOrGlob } from '../util';
+import { extractVariablesFromTemplates } from '../util/templates';
 import { processJsFile } from './processors/javascript';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
@@ -173,7 +175,19 @@ export async function readPrompts(
     if (promptBatch.length === 0) {
       throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
     }
-    prompts.push(...promptBatch);
+
+    for (const processedPrompt of promptBatch) {
+      const variables = extractVariablesFromTemplates([processedPrompt.raw]);
+      if (variables.length === 0 && !getEnvBool('PROMPTFOO_DISABLE_NO_VARIABLE_WARNING')) {
+        logger.warn(
+          `Warning: The prompt "${processedPrompt.raw.substring(0, 50)}..." does not contain any variables. ` +
+            `Consider using variables to make your prompts more dynamic and reusable. ` +
+            `You can disable this warning by setting PROMPTFOO_DISABLE_NO_VARIABLE_WARNING=true.`,
+        );
+      }
+      prompts.push(processedPrompt);
+    }
   }
+
   return prompts;
 }

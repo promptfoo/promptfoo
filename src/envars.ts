@@ -83,6 +83,7 @@ export type EnvVars = {
   REPLICATE_TOP_P?: number;
   VOYAGE_API_BASE_URL?: string;
   VOYAGE_API_KEY?: string;
+  PROMPTFOO_DISABLE_NO_VARIABLE_WARNING?: boolean;
 
   // node/npm
   NODE_ENV?: string;
