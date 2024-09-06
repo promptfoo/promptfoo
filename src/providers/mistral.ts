@@ -5,42 +5,47 @@ import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '..
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const MISTRAL_CHAT_MODELS = [
-  ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map(id => ({
+  ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
     id,
     cost: {
       input: 0.25 / 1000000,
       output: 0.25 / 1000000,
     },
   })),
-  ...['open-mistral-nemo', 'open-mistral-nemo-2407', 'mistral-tiny-2407', 'mistral-tiny-latest'].map(id => ({
+  ...[
+    'open-mistral-nemo',
+    'open-mistral-nemo-2407',
+    'mistral-tiny-2407',
+    'mistral-tiny-latest',
+  ].map((id) => ({
     id,
     cost: {
       input: 0.3 / 1000000,
       output: 0.3 / 1000000,
     },
   })),
-  ...['open-mixtral-8x7b', 'mistral-small', 'mistral-small-2312'].map(id => ({
+  ...['open-mixtral-8x7b', 'mistral-small', 'mistral-small-2312'].map((id) => ({
     id,
     cost: {
       input: 0.7 / 1000000,
       output: 0.7 / 1000000,
     },
   })),
-  ...['open-mixtral-8x22b', 'open-mixtral-8x22b-2404'].map(id => ({
+  ...['open-mixtral-8x22b', 'open-mixtral-8x22b-2404'].map((id) => ({
     id,
     cost: {
       input: 2 / 1000000,
       output: 6 / 1000000,
     },
   })),
-  ...['mistral-small-2402', 'mistral-small-latest'].map(id => ({
+  ...['mistral-small-2402', 'mistral-small-latest'].map((id) => ({
     id,
     cost: {
       input: 1 / 1000000,
       output: 3 / 1000000,
     },
   })),
-  ...['mistral-medium-2312', 'mistral-medium', 'mistral-medium-latest'].map(id => ({
+  ...['mistral-medium-2312', 'mistral-medium', 'mistral-medium-latest'].map((id) => ({
     id,
     cost: {
       input: 2.7 / 1000000,
@@ -54,21 +59,21 @@ const MISTRAL_CHAT_MODELS = [
       output: 12 / 1000000,
     },
   },
-  ...['mistral-large-2407', 'mistral-large-latest'].map(id => ({
+  ...['mistral-large-2407', 'mistral-large-latest'].map((id) => ({
     id,
     cost: {
       input: 3 / 1000000,
       output: 9 / 1000000,
     },
   })),
-  ...['codestral-2405', 'codestral-latest'].map(id => ({
+  ...['codestral-2405', 'codestral-latest'].map((id) => ({
     id,
     cost: {
       input: 1 / 1000000,
       output: 3 / 1000000,
     },
   })),
-  ...['codestral-mamba-2407', 'open-codestral-mamba', 'codestral-mamba-latest'].map(id => ({
+  ...['codestral-mamba-2407', 'open-codestral-mamba', 'codestral-mamba-latest'].map((id) => ({
     id,
     cost: {
       input: 0.25 / 1000000,
