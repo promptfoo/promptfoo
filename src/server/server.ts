@@ -53,7 +53,6 @@ export enum BrowserBehavior {
 
 export function startServer(
   port = 15500,
-  apiBaseUrl = '',
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
 ) {
