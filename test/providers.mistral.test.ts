@@ -165,6 +165,7 @@ describe('Mistral', () => {
       const customProvider = new MistralChatCompletionProvider('mistral-tiny', {
         config: { apiBaseUrl: 'https://custom.mistral.ai/v1' },
       });
+      jest.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
       const mockResponse = {
         choices: [{ message: { content: 'Custom API response' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
@@ -184,6 +185,7 @@ describe('Mistral', () => {
       const customProvider = new MistralChatCompletionProvider('mistral-tiny', {
         config: { apiHost: 'custom.mistral.ai' },
       });
+      jest.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
       const mockResponse = {
         choices: [{ message: { content: 'Custom API response' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
@@ -316,6 +318,7 @@ describe('Mistral', () => {
       const customProvider = new MistralEmbeddingProvider({
         config: { apiBaseUrl: 'https://custom.mistral.ai/v1' },
       });
+      jest.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
       const mockResponse = {
         model: 'mistral-embed',
         data: [{ embedding: [0.1, 0.2, 0.3] }],
