@@ -272,16 +272,14 @@ export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[
     // Use the prefix id to create a string that works as the key of the associated env override.
     const chosenProviderEnumKey =
       `${choice.split(':')[0].toUpperCase()}_API_KEY` as keyof typeof ProvidersRequiringAPIKeysEnvKeys;
-    if (ProvidersRequiringAPIKeysEnvKeys[chosenProviderEnumKey]) {
-      // Check to make sure we haven't already generated a warning for the given provider.
-      if (!generatedWarnings.get(chosenProviderEnumKey)) {
+    if (ProvidersRequiringAPIKeysEnvKeys[chosenProviderEnumKey] && // Check to make sure we haven't already generated a warning for the given provider.
+      !generatedWarnings.get(chosenProviderEnumKey)) {
         generatedWarnings.set(chosenProviderEnumKey, true);
         warnings.push(dedent`\n${chalk.bold(`Warning: ${chosenProviderEnumKey} environment variable is not set.`)}
 
           Please set this environment variable like: export ${chosenProviderEnumKey}=<my-api-key>\n
           `);
       }
-    }
   }
   return warnings;
 }
