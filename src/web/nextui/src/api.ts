@@ -1,5 +1,8 @@
+import useApiConfig from './state/apiConfig';
+
 export function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL || '';
+  const apiConfig = useApiConfig.getState();
+  return apiConfig.apiBaseUrl || '';
 }
 
 export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {

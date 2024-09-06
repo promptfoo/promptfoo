@@ -125,10 +125,13 @@ export default function Eval({
       console.log('Eval init: Fetching eval', fetchId);
       const run = async () => {
         console.log('Fetching eval from remote server', fetchId);
-        const response = await await callApi(`/eval/${fetchId}`);
+        let response = await await callApi(`/eval/${fetchId}`);
         if (!response.ok) {
-          setFailed(true);
-          return;
+          response = await callApi(`/results/${fetchId}`);
+          if (!response.ok) {
+            setFailed(true);
+            return;
+          }
         }
         const results = await response.json();
         setTable(results.data.results?.table as EvaluateTable);
@@ -139,8 +142,8 @@ export default function Eval({
       run();
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
-      const apiBaseUrl = getApiBaseUrl();
-      const socket = SocketIOClient(apiBaseUrl);
+
+      const socket = SocketIOClient(getApiBaseUrl());
 
       socket.on('init', (data) => {
         console.log('Initialized socket connection', data);

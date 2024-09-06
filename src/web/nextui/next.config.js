@@ -1,3 +1,22 @@
+const API_PORT = process.env.API_PORT || '15500';
+
+if (process.env.NODE_ENV === 'development') {
+  process.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
+    process.env.PROMPTFOO_REMOTE_API_BASE_URL || `http://localhost:${API_PORT}`;
+  process.env.NEXT_PUBLIC_PROMPTFOO_SHARE_API_URL = `http://localhost:${API_PORT}`;
+} else {
+  if (process.env.NEXT_PUBLIC_HOSTED) {
+    process.env.NEXT_PUBLIC_PROMPTFOO_SHARE_API_URL =
+      process.env.PROMPTFOO_REMOTE_API_BASE_URL || '';
+  } else {
+    process.env.NEXT_PUBLIC_PROMPTFOO_APP_SHARE_URL = 'https://app.promptfoo.dev';
+    process.env.NEXT_PUBLIC_PROMPTFOO_SHARE_API_URL = 'https://api.promptfoo.dev';
+  }
+
+  process.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
+    process.env.PROMPTFOO_REMOTE_API_BASE_URL || '';
+}
+
 console.log('**************************************************');
 console.log(`Building next.js`);
 console.log('**************************************************');
@@ -6,7 +25,6 @@ console.log('**************************************************');
 const nextConfig = {
   output: 'export',
   trailingSlash: true,
-  customServer: true,
   webpack: (config, { isServer }) => {
     config.externals.push({
       'utf-8-validate': 'commonjs utf-8-validate',
@@ -34,11 +52,6 @@ const nextConfig = {
     NEXT_PUBLIC_SUPABASE_URL:
       process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.promptfoo.dev',
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'abc123',
-    NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL:
-      process.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL ||
-      process.env.NODE_ENV === 'development'
-        ? `http://localhost:${process.env.PORT || 15500}`
-        : '',
   },
 };
 

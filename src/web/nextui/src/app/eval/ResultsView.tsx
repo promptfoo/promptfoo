@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL } from '@/../../../constants';
 import { callApi } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore as useMainStore } from '@/state/evalConfig';
+import useShareConfig, { useShareAppBaseUrl } from '@/state/shareConfig';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -122,6 +122,8 @@ export default function ResultsView({
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const { apiShareBaseUrl } = useShareConfig();
+  const appShareBaseUrl = useShareAppBaseUrl();
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
@@ -140,7 +142,7 @@ export default function ResultsView({
     let shareUrl = '';
     try {
       if (IS_RUNNING_LOCALLY) {
-        const response = await fetch(`${SHARE_API_BASE_URL}/api/eval`, {
+        const response = await fetch(`${apiShareBaseUrl}/api/eval`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -157,9 +159,9 @@ export default function ResultsView({
           }),
         });
         const { id } = await response.json();
-        shareUrl = `${SHARE_VIEW_BASE_URL}/eval/${id}`;
+        shareUrl = `${appShareBaseUrl}/eval/${id}`;
       } else {
-        shareUrl = `${window.location.host}/eval/?evalId=${evalId}`;
+        shareUrl = `${window.location.host}/eval/?evalId=${currentEvalId}`;
       }
 
       setShareUrl(shareUrl);

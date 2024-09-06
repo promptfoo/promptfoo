@@ -8,22 +8,19 @@ FROM base AS builder
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
+# Set environment variables for the build
+ENV NEXT_PUBLIC_HOSTED=1
+
 COPY . .
 
 RUN npm install --install-links --include=peer
 RUN npm run build
 
-FROM base as server
+FROM base AS server
 
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-
-# Set environment variables for the build
-ARG BASE_URL
-ENV NEXT_PUBLIC_PROMPTFOO_BASE_URL=${BASE_URL}
-
-ENV NEXT_PUBLIC_HOSTED=true
 
 EXPOSE 15500
 
