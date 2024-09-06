@@ -213,6 +213,7 @@ export const displayNameOverrides = {
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
   basic: 'Raw attacks without any special attack strategies',
+  'ascii-smuggling': 'Attempts to obfuscate malicious content using ASCII smuggling',
   multilingual: 'Translates the input into low-resource languages',
   bola: 'Broken Object Level Authorization (BOLA) tests',
   bfla: 'Broken Function Level Authorization (BFLA) tests',

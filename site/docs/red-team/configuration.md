@@ -189,6 +189,8 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 
   - By default uses a [target URL](https://promptfoo.dev/plugin-helpers/ssrf.txt) on the promptfoo.dev host. We recommend placing with your own internal URL.
 
+- `ascii-smuggling`: Tests if the model is vulnerable to attacks using special Unicode characters to embed invisible instructions in text.
+
 ### Plugin Collections
 
 - `harmful`: Includes all available harm plugins
