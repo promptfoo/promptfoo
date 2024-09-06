@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import type { PromptWithMetadata } from '@/../../../types';
-import { callApi, getApiBaseUrl } from '@/api';
+import { callApi } from '@/api';
 import Box from '@mui/material/Box';
 import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
