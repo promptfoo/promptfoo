@@ -10,6 +10,7 @@ jest.mock('../src/cache', () => ({
 }));
 
 jest.mock('../src/util');
+jest.mock('../src/logger');
 
 describe('Mistral', () => {
   beforeEach(() => {
@@ -38,6 +39,7 @@ describe('Mistral', () => {
 
     beforeEach(() => {
       provider = new MistralChatCompletionProvider('mistral-tiny');
+      jest.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
     });
 
     it('should create a provider with default options', () => {
@@ -203,6 +205,7 @@ describe('Mistral', () => {
 
     beforeEach(() => {
       provider = new MistralEmbeddingProvider();
+      jest.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
     });
 
     it('should create a provider with default options', () => {
