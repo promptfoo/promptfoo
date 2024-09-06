@@ -6,12 +6,7 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
-import {
-  categoryAliases,
-  displayNameOverrides,
-  Severity,
-  riskCategorySeverityMap,
-} from '../report/constants';
+import { categoryAliases, displayNameOverrides, Severity } from '../report/constants';
 import { processCategoryData } from './utils';
 
 interface HighestSeverityCategoriesProps {

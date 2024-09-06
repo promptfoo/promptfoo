@@ -12,8 +12,6 @@ import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import {
   Severity,
@@ -26,11 +24,10 @@ import DashboardCharts from './DashboardCharts';
 import EmergingRisks from './EmergingRisks';
 import HighestSeverityCategories from './HighestSeverityCategories';
 import IssuesBySeverity from './IssuesBySeverity';
-import MetricCard from './MetricCard';
 import RecentEvals from './RecentEvals';
 import Sidebar from './Sidebar';
 import TopFailingCategories from './TopFailingCategories';
-import { calculateTrend, processCategoryData, CategoryData } from './utils';
+import { calculateTrend, processCategoryData } from './utils';
 
 interface OverallAttackSuccessRateDataPoint {
   name: string;
@@ -277,8 +274,6 @@ export default function Dashboard() {
         minute: '2-digit',
       })
     : 'N/A';
-
-  const categoryData = processCategoryData(evals);
 
   const calculateSeveritySummary = () => {
     const severityCounts = {

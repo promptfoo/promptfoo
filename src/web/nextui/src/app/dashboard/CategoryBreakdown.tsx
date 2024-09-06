@@ -1,4 +1,5 @@
 import React from 'react';
+import type { StandaloneEval } from '@/../../../util';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
@@ -14,7 +15,7 @@ import {
   displayNameOverrides,
   subCategoryDescriptions,
 } from '../report/constants';
-import { processCategoryData, CategoryData } from './utils';
+import { processCategoryData } from './utils';
 
 const CategoryBreakdown: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
   const categoryData = processCategoryData(evals);

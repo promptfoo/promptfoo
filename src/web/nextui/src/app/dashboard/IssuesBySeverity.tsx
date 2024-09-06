@@ -50,7 +50,7 @@ export default function IssuesBySeverity({ severityCounts, totalIssues }: Issues
             paddingAngle={4}
           >
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[entry.severity]} stroke="none" />
+              <Cell key={`cell-${index}`} fill={COLORS[entry.severity as Severity]} stroke="none" />
             ))}
           </Pie>
           <Tooltip

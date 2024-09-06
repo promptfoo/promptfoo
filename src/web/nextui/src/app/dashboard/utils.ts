@@ -1,4 +1,4 @@
-import { StandaloneEval } from '@/../../../util';
+import type { StandaloneEval } from '@/../../../util';
 import {
   riskCategories,
   categoryAliases,

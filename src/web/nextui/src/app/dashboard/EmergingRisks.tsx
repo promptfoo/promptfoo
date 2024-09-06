@@ -10,21 +10,10 @@ import {
   displayNameOverrides,
   subCategoryDescriptions,
 } from '../report/constants';
-import { processCategoryData, CategoryData, calculateTrend } from './utils';
+import { processCategoryData, calculateTrend } from './utils';
 
 interface EmergingRisksProps {
   evals: StandaloneEval[];
-}
-
-interface CategoryRisk {
-  category: string;
-  recentFailureRate: number;
-  historicalFailureRate: number;
-  increaseFactor: number;
-  recentFails: number;
-  recentTotal: number;
-  historicalFails: number;
-  historicalTotal: number;
 }
 
 const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
