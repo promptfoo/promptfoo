@@ -311,8 +311,8 @@ export class MistralEmbeddingProvider extends MistralChatCompletionProvider {
     const url = `${this.getApiUrl()}/embeddings`;
     logger.debug(`Mistral Embedding API request: ${url} ${JSON.stringify(body)}`);
 
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
 
     try {
       ({ data, cached } = (await fetchWithCache(
@@ -343,7 +343,6 @@ export class MistralEmbeddingProvider extends MistralChatCompletionProvider {
       return {
         embedding,
         tokenUsage,
-        cost: calculateCost(this.modelName, this.config, tokenUsage.prompt, tokenUsage.completion),
       };
     } catch (err) {
       logger.error(data.error?.message || 'Unknown error');

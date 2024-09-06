@@ -82,8 +82,6 @@ describe('Mistral', () => {
         output: 'Cached output',
         tokenUsage: {
           total: 10,
-          prompt: 5,
-          completion: 5,
           cached: 10,
         },
         cached: true,
@@ -117,6 +115,44 @@ describe('Mistral', () => {
       expect(result).toEqual({
         error: 'API call error: Error: API Error',
       });
+    });
+
+    it('should use custom API base URL if provided', async () => {
+      const customProvider = new MistralChatCompletionProvider('mistral-tiny', {
+        config: { apiBaseUrl: 'https://custom.mistral.ai/v1' },
+      });
+      const mockResponse = {
+        choices: [{ message: { content: 'Custom API response' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValue({ data: mockResponse, cached: false });
+
+      await customProvider.callApi('Test prompt');
+
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+        'https://custom.mistral.ai/v1/chat/completions',
+        expect.any(Object),
+        expect.any(Number),
+      );
+    });
+
+    it('should use API host if provided', async () => {
+      const customProvider = new MistralChatCompletionProvider('mistral-tiny', {
+        config: { apiHost: 'custom.mistral.ai' },
+      });
+      const mockResponse = {
+        choices: [{ message: { content: 'Custom API response' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValue({ data: mockResponse, cached: false });
+
+      await customProvider.callApi('Test prompt');
+
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+        'https://custom.mistral.ai/v1/chat/completions',
+        expect.any(Object),
+        expect.any(Number),
+      );
     });
   });
 
@@ -158,10 +194,10 @@ describe('Mistral', () => {
       expect(result).toEqual({
         embedding: [0.1, 0.2, 0.3],
         tokenUsage: {
+          completion: 0,
           total: 5,
           prompt: 5,
         },
-        cost: expect.any(Number),
       });
     });
 
@@ -175,6 +211,26 @@ describe('Mistral', () => {
     it('should return provider id and string representation', () => {
       expect(provider.id()).toBe('mistral:embedding:mistral-embed');
       expect(provider.toString()).toBe('[Mistral Embedding Provider mistral-embed]');
+    });
+
+    it('should use custom API base URL if provided', async () => {
+      const customProvider = new MistralEmbeddingProvider({
+        config: { apiBaseUrl: 'https://custom.mistral.ai/v1' },
+      });
+      const mockResponse = {
+        model: 'mistral-embed',
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: { total_tokens: 5, prompt_tokens: 5 },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValue({ data: mockResponse, cached: false });
+
+      await customProvider.callEmbeddingApi('Test text');
+
+      expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+        'https://custom.mistral.ai/v1/embeddings',
+        expect.any(Object),
+        expect.any(Number),
+      );
     });
   });
 });
