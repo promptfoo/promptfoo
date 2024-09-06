@@ -9,8 +9,8 @@ import path from 'path';
 import { redteamInit } from './commands/redteam/init';
 import { getEnvString } from './envars';
 import logger from './logger';
-import { ProvidersRequiringAPIKeysEnvKeys } from './providers';
 import telemetry, { type EventValue } from './telemetry';
+import { EnvOverrides } from './types';
 import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
@@ -242,46 +242,24 @@ function recordOnboardingStep(step: string, properties: Record<string, EventValu
 
 /**
  * Iterate through user choices and determine if the user has selected a provider that needs an API key
- * but has not set an API key in their environment.
+ * but has not set and API key in their environment.
  */
 export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[]): string[] {
-  // Dictionary of what warnings may have already been genereated for the user.
-  const generatedWarnings = new Map<string, boolean>();
-  for (const key of Object.keys(ProvidersRequiringAPIKeysEnvKeys)) {
-    generatedWarnings.set(key, false);
-  }
-  const choices = providerChoices.map((choice) => {
-    // Map and only return the provider id strings.
-    switch (typeof choice) {
-      case 'object':
-        // TODO(should use a rigid interface in the future).
-        return (choice as any).id;
-      case 'string':
-      default:
-        return choice;
-    }
-  });
-  const warnings: string[] = [];
-  for (const choice of choices) {
-    // Iterate through the list and determine if the user has selected a provider that
-    // requires an API key for interaction.
-    if (!choice.includes(':')) {
-      // Avoid splitting on a symbol that may not exist in the future.
-      continue;
-    }
-    // Use the prefix id to create a string that works as the key of the associated env override.
-    const chosenProviderEnumKey =
-      `${choice.split(':')[0].toUpperCase()}_API_KEY` as keyof typeof ProvidersRequiringAPIKeysEnvKeys;
-    if (ProvidersRequiringAPIKeysEnvKeys[chosenProviderEnumKey] && // Check to make sure we haven't already generated a warning for the given provider.
-      !generatedWarnings.get(chosenProviderEnumKey)) {
-        generatedWarnings.set(chosenProviderEnumKey, true);
-        warnings.push(dedent`\n${chalk.bold(`Warning: ${chosenProviderEnumKey} environment variable is not set.`)}
+  const ids = providerChoices.map((c) => (typeof c === 'object' ? (c as any).id : c));
 
-          Please set this environment variable like: export ${chosenProviderEnumKey}=<my-api-key>\n
-          `);
-      }
-  }
-  return warnings;
+  const map: Record<string, keyof EnvOverrides> = {
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+  };
+
+  return Object.entries(map)
+    .filter(([prefix, key]) => ids.some((id) => id.startsWith(prefix)) && !getEnvString(key))
+    .map(
+      ([prefix, key]) => dedent`
+    ${chalk.bold(`Warning: ${key} environment variable is not set.`)}
+    Please set this environment variable like: export ${key}=<my-api-key>
+  `,
+    );
 }
 
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
@@ -473,32 +451,33 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     });
 
     // Tell the user if they have providers selected without relevant API keys set in env.
-    reportProviderAPIKeyWarnings(providerChoices).map((warningText) => logger.warn(warningText));
+    reportProviderAPIKeyWarnings(providerChoices).forEach((warningText) =>
+      logger.warn(warningText),
+    );
 
     if (providerChoices.length > 0) {
-      const flatProviders = providerChoices.flat();
-      if (flatProviders.length > 3) {
+      if (providerChoices.length > 3) {
         providers.push(
           ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
         );
       } else {
-        providers.push(...flatProviders);
+        providers.push(...providerChoices);
       }
 
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
+        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.js'), JAVASCRIPT_PROVIDER);
         logger.info('⌛ Wrote provider.js');
       }
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
+        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.sh'), BASH_PROVIDER);
         logger.info('⌛ Wrote provider.sh');
       }
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
+        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.py'), PYTHON_PROVIDER);
         logger.info('⌛ Wrote provider.py');

@@ -71,14 +71,6 @@ import type {
   ProviderOptionsMap,
 } from './types/providers';
 
-/**
- * Provider env keys that are required to be set either in env or in config to interact with provider services.
- */
-export enum ProvidersRequiringAPIKeysEnvKeys {
-  OPENAI_API_KEY = 'OPENAI_API_KEY',
-  ANTHROPIC_API_KEY = 'ANTHROPIC_API_KEY',
-}
-
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
   providerPath: string,
