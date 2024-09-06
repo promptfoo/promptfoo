@@ -10,7 +10,7 @@ import { redteamInit } from './commands/redteam/init';
 import { getEnvString } from './envars';
 import logger from './logger';
 import telemetry, { type EventValue } from './telemetry';
-import { EnvOverrides } from './types';
+import type { EnvOverrides } from './types';
 import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
