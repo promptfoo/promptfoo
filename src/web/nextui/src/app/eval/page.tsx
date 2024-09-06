@@ -1,5 +1,5 @@
 import React from 'react';
-import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
+import { USE_SUPABASE } from '@/constants';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import Link from 'next/link';

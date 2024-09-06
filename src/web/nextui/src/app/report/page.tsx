@@ -1,5 +1,4 @@
 import React from 'react';
-import { IS_RUNNING_LOCALLY } from '@/constants';
 import Report from './Report';
 
 // We don't really want to cache database lookups, but make this non-zero so
