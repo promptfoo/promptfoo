@@ -29,31 +29,6 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
   const { pluginPassRateThreshold } = useReportStore();
   const [expandedFrameworks, setExpandedFrameworks] = useState<Record<string, boolean>>({});
 
-  const frameworkCompliance = React.useMemo(() => {
-    return Object.entries(ALIASED_PLUGIN_MAPPINGS).reduce(
-      (acc, [framework, mappings]) => {
-        const isCompliant = Object.values(mappings).every((preset) => {
-          return (
-            preset.plugins.every((plugin) => {
-              const stats = categoryStats[plugin];
-              return stats && stats.pass / stats.total >= pluginPassRateThreshold;
-            }) &&
-            preset.strategies.every((strategy) => {
-              const stats = strategyStats[strategy];
-              return stats && stats.pass / stats.total >= pluginPassRateThreshold;
-            })
-          );
-        });
-        acc[framework] = isCompliant;
-        return acc;
-      },
-      {} as Record<string, boolean>,
-    );
-  }, [categoryStats, strategyStats, pluginPassRateThreshold]);
-
-  const totalFrameworks = Object.keys(frameworkCompliance).length;
-  const compliantFrameworks = Object.values(frameworkCompliance).filter(Boolean).length;
-
   const getNonCompliantPlugins = (framework: string) => {
     const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
     if (!mappings) {
@@ -65,13 +40,27 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
         Object.entries(mappings).flatMap(([_, { plugins, strategies }]) => {
           const nonCompliantItems = [...plugins, ...strategies].filter((item) => {
             const stats = categoryStats[item] || strategyStats[item];
-            return !stats || stats.pass / stats.total < pluginPassRateThreshold;
+            return stats && stats.total > 0 && stats.pass / stats.total < pluginPassRateThreshold;
           });
           return nonCompliantItems;
         }),
       ),
     );
   };
+
+  const frameworkCompliance = React.useMemo(() => {
+    return Object.entries(ALIASED_PLUGIN_MAPPINGS).reduce(
+      (acc, [framework, mappings]) => {
+        const nonCompliantPlugins = getNonCompliantPlugins(framework);
+        acc[framework] = nonCompliantPlugins.length === 0;
+        return acc;
+      },
+      {} as Record<string, boolean>,
+    );
+  }, [categoryStats, strategyStats, pluginPassRateThreshold]);
+
+  const totalFrameworks = Object.keys(frameworkCompliance).length;
+  const compliantFrameworks = Object.values(frameworkCompliance).filter(Boolean).length;
 
   const toggleFramework = (framework: string) => {
     setExpandedFrameworks((prev) => ({
