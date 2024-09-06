@@ -15,7 +15,6 @@ import { listCommand } from './commands/list';
 import { generateRedteamCommand } from './commands/redteam/generate';
 import { initCommand as redteamInitCommand } from './commands/redteam/init';
 import { pluginsCommand as redteamPluginsCommand } from './commands/redteam/plugins';
-import { serveCommand } from './commands/serve';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { versionCommand } from './commands/version';
@@ -70,7 +69,6 @@ async function main() {
   importCommand(program);
   initCommand(program);
   listCommand(program);
-  serveCommand(program);
   shareCommand(program);
   showCommand(program);
   versionCommand(program);
