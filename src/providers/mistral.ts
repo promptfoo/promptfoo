@@ -1,7 +1,13 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import type {
+  ApiProvider,
+  EnvOverrides,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+  TokenUsage,
+} from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const MISTRAL_CHAT_MODELS = [
@@ -80,6 +86,9 @@ const MISTRAL_CHAT_MODELS = [
       output: 6 / 1000000,
     },
   })),
+];
+
+const MISTRAL_EMBEDDING_MODELS = [
   {
     id: 'mistral-embed',
     cost: {
@@ -128,7 +137,9 @@ function calculateCost(
     return undefined;
   }
 
-  const model = MISTRAL_CHAT_MODELS.find((m) => m.id === modelName);
+  const model =
+    MISTRAL_CHAT_MODELS.find((m) => m.id === modelName) ||
+    MISTRAL_EMBEDDING_MODELS.find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;
   }
@@ -269,5 +280,74 @@ export class MistralChatCompletionProvider implements ApiProvider {
         data.usage?.completion_tokens,
       ),
     };
+  }
+}
+
+export class MistralEmbeddingProvider extends MistralChatCompletionProvider {
+  constructor(
+    options: { config?: MistralChatCompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super('mistral-embed', options);
+  }
+
+  id(): string {
+    return `mistral:embedding:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Mistral Embedding Provider ${this.modelName}]`;
+  }
+
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    if (!this.getApiKey()) {
+      throw new Error('Mistral API key must be set for embedding');
+    }
+
+    const body = {
+      model: this.modelName,
+      input: text,
+    };
+
+    const url = `${this.getApiUrl()}/embeddings`;
+    logger.debug(`Mistral Embedding API request: ${url} ${JSON.stringify(body)}`);
+
+    let data,
+      cached = false;
+
+    try {
+      ({ data, cached } = (await fetchWithCache(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      )) as unknown as { data: any; cached: boolean });
+    } catch (err) {
+      logger.error(`API call error: ${err}`);
+      throw err;
+    }
+
+    logger.debug(`Mistral Embedding API response: ${JSON.stringify(data)}`);
+
+    try {
+      const embedding = data?.data?.[0]?.embedding;
+      if (!embedding) {
+        throw new Error('No embedding found in Mistral Embedding API response');
+      }
+      const tokenUsage = getTokenUsage(data, cached);
+      return {
+        embedding,
+        tokenUsage,
+        cost: calculateCost(this.modelName, this.config, tokenUsage.prompt, tokenUsage.completion),
+      };
+    } catch (err) {
+      logger.error(data.error?.message || 'Unknown error');
+      throw err;
+    }
   }
 }

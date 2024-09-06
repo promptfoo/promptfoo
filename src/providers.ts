@@ -33,7 +33,7 @@ import {
   LocalAiEmbeddingProvider,
 } from './providers/localai';
 import { ManualInputProvider } from './providers/manualInput';
-import { MistralChatCompletionProvider } from './providers/mistral';
+import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './providers/mistral';
 import {
   OllamaEmbeddingProvider,
   OllamaCompletionProvider,
@@ -335,8 +335,14 @@ export async function loadApiProvider(
       ret = new VertexChatProvider(splits.slice(1).join(':'), providerOptions);
     }
   } else if (providerPath.startsWith('mistral:')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new MistralChatCompletionProvider(modelName, providerOptions);
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits.slice(2).join(':');
+    if (modelType === 'embedding' || modelType === 'embeddings') {
+      ret = new MistralEmbeddingProvider(modelName || 'mistral-embed', providerOptions);
+    } else {
+      ret = new MistralChatCompletionProvider(modelName || modelType, providerOptions);
+    }
   } else if (providerPath.startsWith('cohere:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
@@ -463,5 +469,7 @@ export default {
   BAMChatProvider,
   BAMEmbeddingProvider,
   GroqProvider,
+  MistralChatCompletionProvider,
+  MistralEmbeddingProvider,
   loadApiProvider,
 };
