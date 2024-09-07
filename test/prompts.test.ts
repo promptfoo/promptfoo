@@ -1,7 +1,9 @@
 import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
+import { getEnvBool } from '../src/envars';
 import { importModule } from '../src/esm';
+import logger from '../src/logger';
 import { readPrompts, readProviderPromptMap } from '../src/prompts';
 import { maybeFilePath } from '../src/prompts/utils';
 import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
@@ -47,6 +49,13 @@ jest.mock('../src/prompts/utils', () => {
     maybeFilePath: jest.fn(actual.maybeFilePath),
   };
 });
+jest.mock('../src/envars', () => {
+  const actual = jest.requireActual('../src/envars');
+  return {
+    ...actual,
+    getEnvBool: jest.fn(actual.getEnvBool),
+  };
+});
 
 describe('readPrompts', () => {
   afterEach(() => {
@@ -55,6 +64,7 @@ describe('readPrompts', () => {
     jest.mocked(fs.statSync).mockReset();
     jest.mocked(globSync).mockReset();
     jest.mocked(maybeFilePath).mockClear();
+    jest.clearAllMocks();
   });
 
   it('should throw an error for invalid inputs', async () => {
@@ -262,7 +272,7 @@ describe('readPrompts', () => {
     - role: user
       content:
         - type: text
-          text: "What’s in this image?"
+          text: "What's in this image?"
         - type: image_url
           image_url:
             url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
@@ -283,7 +293,7 @@ describe('readPrompts', () => {
     - role: user
       content:
         - type: text
-          text: "What’s in this image?"
+          text: "What's in this image?"
         - type: image_url
           image_url:
             url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
@@ -456,6 +466,54 @@ describe('readPrompts', () => {
     await expect(readPrompts('non-existent-file.txt*')).resolves.toEqual([
       { raw: 'non-existent-file.txt*', label: 'non-existent-file.txt*' },
     ]);
+  });
+
+  it('should warn about prompts without variables', async () => {
+    const prompts = ['Sample prompt A', 'Sample prompt B'];
+    jest.mocked(maybeFilePath).mockReturnValue(false);
+    const warnSpy = jest.spyOn(logger, 'warn');
+
+    await readPrompts(prompts);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Warning: 2 prompts without {{variables}} detected.'),
+    );
+  });
+
+  it('should not warn about prompts without variables when PROMPTFOO_DISABLE_NO_VARIABLE_WARNING is true', async () => {
+    const prompts = ['Sample prompt A', 'Sample prompt B'];
+    jest.mocked(maybeFilePath).mockReturnValue(false);
+    const warnSpy = jest.spyOn(logger, 'warn');
+    jest.mocked(getEnvBool).mockReturnValue(true);
+
+    await readPrompts(prompts);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('should not warn about prompts with variables', async () => {
+    const prompts = ['Sample prompt {{var1}}', 'Sample prompt {{var2}}'];
+    jest.mocked(maybeFilePath).mockReturnValue(false);
+    jest.mocked(getEnvBool).mockReturnValue(false);
+
+    const warnSpy = jest.spyOn(logger, 'warn');
+
+    await readPrompts(prompts);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('should warn about some prompts without variables', async () => {
+    const prompts = ['Sample prompt {{var1}}', 'Sample prompt without var'];
+    jest.mocked(maybeFilePath).mockReturnValue(false);
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    const warnSpy = jest.spyOn(logger, 'warn');
+
+    await readPrompts(prompts);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Warning: 1 prompt without {{variables}} detected.'),
+    );
   });
 });
 
