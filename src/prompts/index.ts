@@ -185,7 +185,6 @@ export async function readPrompts(
     }
   }
   if (promptsWithoutVars.length > 0) {
-    // TODO: show more warnings
     logger.warn(
       `Warning: ${promptsWithoutVars.length} prompt${promptsWithoutVars.length > 1 ? 's' : ''} without {{variables}} detected.\n` +
         `Examples: "${promptsWithoutVars.slice(0, 3).join('", "')}"${promptsWithoutVars.length > 3 ? ', ...' : ''}\n` +
