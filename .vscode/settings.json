@@ -9,6 +9,7 @@
     "Envar",
     "envars",
     "Evals",
+    "globbed",
     "Groq",
     "mitigations",
     "openai",
