@@ -132,7 +132,7 @@ Translate the following text to German: "{{name}}: {{text}}"
 The prompt separator can be overridden with the `PROMPTFOO_PROMPT_SEPARATOR` environment variable.
 :::
 
-## Prompts as Markdown
+### Prompts as Markdown
 
 Prompts as markdown are treated similarly to prompts as raw text. You can define a prompt in a markdown file as:
 
@@ -168,7 +168,7 @@ providers:
       - llama_completion_prompt
 ```
 
-In this configuration, the `gpt_chat_prompt` is used for both and GPT-4o and GPT-4o-mini models, while the `llama_completion_prompt` is used for the llama3.1 model. The prompts are defined in separate files within the `prompts` directory.
+In this configuration, the `gpt_chat_prompt` is used for both GPT-4o and GPT-4o-mini models, while the `llama_completion_prompt` is used for the llama3.1 model. The prompts are defined in separate files within the `prompts` directory.
 
 Make sure to create the corresponding prompt files with the content formatted as expected by each model. For example, GPT models might expect a JSON array of messages, while Llama might expect a plain text format with a specific prefix.
 
