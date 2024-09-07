@@ -170,23 +170,27 @@ export async function readPrompts(
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
   const promptPartials: Partial<Prompt>[] = normalizeInput(promptPathOrGlobs);
   const prompts: Prompt[] = [];
+  const promptsWithoutVars: string[] = [];
   for (const prompt of promptPartials) {
     const promptBatch = await processPrompt(prompt, basePath);
     if (promptBatch.length === 0) {
       throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
     }
-
     for (const processedPrompt of promptBatch) {
       const variables = extractVariablesFromTemplates([processedPrompt.raw]);
       if (variables.length === 0 && !getEnvBool('PROMPTFOO_DISABLE_NO_VARIABLE_WARNING')) {
-        logger.warn(
-          `Warning: The prompt "${processedPrompt.raw.substring(0, 50)}..." does not contain any variables. ` +
-            `Consider using variables to make your prompts more dynamic and reusable. ` +
-            `You can disable this warning by setting PROMPTFOO_DISABLE_NO_VARIABLE_WARNING=true.`,
-        );
+        promptsWithoutVars.push(processedPrompt.label || processedPrompt.raw.substring(0, 50));
       }
       prompts.push(processedPrompt);
     }
+  }
+  if (promptsWithoutVars.length > 0) {
+    // TODO: show more warnings
+    logger.warn(
+      `Warning: The prompt "${promptsWithoutVars[0]}..." does not contain any {{variables}}. ` +
+        `Most promptfoo users include variables in their tests when performing evals. ` +
+        `You can disable this warning by setting PROMPTFOO_DISABLE_NO_VARIABLE_WARNING=true.`,
+    );
   }
 
   return prompts;
