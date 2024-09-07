@@ -162,15 +162,15 @@ providers:
   - id: openai:gpt-4o
     prompts:
       - gpt_chat_prompt
-  - id: replicate:meta/llama3.1:8b
-    label: llama3.1:70b-chat
+  - id: replicate:meta/meta-llama-3.1-405b-instruct
+    label: llama-3.1-405b-instruct
     prompts:
       - llama_completion_prompt
 ```
 
 In this configuration, the `gpt_chat_prompt` is used for both GPT-4o and GPT-4o-mini models, while the `llama_completion_prompt` is used for the llama3.1 model. The prompts are defined in separate files within the `prompts` directory.
 
-Make sure to create the corresponding prompt files with the content formatted as expected by each model. For example, GPT models might expect a JSON array of messages, while Llama might expect a plain text format with a specific prefix.
+Make sure to create the corresponding prompt files with the content formatted as expected by each model. For example, GPT models might expect a JSON array of messages, while llama might expect a plain text format with a specific prefix.
 
 ### Prompt functions
 
