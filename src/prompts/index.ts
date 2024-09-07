@@ -187,7 +187,8 @@ export async function readPrompts(
   if (promptsWithoutVars.length > 0) {
     // TODO: show more warnings
     logger.warn(
-      `Warning: The prompt "${promptsWithoutVars[0]}..." does not contain any {{variables}}. ` +
+      `Warning: ${promptsWithoutVars.length} prompt${promptsWithoutVars.length > 1 ? 's' : ''} without {{variables}} detected.\n` +
+        `Examples: "${promptsWithoutVars.slice(0, 3).join('", "')}"${promptsWithoutVars.length > 3 ? ', ...' : ''}\n` +
         `Most promptfoo users include variables in their tests when performing evals. ` +
         `You can disable this warning by setting PROMPTFOO_DISABLE_NO_VARIABLE_WARNING=true.`,
     );
