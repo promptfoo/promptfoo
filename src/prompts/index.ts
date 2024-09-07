@@ -12,6 +12,7 @@ import { isJavascriptFile, parsePathOrGlob } from '../util';
 import { processJsFile } from './processors/javascript';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
+import { processMarkdownFile } from './processors/markdown';
 import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
@@ -142,6 +143,9 @@ export async function processPrompt(
   }
   if (extension && isJavascriptFile(extension)) {
     return processJsFile(filePath, prompt, functionName);
+  }
+  if (extension === '.md') {
+    return processMarkdownFile(filePath, prompt);
   }
   if (extension === '.py') {
     return processPythonFile(filePath, prompt, functionName);

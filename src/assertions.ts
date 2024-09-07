@@ -548,13 +548,14 @@ export async function runAssertion({
       Array.isArray(renderedValue),
       '"contains-all" assertion type must have an array value',
     );
-    pass = renderedValue.every((value) => outputString.includes(String(value))) !== inverse;
+    const missingStrings = renderedValue.filter((value) => !outputString.includes(String(value)));
+    pass = (missingStrings.length === 0) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(', ')}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain all of [${renderedValue.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
       assertion,
     };
   }
@@ -568,16 +569,16 @@ export async function runAssertion({
       Array.isArray(renderedValue),
       '"icontains-all" assertion type must have an array value',
     );
-    pass =
-      renderedValue.every((value) =>
-        outputString.toLowerCase().includes(String(value).toLowerCase()),
-      ) !== inverse;
+    const missingStrings = renderedValue.filter(
+      (value) => !outputString.toLowerCase().includes(String(value).toLowerCase()),
+    );
+    pass = (missingStrings.length === 0) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(', ')}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain all of [${renderedValue.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
       assertion,
     };
   }

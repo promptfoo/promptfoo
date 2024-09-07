@@ -86,6 +86,7 @@ export interface ProviderResponse {
 }
 
 export interface ProviderEmbeddingResponse {
+  cost?: number;
   error?: string;
   embedding?: number[];
   tokenUsage?: Partial<TokenUsage>;

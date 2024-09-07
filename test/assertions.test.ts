@@ -2007,7 +2007,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output to contain all of "option1, option2, option3"',
+      reason: 'Expected output to contain all of [option1, option2, option3]. Missing: [option3]',
     });
   });
 
@@ -2045,7 +2045,8 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output to contain all of "option1, option2, option3, option4"',
+      reason:
+        'Expected output to contain all of [option1, option2, option3, option4]. Missing: [option4]',
     });
   });
 

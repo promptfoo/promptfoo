@@ -191,7 +191,7 @@ class HarmfulPlugin extends PluginBase {
     return [
       {
         type: `promptfoo:redteam:${this.category.key}`,
-        metric: `${this.category.key}`,
+        metric: 'Harmful',
       },
     ];
   }

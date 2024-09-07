@@ -109,20 +109,34 @@ describe('getNunjucksEngine', () => {
     process.env = originalEnv;
   });
 
-  it('should return a simple render function when PROMPTFOO_DISABLE_TEMPLATING is set', () => {
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
-    const engine = getNunjucksEngine();
-    expect(engine.renderString('Hello {{ name }}', {})).toBe('Hello {{ name }}');
-  });
-
-  it('should return a nunjucks environment when PROMPTFOO_DISABLE_TEMPLATING is not set', () => {
+  it('should return a nunjucks environment by default', () => {
     const engine = getNunjucksEngine();
     expect(engine).toBeInstanceOf(nunjucks.Environment);
     expect(engine.renderString('Hello {{ name }}', { name: 'World' })).toBe('Hello World');
   });
 
+  it('should return a simple render function when PROMPTFOO_DISABLE_TEMPLATING is set', () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const engine = getNunjucksEngine();
+    expect(engine.renderString('Hello {{ name }}', { name: 'World' })).toBe('Hello {{ name }}');
+  });
+
+  it('should return a nunjucks environment when isGrader is true, regardless of PROMPTFOO_DISABLE_TEMPLATING', () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const engine = getNunjucksEngine({}, false, true);
+    expect(engine).toBeInstanceOf(nunjucks.Environment);
+    expect(engine.renderString('Hello {{ name }}', { name: 'Grader' })).toBe('Hello Grader');
+  });
+
+  it('should use nunjucks when isGrader is true, even if PROMPTFOO_DISABLE_TEMPLATING is set', () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const engine = getNunjucksEngine({}, false, true);
+    expect(engine).toBeInstanceOf(nunjucks.Environment);
+    expect(engine.renderString('Hello {{ name }}', { name: 'Grader' })).toBe('Hello Grader');
+  });
+
   it('should add custom filters when provided', () => {
-    const customFilters: Record<string, (args_0: any, ...args_1: any[]) => string> = {
+    const customFilters = {
       uppercase: (str: string) => str.toUpperCase(),
       add: (a: number, b: number) => (a + b).toString(),
     };
@@ -135,7 +149,6 @@ describe('getNunjucksEngine', () => {
     process.env.TEST_VAR = 'test_value';
     const engine = getNunjucksEngine();
     expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
-    delete process.env.TEST_VAR;
   });
 
   it('should throw an error when throwOnUndefined is true and a variable is undefined', () => {
@@ -150,5 +163,18 @@ describe('getNunjucksEngine', () => {
     expect(() => {
       engine.renderString('{{ undefined_var }}', {});
     }).not.toThrow();
+  });
+
+  it('should respect all parameters when provided', () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const customFilters = {
+      double: (n: number) => (n * 2).toString(),
+    };
+    const engine = getNunjucksEngine(customFilters, true, true);
+    expect(engine).toBeInstanceOf(nunjucks.Environment);
+    expect(engine.renderString('{{ 5 | double }}', {})).toBe('10');
+    expect(() => {
+      engine.renderString('{{ undefined_var }}', {});
+    }).toThrow(/attempted to output null or undefined value/);
   });
 });

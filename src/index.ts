@@ -7,6 +7,7 @@ import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
+import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
 import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
@@ -53,11 +54,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
               function: promptInput as PromptFunction,
             };
           } else if (typeof promptInput === 'string') {
-            const prompts = await readPrompts(promptInput);
-            return prompts.map((p) => ({
-              raw: p.raw,
-              label: p.label,
-            }));
+            return readPrompts(promptInput);
           } else {
             return {
               raw: JSON.stringify(promptInput),
@@ -131,6 +128,7 @@ const redteam = {
     extractEntities,
     extractSystemPurpose,
   },
+  Graders: GRADERS,
   Plugins,
   Strategies,
 };

@@ -72,6 +72,7 @@ prompts:
   - file://path/to/prompt.json
   - file://path/to/prompt.yaml
   - file://path/to/prompt.yml
+  - file://path/to/prompt.md
   # Globs are supported
   - file://prompts/*.txt
   - file://path/**/*
@@ -131,11 +132,21 @@ Translate the following text to German: "{{name}}: {{text}}"
 The prompt separator can be overridden with the `PROMPTFOO_PROMPT_SEPARATOR` environment variable.
 :::
 
+### Prompts as Markdown
+
+Prompts as markdown are treated similarly to prompts as raw text. You can define a prompt in a markdown file as:
+
+```markdown title=prompt.md
+You are a helpful assistant for Promptfoo. Please answer the following question: {{question}}
+```
+
+Note that only one prompt per markdown file is supported.
+
 ### Different prompts per model
 
 To set separate prompts for different providers, you can specify the prompt files within the `providers` section of your `promptfooconfig.yaml`. Each provider can have its own set of prompts that are tailored to its specific requirements or input format.
 
-Here's an example of how to set separate prompts for Llama v2 and GPT models:
+Here's an example of how to set separate prompts for llama3.1 and GPT-4o models:
 
 ```yaml title=promptfooconfig.yaml
 prompts:
@@ -151,15 +162,15 @@ providers:
   - id: openai:gpt-4o
     prompts:
       - gpt_chat_prompt
-  - id: replicate:meta/llama70b-v2-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3
-    label: llama70b-v2-chat
+  - id: replicate:meta/meta-llama-3.1-405b-instruct
+    label: llama-3.1-405b-instruct
     prompts:
       - llama_completion_prompt
 ```
 
-In this configuration, the `gpt_chat_prompt` is used for both GPT-3.5 and GPT-4 models, while the `llama_completion_prompt` is used for the Llama v2 model. The prompts are defined in separate files within the `prompts` directory.
+In this configuration, the `gpt_chat_prompt` is used for both GPT-4o and GPT-4o-mini models, while the `llama_completion_prompt` is used for the llama3.1 model. The prompts are defined in separate files within the `prompts` directory.
 
-Make sure to create the corresponding prompt files with the content formatted as expected by each model. For example, GPT models might expect a JSON array of messages, while Llama might expect a plain text format with a specific prefix.
+Make sure to create the corresponding prompt files with the content formatted as expected by each model. For example, GPT models might expect a JSON array of messages, while llama might expect a plain text format with a specific prefix.
 
 ### Prompt functions
 
