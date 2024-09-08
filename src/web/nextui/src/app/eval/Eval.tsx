@@ -230,6 +230,7 @@ export default function Eval({
     }
     setInComparisonMode(false);
   }, [
+    apiBaseUrl,
     fetchId,
     setTable,
     setConfig,
