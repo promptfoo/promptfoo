@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
-import { Stack, IconButton } from '@mui/material';
+import { Stack, IconButton, Tooltip } from '@mui/material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import ApiSettingsModal from './ApiSettingsModal';
@@ -51,9 +51,11 @@ export default function Navigation({
           <InfoIcon />
         </IconButton>
         {IS_RUNNING_LOCALLY && (
-          <IconButton onClick={handleApiSettingsModalToggle} sx={{ color: '#f0f0f0' }}>
-            <EngineeringIcon />
-          </IconButton>
+          <Tooltip title="API and Sharing Settings">
+            <IconButton onClick={handleApiSettingsModalToggle} sx={{ color: '#f0f0f0' }}>
+              <EngineeringIcon />
+            </IconButton>
+          </Tooltip>
         )}
         <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
       </div>

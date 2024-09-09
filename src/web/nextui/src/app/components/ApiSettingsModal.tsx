@@ -8,6 +8,7 @@ import {
   DialogContent,
   DialogTitle,
   TextField,
+  Typography,
 } from '@mui/material';
 
 export default function ApiSettingsModal<T extends { open: boolean; onClose: () => void }>({
@@ -54,17 +55,22 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
       fullWidth
       aria-labelledby="api-settings-dialog-title"
     >
-      <DialogTitle id="api-settings-dialog-title">API Settings</DialogTitle>
+      <DialogTitle id="api-settings-dialog-title">API and Sharing Settings</DialogTitle>
       <DialogContent>
+        <Typography variant="h6">API</Typography>
         <TextField
           label="API Base URL"
+          helperText="The promptfoo API the webview will connect to"
           value={tempApiBaseUrl}
           onChange={handleApiBaseUrlChange}
           fullWidth
           margin="normal"
         />
+
+        <Typography variant="h6">Sharing</Typography>
         <TextField
           label="API Share Base URL"
+          helperText='Where to send the eval when you click "Share"'
           value={tempApiShareBaseUrl}
           onChange={handleApiShareBaseUrlChange}
           fullWidth
@@ -72,6 +78,7 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
         />
         <TextField
           label="App Share Base URL"
+          helperText="Set this to the App URL for the promptfoo instance you send shared evals to"
           value={tempAppShareBaseUrl}
           onChange={handleAppShareBaseUrlChange}
           fullWidth
