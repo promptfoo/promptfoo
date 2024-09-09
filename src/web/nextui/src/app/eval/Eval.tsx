@@ -73,6 +73,10 @@ export default function Eval({
 
   const fetchRecentFileEvals = async () => {
     const resp = await callApi(`/results`, { cache: 'no-store' });
+    if (!resp.ok) {
+      setFailed(true);
+      return;
+    }
     const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
     setRecentEvals(body.data);
     return body.data;
@@ -95,7 +99,7 @@ export default function Eval({
       setLoaded(false);
       router.push(`/eval/remote:${encodeURIComponent(id)}`);
     } else {
-      router.push(`/eval/?evalId=${encodeURIComponent(id)}`);
+      router.push(`/eval/${encodeURIComponent(id)}`);
     }
   };
 
@@ -107,12 +111,13 @@ export default function Eval({
   const searchEvalId = searchParams ? searchParams.get('evalId') : null;
 
   React.useEffect(() => {
-    if (searchEvalId) {
-      console.log('Eval init: Fetching eval by id', searchEvalId);
+    const evalId = searchEvalId || fetchId;
+    if (evalId) {
+      console.log('Eval init: Fetching eval by id', { searchEvalId, fetchId });
       const run = async () => {
-        await fetchEvalById(searchEvalId);
+        await fetchEvalById(evalId);
         setLoaded(true);
-        setDefaultEvalId(searchEvalId);
+        setDefaultEvalId(evalId);
         // Load other recent eval runs
         fetchRecentFileEvals();
       };
@@ -123,24 +128,6 @@ export default function Eval({
       setConfig(preloadedData.data.config);
       setAuthor(preloadedData.data.author || null);
       setLoaded(true);
-    } else if (fetchId) {
-      console.log('Eval init: Fetching eval', fetchId);
-      const run = async () => {
-        let response = await await callApi(`/eval/${fetchId}`);
-        if (!response.ok) {
-          response = await callApi(`/results/${fetchId}`);
-          if (!response.ok) {
-            setFailed(true);
-            return;
-          }
-        }
-        const results = await response.json();
-        setTable(results.data.results?.table as EvaluateTable);
-        setConfig(results.data.config);
-        setAuthor(results.data.author || null);
-        setLoaded(true);
-      };
-      run();
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
 
@@ -153,9 +140,11 @@ export default function Eval({
         setConfig(data?.config);
         setAuthor(data?.author || null);
         fetchRecentFileEvals().then((newRecentEvals) => {
-          setDefaultEvalId(newRecentEvals[0]?.evalId);
-          console.log('setting default eval id', newRecentEvals[0]?.evalId);
-          setEvalId(newRecentEvals[0]?.evalId);
+          if (newRecentEvals && newRecentEvals.length > 0) {
+            setDefaultEvalId(newRecentEvals[0]?.evalId);
+            setEvalId(newRecentEvals[0]?.evalId);
+            console.log('setting default eval id', newRecentEvals[0]?.evalId);
+          }
         });
       });
 
@@ -165,10 +154,12 @@ export default function Eval({
         setConfig(data.config);
         setAuthor(data.author || null);
         fetchRecentFileEvals().then((newRecentEvals) => {
-          const newId = newRecentEvals[0]?.evalId;
-          if (newId) {
-            setDefaultEvalId(newId);
-            setEvalId(newId);
+          if (newRecentEvals && newRecentEvals.length > 0) {
+            const newId = newRecentEvals[0]?.evalId;
+            if (newId) {
+              setDefaultEvalId(newId);
+              setEvalId(newId);
+            }
           }
         });
       });
@@ -208,7 +199,7 @@ export default function Eval({
       // Fetch from next.js server
       const run = async () => {
         const evals = await fetchRecentFileEvals();
-        if (evals.length > 0) {
+        if (evals && evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
           const resp = await callApi(`/results/${defaultEvalId}`);
           const body = await resp.json();
