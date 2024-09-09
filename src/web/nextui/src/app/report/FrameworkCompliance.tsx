@@ -57,7 +57,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
       },
       {} as Record<string, boolean>,
     );
-  }, [categoryStats, strategyStats, pluginPassRateThreshold]);
+  }, [categoryStats, strategyStats, pluginPassRateThreshold, getNonCompliantPlugins]);
 
   const totalFrameworks = Object.keys(frameworkCompliance).length;
   const compliantFrameworks = Object.values(frameworkCompliance).filter(Boolean).length;
