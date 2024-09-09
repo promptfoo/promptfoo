@@ -26,7 +26,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
   categoryStats,
   strategyStats,
 }) => {
-  const { pluginPassRateThreshold } = useReportStore();
+  const { pluginPassRateThreshold, showComplianceSection } = useReportStore();
   const [expandedFrameworks, setExpandedFrameworks] = useState<Record<string, boolean>>({});
 
   const getNonCompliantPlugins = (framework: string) => {
@@ -68,6 +68,10 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
       [framework]: !prev[framework],
     }));
   };
+
+  if (!showComplianceSection) {
+    return null;
+  }
 
   return (
     <Card className="framework-compliance-card">

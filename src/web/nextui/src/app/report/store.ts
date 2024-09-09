@@ -20,6 +20,8 @@ interface ReportState {
   setShowPercentagesOnRiskCards: (show: boolean) => void;
   pluginPassRateThreshold: number;
   setPluginPassRateThreshold: (threshold: number) => void;
+  showComplianceSection: boolean;
+  setShowComplianceSection: (show: boolean) => void;
 }
 
 export const useReportStore = create<ReportState>()(
@@ -31,6 +33,8 @@ export const useReportStore = create<ReportState>()(
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: (threshold: number) =>
         set(() => ({ pluginPassRateThreshold: threshold })),
+      showComplianceSection: false,
+      setShowComplianceSection: (show: boolean) => set(() => ({ showComplianceSection: show })),
     }),
     {
       name: 'ReportViewStorage',
