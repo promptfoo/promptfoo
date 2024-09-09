@@ -8,7 +8,7 @@ import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
-import { getEnvBool, getEnvInt } from './envars';
+import { getEnvBool, getEnvInt, isCI } from './envars';
 import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
@@ -852,13 +852,7 @@ class Evaluator {
         new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
       ).sort(),
       eventSource: options.eventSource || 'default',
-      ci:
-        getEnvBool('CI') ||
-        getEnvBool('GITHUB_ACTIONS') ||
-        getEnvBool('TRAVIS') ||
-        getEnvBool('CIRCLECI') ||
-        getEnvBool('JENKINS') ||
-        getEnvBool('GITLAB_CI'),
+      ci: isCI(),
       hasAnyPass: results.some((r) => r.success),
       isRedteam: Boolean(testSuite.redteam),
     });

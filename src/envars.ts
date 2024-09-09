@@ -95,6 +95,13 @@ export type EnvVars = {
   GITLAB_CI?: boolean;
   JENKINS?: boolean;
   TRAVIS?: boolean;
+  APPVEYOR?: boolean;
+  CODEBUILD_BUILD_ID?: boolean;
+  TF_BUILD?: boolean;
+  BITBUCKET_COMMIT?: boolean;
+  BUDDY?: boolean;
+  BUILDKITE?: boolean;
+  TEAMCITY_VERSION?: boolean;
 } & EnvOverrides;
 
 type EnvVarKey = keyof EnvVars;
@@ -174,4 +181,22 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
     }
   }
   return defaultValue;
+}
+
+export function isCI() {
+  return (
+    getEnvBool('CI') ||
+    getEnvBool('GITHUB_ACTIONS') ||
+    getEnvBool('TRAVIS') ||
+    getEnvBool('CIRCLECI') ||
+    getEnvBool('JENKINS') ||
+    getEnvBool('GITLAB_CI') ||
+    getEnvBool('APPVEYOR') ||
+    getEnvBool('CODEBUILD_BUILD_ID') ||
+    getEnvBool('TF_BUILD') ||
+    getEnvBool('BITBUCKET_COMMIT') ||
+    getEnvBool('BUDDY') ||
+    getEnvBool('BUILDKITE') ||
+    getEnvBool('TEAMCITY_VERSION')
+  );
 }
