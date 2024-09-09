@@ -22,6 +22,8 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
-EXPOSE 15500
+ENV API_PORT=3000
+
+EXPOSE 3000
 
 CMD ["node", "dist/src/server/index.js"]
