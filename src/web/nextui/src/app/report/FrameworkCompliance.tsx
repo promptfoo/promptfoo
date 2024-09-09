@@ -29,24 +29,27 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
   const { pluginPassRateThreshold, showComplianceSection } = useReportStore();
   const [expandedFrameworks, setExpandedFrameworks] = useState<Record<string, boolean>>({});
 
-  const getNonCompliantPlugins = (framework: string) => {
-    const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
-    if (!mappings) {
-      return [];
-    }
+  const getNonCompliantPlugins = React.useCallback(
+    (framework: string) => {
+      const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
+      if (!mappings) {
+        return [];
+      }
 
-    return Array.from(
-      new Set(
-        Object.entries(mappings).flatMap(([_, { plugins, strategies }]) => {
-          const nonCompliantItems = [...plugins, ...strategies].filter((item) => {
-            const stats = categoryStats[item] || strategyStats[item];
-            return stats && stats.total > 0 && stats.pass / stats.total < pluginPassRateThreshold;
-          });
-          return nonCompliantItems;
-        }),
-      ),
-    );
-  };
+      return Array.from(
+        new Set(
+          Object.entries(mappings).flatMap(([_, { plugins, strategies }]) => {
+            const nonCompliantItems = [...plugins, ...strategies].filter((item) => {
+              const stats = categoryStats[item] || strategyStats[item];
+              return stats && stats.total > 0 && stats.pass / stats.total < pluginPassRateThreshold;
+            });
+            return nonCompliantItems;
+          }),
+        ),
+      );
+    },
+    [categoryStats, strategyStats, pluginPassRateThreshold],
+  );
 
   const frameworkCompliance = React.useMemo(() => {
     return Object.entries(ALIASED_PLUGIN_MAPPINGS).reduce(
