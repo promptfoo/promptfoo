@@ -7,12 +7,17 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from 'recharts';
+import { Severity } from '../report/constants';
 
-interface AttackSuccessRateDataPoint {
+export interface AttackSuccessRateDataPoint {
   date: string;
-  attackSuccessRate: number;
-  successfulAttacks: number;
+  [Severity.Critical]: number;
+  [Severity.High]: number;
+  [Severity.Medium]: number;
+  [Severity.Low]: number;
+  total: number;
 }
 
 interface AttackSuccessRateChartProps {
@@ -26,8 +31,11 @@ export default function AttackSuccessRateChart({ data }: AttackSuccessRateChartP
     data.forEach((point) => {
       if (dataMap.has(point.date)) {
         const existing = dataMap.get(point.date)!;
-        existing.successfulAttacks += point.successfulAttacks;
-        existing.attackSuccessRate = (existing.attackSuccessRate + point.attackSuccessRate) / 2; // Average the rate
+        existing[Severity.Critical] += point[Severity.Critical];
+        existing[Severity.High] += point[Severity.High];
+        existing[Severity.Medium] += point[Severity.Medium];
+        existing[Severity.Low] += point[Severity.Low];
+        existing.total += point.total;
       } else {
         dataMap.set(point.date, { ...point });
       }
@@ -37,6 +45,13 @@ export default function AttackSuccessRateChart({ data }: AttackSuccessRateChartP
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
     );
   }, [data]);
+
+  const severityColors = {
+    [Severity.Critical]: '#d32f2f',
+    [Severity.High]: '#f57c00',
+    [Severity.Medium]: '#fbc02d',
+    [Severity.Low]: '#388e3c',
+  };
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -48,50 +63,23 @@ export default function AttackSuccessRateChart({ data }: AttackSuccessRateChartP
           type="category"
           tickFormatter={(value) => new Date(value).toLocaleDateString()}
         />
-        <YAxis
-          yAxisId="left"
-          width={40}
-          domain={[0, 100]}
-          //tickFormatter={(value) => `${value}%`}
-          tick={{ fontSize: 12 }}
-        />
-        <YAxis yAxisId="right" orientation="right" width={40} tick={{ fontSize: 12 }} />
+        <YAxis width={40} domain={[0, 'dataMax']} tick={{ fontSize: 12 }} />
         <Tooltip
-          formatter={(value: number | string, name: string) => {
-            if (name === 'attackSuccessRate') {
-              return [
-                typeof value === 'number'
-                  ? value.toLocaleString(undefined, {
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 1,
-                    }) + '%'
-                  : value,
-                'Attack Success Rate',
-              ];
-            } else if (name === 'successfulAttacks') {
-              return [value, 'Successful Attacks'];
-            }
-            return [value, name];
+          formatter={(value: number, name: string) => {
+            return [value, name === 'total' ? 'Total' : name];
           }}
         />
-        <defs>
-          <linearGradient id="attackSuccessRateGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#f44336" stopOpacity={0.8} />
-            <stop offset="95%" stopColor="#f44336" stopOpacity={0.1} />
-          </linearGradient>
-        </defs>
-        <Area
-          yAxisId="left"
-          type="monotone"
-          //dataKey="attackSucessRate"
-          dataKey="successfulAttacks"
-          stroke="#f44336"
-          strokeWidth={2}
-          fillOpacity={1}
-          fill="url(#attackSuccessRateGradient)"
-          dot={false}
-          activeDot={{ r: 6, fill: '#d32f2f', stroke: '#fff', strokeWidth: 2 }}
-        />
+        <Legend />
+        {Object.values(Severity).map((severity) => (
+          <Area
+            key={severity}
+            type="monotone"
+            dataKey={severity}
+            stackId="1"
+            stroke={severityColors[severity]}
+            fill={severityColors[severity]}
+          />
+        ))}
       </AreaChart>
     </ResponsiveContainer>
   );

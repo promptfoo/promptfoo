@@ -16,6 +16,7 @@ import Typography from '@mui/material/Typography';
 import {
   Severity,
   categoryAliases,
+  categoryAliasesReverse,
   riskCategories,
   riskCategorySeverityMap,
 } from '../report/constants';
@@ -29,6 +30,11 @@ import Sidebar from './Sidebar';
 import TopFailingCategories from './TopFailingCategories';
 import { calculateTrend, processCategoryData } from './utils';
 
+function getPluginIdFromMetricName(metricName: string): string {
+  const metricBaseName = metricName.split('/')[0];
+  return categoryAliasesReverse[metricBaseName as keyof typeof categoryAliases];
+}
+
 interface OverallAttackSuccessRateDataPoint {
   name: string;
   value: number;
@@ -36,8 +42,11 @@ interface OverallAttackSuccessRateDataPoint {
 
 interface AttackSuccessRateDataPoint {
   date: string;
-  attackSuccessRate: number;
-  successfulAttacks: number;
+  [Severity.Critical]: number;
+  [Severity.High]: number;
+  [Severity.Medium]: number;
+  [Severity.Low]: number;
+  total: number;
 }
 
 export default function Dashboard() {
@@ -94,16 +103,27 @@ export default function Dashboard() {
     // Prepare data for Recharts
     const attackSuccessRateOverTime = evals
       .sort((a, b) => a.createdAt - b.createdAt)
-      .map((eval_) => ({
-        date: new Date(eval_.createdAt).toLocaleDateString(),
-        attackSuccessRate:
-          eval_.metrics?.testFailCount && eval_.metrics?.testPassCount
-            ? (eval_.metrics.testFailCount /
-                (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
-              100
-            : 0,
-        successfulAttacks: eval_.metrics?.testFailCount || 0,
-      }));
+      .map((eval_) => {
+        const dataPoint: AttackSuccessRateDataPoint = {
+          date: new Date(eval_.createdAt).toLocaleDateString(),
+          [Severity.Critical]: 0,
+          [Severity.High]: 0,
+          [Severity.Medium]: 0,
+          [Severity.Low]: 0,
+          total: 0,
+        };
+
+        Object.entries(eval_.metrics?.namedScores || {}).forEach(([category, score]) => {
+          if (score <= 0) {
+            const severity =
+              riskCategorySeverityMap[getPluginIdFromMetricName(category)] || Severity.Low;
+            dataPoint[severity]++;
+            dataPoint.total++;
+          }
+        });
+
+        return dataPoint;
+      });
 
     setAttackSuccessRateData(attackSuccessRateOverTime);
 

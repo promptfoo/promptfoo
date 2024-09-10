@@ -4,19 +4,8 @@ import Paper from '@mui/material/Paper';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
-import AttackSuccessRateChart from './AttackSuccessRateChart';
-import IssuesResolvedChart from './IssuesResolvedChart';
-
-interface AttackSuccessRateDataPoint {
-  date: string;
-  attackSuccessRate: number;
-  successfulAttacks: number;
-}
-
-interface IssuesResolvedDataPoint {
-  date: string;
-  resolved: number;
-}
+import AttackSuccessRateChart, { type AttackSuccessRateDataPoint } from './AttackSuccessRateChart';
+import IssuesResolvedChart, { type IssuesResolvedDataPoint } from './IssuesResolvedChart';
 
 interface DashboardChartsProps {
   attackSuccessRateData: AttackSuccessRateDataPoint[];

@@ -17,10 +17,10 @@ export default function IssuesBySeverity({ severityCounts, totalIssues }: Issues
   ].filter((item) => item.count > 0);
 
   const COLORS = {
-    Critical: '#f44336',
-    High: '#4caf50',
-    Medium: '#ff9800',
-    Low: '#f44336',
+    Critical: '#d32f2f',
+    High: '#f57c00',
+    Medium: '#fbc02d',
+    Low: '#388e3c',
   };
 
   return (

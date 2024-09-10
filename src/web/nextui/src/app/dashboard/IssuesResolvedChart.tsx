@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-interface IssuesResolvedDataPoint {
+export interface IssuesResolvedDataPoint {
   date: string;
   resolved: number;
 }
