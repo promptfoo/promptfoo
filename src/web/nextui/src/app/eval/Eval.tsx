@@ -1,27 +1,27 @@
 'use client';
 
 import * as React from 'react';
+import { callApi } from '@app/api';
+import { ShiftKeyProvider } from '@app/app/contexts/ShiftKeyContext';
+import { ToastProvider } from '@app/app/contexts/ToastContext';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@app/constants';
+import useApiConfig from '@app/state/apiConfig';
+import type { Database } from '@app/types/supabase';
+import CircularProgress from '@mui/material/CircularProgress';
 import type {
   EvaluateSummary,
   UnifiedConfig,
   SharedResults,
   ResultLightweightWithLabel,
   ResultsFile,
-} from '@/../../../types';
-import { callApi } from '@/api';
-import { ShiftKeyProvider } from '@/app/contexts/ShiftKeyContext';
-import { ToastProvider } from '@/app/contexts/ToastContext';
-import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
-import useApiConfig from '@/state/apiConfig';
-import type { Database } from '@/types/supabase';
-import CircularProgress from '@mui/material/CircularProgress';
+} from '@promptfoo/types';
+import type { EvaluateTable } from '@promptfoo/types';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { io as SocketIOClient } from 'socket.io-client';
 import invariant from 'tiny-invariant';
 import ResultsView from './ResultsView';
 import { useStore } from './store';
-import type { EvaluateTable } from './types';
 import './Eval.css';
 
 async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string }[]> {

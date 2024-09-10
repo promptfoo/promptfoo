@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { callApi } from '@/api';
-import { USE_SUPABASE } from '@/constants';
-import { useStore } from '@/state/evalConfig';
+import { callApi } from '@app/api';
+import { USE_SUPABASE } from '@app/constants';
+import { useStore } from '@app/state/evalConfig';
 import { Button, CircularProgress } from '@mui/material';
 import { useRouter } from 'next/navigation';
 

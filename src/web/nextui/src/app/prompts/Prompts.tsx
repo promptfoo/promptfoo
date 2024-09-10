@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import type { PromptWithMetadata } from '@/../../../types';
-import { callApi } from '@/api';
+import { callApi } from '@app/api';
 import Box from '@mui/material/Box';
 import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
@@ -13,6 +12,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
+import type { PromptWithMetadata } from '@promptfoo/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import PromptDialog from './PromptDialog';

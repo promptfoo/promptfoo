@@ -1,6 +1,6 @@
 import React from 'react';
-import type { ResultLightweightWithLabel, SharedResults } from '@/../../../types';
-import { callApi } from '@/api';
+import { callApi } from '@app/api';
+import type { ResultLightweightWithLabel, SharedResults } from '@promptfoo/types';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Eval from '../Eval';
@@ -15,7 +15,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   let recentEvals: ResultLightweightWithLabel[] = [];
   let defaultEvalId: string | undefined;
   const decodedId = decodeURIComponent(params.id);
-  console.log({ decodedId });
+
   if (decodedId.startsWith('local:')) {
     // Load local file and list of recent files in parallel
     const [response, response2] = await Promise.all([

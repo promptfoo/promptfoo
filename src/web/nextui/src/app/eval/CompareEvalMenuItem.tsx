@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { callApi } from '@/api';
+import { callApi } from '@app/api';
 import CompareIcon from '@mui/icons-material/Compare';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';

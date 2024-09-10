@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import type { Assertion, AssertionType } from '@/../../../types';
 import Delete from '@mui/icons-material/Delete';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -8,6 +7,7 @@ import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
   onAdd: (asserts: Assertion[]) => void;

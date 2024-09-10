@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { ShiftKeyContext } from '@/app/contexts/ShiftKeyContext';
+import { ShiftKeyContext } from '@app/app/contexts/ShiftKeyContext';
 
 export const useShiftKey = () => {
   const context = useContext(ShiftKeyContext);

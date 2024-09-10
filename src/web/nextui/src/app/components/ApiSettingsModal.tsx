@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import useApiConfig from '@/state/apiConfig';
-import useShareConfig from '@/state/shareConfig';
+import useApiConfig from '@app/state/apiConfig';
+import useShareConfig from '@app/state/shareConfig';
 import {
   Button,
   Dialog,

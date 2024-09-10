@@ -7,21 +7,21 @@ import {
 } from '@tanstack/react-table';
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { callApi } from '@/api';
-import { useToast } from '@/app/contexts/ToastContext';
-import CustomMetrics from '@/app/eval/CustomMetrics';
-import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
-import GenerateTestCases from '@/app/eval/GenerateTestCases';
-import type { TruncatedTextProps } from '@/app/eval/TruncatedText';
-import TruncatedText from '@/app/eval/TruncatedText';
-import { useStore as useMainStore } from '@/app/eval/store';
-import { useStore as useResultsViewStore } from '@/app/eval/store';
+import { callApi } from '@app/api';
+import { useToast } from '@app/app/contexts/ToastContext';
+import CustomMetrics from '@app/app/eval/CustomMetrics';
+import EvalOutputPromptDialog from '@app/app/eval/EvalOutputPromptDialog';
+import GenerateTestCases from '@app/app/eval/GenerateTestCases';
+import type { TruncatedTextProps } from '@app/app/eval/TruncatedText';
+import TruncatedText from '@app/app/eval/TruncatedText';
+import { useStore as useMainStore } from '@app/app/eval/store';
+import { useStore as useResultsViewStore } from '@app/app/eval/store';
 import type {
   EvaluateTableRow,
   EvaluateTableOutput,
   FilterMode,
   EvaluateTable,
-} from '@/app/eval/types';
+} from '@app/app/eval/types';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';

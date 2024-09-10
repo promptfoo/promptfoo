@@ -27,7 +27,6 @@ export default useShareConfig;
 export function useShareAppBaseUrl(): string {
   // If this is running on a server, it should always point to itself.
   const { appShareBaseUrl } = useShareConfig();
-  console.log({ appShareBaseUrl });
 
   if (appShareBaseUrl) {
     return appShareBaseUrl;
