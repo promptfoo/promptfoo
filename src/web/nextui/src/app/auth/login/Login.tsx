@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { supabase } from '@/supabase-client';
+import { supabase } from '@app/supabase-client';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import TextField from '@mui/material/TextField';

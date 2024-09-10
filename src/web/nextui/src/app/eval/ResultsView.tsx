@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { callApi } from '@/api';
-import { IS_RUNNING_LOCALLY } from '@/constants';
-import { useStore as useMainStore } from '@/state/evalConfig';
-import useShareConfig, { useShareAppBaseUrl } from '@/state/shareConfig';
+import { callApi } from '@app/api';
+import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { useStore as useMainStore } from '@app/state/evalConfig';
+import useShareConfig, { useShareAppBaseUrl } from '@app/state/shareConfig';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@app/constants';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
 import { Stack, IconButton, Tooltip } from '@mui/material';

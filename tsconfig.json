@@ -10,7 +10,12 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "paths": {
+      "@promptfoo/*": ["./src/*"],
+      "@server/*": ["./src/server/*"],
+      "@app/*": ["./src/web/nextui/src/*"]
+    }
   },
   "include": ["src/", "typings/**/*", "test/"],
   "exclude": [

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useStore } from '@/state/evalConfig';
+import { useStore } from '@app/state/evalConfig';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
