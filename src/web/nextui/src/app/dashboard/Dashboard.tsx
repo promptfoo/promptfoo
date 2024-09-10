@@ -52,6 +52,7 @@ interface AttackSuccessRateDataPoint {
 
 export default function Dashboard() {
   const [evals, setEvals] = useState<StandaloneEval[]>([]);
+  const [originalEvals, setOriginalEvals] = useState<StandaloneEval[]>([]);
   const [selectedApplication, setSelectedApplication] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -87,7 +88,9 @@ export default function Dashboard() {
     const response = await fetch(`/api/progress?${queryParams}`);
     const data = await response.json();
     if (data && data.data) {
-      setEvals(data.data.filter((eval_: StandaloneEval) => eval_.isRedteam));
+      const newEvals = data.data.filter((eval_: StandaloneEval) => eval_.isRedteam);
+      setEvals(newEvals);
+      setOriginalEvals(newEvals);
     }
     setIsLoading(false);
   };
@@ -98,11 +101,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (selectedApplication) {
-      setEvals((prevEvals) =>
-        prevEvals.filter((eval_) => eval_.description === selectedApplication),
-      );
+      setEvals(originalEvals.filter((eval_) => eval_.description === selectedApplication));
     } else {
-      fetchEvals();
+      setEvals(originalEvals);
     }
   }, [selectedApplication]);
 
