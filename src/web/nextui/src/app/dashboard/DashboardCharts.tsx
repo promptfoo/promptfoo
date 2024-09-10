@@ -61,9 +61,9 @@ export default function DashboardCharts({
           }}
           size="small"
         >
-          <ToggleButton value="attackSuccess">Attacks</ToggleButton>
+          <ToggleButton value="attackSuccess">Severity</ToggleButton>
+          <ToggleButton value="applicationSuccess">Applications</ToggleButton>
           <ToggleButton value="issuesResolved">Resolutions</ToggleButton>
-          <ToggleButton value="applicationSuccess">By Application</ToggleButton>
         </ToggleButtonGroup>
       </Box>
       {activeChart === 'attackSuccess' ? (

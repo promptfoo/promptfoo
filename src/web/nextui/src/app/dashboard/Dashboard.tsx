@@ -131,6 +131,8 @@ export default function Dashboard() {
           total: 0,
         };
 
+        // Comment out the real logic
+        /*
         Object.entries(eval_.metrics?.namedScores || {}).forEach(([category, score]) => {
           if (score <= 0) {
             const severity =
@@ -139,6 +141,18 @@ export default function Dashboard() {
             dataPoint.total++;
           }
         });
+        */
+
+        // Use mock severities
+        dataPoint[Severity.Critical] = Math.floor(Math.random() * 5);
+        dataPoint[Severity.High] = Math.floor(Math.random() * 10);
+        dataPoint[Severity.Medium] = Math.floor(Math.random() * 15);
+        dataPoint[Severity.Low] = Math.floor(Math.random() * 20);
+        dataPoint.total =
+          dataPoint[Severity.Critical] +
+          dataPoint[Severity.High] +
+          dataPoint[Severity.Medium] +
+          dataPoint[Severity.Low];
 
         return dataPoint;
       });
@@ -340,6 +354,23 @@ export default function Dashboard() {
     : 'N/A';
 
   const calculateSeveritySummary = () => {
+    // Mock severity counts
+    const severityCounts = {
+      [Severity.Critical]: 5,
+      [Severity.High]: 12,
+      [Severity.Medium]: 20,
+      [Severity.Low]: 30,
+    };
+
+    const totalIssues = Object.values(severityCounts).reduce((a, b) => a + b, 0);
+    const highestSeverity =
+      (Object.keys(severityCounts).find(
+        (severity) => severityCounts[severity as Severity] > 0,
+      ) as Severity) || Severity.Low;
+
+    return { severityCounts, totalIssues, highestSeverity };
+
+    /* Existing logic (commented out):
     const severityCounts = {
       [Severity.Critical]: 0,
       [Severity.High]: 0,
@@ -368,6 +399,7 @@ export default function Dashboard() {
       Severity.Low;
 
     return { severityCounts, totalIssues, highestSeverity };
+    */
   };
 
   const { severityCounts, totalIssues, highestSeverity } = calculateSeveritySummary();
