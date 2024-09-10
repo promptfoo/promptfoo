@@ -21,6 +21,9 @@ import {
   riskCategories,
   riskCategorySeverityMap,
 } from '../report/constants';
+import ApplicationAttackSuccessChart, {
+  ApplicationAttackSuccessDataPoint,
+} from './ApplicationAttackSuccessChart';
 import CategoryBreakdown from './CategoryBreakdown';
 import DashboardCharts from './DashboardCharts';
 import EmergingRisks from './EmergingRisks';
@@ -67,9 +70,12 @@ export default function Dashboard() {
   const [issuesResolvedData, setIssuesResolvedData] = useState<
     { date: string; resolved: number }[]
   >([]);
-  const [activeChart, setActiveChart] = useState<'attackSuccess' | 'issuesResolved'>(
-    'attackSuccess',
-  );
+  const [activeChart, setActiveChart] = useState<
+    'attackSuccess' | 'issuesResolved' | 'applicationSuccess'
+  >('attackSuccess');
+  const [applicationAttackSuccessData, setApplicationAttackSuccessData] = useState<
+    ApplicationAttackSuccessDataPoint[]
+  >([]);
 
   const fetchEvals = async () => {
     setIsLoading(true);
@@ -188,6 +194,32 @@ export default function Dashboard() {
       );
 
     setIssuesResolvedData(issuesResolved);
+
+    // Prepare data for Application Attack Success chart
+    const applicationData: Record<string, Record<string, number>> = {};
+    evals.forEach((eval_) => {
+      const date = new Date(eval_.createdAt).toISOString().split('T')[0];
+      const application = eval_.description || 'Unknown';
+      if (!applicationData[date]) {
+        applicationData[date] = {};
+      }
+      if (!applicationData[date][application]) {
+        applicationData[date][application] = 0;
+      }
+      const successfulAttacks = eval_.metrics?.testFailCount || 0;
+      applicationData[date][application] += successfulAttacks;
+    });
+
+    const applicationAttackSuccess: ApplicationAttackSuccessDataPoint[] = Object.entries(
+      applicationData,
+    )
+      .map(([date, apps]) => ({
+        date,
+        applications: apps,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    setApplicationAttackSuccessData(applicationAttackSuccess);
   }, [evals]);
 
   const totalProbes = evals.reduce(
@@ -516,6 +548,7 @@ export default function Dashboard() {
                 <DashboardCharts
                   attackSuccessRateData={attackSuccessRateData}
                   issuesResolvedData={issuesResolvedData}
+                  applicationAttackSuccessData={applicationAttackSuccessData}
                   activeChart={activeChart}
                   setActiveChart={setActiveChart}
                 />

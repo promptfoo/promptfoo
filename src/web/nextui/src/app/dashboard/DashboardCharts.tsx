@@ -4,19 +4,24 @@ import Paper from '@mui/material/Paper';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
+import ApplicationAttackSuccessChart, {
+  type ApplicationAttackSuccessDataPoint,
+} from './ApplicationAttackSuccessChart';
 import AttackSuccessRateChart, { type AttackSuccessRateDataPoint } from './AttackSuccessRateChart';
 import IssuesResolvedChart, { type IssuesResolvedDataPoint } from './IssuesResolvedChart';
 
 interface DashboardChartsProps {
   attackSuccessRateData: AttackSuccessRateDataPoint[];
   issuesResolvedData: IssuesResolvedDataPoint[];
-  activeChart: 'attackSuccess' | 'issuesResolved';
-  setActiveChart: (value: 'attackSuccess' | 'issuesResolved') => void;
+  applicationAttackSuccessData: ApplicationAttackSuccessDataPoint[];
+  activeChart: 'attackSuccess' | 'issuesResolved' | 'applicationSuccess';
+  setActiveChart: (value: 'attackSuccess' | 'issuesResolved' | 'applicationSuccess') => void;
 }
 
 export default function DashboardCharts({
   attackSuccessRateData,
   issuesResolvedData,
+  applicationAttackSuccessData,
   activeChart,
   setActiveChart,
 }: DashboardChartsProps) {
@@ -42,7 +47,9 @@ export default function DashboardCharts({
         <Typography variant="h6">
           {activeChart === 'attackSuccess'
             ? 'Attack Success Over Time'
-            : 'Issues Resolved Over Time'}
+            : activeChart === 'issuesResolved'
+              ? 'Issues Resolved Over Time'
+              : 'Successful Attacks by Application'}
         </Typography>
         <ToggleButtonGroup
           value={activeChart}
@@ -56,12 +63,15 @@ export default function DashboardCharts({
         >
           <ToggleButton value="attackSuccess">Attacks</ToggleButton>
           <ToggleButton value="issuesResolved">Resolutions</ToggleButton>
+          <ToggleButton value="applicationSuccess">By Application</ToggleButton>
         </ToggleButtonGroup>
       </Box>
       {activeChart === 'attackSuccess' ? (
         <AttackSuccessRateChart data={attackSuccessRateData} />
-      ) : (
+      ) : activeChart === 'issuesResolved' ? (
         <IssuesResolvedChart data={issuesResolvedData} />
+      ) : (
+        <ApplicationAttackSuccessChart data={applicationAttackSuccessData} />
       )}
     </Paper>
   );
