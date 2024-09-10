@@ -1,6 +1,8 @@
 import React from 'react';
 import type { StandaloneEval } from '@/../../../util';
+import SettingsIcon from '@mui/icons-material/Settings';
 import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
 import LinearProgress from '@mui/material/LinearProgress';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -34,9 +36,19 @@ const HighestSeverityCategories: React.FC<HighestSeverityCategoriesProps> = ({ e
   }, [categoryData]);
 
   return (
-    <>
+    <Box sx={{ position: 'relative' }}>
+      <IconButton
+        sx={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          zIndex: 1,
+        }}
+      >
+        <SettingsIcon />
+      </IconButton>
       <Typography variant="h6" gutterBottom>
-        Highest Severity Categories
+        High Priority Areas
       </Typography>
       <List>
         {sortedCategories.map(([category, data], index) => {
@@ -69,7 +81,7 @@ const HighestSeverityCategories: React.FC<HighestSeverityCategoriesProps> = ({ e
           );
         })}
       </List>
-    </>
+    </Box>
   );
 };
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   AreaChart,
   Area,
@@ -20,11 +20,34 @@ interface AttackSuccessRateChartProps {
 }
 
 export default function AttackSuccessRateChart({ data }: AttackSuccessRateChartProps) {
+  const aggregatedData = useMemo(() => {
+    const dataMap = new Map<string, AttackSuccessRateDataPoint>();
+
+    data.forEach((point) => {
+      if (dataMap.has(point.date)) {
+        const existing = dataMap.get(point.date)!;
+        existing.successfulAttacks += point.successfulAttacks;
+        existing.attackSuccessRate = (existing.attackSuccessRate + point.attackSuccessRate) / 2; // Average the rate
+      } else {
+        dataMap.set(point.date, { ...point });
+      }
+    });
+
+    return Array.from(dataMap.values()).sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
+  }, [data]);
+
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={data}>
+      <AreaChart data={aggregatedData}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 10 }}
+          type="category"
+          tickFormatter={(value) => new Date(value).toLocaleDateString()}
+        />
         <YAxis
           yAxisId="left"
           width={40}
