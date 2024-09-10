@@ -14,7 +14,7 @@
     "paths": {
       "@promptfoo/*": ["./src/*"],
       "@server/*": ["./src/server/*"],
-      "@web/*": ["./src/web/nextui/src/*"]
+      "@app/*": ["./src/web/nextui/src/*"]
     }
   },
   "include": ["src/", "typings/**/*", "test/"],
