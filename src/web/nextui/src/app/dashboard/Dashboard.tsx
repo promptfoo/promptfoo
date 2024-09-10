@@ -443,39 +443,64 @@ export default function Dashboard() {
 
           {/* Filters */}
           <Paper
-            sx={{ p: 3, mb: 3, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
+            sx={{
+              p: 3,
+              mb: 3,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+            }}
           >
-            <Autocomplete
-              options={autoCompleteOptions}
-              renderInput={(params) => <TextField {...params} label="Select application" />}
-              value={selectedApplication}
-              onChange={(event, newValue) => setSelectedApplication(newValue)}
-              sx={{ width: 300 }}
-              size="small"
-              clearOnBlur
-              handleHomeEndKeys
-            />
-            <TextField
-              label="Start Date"
-              type="date"
-              variant="outlined"
-              size="small"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              label="End Date"
-              type="date"
-              variant="outlined"
-              size="small"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-            />
-            <Button variant="contained" color="inherit" onClick={fetchEvals}>
-              Apply Filters
-            </Button>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+              <Autocomplete
+                options={autoCompleteOptions}
+                renderInput={(params) => <TextField {...params} label="Select application" />}
+                value={selectedApplication}
+                onChange={(event, newValue) => setSelectedApplication(newValue)}
+                sx={{ width: 300 }}
+                size="small"
+                clearOnBlur
+                handleHomeEndKeys
+              />
+              <TextField
+                label="Start Date"
+                type="date"
+                variant="outlined"
+                size="small"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                label="End Date"
+                type="date"
+                variant="outlined"
+                size="small"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+              <Button variant="contained" color="inherit" onClick={fetchEvals}>
+                Apply Filters
+              </Button>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box
+                sx={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  backgroundColor: 'green',
+                }}
+              />
+              {evals[0]?.createdAt && (
+                <Typography variant="body2">
+                  Last scan: {new Date(evals[0].createdAt).toLocaleString()}
+                </Typography>
+              )}
+            </Box>
           </Paper>
 
           {isLoading ? (
