@@ -18,6 +18,7 @@ import type {
   Job,
   Prompt,
   PromptWithMetadata,
+  ResultsFile,
   TestCase,
   TestSuite,
 } from '../index';
@@ -35,6 +36,7 @@ import {
   migrateResultsFromFileSystemToDatabase,
   getStandaloneEvals,
   deleteEval,
+  writeResultsToDatabase,
 } from '../util';
 
 // Running jobs
@@ -49,9 +51,8 @@ export enum BrowserBehavior {
   SKIP = 2,
 }
 
-export async function startServer(
+export function startServer(
   port = 15500,
-  apiBaseUrl = '',
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
 ) {
@@ -71,7 +72,9 @@ export async function startServer(
     },
   });
 
-  await migrateResultsFromFileSystemToDatabase();
+  migrateResultsFromFileSystemToDatabase().then(() => {
+    logger.info('Migrated results from file system to database');
+  });
 
   const watchFilePath = getDbSignalPath();
   const watcher = debounce(async (curr: Stats, prev: Stats) => {
@@ -167,6 +170,18 @@ export async function startServer(
     }
   });
 
+  app.post('/api/eval', async (req, res) => {
+    const { data: payload } = req.body as { data: ResultsFile };
+
+    try {
+      const id = await writeResultsToDatabase(payload.results, payload.config);
+      res.json({ id });
+    } catch (error) {
+      console.error('Failed to write eval to database', error);
+      res.status(500).json({ error: 'Failed to write eval to database' });
+    }
+  });
+
   app.delete('/api/eval/:id', async (req, res) => {
     const { id } = req.params;
     try {
@@ -209,12 +224,6 @@ export async function startServer(
 
   app.get('/api/datasets', async (req, res) => {
     res.json({ data: await getTestCases() });
-  });
-
-  app.get('/api/config', (req, res) => {
-    res.json({
-      apiBaseUrl: apiBaseUrl || '',
-    });
   });
 
   app.post('/api/dataset/generate', async (req, res) => {

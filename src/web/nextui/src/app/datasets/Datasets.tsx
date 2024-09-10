@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import type { TestCase, TestCasesWithMetadata } from '@/../../../types';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@/api';
 import Box from '@mui/material/Box';
 import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
@@ -39,7 +39,7 @@ export default function Datasets() {
 
   useEffect(() => {
     (async () => {
-      fetch(`${await getApiBaseUrl()}/api/datasets`)
+      callApi(`/datasets`)
         .then((response) => response.json())
         .then((data) => {
           const sortedData = [...data.data].sort((a, b) => {

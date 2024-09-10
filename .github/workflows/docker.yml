@@ -1,4 +1,4 @@
-# This GitHub Action builds the Docker image for the Next.js application,
+# This GitHub Action builds the Docker image Promptfoo,
 # runs the Docker container, performs a health check to ensure the application
 # is running correctly, and then publishes the image to GitHub Container Registry
 # if all checks pass. This action is exclusively triggered via workflow dispatch.
@@ -45,8 +45,6 @@ jobs:
           load: true
           tags: local-test-image:latest
           platforms: linux/amd64
-          build-args: |
-            NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000
 
       - name: Run Docker container and health check
         run: |
@@ -105,7 +103,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000
           outputs: |
             type=image,name=target,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.

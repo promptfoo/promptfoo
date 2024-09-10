@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-table';
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@/api';
 import { useToast } from '@/app/contexts/ToastContext';
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
@@ -200,7 +200,7 @@ function ResultsTable({
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
         try {
-          const response = await fetch(`${await getApiBaseUrl()}/api/eval/${evalId}`, {
+          const response = await callApi(`/eval/${evalId}`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',

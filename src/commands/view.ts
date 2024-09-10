@@ -1,8 +1,8 @@
 import type { Command } from 'commander';
+import { BrowserBehavior, startServer } from '../server/server';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 import { setConfigDirectoryPath } from '../util/config';
-import { BrowserBehavior, startServer } from '../web/server';
 
 export function viewCommand(program: Command) {
   program
@@ -11,7 +11,6 @@ export function viewCommand(program: Command) {
     .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('-n, --no', 'Skip confirmation and do not open the URL')
-    .option('--api-base-url <url>', 'Base URL for viewer API calls')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file <path>', 'Path to .env file')
     .action(
@@ -42,12 +41,7 @@ export function viewCommand(program: Command) {
           : cmdObj.no
             ? BrowserBehavior.SKIP
             : BrowserBehavior.ASK;
-        await startServer(
-          cmdObj.port,
-          cmdObj.apiBaseUrl,
-          browserBehavior,
-          cmdObj.filterDescription,
-        );
+        await startServer(cmdObj.port, browserBehavior, cmdObj.filterDescription);
       },
     );
 }

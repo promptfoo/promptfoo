@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import type { PromptWithMetadata } from '@/../../../types';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@/api';
 import Box from '@mui/material/Box';
 import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
@@ -38,20 +38,20 @@ export default function Prompts() {
 
   useEffect(() => {
     (async () => {
-      fetch(`${await getApiBaseUrl()}/api/prompts`)
-        .then((response) => response.json())
-        .then((data) => {
-          const sortedData = [...data.data].sort((a, b) => {
-            if (sortField === null) {
-              return 0;
-            }
-            if (sortOrder === 'asc') {
-              return a[sortField] > b[sortField] ? 1 : -1;
-            }
-            return a[sortField] < b[sortField] ? 1 : -1;
-          });
-          setPrompts(sortedData);
+      const response = await callApi('/prompts');
+      const data = await response.json();
+      if (data && data.data) {
+        const sortedData = [...data.data].sort((a, b) => {
+          if (sortField === null) {
+            return 0;
+          }
+          if (sortOrder === 'asc') {
+            return a[sortField] > b[sortField] ? 1 : -1;
+          }
+          return a[sortField] < b[sortField] ? 1 : -1;
         });
+        setPrompts(sortedData);
+      }
     })();
   }, [sortField, sortOrder]);
 
