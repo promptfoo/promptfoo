@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import type { StandaloneEval } from '@/../../../util';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -51,7 +52,7 @@ interface AttackSuccessRateDataPoint {
 
 export default function Dashboard() {
   const [evals, setEvals] = useState<StandaloneEval[]>([]);
-  const [tagValue, setTagValue] = useState('');
+  const [selectedApplication, setSelectedApplication] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [startDate, setStartDate] = useState('');
@@ -72,9 +73,9 @@ export default function Dashboard() {
   const fetchEvals = async () => {
     setIsLoading(true);
     const queryParams = new URLSearchParams();
-    if (tagValue) {
+    if (selectedApplication) {
       queryParams.append('tagName', 'application');
-      queryParams.append('tagValue', tagValue);
+      queryParams.append('tagValue', selectedApplication);
     }
     if (startDate) {
       queryParams.append('startDate', startDate);
@@ -94,6 +95,16 @@ export default function Dashboard() {
   useEffect(() => {
     fetchEvals();
   }, []);
+
+  useEffect(() => {
+    if (selectedApplication) {
+      setEvals((prevEvals) =>
+        prevEvals.filter((eval_) => eval_.description === selectedApplication),
+      );
+    } else {
+      fetchEvals();
+    }
+  }, [selectedApplication]);
 
   useEffect(() => {
     if (evals.length === 0) {
@@ -367,12 +378,15 @@ export default function Dashboard() {
           <Paper
             sx={{ p: 3, mb: 3, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
           >
-            <TextField
-              label="Application Name"
-              variant="outlined"
+            <Autocomplete
+              options={Array.from(new Set(evals.map((eval_) => eval_.description)))}
+              renderInput={(params) => <TextField {...params} label="Application Name" />}
+              value={selectedApplication}
+              onChange={(event, newValue) => setSelectedApplication(newValue)}
+              sx={{ width: 300 }}
               size="small"
-              value={tagValue}
-              onChange={(e) => setTagValue(e.target.value)}
+              clearOnBlur
+              handleHomeEndKeys
             />
             <TextField
               label="Start Date"
