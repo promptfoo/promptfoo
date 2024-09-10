@@ -29,7 +29,7 @@ export default function AttackSuccessRateChart({ data }: AttackSuccessRateChartP
           yAxisId="left"
           width={40}
           domain={[0, 100]}
-          tickFormatter={(value) => `${value}%`}
+          //tickFormatter={(value) => `${value}%`}
           tick={{ fontSize: 12 }}
         />
         <YAxis yAxisId="right" orientation="right" width={40} tick={{ fontSize: 12 }} />
@@ -46,7 +46,7 @@ export default function AttackSuccessRateChart({ data }: AttackSuccessRateChartP
                 'Attack Success Rate',
               ];
             } else if (name === 'successfulAttacks') {
-              return [value, 'Successful Attacks:'];
+              return [value, 'Successful Attacks'];
             }
             return [value, name];
           }}
@@ -60,7 +60,8 @@ export default function AttackSuccessRateChart({ data }: AttackSuccessRateChartP
         <Area
           yAxisId="left"
           type="monotone"
-          dataKey="attackSuccessRate"
+          //dataKey="attackSucessRate"
+          dataKey="successfulAttacks"
           stroke="#f44336"
           strokeWidth={2}
           fillOpacity={1}
