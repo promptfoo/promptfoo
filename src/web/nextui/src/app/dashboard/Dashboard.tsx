@@ -340,6 +340,8 @@ export default function Dashboard() {
 
   const { severityCounts, totalIssues, highestSeverity } = calculateSeveritySummary();
 
+  const autoCompleteOptions = Array.from(new Set(evals.map((eval_) => eval_.description))).sort();
+
   return (
     <Box
       sx={{
@@ -380,8 +382,8 @@ export default function Dashboard() {
             sx={{ p: 3, mb: 3, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
           >
             <Autocomplete
-              options={Array.from(new Set(evals.map((eval_) => eval_.description)))}
-              renderInput={(params) => <TextField {...params} label="Application Name" />}
+              options={autoCompleteOptions}
+              renderInput={(params) => <TextField {...params} label="Select application" />}
               value={selectedApplication}
               onChange={(event, newValue) => setSelectedApplication(newValue)}
               sx={{ width: 300 }}
