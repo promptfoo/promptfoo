@@ -13,14 +13,14 @@ import Modal from '@mui/material/Modal';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { EvaluateResult, ResultsFile, SharedResults } from '../eval/types';
+import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import TestSuites from './TestSuites';
-import type { categoryAliases } from './constants';
-import { categoryAliasesReverse } from './constants';
+import { categoryAliasesReverse, type categoryAliases } from './constants';
 import './Report.css';
 
 function getStrategyIdFromMetric(metric: string): string | null {
@@ -275,6 +275,7 @@ const App: React.FC = () => {
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} />
+        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
         <StrategyStats strategyStats={strategyStats} />
         <RiskCategories
           categoryStats={categoryStats}

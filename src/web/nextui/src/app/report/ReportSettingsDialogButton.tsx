@@ -17,6 +17,8 @@ const ReportSettingsDialogButton: React.FC = () => {
     setShowPercentagesOnRiskCards,
     pluginPassRateThreshold,
     setPluginPassRateThreshold,
+    showComplianceSection,
+    setShowComplianceSection,
   } = useReportStore();
   const [open, setOpen] = React.useState(false);
 
@@ -38,6 +40,17 @@ const ReportSettingsDialogButton: React.FC = () => {
       <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
         <DialogTitle>Report Settings</DialogTitle>
         <DialogContent>
+          <Typography component="div" sx={{ padding: '16px 0' }}>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showComplianceSection}
+                onChange={(e) => setShowComplianceSection(e.target.checked)}
+                style={{ marginRight: '10px' }}
+              />
+              Show compliance section (NIST, OWASP)
+            </label>
+          </Typography>
           <Typography component="div" sx={{ padding: '16px 0' }}>
             <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
               <input
