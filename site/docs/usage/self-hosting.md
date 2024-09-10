@@ -23,7 +23,7 @@ promptfoo provides a Docker image that allows you to host a central server that 
 
 The self-hosted app consists of:
 
-- Express server that serves the web UI and API.
+- he self-hosted app is an Express server that serves the web UI and API.
 
 ## Building from Source
 
