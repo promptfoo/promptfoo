@@ -9,6 +9,7 @@ import { maybeLoadFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { getNunjucksEngine } from '../../util/templates';
 import { loadRedteamProvider } from '../providers/shared';
+import { removePrefix } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -120,19 +121,18 @@ export abstract class PluginBase {
    */
   protected parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
     const parsePrompt = (line: string): string | null => {
-      const match = line.trim().match(/^prompt:\s*(.*)/i);
-      if (match) {
-        let prompt = match[1];
-        // Handle numbered lists with various formats
-        prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
-        // Handle quotes
-        prompt = prompt.replace(/^["'](.*)["']$/, '$1');
-        // Handle nested quotes
-        prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
-        prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
-        return prompt.trim();
+      if (!line.toLowerCase().includes('prompt:')) {
+        return null;
       }
-      return null;
+      let prompt = removePrefix(line, 'Prompt');
+      // Handle numbered lists with various formats
+      prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
+      // Handle quotes
+      prompt = prompt.replace(/^["'](.*)["']$/, '$1');
+      // Handle nested quotes
+      prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
+      prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
+      return prompt.trim();
     };
 
     // Split by newline or semicolon
