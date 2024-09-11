@@ -40,6 +40,7 @@
     "local": "ts-node --cwdMode --transpileOnly src/main.ts",
     "local:web": "npm run dev --prefix src/web/nextui",
     "install:nextui": "npm install --prefix src/web/nextui",
+    "postinstall": "npm run install:nextui",
     "build:clean": "shx rm -rf dist",
     "build:nextui": "sh src/web/nextui/build.sh",
     "build:watch": "tsc --watch",
