@@ -1,10 +1,10 @@
 import React from 'react';
-import type { StandaloneEval } from '@/../../../util';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import type { StandaloneEval } from '@promptfoo/util';
 import {
   categoryAliases,
   displayNameOverrides,

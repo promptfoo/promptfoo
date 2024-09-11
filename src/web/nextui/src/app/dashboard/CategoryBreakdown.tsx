@@ -1,5 +1,4 @@
 import React from 'react';
-import type { StandaloneEval } from '@/../../../util';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
@@ -9,6 +8,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import type { StandaloneEval } from '@promptfoo/util';
 import {
   categoryAliases,
   riskCategories,
