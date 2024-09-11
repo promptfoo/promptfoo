@@ -1,3 +1,4 @@
+import type { TestCase } from './index';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
@@ -37,6 +38,7 @@ export interface CallApiContextParams {
   getCache?: any;
   logger?: any;
   originalProvider?: any;
+  test?: TestCase;
   prompt: Prompt;
   vars: Record<string, string | object>;
 }
