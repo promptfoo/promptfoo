@@ -447,11 +447,4 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
   'indirect-prompt-injection':
     'Tests if the prompt is vulnerable to instructions injected into variables in the prompt',
-  'mitre:atlas:reconnaissance': 'Techniques for gathering information about the target ML system',
-  'mitre:atlas:resource-development': 'Techniques for obtaining resources to support the operation',
-  'mitre:atlas:initial-access': 'Techniques to gain an initial foothold within a network or system',
-  'mitre:atlas:ml-attack-staging': 'Techniques for preparing and optimizing ML-specific attacks',
-  'mitre:atlas:exfiltration': 'Techniques for stealing data from the target ML system',
-  'mitre:atlas:impact':
-    'Techniques for manipulating, interrupting, or destroying ML systems and data',
 };
