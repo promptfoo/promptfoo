@@ -17,7 +17,7 @@ The purpose of red teaming is to identify and address these vulnerabilities befo
 In order to do this, we need to systematically generate a wide range of adversarial inputs and evaluate the LLM's responses.
 
 :::tip
-Ready to run a red team? Jump to **[Quickstart](#quickstart)**.
+Ready to run a red team? Jump to **[Quickstart](/docs/red-team/quickstart/)**.
 :::
 
 ## How generative AI red teaming works
