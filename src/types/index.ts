@@ -446,6 +446,8 @@ export const TestCaseSchema = z.object({
           disableVarExpansion: z.boolean().optional(),
           // If true, do not include an implicit `_conversation` variable in the prompt.
           disableConversationVar: z.boolean().optional(),
+          // If true, run this without concurrency no matter what
+          runSerially: z.boolean().optional(),
         }),
       ),
     )
