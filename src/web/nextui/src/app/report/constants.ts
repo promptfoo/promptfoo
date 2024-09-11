@@ -444,15 +444,58 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
 };
 
+export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'mitre:atlas:reconnaissance': {
+    plugins: ['competitors', 'policy', 'rbac', 'prompt-extraction'],
+    strategies: ['multilingual'],
+  },
+  'mitre:atlas:resource-development': {
+    plugins: ['harmful:cybercrime', 'harmful:illegal-drugs', 'harmful:indiscriminate-weapons'],
+    strategies: [],
+  },
+  'mitre:atlas:initial-access': {
+    plugins: ['harmful:cybercrime', 'sql-injection', 'shell-injection', 'ssrf', 'debug-access'],
+    strategies: ['jailbreak', 'prompt-injection', 'base64', 'leetspeak', 'rot13'],
+  },
+  'mitre:atlas:ml-attack-staging': {
+    plugins: [
+      'overreliance',
+      'excessive-agency',
+      'hallucination',
+      'ascii-smuggling',
+      'indirect-prompt-injection',
+    ],
+    strategies: ['jailbreak', 'jailbreak:tree'],
+  },
+  'mitre:atlas:exfiltration': {
+    plugins: [
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:session',
+      'pii:direct',
+      'pii:social',
+      'indirect-prompt-injection',
+      'prompt-extraction',
+      'ascii-smuggling',
+    ],
+    strategies: [],
+  },
+  'mitre:atlas:impact': {
+    plugins: ['harmful', 'overreliance', 'excessive-agency', 'hijacking', 'imitation', 'politics'],
+    strategies: ['crescendo'],
+  },
+};
 // Aliased plugins are like collections, except they are hidden from the standard plugin list.
 export const ALIASED_PLUGINS = [
   'owasp:llm',
   'owasp:api',
   'nist:ai',
   'nist:ai:measure',
+  'mitre:atlas',
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
+  ...Object.keys(MITRE_ATLAS_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
@@ -462,6 +505,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'nist:ai:measure': NIST_AI_RMF_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
   'owasp:api': OWASP_API_TOP_10_MAPPING,
+  'mitre:atlas': MITRE_ATLAS_MAPPING,
 };
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
