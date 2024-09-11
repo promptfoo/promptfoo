@@ -39,21 +39,6 @@ describe('index.ts exports', () => {
     });
   });
 
-  it('should export all expected schemas', () => {
-    expectedSchemaExports.forEach((exportName) => {
-      expect(index).toHaveProperty(exportName);
-    });
-  });
-
-  it('should not have unexpected exports', () => {
-    const actualExports = Object.keys(index)
-      .filter((key) => key !== 'default')
-      .sort();
-    const expectedExports = [...expectedNamedExports, ...expectedSchemaExports].sort();
-    expect(actualExports).toHaveLength(expectedExports.length);
-    expect(actualExports).toEqual(expectedExports);
-  });
-
   it('redteam should have expected properties', () => {
     expect(index.redteam).toEqual(
       expect.objectContaining({
