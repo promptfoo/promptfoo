@@ -111,29 +111,7 @@ The `init` step will do this for you automatically, but in case you'd like to ma
 
 This will generate several hundred adversarial inputs across many categories of potential harm and save them in `redteam.yaml`.
 
-You can reduce the number of test cases by setting the specific [plugins](/docs/guides/llm-redteaming#step-3-generate-adversarial-test-cases) you want to run. For example, to only generate harmful inputs:
-
-<Tabs groupId="installation-method">
-  <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest redteam generate --plugins harmful
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo redteam generate --plugins harmful
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo redteam generate --plugins harmful
-    </CodeBlock>
-  </TabItem>
-</Tabs>
-
-Run `npx promptfoo@latest redteam generate --help` to see all available plugins.
-
-### Changing the provider
+## Changing the provider (optional)
 
 By default we use OpenAI's `gpt-4o` model to generate the adversarial inputs, but we support hundreds of other models. Learn more about [setting the provider](/docs/red-team/configuration/#providers).
 
