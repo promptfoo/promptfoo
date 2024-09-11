@@ -87,14 +87,12 @@ class CrescendoProvider implements ApiProvider {
           jsonOnly: true,
           preferSmallModel: true,
         });
-        logger.warn('Using remote red teaming provider');
       } else {
         this.redTeamProvider = await loadRedteamProvider({
           provider: this.config.redteamProvider,
           preferSmallModel: true,
           jsonOnly: true,
         });
-        logger.warn('Using local red teaming provider');
       }
     }
     return this.redTeamProvider;
