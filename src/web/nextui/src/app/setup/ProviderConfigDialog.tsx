@@ -1,5 +1,4 @@
 import React from 'react';
-import type { ProviderOptions } from '@/../../../types';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -7,6 +6,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
+import type { ProviderOptions } from '@promptfoo/types';
 import JsonTextField from '../components/JsonTextField';
 
 interface ProviderConfigDialogProps {

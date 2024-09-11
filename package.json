@@ -53,7 +53,10 @@
     "db:generate": "npx drizzle-kit generate",
     "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json",
     "audit:fix": "npm audit fix && npm audit fix --prefix src/web/nextui && npm audit fix --prefix site",
-    "prepublishOnly": "npm run build:clean && npm run build"
+    "prepublishOnly": "npm run build:clean && npm run build",
+    "dev:server": "nodemon src/server/index.ts",
+    "dev:web": "npm run dev --prefix src/web/nextui",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\""
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
@@ -101,6 +104,7 @@
     "@types/uuid": "^10.0.0",
     "check-dependency-version-consistency": "^4.1.0",
     "cloudflare": "3.4.0",
+    "concurrently": "^8.2.2",
     "drizzle-kit": "^0.24.2",
     "esbuild": "^0.23.1",
     "eslint": "^8.57.0",
@@ -114,9 +118,11 @@
     "nexe": "^4.0.0-rc.6",
     "next": "13.4.13",
     "nock": "^13.5.5",
+    "nodemon": "^3.1.4",
     "prettier": "^3.3.3",
     "shx": "^0.3.4",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.5.4",
     "typescript-eslint": "^7.18.0",
     "zod-to-json-schema": "^3.23.2"

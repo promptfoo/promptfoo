@@ -1,6 +1,6 @@
 import React from 'react';
 import Editor from 'react-simple-code-editor';
-import { useStore } from '@/state/evalConfig';
+import { useStore } from '@app/state/evalConfig';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import UploadIcon from '@mui/icons-material/Upload';

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@app/api';
 import CompareIcon from '@mui/icons-material/Compare';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
@@ -21,12 +21,10 @@ function CompareEvalMenuItem({ initialEvals, onComparisonEvalSelected }: Compare
 
   const fetchRecentEvals = async () => {
     try {
-      const apiBaseUrl = await getApiBaseUrl();
-
       // First, get the dataset for the currentEvalId
       // TODO(ian): In theory we already have this datasetId because we've fetched the current eval...dataset should probably be stored in the store
       const fetchEvalId = currentEvalId || initialEvals[0].evalId;
-      const currentEvalResponse = await fetch(`${apiBaseUrl}/api/results/${fetchEvalId}`, {
+      const currentEvalResponse = await callApi(`/results/${fetchEvalId}`, {
         cache: 'no-store',
       });
       const currentEvalData = await currentEvalResponse.json();
@@ -38,7 +36,7 @@ function CompareEvalMenuItem({ initialEvals, onComparisonEvalSelected }: Compare
       }
 
       // Then, fetch the results with the obtained datasetId
-      const response = await fetch(`${apiBaseUrl}/api/results?datasetId=${datasetId}`, {
+      const response = await callApi(`/results?datasetId=${datasetId}`, {
         cache: 'no-store',
       });
       const body = (await response.json()) as { data: ResultLightweightWithLabel[] };

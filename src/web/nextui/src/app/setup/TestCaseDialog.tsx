@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import type { Assertion, TestCase } from '@/../../../types';
 import { Button, Box, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import type { Assertion, TestCase } from '@promptfoo/types';
 import AssertsForm from './AssertsForm';
 import VarsForm from './VarsForm';
 

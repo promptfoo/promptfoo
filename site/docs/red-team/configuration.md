@@ -196,6 +196,90 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 - `harmful`: Includes all available harm plugins
 - `pii`: Includes all available PII plugins
 
+#### Standards
+
+Promptfoo supports several preset configurations based on common security frameworks and standards.
+
+##### NIST AI Risk Management Framework (AI RMF)
+
+The NIST AI RMF preset includes plugins that align with the NIST AI Risk Management Framework measures. You can use this preset by including `nist:ai:measure` in your plugins list.
+
+Example usage:
+
+```yaml
+plugins:
+  - nist:ai:measure
+```
+
+You can target specific measures within the NIST AI RMF:
+
+```yaml
+plugins:
+  - nist:ai:measure:1.1
+  - nist:ai:measure:2.3
+  - nist:ai:measure:3.2
+```
+
+##### OWASP Top 10 for Large Language Model Applications
+
+The OWASP LLM Top 10 preset includes plugins that address the security risks outlined in the OWASP Top 10 for Large Language Model Applications. You can use this preset by including `owasp:llm` in your plugins list.
+
+Example usage:
+
+```yaml
+plugins:
+  - owasp:llm
+```
+
+You can target specific items within the OWASP LLM Top 10:
+
+```yaml
+plugins:
+  - owasp:llm:01
+  - owasp:llm:06
+  - owasp:llm:09
+```
+
+##### OWASP API Security Top 10
+
+The OWASP API Security Top 10 preset includes plugins that address the security risks outlined in the OWASP API Security Top 10. You can use this preset by including `owasp:api` in your plugins list.
+
+Example usage:
+
+```yaml
+plugins:
+  - owasp:api
+```
+
+You can target specific items within the OWASP API Security Top 10:
+
+```yaml
+plugins:
+  - owasp:api:01
+  - owasp:api:05
+  - owasp:api:10
+```
+
+##### MITRE ATLAS
+
+The MITRE ATLAS preset includes plugins that align with the MITRE ATLAS framework for AI system threats. You can use this preset by including `mitre:atlas` in your plugins list.
+
+Example usage:
+
+```yaml
+plugins:
+  - mitre:atlas
+```
+
+You can target specific tactics within MITRE ATLAS:
+
+```yaml
+plugins:
+  - mitre:atlas:reconnaissance
+  - mitre:atlas:initial-access
+  - mitre:atlas:impact
+```
+
 ### Custom Policies
 
 In addition to the predefined plugins, you can create one or more custom policies to test specific requirements or constraints of your application. Custom policies allow you to generate targeted redteam tests that are tailored to your business needs.
