@@ -86,19 +86,19 @@ export async function fetchWithRetries(
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
+      if (response && isRateLimited(response)) {
+        logger.debug(
+          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${retries}`,
+        );
+        await handleRateLimit(response);
+        continue;
+      }
+
       return response;
     } catch (error) {
       lastError = error;
       const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
       await new Promise((resolve) => setTimeout(resolve, waitTime));
-    }
-
-    if (response && isRateLimited(response)) {
-      logger.debug(
-        `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${retries}`,
-      );
-      await handleRateLimit(response);
-      continue;
     }
   }
   throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
