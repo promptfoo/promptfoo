@@ -3,6 +3,7 @@ import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
+import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,7 +14,7 @@ import type {
 } from '../../../types';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
-import { isBasicRefusal } from '../../util';
+import { isBasicRefusal, shouldGenerateRemote } from '../../util';
 import { loadRedteamProvider } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
@@ -80,11 +81,17 @@ class CrescendoProvider implements ApiProvider {
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      this.redTeamProvider = await loadRedteamProvider({
-        provider: this.config.redteamProvider,
-        preferSmallModel: true,
-        jsonOnly: true,
-      });
+      if (shouldGenerateRemote()) {
+        this.redTeamProvider = new PromptfooChatCompletionProvider();
+        logger.warn('Using remote red teaming provider');
+      } else {
+        this.redTeamProvider = await loadRedteamProvider({
+          provider: this.config.redteamProvider,
+          preferSmallModel: true,
+          jsonOnly: true,
+        });
+        logger.warn('Using local red teaming provider');
+      }
     }
     return this.redTeamProvider;
   }

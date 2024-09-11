@@ -17,6 +17,7 @@ import type { Environment } from 'nunjucks';
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -26,6 +27,7 @@ import type {
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { shouldGenerateRemote } from '../util';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { loadRedteamProvider } from './shared';
@@ -527,14 +529,23 @@ class RedteamIterativeTreeProvider implements ApiProvider {
   ): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
+
+    let redteamProvider: ApiProvider;
+
+    if (shouldGenerateRemote()) {
+      redteamProvider = new PromptfooChatCompletionProvider();
+    } else {
+      redteamProvider = await loadRedteamProvider({
+        provider: this.config.redteamProvider,
+        jsonOnly: true,
+      });
+    }
+
     return runRedteamConversation({
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: await loadRedteamProvider({
-        provider: this.config.redteamProvider,
-        jsonOnly: true,
-      }),
+      redteamProvider,
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
     });
