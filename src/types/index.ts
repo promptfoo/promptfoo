@@ -1,23 +1,26 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
+import { PromptSchema } from '../validators/prompts';
 import {
   ApiProviderSchema,
   ProviderEnvOverridesSchema,
-  ProviderOptionsSchema,
   ProvidersSchema,
 } from '../validators/providers';
-import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
-import type { Prompt, PromptFunction } from './prompts';
+import { MetadataSchema, NunjucksFilterMapSchema } from '../validators/shared';
+import type { GradingResult } from './assertions';
+import type { CompletedPrompt, Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
-import type { RedteamAssertionTypes, RedteamFileConfig } from './redteam';
+import type { RedteamFileConfig } from './redteam';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
+import { TestCaseSchema, type AtomicTestCase } from './testCases';
 
+export * from './assertions';
 export * from './prompts';
 export * from './providers';
 export * from './redteam';
 export * from './shared';
+export * from './testCases';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -67,48 +70,6 @@ export interface CsvRow {
 
 export type VarMapping = Record<string, string>;
 
-const GradingConfigSchema = z.object({
-  rubricPrompt: z
-    .union([
-      z.string(),
-      z.array(z.string()),
-      z.array(
-        z.object({
-          role: z.string(),
-          content: z.string(),
-        }),
-      ),
-    ])
-    .optional(),
-  provider: z
-    .union([z.string(), z.any(), z.record(z.string(), z.union([z.string(), z.any()])).optional()])
-    .optional(),
-  factuality: z
-    .object({
-      subset: z.number().optional(),
-      superset: z.number().optional(),
-      agree: z.number().optional(),
-      disagree: z.number().optional(),
-      differButFactual: z.number().optional(),
-    })
-    .optional(),
-});
-
-export type GradingConfig = z.infer<typeof GradingConfigSchema>;
-
-export const OutputConfigSchema = z.object({
-  /**
-   * @deprecated in > 0.38.0. Use `transform` instead.
-   */
-  postprocess: z.string().optional(),
-  transform: z.string().optional(),
-
-  // The name of the variable to store the output of this test case
-  storeOutputAs: z.string().optional(),
-});
-
-export type OutputConfig = z.infer<typeof OutputConfigSchema>;
-
 export interface RunEvalOptions {
   provider: ApiProvider;
   prompt: Prompt;
@@ -142,26 +103,6 @@ const EvaluateOptionsSchema = z.object({
   showProgressBar: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema>;
-
-// Used for final prompt display
-export const CompletedPromptSchema = PromptSchema.extend({
-  provider: z.string(),
-  metrics: z
-    .object({
-      score: z.number(),
-      testPassCount: z.number(),
-      testFailCount: z.number(),
-      assertPassCount: z.number(),
-      assertFailCount: z.number(),
-      totalLatencyMs: z.number(),
-      tokenUsage: TokenUsageSchema,
-      namedScores: z.record(z.string(), z.number()),
-      cost: z.number(),
-    })
-    .optional(),
-});
-
-export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;
 
 // Used when building prompts index from files.
 export interface PromptWithMetadata {
@@ -235,251 +176,10 @@ export interface EvaluateSummary {
   stats: EvaluateStats;
 }
 
-export interface GradingResult {
-  // Whether the test passed or failed
-  pass: boolean;
-
-  // Test score, typically between 0 and 1
-  score: number;
-
-  // Plain text reason for the result
-  reason: string;
-
-  // Map of labeled metrics to values
-  namedScores?: Record<string, number>;
-
-  // Record of tokens usage for this assertion
-  tokensUsed?: TokenUsage;
-
-  // List of results for each component of the assertion
-  componentResults?: GradingResult[];
-
-  // The assertion that was evaluated
-  assertion?: Assertion | null;
-
-  // User comment
-  comment?: string;
-}
-
-export function isGradingResult(result: any): result is GradingResult {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    typeof result.pass === 'boolean' &&
-    typeof result.score === 'number' &&
-    typeof result.reason === 'string' &&
-    (typeof result.namedScores === 'undefined' || typeof result.namedScores === 'object') &&
-    (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
-    (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
-    (typeof result.assertion === 'undefined' ||
-      result.assertion === null ||
-      typeof result.assertion === 'object') &&
-    (typeof result.comment === 'undefined' || typeof result.comment === 'string')
-  );
-}
-
-export const BaseAssertionTypesSchema = z.enum([
-  'answer-relevance',
-  'contains-all',
-  'contains-any',
-  'contains-json',
-  'contains-sql',
-  'contains-xml',
-  'contains',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'cost',
-  'equals',
-  'factuality',
-  'human',
-  'icontains-all',
-  'icontains-any',
-  'icontains',
-  'is-json',
-  'is-sql',
-  'is-valid-openai-function-call',
-  'is-valid-openai-tools-call',
-  'is-xml',
-  'javascript',
-  'latency',
-  'levenshtein',
-  'llm-rubric',
-  'model-graded-closedqa',
-  'model-graded-factuality',
-  'moderation',
-  'perplexity-score',
-  'perplexity',
-  'python',
-  'regex',
-  'rouge-l',
-  'rouge-n',
-  'rouge-s',
-  'select-best',
-  'similar',
-  'starts-with',
-  'webhook',
-]);
-
-export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
-
-type NotPrefixed<T extends string> = `not-${T}`;
-
-export type AssertionType =
-  | BaseAssertionTypes
-  | NotPrefixed<BaseAssertionTypes>
-  | RedteamAssertionTypes;
-
-const AssertionSetSchema = z.object({
-  type: z.literal('assert-set'),
-  // Sub assertions to be run for this assertion set
-  assert: z.array(z.lazy(() => AssertionSchema)), // eslint-disable-line @typescript-eslint/no-use-before-define
-  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-  weight: z.number().optional(),
-  // Tag this assertion result as a named metric
-  metric: z.string().optional(),
-  // The required score for this assert set. If not provided, the test case is graded pass/fail.
-  threshold: z.number().optional(),
-});
-
-export type AssertionSet = z.infer<typeof AssertionSetSchema>;
-
-// TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
-export const AssertionSchema = z.object({
-  // Type of assertion
-  type: z.custom<AssertionType>(),
-
-  // The expected value, if applicable
-  value: z.custom<AssertionValue>().optional(),
-
-  // The threshold value, only applicable for similarity (cosine distance)
-  threshold: z.number().optional(),
-
-  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-  weight: z.number().optional(),
-
-  // Some assertions (similarity, llm-rubric) require an LLM provider
-  provider: z.custom<GradingConfig['provider']>().optional(),
-
-  // Override the grading rubric
-  rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
-
-  // Tag this assertion result as a named metric
-  metric: z.string().optional(),
-
-  // Process the output before running the assertion
-  transform: z.string().optional(),
-});
-
-export type Assertion = z.infer<typeof AssertionSchema>;
-
-export interface AssertionValueFunctionContext {
-  prompt: string | undefined;
-  vars: Record<string, string | object>;
-  test: AtomicTestCase<Record<string, string | object>>;
-}
-
-export type AssertionValueFunction = (
-  output: string,
-  context: AssertionValueFunctionContext,
-) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
-
-export type AssertionValue = string | string[] | object | AssertionValueFunction;
-
-export type AssertionValueFunctionResult = boolean | number | GradingResult;
-
-// Used when building prompts index from files.
-export const TestCasesWithMetadataPromptSchema = z.object({
-  prompt: CompletedPromptSchema,
-  id: z.string(),
-  evalId: z.string(),
-});
-
-export type TestCasesWithMetadataPrompt = z.infer<typeof TestCasesWithMetadataPromptSchema>;
-
 const ProviderPromptMapSchema = z.record(
   z.string(),
   z.union([z.string().transform((value) => [value]), z.array(z.string())]),
 );
-
-// Metadata is a key-value store for arbitrary data
-const MetadataSchema = z.record(z.string(), z.any());
-
-export const VarsSchema = z.record(
-  z.union([
-    z.string(),
-    z.number().transform(String),
-    z.boolean().transform(String),
-    z.array(z.union([z.string(), z.number().transform(String), z.boolean().transform(String)])),
-    z.object({}),
-    z.array(z.any()),
-  ]),
-);
-
-export type Vars = z.infer<typeof VarsSchema>;
-
-// Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
-export const TestCaseSchema = z.object({
-  // Optional description of what you're testing
-  description: z.string().optional(),
-
-  // Key-value pairs to substitute in the prompt
-  vars: VarsSchema.optional(),
-
-  // Override the provider.
-  provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
-
-  // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
-  providerOutput: z.union([z.string(), z.object({})]).optional(),
-
-  // Optional list of automatic checks to run on the LLM output
-  assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
-
-  // Additional configuration settings for the prompt
-  options: z
-    .intersection(
-      z.intersection(PromptConfigSchema, OutputConfigSchema),
-      z.intersection(
-        GradingConfigSchema,
-        z.object({
-          // If true, do not expand arrays of variables into multiple eval cases.
-          disableVarExpansion: z.boolean().optional(),
-          // If true, do not include an implicit `_conversation` variable in the prompt.
-          disableConversationVar: z.boolean().optional(),
-        }),
-      ),
-    )
-    .optional(),
-
-  // The required score for this test case.  If not provided, the test case is graded pass/fail.
-  threshold: z.number().optional(),
-
-  metadata: MetadataSchema.optional(),
-});
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type TestCase<vars = Record<string, string | string[] | object>> = z.infer<
-  typeof TestCaseSchema
->;
-
-export type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
-
-export const TestCaseWithVarsFileSchema = TestCaseSchema.extend({
-  vars: z.union([VarsSchema, z.string(), z.array(z.string())]).optional(),
-});
-
-export type TestCaseWithVarsFile = z.infer<typeof TestCaseWithVarsFileSchema>;
-
-export const TestCasesWithMetadataSchema = z.object({
-  id: z.string(),
-  testCases: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]),
-  recentEvalDate: z.date(),
-  recentEvalId: z.string(),
-  count: z.number(),
-  prompts: z.array(TestCasesWithMetadataPromptSchema),
-});
-
-export type TestCasesWithMetadata = z.infer<typeof TestCasesWithMetadataSchema>;
 
 export const ScenarioSchema = z.object({
   // Optional description of what you're testing
@@ -493,16 +193,6 @@ export const ScenarioSchema = z.object({
 });
 
 export type Scenario = z.infer<typeof ScenarioSchema>;
-
-// Same as a TestCase, except the `vars` object has been flattened into its final form.
-export const AtomicTestCaseSchema = TestCaseSchema.extend({
-  vars: z.record(z.union([z.string(), z.object({})])).optional(),
-}).strict();
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
-  typeof AtomicTestCaseSchema
->;
 
 export const DerivedMetricSchema = z.object({
   // The name of this metric

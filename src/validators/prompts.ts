@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import type { Prompt, PromptConfig, PromptFunction } from '../types/prompts';
+import type { CompletedPrompt, Prompt, PromptConfig, PromptFunction } from '../types/prompts';
 import type { ApiProvider } from '../types/providers';
+import { TokenUsageSchema } from './shared';
 
 // Zod schemas for validation
 export const PromptConfigSchema = z.object({
@@ -32,6 +33,24 @@ export const PromptSchema = z.object({
   config: z.any().optional(),
 });
 
+// Used for final prompt display
+export const CompletedPromptSchema = PromptSchema.extend({
+  provider: z.string(),
+  metrics: z
+    .object({
+      score: z.number(),
+      testPassCount: z.number(),
+      testFailCount: z.number(),
+      assertPassCount: z.number(),
+      assertFailCount: z.number(),
+      totalLatencyMs: z.number(),
+      tokenUsage: TokenUsageSchema,
+      namedScores: z.record(z.string(), z.number()),
+      cost: z.number(),
+    })
+    .optional(),
+});
+
 // Ensure that schemas match their corresponding types
 type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -40,3 +59,4 @@ function assert<T extends true>() {}
 assert<AssertEqual<PromptConfig, z.infer<typeof PromptConfigSchema>>>();
 assert<AssertEqual<PromptFunction, z.infer<typeof PromptFunctionSchema>>>();
 assert<AssertEqual<Prompt, z.infer<typeof PromptSchema>>>();
+assert<AssertEqual<CompletedPrompt, z.infer<typeof CompletedPromptSchema>>>();

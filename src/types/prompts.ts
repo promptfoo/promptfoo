@@ -1,3 +1,5 @@
+import type { TokenUsage } from './shared';
+
 // Declared to avoid circular dependency with providers.ts
 declare class ApiProvider {
   id: () => string;
@@ -32,4 +34,19 @@ export type Prompt = {
 
   // These config options are merged into the provider config.
   config?: any;
+};
+
+export type CompletedPrompt = Prompt & {
+  provider: string;
+  metrics?: {
+    score: number;
+    testPassCount: number;
+    testFailCount: number;
+    assertPassCount: number;
+    assertFailCount: number;
+    totalLatencyMs: number;
+    tokenUsage: TokenUsage;
+    namedScores: Record<string, number>;
+    cost: number;
+  };
 };
