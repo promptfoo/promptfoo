@@ -13,26 +13,6 @@ describe('index.ts exports', () => {
     'redteam',
   ];
 
-  const expectedSchemaExports = [
-    'AssertionSchema',
-    'AtomicTestCaseSchema',
-    'BaseAssertionTypesSchema',
-    'CommandLineOptionsSchema',
-    'CompletedPromptSchema',
-    'DerivedMetricSchema',
-    'OutputConfigSchema',
-    'OutputFileExtension',
-    'ScenarioSchema',
-    'TestCaseSchema',
-    'TestCaseWithVarsFileSchema',
-    'TestCasesWithMetadataPromptSchema',
-    'TestCasesWithMetadataSchema',
-    'TestSuiteConfigSchema',
-    'TestSuiteSchema',
-    'UnifiedConfigSchema',
-    'VarsSchema',
-  ];
-
   it('should export all expected named modules', () => {
     expectedNamedExports.forEach((exportName) => {
       expect(index).toHaveProperty(exportName);
