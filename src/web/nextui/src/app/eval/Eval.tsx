@@ -99,7 +99,7 @@ export default function Eval({
       setLoaded(false);
       router.push(`/eval/remote:${encodeURIComponent(id)}`);
     } else {
-      router.push(`/eval/${encodeURIComponent(id)}`);
+      router.push(`/eval/?evalId=${encodeURIComponent(id)}`);
     }
   };
 
