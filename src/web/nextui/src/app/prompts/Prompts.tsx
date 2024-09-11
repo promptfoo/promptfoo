@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import type { PromptWithMetadata } from '@/../../../types';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@app/api';
 import Box from '@mui/material/Box';
 import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
@@ -13,6 +12,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
+import type { PromptWithMetadata } from '@promptfoo/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import PromptDialog from './PromptDialog';
@@ -38,20 +38,20 @@ export default function Prompts() {
 
   useEffect(() => {
     (async () => {
-      fetch(`${await getApiBaseUrl()}/api/prompts`)
-        .then((response) => response.json())
-        .then((data) => {
-          const sortedData = [...data.data].sort((a, b) => {
-            if (sortField === null) {
-              return 0;
-            }
-            if (sortOrder === 'asc') {
-              return a[sortField] > b[sortField] ? 1 : -1;
-            }
-            return a[sortField] < b[sortField] ? 1 : -1;
-          });
-          setPrompts(sortedData);
+      const response = await callApi('/prompts');
+      const data = await response.json();
+      if (data && data.data) {
+        const sortedData = [...data.data].sort((a, b) => {
+          if (sortField === null) {
+            return 0;
+          }
+          if (sortOrder === 'asc') {
+            return a[sortField] > b[sortField] ? 1 : -1;
+          }
+          return a[sortField] < b[sortField] ? 1 : -1;
         });
+        setPrompts(sortedData);
+      }
     })();
   }, [sortField, sortOrder]);
 

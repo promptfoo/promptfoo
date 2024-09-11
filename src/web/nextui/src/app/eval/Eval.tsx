@@ -1,27 +1,27 @@
 'use client';
 
 import * as React from 'react';
-import { REMOTE_API_BASE_URL } from '@/../../../constants';
+import { callApi } from '@app/api';
+import { ShiftKeyProvider } from '@app/app/contexts/ShiftKeyContext';
+import { ToastProvider } from '@app/app/contexts/ToastContext';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@app/constants';
+import useApiConfig from '@app/state/apiConfig';
+import type { Database } from '@app/types/supabase';
+import CircularProgress from '@mui/material/CircularProgress';
 import type {
   EvaluateSummary,
   UnifiedConfig,
   SharedResults,
   ResultLightweightWithLabel,
   ResultsFile,
-} from '@/../../../types';
-import { getApiBaseUrl } from '@/api';
-import { ShiftKeyProvider } from '@/app/contexts/ShiftKeyContext';
-import { ToastProvider } from '@/app/contexts/ToastContext';
-import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
-import type { Database } from '@/types/supabase';
-import CircularProgress from '@mui/material/CircularProgress';
+} from '@promptfoo/types';
+import type { EvaluateTable } from '@promptfoo/types';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { io as SocketIOClient } from 'socket.io-client';
 import invariant from 'tiny-invariant';
 import ResultsView from './ResultsView';
 import { useStore } from './store';
-import type { EvaluateTable } from './types';
 import './Eval.css';
 
 async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string }[]> {
@@ -61,6 +61,8 @@ export default function Eval({
   defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
   const router = useRouter();
+  const { apiBaseUrl } = useApiConfig();
+
   const { table, setTable, config, setConfig, evalId, setEvalId, setAuthor, setInComparisonMode } =
     useStore();
   const [loaded, setLoaded] = React.useState(false);
@@ -70,7 +72,11 @@ export default function Eval({
   );
 
   const fetchRecentFileEvals = async () => {
-    const resp = await fetch(`${await getApiBaseUrl()}/api/results`, { cache: 'no-store' });
+    const resp = await callApi(`/results`, { cache: 'no-store' });
+    if (!resp.ok) {
+      setFailed(true);
+      return;
+    }
     const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
     setRecentEvals(body.data);
     return body.data;
@@ -78,7 +84,7 @@ export default function Eval({
 
   const fetchEvalById = React.useCallback(
     async (id: string) => {
-      const resp = await fetch(`${await getApiBaseUrl()}/api/results/${id}`, { cache: 'no-store' });
+      const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
       const body = (await resp.json()) as { data: ResultsFile };
       setTable(body.data.results.table);
       setConfig(body.data.config);
@@ -105,12 +111,13 @@ export default function Eval({
   const searchEvalId = searchParams ? searchParams.get('evalId') : null;
 
   React.useEffect(() => {
-    if (searchEvalId) {
-      console.log('Eval init: Fetching eval by id', searchEvalId);
+    const evalId = searchEvalId || fetchId;
+    if (evalId) {
+      console.log('Eval init: Fetching eval by id', { searchEvalId, fetchId });
       const run = async () => {
-        await fetchEvalById(searchEvalId);
+        await fetchEvalById(evalId);
         setLoaded(true);
-        setDefaultEvalId(searchEvalId);
+        setDefaultEvalId(evalId);
         // Load other recent eval runs
         fetchRecentFileEvals();
       };
@@ -121,60 +128,45 @@ export default function Eval({
       setConfig(preloadedData.data.config);
       setAuthor(preloadedData.data.author || null);
       setLoaded(true);
-    } else if (fetchId) {
-      console.log('Eval init: Fetching eval', fetchId);
-      const run = async () => {
-        const host = IS_RUNNING_LOCALLY ? REMOTE_API_BASE_URL : '';
-        const url = `${host}/api/eval/${fetchId}`;
-        console.log('Fetching eval from remote server', url);
-        const response = await fetch(url);
-        if (!response.ok) {
-          setFailed(true);
-          return;
-        }
-        const results = await response.json();
-        setTable(results.data.results?.table as EvaluateTable);
-        setConfig(results.data.config);
-        setAuthor(results.data.author || null);
-        setLoaded(true);
-      };
-      run();
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
-      getApiBaseUrl().then((apiBaseUrl) => {
-        const socket = SocketIOClient(apiBaseUrl);
 
-        socket.on('init', (data) => {
-          console.log('Initialized socket connection', data);
-          setLoaded(true);
-          setTable(data?.results.table);
-          setConfig(data?.config);
-          setAuthor(data?.author || null);
-          fetchRecentFileEvals().then((newRecentEvals) => {
+      const socket = SocketIOClient(apiBaseUrl || '');
+
+      socket.on('init', (data) => {
+        console.log('Initialized socket connection', data);
+        setLoaded(true);
+        setTable(data?.results.table);
+        setConfig(data?.config);
+        setAuthor(data?.author || null);
+        fetchRecentFileEvals().then((newRecentEvals) => {
+          if (newRecentEvals && newRecentEvals.length > 0) {
             setDefaultEvalId(newRecentEvals[0]?.evalId);
-            console.log('setting default eval id', newRecentEvals[0]?.evalId);
             setEvalId(newRecentEvals[0]?.evalId);
-          });
+            console.log('setting default eval id', newRecentEvals[0]?.evalId);
+          }
         });
+      });
 
-        socket.on('update', (data) => {
-          console.log('Received data update', data);
-          setTable(data.results.table);
-          setConfig(data.config);
-          setAuthor(data.author || null);
-          fetchRecentFileEvals().then((newRecentEvals) => {
+      socket.on('update', (data) => {
+        console.log('Received data update', data);
+        setTable(data.results.table);
+        setConfig(data.config);
+        setAuthor(data.author || null);
+        fetchRecentFileEvals().then((newRecentEvals) => {
+          if (newRecentEvals && newRecentEvals.length > 0) {
             const newId = newRecentEvals[0]?.evalId;
             if (newId) {
               setDefaultEvalId(newId);
               setEvalId(newId);
             }
-          });
+          }
         });
-
-        return () => {
-          socket.disconnect();
-        };
       });
+
+      return () => {
+        socket.disconnect();
+      };
     } else if (USE_SUPABASE) {
       console.log('Eval init: Using Supabase');
       // TODO(ian): Move this to server
@@ -207,10 +199,9 @@ export default function Eval({
       // Fetch from next.js server
       const run = async () => {
         const evals = await fetchRecentFileEvals();
-        if (evals.length > 0) {
-          const apiBaseUrl = await getApiBaseUrl();
+        if (evals && evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
-          const resp = await fetch(`${apiBaseUrl}/api/results/${defaultEvalId}`);
+          const resp = await callApi(`/results/${defaultEvalId}`);
           const body = await resp.json();
           setTable(body.data.results.table);
           setConfig(body.data.config);
@@ -230,6 +221,7 @@ export default function Eval({
     }
     setInComparisonMode(false);
   }, [
+    apiBaseUrl,
     fetchId,
     setTable,
     setConfig,

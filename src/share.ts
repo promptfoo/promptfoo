@@ -1,6 +1,6 @@
 import { URL } from 'url';
 import { getAuthor } from './accounts';
-import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from './constants';
+import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL } from './constants';
 import { fetchWithProxy } from './fetch';
 import logger from './logger';
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
@@ -45,7 +45,7 @@ export async function createShareableUrl(
   };
 
   const apiBaseUrl =
-    typeof config.sharing === 'object' ? config.sharing.apiBaseUrl : REMOTE_API_BASE_URL;
+    typeof config.sharing === 'object' ? config.sharing.apiBaseUrl : SHARE_API_BASE_URL;
   const response = await fetchWithProxy(`${apiBaseUrl}/api/eval`, {
     method: 'POST',
     headers: {
@@ -59,7 +59,7 @@ export async function createShareableUrl(
     throw new Error(`Failed to create shareable URL: ${responseJson.error}`);
   }
   const appBaseUrl =
-    typeof config.sharing === 'object' ? config.sharing.appBaseUrl : REMOTE_APP_BASE_URL;
+    typeof config.sharing === 'object' ? config.sharing.appBaseUrl : SHARE_VIEW_BASE_URL;
   const fullUrl = `${appBaseUrl}/eval/${responseJson.id}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);

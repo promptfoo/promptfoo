@@ -12,6 +12,7 @@ import { BflaPlugin } from './bfla';
 import { BolaPlugin } from './bola';
 import { CompetitorPlugin } from './competitors';
 import { ContractPlugin } from './contracts';
+import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { DebugAccessPlugin } from './debugAccess';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
@@ -112,6 +113,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(AsciiSmugglingPlugin, 'ascii-smuggling'),
   createPluginFactory(CompetitorPlugin, 'competitors'),
   createPluginFactory(ContractPlugin, 'contracts'),
+  createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(HijackingPlugin, 'hijacking'),

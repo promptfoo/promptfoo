@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import type { TestCase, TestCasesWithMetadata } from '@/../../../types';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@app/api';
 import Box from '@mui/material/Box';
 import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
@@ -13,6 +12,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
+import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import DatasetDialog from './DatasetDialog';
@@ -39,7 +39,7 @@ export default function Datasets() {
 
   useEffect(() => {
     (async () => {
-      fetch(`${await getApiBaseUrl()}/api/datasets`)
+      callApi(`/datasets`)
         .then((response) => response.json())
         .then((data) => {
           const sortedData = [...data.data].sort((a, b) => {

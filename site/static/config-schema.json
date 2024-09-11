@@ -515,6 +515,9 @@
                               },
                               "disableConversationVar": {
                                 "type": "boolean"
+                              },
+                              "runSerially": {
+                                "type": "boolean"
                               }
                             }
                           }

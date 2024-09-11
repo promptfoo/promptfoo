@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { useStore } from '@/state/evalConfig';
+import { useStore } from '@app/state/evalConfig';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';

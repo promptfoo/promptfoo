@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { USE_SUPABASE } from '@/constants';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@app/constants';
+import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
-import { Stack, IconButton } from '@mui/material';
+import { Stack, IconButton, Tooltip } from '@mui/material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import LoggedInAs from './LoggedInAs';
@@ -27,9 +29,10 @@ export default function Navigation({
   onToggleDarkMode: () => void;
 }) {
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
+  const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
 
   const handleModalToggle = () => setShowInfoModal((prevState) => !prevState);
-
+  const handleApiSettingsModalToggle = () => setShowApiSettingsModal((prevState) => !prevState);
   const navigationContent = (
     <>
       <Logo />
@@ -47,6 +50,13 @@ export default function Navigation({
         <IconButton onClick={handleModalToggle} sx={{ color: '#f0f0f0' }}>
           <InfoIcon />
         </IconButton>
+        {IS_RUNNING_LOCALLY && (
+          <Tooltip title="API and Sharing Settings">
+            <IconButton onClick={handleApiSettingsModalToggle} sx={{ color: '#f0f0f0' }}>
+              <EngineeringIcon />
+            </IconButton>
+          </Tooltip>
+        )}
         <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
       </div>
     </>
@@ -55,6 +65,7 @@ export default function Navigation({
   return (
     <>
       <InfoModal open={showInfoModal} onClose={handleModalToggle} />
+      <ApiSettingsModal open={showApiSettingsModal} onClose={handleApiSettingsModalToggle} />
       <Stack direction="row" spacing={2} className="nav">
         {navigationContent}
       </Stack>

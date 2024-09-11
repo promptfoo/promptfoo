@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import Navigation from '@/app/components/Navigation';
-import { AuthProvider } from '@/supabase-client';
+import Navigation from '@app/app/components/Navigation';
+import { AuthProvider } from '@app/supabase-client';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import './PageShell.css';
