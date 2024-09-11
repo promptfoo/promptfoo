@@ -106,7 +106,6 @@ class CrescendoProvider implements ApiProvider {
           jsonOnly: false,
           preferSmallModel: true,
         });
-        logger.warn('Using remote scoring provider');
       } else {
         this.scoringProvider = await loadRedteamProvider({
           provider: this.config.redteamProvider,
