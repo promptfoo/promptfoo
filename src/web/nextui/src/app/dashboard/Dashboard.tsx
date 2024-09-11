@@ -19,11 +19,8 @@ import {
   categoryAliases,
   categoryAliasesReverse,
   riskCategories,
-  riskCategorySeverityMap,
 } from '../report/constants';
-import ApplicationAttackSuccessChart, {
-  ApplicationAttackSuccessDataPoint,
-} from './ApplicationAttackSuccessChart';
+import type { ApplicationAttackSuccessDataPoint } from './ApplicationAttackSuccessChart';
 import CategoryBreakdown from './CategoryBreakdown';
 import DashboardCharts from './DashboardCharts';
 import EmergingRisks from './EmergingRisks';
@@ -32,16 +29,10 @@ import IssuesBySeverity from './IssuesBySeverity';
 import RecentEvals from './RecentEvals';
 import Sidebar from './Sidebar';
 import TopFailingCategories from './TopFailingCategories';
-import { calculateTrend, processCategoryData } from './utils';
 
 function getPluginIdFromMetricName(metricName: string): string {
   const metricBaseName = metricName.split('/')[0];
   return categoryAliasesReverse[metricBaseName as keyof typeof categoryAliases];
-}
-
-interface OverallAttackSuccessRateDataPoint {
-  name: string;
-  value: number;
 }
 
 interface AttackSuccessRateDataPoint {
@@ -64,9 +55,6 @@ export default function Dashboard() {
   const [attackSuccessRateData, setAttackSuccessRateData] = useState<AttackSuccessRateDataPoint[]>(
     [],
   );
-  const [overallAttackSuccessRateData, setOverallAttackSuccessRateData] = useState<
-    OverallAttackSuccessRateDataPoint[]
-  >([]);
   const [issuesResolvedData, setIssuesResolvedData] = useState<
     { date: string; resolved: number }[]
   >([]);
@@ -159,19 +147,6 @@ export default function Dashboard() {
 
     setAttackSuccessRateData(attackSuccessRateOverTime);
 
-    const overallAttackSuccessRate =
-      evals.reduce((sum, eval_) => sum + (eval_.metrics?.testFailCount || 0), 0) /
-      evals.reduce(
-        (sum, eval_) =>
-          sum + ((eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0)),
-        0,
-      );
-
-    setOverallAttackSuccessRateData([
-      { name: 'Succeeded', value: overallAttackSuccessRate },
-      { name: 'Defended', value: 1 - overallAttackSuccessRate },
-    ]);
-
     // Calculate issues resolved over time
     const calculateTotalIssues = (eval_: StandaloneEval) => {
       let total = 0;
@@ -195,7 +170,7 @@ export default function Dashboard() {
           const date = new Date(eval_.createdAt).toLocaleDateString();
           const previousIssues = index > 0 ? calculateTotalIssues(evals[index - 1]) : 0;
           const currentIssues = calculateTotalIssues(eval_);
-          const resolved = Math.max(0, previousIssues - currentIssues); // Ensure we don't have negative resolutions
+          const resolved = Math.max(0, previousIssues - currentIssues);
 
           if (acc.length > 0 && acc[acc.length - 1].date === date) {
             acc[acc.length - 1].resolved += resolved;
@@ -236,123 +211,6 @@ export default function Dashboard() {
     setApplicationAttackSuccessData(applicationAttackSuccess);
   }, [evals]);
 
-  const totalProbes = evals.reduce(
-    (sum, eval_) => sum + (eval_.metrics?.testPassCount || 0) + (eval_.metrics?.testFailCount || 0),
-    0,
-  );
-  const totalSuccessfulAttacks = evals.reduce(
-    (sum, eval_) => sum + (eval_.metrics?.testFailCount || 0),
-    0,
-  );
-  const averageAttackSuccessRate =
-    evals.length > 0
-      ? evals.reduce((sum, eval_) => {
-          const attackSuccessRate =
-            eval_.metrics?.testFailCount && eval_.metrics?.testPassCount
-              ? eval_.metrics.testFailCount /
-                (eval_.metrics.testPassCount + eval_.metrics.testFailCount)
-              : 0;
-          return sum + attackSuccessRate;
-        }, 0) / evals.length
-      : 0;
-  const latestAttackSuccessRate = (() => {
-    if (evals.length === 0) {
-      return 0;
-    }
-    const latestEval = evals[evals.length - 1];
-    if (latestEval.metrics?.testFailCount && latestEval.metrics?.testPassCount) {
-      return (
-        latestEval.metrics.testFailCount /
-        (latestEval.metrics.testPassCount + latestEval.metrics.testFailCount)
-      );
-    }
-    return 0;
-  })();
-
-  const calculateMetricTrends = () => {
-    if (evals.length < 2) {
-      const flatTrend = {
-        direction: 'flat' as const,
-        sentiment: 'flat' as const,
-        value: 0,
-      };
-      return {
-        attackSuccessRateTrend: flatTrend,
-        totalSuccessfulAttacksTrend: flatTrend,
-        averageAttackSuccessRateTrend: flatTrend,
-      };
-    }
-
-    const currentAttackSuccessRate = latestAttackSuccessRate;
-    const previousAttackSuccessRate = (() => {
-      if (evals.length <= 1) {
-        return currentAttackSuccessRate;
-      }
-      const previousEval = evals[evals.length - 2];
-      if (previousEval.metrics?.testFailCount && previousEval.metrics?.testPassCount) {
-        return (
-          previousEval.metrics.testFailCount /
-          (previousEval.metrics.testPassCount + previousEval.metrics.testFailCount)
-        );
-      }
-      return currentAttackSuccessRate;
-    })();
-
-    const attackSuccessRateTrend = calculateTrend(
-      currentAttackSuccessRate,
-      previousAttackSuccessRate,
-      true, // increase is bad
-    );
-
-    const currentTotalSuccessfulAttacks = totalSuccessfulAttacks;
-    const previousTotalSuccessfulAttacks =
-      evals.length > 1
-        ? evals.slice(1).reduce((sum, eval_) => sum + (eval_.metrics?.testFailCount || 0), 0)
-        : currentTotalSuccessfulAttacks;
-
-    const totalSuccessfulAttacksTrend = calculateTrend(
-      currentTotalSuccessfulAttacks,
-      previousTotalSuccessfulAttacks,
-      true /* increase is bad */,
-    );
-
-    // Calculate average attack success rate trend by looking at the average attack success rate of the last half of the evals
-    const currentAverageAttackSuccessRate = averageAttackSuccessRate;
-    const previousAverageAttackSuccessRate =
-      evals.length > 1
-        ? evals.slice(Math.floor(evals.length / 2)).reduce((sum, eval_) => {
-            const attackSuccessRate =
-              eval_.metrics?.testFailCount && eval_.metrics?.testPassCount
-                ? eval_.metrics.testFailCount /
-                  (eval_.metrics.testPassCount + eval_.metrics.testFailCount)
-                : 0;
-            return sum + attackSuccessRate;
-          }, 0) / Math.floor(evals.length / 2)
-        : currentAverageAttackSuccessRate;
-
-    const averageAttackSuccessRateTrend = calculateTrend(
-      currentAverageAttackSuccessRate,
-      previousAverageAttackSuccessRate,
-      true, // increase is bad
-    );
-
-    return { attackSuccessRateTrend, totalSuccessfulAttacksTrend, averageAttackSuccessRateTrend };
-  };
-
-  const { attackSuccessRateTrend, totalSuccessfulAttacksTrend, averageAttackSuccessRateTrend } =
-    calculateMetricTrends();
-
-  const latestEvalDate = evals.length > 0 ? new Date(evals[evals.length - 1].createdAt) : null;
-  const formattedLatestEvalDate = latestEvalDate
-    ? latestEvalDate.toLocaleString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : 'N/A';
-
   const calculateSeveritySummary = () => {
     // Mock severity counts
     const severityCounts = {
@@ -363,14 +221,10 @@ export default function Dashboard() {
     };
 
     const totalIssues = Object.values(severityCounts).reduce((a, b) => a + b, 0);
-    const highestSeverity =
-      (Object.keys(severityCounts).find(
-        (severity) => severityCounts[severity as Severity] > 0,
-      ) as Severity) || Severity.Low;
 
-    return { severityCounts, totalIssues, highestSeverity };
+    return { severityCounts, totalIssues };
 
-    /* Existing logic (commented out):
+    /* 
     const severityCounts = {
       [Severity.Critical]: 0,
       [Severity.High]: 0,
@@ -402,7 +256,7 @@ export default function Dashboard() {
     */
   };
 
-  const { severityCounts, totalIssues, highestSeverity } = calculateSeveritySummary();
+  const { severityCounts, totalIssues } = calculateSeveritySummary();
 
   const autoCompleteOptions = Array.from(new Set(evals.map((eval_) => eval_.description))).sort();
 
