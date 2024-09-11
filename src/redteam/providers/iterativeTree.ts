@@ -100,7 +100,13 @@ export async function evaluateResponse(
       content: targetResponse,
     },
   ]);
-  const judgeResp = await redteamProvider.callApi(judgeBody);
+  const judgeResp = await redteamProvider.callApi(judgeBody, {
+    prompt: {
+      raw: judgeBody,
+      label: 'judge',
+    },
+    vars: {},
+  });
   invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
   let { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
 
@@ -123,7 +129,13 @@ export async function getNewPrompt(
   redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
 ): Promise<{ improvement: string; prompt: string }> {
   const redteamBody = JSON.stringify(redteamHistory);
-  const redteamResp = await redteamProvider.callApi(redteamBody);
+  const redteamResp = await redteamProvider.callApi(redteamBody, {
+    prompt: {
+      raw: redteamBody,
+      label: 'history',
+    },
+    vars: {},
+  });
   invariant(
     typeof redteamResp.output === 'string',
     `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
@@ -153,7 +165,13 @@ export async function checkIfOnTopic(
       content: targetPrompt,
     },
   ]);
-  const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
+  const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody, {
+    prompt: {
+      raw: isOnTopicBody,
+      label: 'on-topic',
+    },
+    vars: {},
+  });
   invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
   const { onTopic } = extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output);
   invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
@@ -533,7 +551,11 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     let redteamProvider: ApiProvider;
 
     if (shouldGenerateRemote()) {
-      redteamProvider = new PromptfooChatCompletionProvider();
+      redteamProvider = new PromptfooChatCompletionProvider({
+        task: 'iterative:tree',
+        jsonOnly: true,
+        preferSmallModel: true,
+      });
     } else {
       redteamProvider = await loadRedteamProvider({
         provider: this.config.redteamProvider,

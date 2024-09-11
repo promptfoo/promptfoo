@@ -57,7 +57,13 @@ describe('RedteamIterativeProvider', () => {
       expect(score).toBe(8);
       expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(1);
       expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('Target response'),
+        '[{"role":"system","content":"Judge prompt"},{"role":"user","content":"Target response"}]',
+        expect.objectContaining({
+          prompt: expect.objectContaining({
+            label: 'judge',
+            raw: '[{"role":"system","content":"Judge prompt"},{"role":"user","content":"Target response"}]',
+          }),
+        }),
       );
     });
 
@@ -122,10 +128,13 @@ describe('RedteamIterativeProvider', () => {
       expect(result).toEqual(mockResponse);
       expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(1);
       expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('System prompt'),
-      );
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('User message'),
+        '[{"role":"system","content":"System prompt"},{"role":"user","content":"User message"}]',
+        expect.objectContaining({
+          prompt: expect.objectContaining({
+            label: 'history',
+            raw: '[{"role":"system","content":"System prompt"},{"role":"user","content":"User message"}]',
+          }),
+        }),
       );
     });
 
@@ -149,7 +158,15 @@ describe('RedteamIterativeProvider', () => {
       const result = await getNewPrompt(mockRedteamProvider, []);
 
       expect(result).toEqual(mockResponse);
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith('[]');
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
+        '[]',
+        expect.objectContaining({
+          prompt: expect.objectContaining({
+            label: 'history',
+            raw: '[]',
+          }),
+        }),
+      );
     });
   });
 
@@ -174,10 +191,13 @@ describe('RedteamIterativeProvider', () => {
       expect(result).toBe(true);
       expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(1);
       expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('On-topic system prompt'),
-      );
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('Target prompt'),
+        '[{"role":"system","content":"On-topic system prompt"},{"role":"user","content":"Target prompt"}]',
+        expect.objectContaining({
+          prompt: expect.objectContaining({
+            label: 'on-topic',
+            raw: '[{"role":"system","content":"On-topic system prompt"},{"role":"user","content":"Target prompt"}]',
+          }),
+        }),
       );
     });
 

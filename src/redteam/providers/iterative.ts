@@ -61,7 +61,13 @@ async function runRedteamConversation({
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
-    const redteamResp = await redteamProvider.callApi(redteamBody);
+    const redteamResp = await redteamProvider.callApi(redteamBody, {
+      prompt: {
+        raw: redteamBody,
+        label: 'history',
+      },
+      vars: {},
+    });
     invariant(
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
@@ -94,7 +100,13 @@ async function runRedteamConversation({
         content: targetPrompt,
       },
     ]);
-    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
+    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody, {
+      prompt: {
+        raw: isOnTopicBody,
+        label: 'on-topic',
+      },
+      vars: {},
+    });
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
     const isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean })
       .onTopic;
@@ -125,7 +137,13 @@ async function runRedteamConversation({
         content: targetResponse,
       },
     ]);
-    const judgeResp = await redteamProvider.callApi(judgeBody);
+    const judgeResp = await redteamProvider.callApi(judgeBody, {
+      prompt: {
+        raw: judgeBody,
+        label: 'judge',
+      },
+      vars: {},
+    });
     invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
     let { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
 
@@ -171,7 +189,11 @@ class RedteamIterativeProvider implements ApiProvider {
     // Redteam provider can be set from the config.
 
     if (shouldGenerateRemote()) {
-      this.redteamProvider = new PromptfooChatCompletionProvider();
+      this.redteamProvider = new PromptfooChatCompletionProvider({
+        task: 'iterative',
+        jsonOnly: true,
+        preferSmallModel: true,
+      });
     } else {
       this.redteamProvider = config.redteamProvider;
     }

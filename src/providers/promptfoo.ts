@@ -79,8 +79,20 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   }
 }
 
+interface PromptfooChatCompletionOptions {
+  env?: EnvOverrides;
+  id?: string;
+  jsonOnly: boolean;
+  preferSmallModel: boolean;
+  task: 'crescendo' | 'iterative' | 'iterative:image' | 'iterative:tree';
+}
+
 export class PromptfooChatCompletionProvider implements ApiProvider {
-  constructor(private options: { id?: string; env?: EnvOverrides } = {}) {}
+  private options: PromptfooChatCompletionOptions;
+
+  constructor(options: PromptfooChatCompletionOptions) {
+    this.options = options;
+  }
 
   id(): string {
     return this.options.id || 'promptfoo:chatcompletion';
@@ -96,9 +108,11 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const body = {
-      task: 'iterative',
-      step: '...',
+      jsonOnly: this.options.jsonOnly,
+      preferSmallModel: this.options.preferSmallModel,
       prompt,
+      step: context?.prompt.label,
+      task: this.options.task,
     };
 
     try {
