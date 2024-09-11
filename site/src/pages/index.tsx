@@ -65,7 +65,9 @@ function HomepageWalkthrough() {
             dependencies, or logins.
           </p>
           <p>
-            <Link to="/docs/intro">&raquo; Get Started</Link>
+            <strong>
+              <Link to="/docs/intro">&raquo; Get Started</Link>
+            </strong>
           </p>
         </>
       ),
@@ -95,32 +97,39 @@ function HomepageWalkthrough() {
           <ul>
             <li>PII leaks</li>
             <li>Insecure tool use</li>
+            <li>Cross-session data leaks</li>
             <li>Jailbreaks</li>
             <li>Harmful content</li>
-            <li>Competitor endorsements</li>
-            <li>Political statements</li>
             <li>Specialized medical and legal advice</li>
             <li>
               and <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
             </li>
           </ul>
           <p>
-            <Link to="/docs/red-team">&raquo; Scan for vulnerabilities in your LLM app</Link>
+            <strong>
+              <Link to="/docs/red-team/quickstart/">
+                &raquo; Scan for vulnerabilities in your LLM app
+              </Link>
+            </strong>
           </p>
         </>
       ),
       icon: <SecurityIcon />,
-      destinationUrl: '/docs/red-team',
+      destinationUrl: '/docs/red-team/quickstart/',
     },
     {
       id: 3,
       caption: 'Continuous Monitoring',
-      image: '/img/docs/github-action-comment.png',
-      image2x: '/img/docs/github-action-comment@2x.png',
+      image: '/img/continuous-monitoring.png',
+      image2x: '/img/continuous-monitoring@2x.png',
       description: (
         <>
           <p>
             <strong>Fits in your development workflow</strong>
+          </p>
+          <p>
+            A high-level view of your system's security posture across different models, prompts,
+            and applications.
           </p>
           <p>
             Promptfoo's simple file-based config and local runtime make it easy to set up in{' '}
@@ -128,12 +137,14 @@ function HomepageWalkthrough() {
             services.
           </p>
           <p>
-            <Link to="/docs/getting-started">&raquo; See setup docs</Link>
+            <strong>
+              <Link to="/docs/red-team/quickstart/">&raquo; See setup docs</Link>
+            </strong>
           </p>
         </>
       ),
       icon: <DescriptionIcon />,
-      destinationUrl: '/docs/getting-started',
+      destinationUrl: '/docs/red-team/quickstart/',
     },
   ];
 

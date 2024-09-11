@@ -17,6 +17,15 @@ With promptfoo, you can:
 
 The goal: **test-driven LLM development**, not trial-and-error.
 
+<hr/>
+
+**Get Started:**
+
+- [Red teaming](/docs/red-team/quickstart) - LLM security scans
+- [Evaluations](/docs/getting-started) - LLM quality benchmarks
+
+<hr/>
+
 promptfoo produces matrix views that let you quickly evaluate outputs across many prompts.
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs:
