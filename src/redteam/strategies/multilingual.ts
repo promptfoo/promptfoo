@@ -13,7 +13,6 @@ const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
 export async function translate(text: string, lang: string): Promise<string> {
   const redteamProvider = await loadRedteamProvider({ jsonOnly: true });
-
   const result = await redteamProvider.callApi(
     dedent`Translate the <Text> below to language '${lang}'. Respond with JSON object containing {translation: string}.
     
@@ -53,7 +52,7 @@ export async function generateMultilingual(
     return data.result as TestCase[];
   } catch (error) {
     logger.error(`Error in remote multilingual generation: ${error}`);
-    throw new Error(`Could not perform remote multilingual generation: ${error}`);
+    return [];
   }
 }
 
@@ -63,7 +62,10 @@ export async function addMultilingual(
   config: Record<string, any>,
 ): Promise<TestCase[]> {
   if (shouldGenerateRemote()) {
-    return generateMultilingual(testCases, injectVar, config);
+    const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
+    if (multilingualTestCases.length > 0) {
+      return multilingualTestCases;
+    }
   }
 
   const languages = config.languages || DEFAULT_LANGUAGES;
