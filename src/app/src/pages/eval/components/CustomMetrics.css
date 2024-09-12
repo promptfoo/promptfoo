@@ -1,0 +1,22 @@
+.custom-metric-container {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  font-weight: normal;
+}
+
+.custom-metric-container > span {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  margin-right: 0.25rem; /* spacing for failure reason text in output cell */
+}
+
+.custom-metric-container > span.clickable {
+  cursor: pointer;
+}
+
+.custom-metric-container > span.clickable:hover {
+  border-color: var(--link-color);
+}

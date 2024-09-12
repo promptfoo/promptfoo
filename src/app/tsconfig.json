@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "../../../typings/**/*"
+  ],
+  "compilerOptions": {
+    "paths": {
+      "@app/*": ["./src/*"]
+    }
+  },
+  "exclude": ["node_modules"],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+}

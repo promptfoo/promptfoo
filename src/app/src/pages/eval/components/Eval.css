@@ -1,0 +1,13 @@
+body {
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  justify-content: center;
+  align-items: center;
+  height: 9rem;
+}

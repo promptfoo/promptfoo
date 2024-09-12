@@ -1,0 +1,22 @@
+.description {
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.description:hover {
+  background-color: #f0f0f0;
+}
+
+[data-theme='dark'] .description:hover {
+  background-color: #2a2a2a;
+}
+
+.eval-header {
+  display: flex;
+  align-items: center;
+  flex-grow: 1;
+}
+
+.eval-header strong {
+  font-weight: 500;
+}
