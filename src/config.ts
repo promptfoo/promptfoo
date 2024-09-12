@@ -13,6 +13,7 @@ import { importModule } from './esm';
 import logger from './logger';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import { loadApiProviders } from './providers';
+import telemetry from './telemetry';
 import { readTest, readTests } from './testCases';
 import type {
   CommandLineOptions,
@@ -358,6 +359,9 @@ export async function resolveConfigs(
 
   // Standalone assertion mode
   if (cmdObj.assertions) {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'standalone assertions mode',
+    });
     if (!cmdObj.modelOutputs) {
       logger.error('You must provide --model-outputs when using --assertions');
       process.exit(1);
