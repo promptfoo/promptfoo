@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
@@ -88,22 +88,6 @@ function EvalOutputCell({
     }
     setCommentText(newCommentText);
   };
-
-  const generateRowLink = useCallback((rowId: string, additionalParams = {}) => {
-    const currentUrl = new URL(window.location.href); // Get the full current URL
-    const params = new URLSearchParams(currentUrl.search); // Get the existing query parameters
-
-    Object.entries(additionalParams).forEach(([key, value]) => {
-      params.set(key, (value as string).toString());
-    });
-
-    params.set('row-id', rowId);
-
-    currentUrl.search = params.toString();
-
-    currentUrl.hash = `row-${rowId}`;
-    return currentUrl.toString(); // Return the full URL with the updated search and hash
-  }, []);
 
   const parseQueryParams = (queryString: string) => {
     return Object.fromEntries(new URLSearchParams(queryString));
