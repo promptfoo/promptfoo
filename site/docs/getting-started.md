@@ -289,7 +289,7 @@ A simple `npx promptfoo@latest eval` will run the example. Also note that you ca
 
 Produces this HTML table:
 
-![Side-by-side evaluation of LLM model quality, gpt4o vs gpt4o-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+![Side-by-side evaluation of LLM model quality, gpt-4o vs gpt-4o-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
 Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini).
 
