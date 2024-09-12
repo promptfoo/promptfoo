@@ -73,7 +73,7 @@ By incorporating the Prompt Extraction plugin in your LLM red teaming strategy, 
 ## Related Concepts
 
 - [Information Disclosure](../llm-vulnerability-types.md#privacy-and-security)
-- [Social Engineering](../llm-vulnerability-types.md#social-engineering)
-- [Model Inversion Attacks](../llm-vulnerability-types.md#model-inversion)
+- [Social Engineering](../llm-vulnerability-types.md#misinformation-and-misuse)
+- [Model Inversion Attacks](../llm-vulnerability-types.md#technical-vulnerabilities)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
