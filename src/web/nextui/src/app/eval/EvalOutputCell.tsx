@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
@@ -86,6 +87,10 @@ function EvalOutputCell({
       onRating(undefined, undefined, newCommentText);
     }
     setCommentText(newCommentText);
+  };
+
+  const parseQueryParams = (queryString: string) => {
+    return Object.fromEntries(new URLSearchParams(queryString));
   };
 
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
@@ -226,6 +231,13 @@ function EvalOutputCell({
     }
   }, [onRating, output.score, output.gradingResult?.comment]);
 
+  const [linked] = React.useState(false);
+  const handleRowShareLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('row-id', String(rowIndex));
+    navigator.clipboard.writeText(url.toString());
+  }, [rowIndex]);
+
   const [copied, setCopied] = React.useState(false);
   const handleCopy = React.useCallback(() => {
     navigator.clipboard.writeText(output.text);
@@ -340,6 +352,15 @@ function EvalOutputCell({
               <span>🌟</span>
             </Tooltip>
           </span>
+          <span
+            className="action"
+            onClick={handleRowShareLink}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <Tooltip title="Share output">
+              <span>{linked ? '✅' : '🔗'}</span>
+            </Tooltip>
+          </span>
         </>
       )}
       {output.prompt && (
@@ -382,6 +403,48 @@ function EvalOutputCell({
       </span>
     </div>
   );
+  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
+
+  useEffect(() => {
+    const params = parseQueryParams(window.location.search);
+    const rowId = params['row-id'];
+
+    if (rowId) {
+      const rowIndex = Number(rowId.split('-').pop());
+      const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
+
+      if (rowPageIndex !== pagination.pageIndex) {
+        setPagination((prev) => ({ ...prev, pageIndex: rowPageIndex }));
+      }
+
+      const scrollToRow = () => {
+        const rowElement = document.querySelector(`#row-${rowId}`);
+        if (rowElement) {
+          rowElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          rowElement.classList.add('highlight');
+          setTimeout(() => {
+            rowElement.classList.remove('highlight');
+          }, 2000);
+        }
+      };
+
+      const observer = new MutationObserver(() => {
+        const rowElement = document.querySelector(`#row-${rowId}`);
+        if (rowElement) {
+          scrollToRow();
+          observer.disconnect();
+        }
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+
+      // Cleanup the observer when the component unmounts
+      return () => observer.disconnect();
+    }
+  }, [pagination.pageIndex, pagination.pageSize]);
 
   const cellStyle: Record<string, string> = {};
   if (output.gradingResult?.comment === '!highlight') {
