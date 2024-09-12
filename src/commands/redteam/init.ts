@@ -164,7 +164,6 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
 }
 
 export async function redteamInit(directory: string | undefined) {
-  telemetry.maybeShowNotice();
   telemetry.record('command_used', { name: 'redteam init - started' });
   recordOnboardingStep('start');
 

@@ -14,7 +14,6 @@ export function cacheCommand(program: Command) {
     .option('--env-file <path>', 'Path to .env file')
     .action(async (cmdObj: { envFile?: string }) => {
       setupEnv(cmdObj.envFile);
-      telemetry.maybeShowNotice();
       logger.info('Clearing cache...');
 
       const cuteMessages = [

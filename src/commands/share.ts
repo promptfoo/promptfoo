@@ -31,7 +31,6 @@ export function shareCommand(program: Command) {
         cmdObj: { yes: boolean; envFile?: string; showAuth: boolean } & Command,
       ) => {
         setupEnv(cmdObj.envFile);
-        telemetry.maybeShowNotice();
         telemetry.record('command_used', {
           name: 'share',
         });

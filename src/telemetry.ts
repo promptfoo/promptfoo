@@ -12,7 +12,12 @@ type TelemetryEvent = {
   properties: Record<string, EventValue>;
 };
 
-type TelemetryEventTypes = 'eval_ran' | 'assertion_used' | 'command_used' | 'funnel';
+type TelemetryEventTypes =
+  | 'eval_ran'
+  | 'assertion_used'
+  | 'command_used'
+  | 'funnel'
+  | 'feature_used';
 
 const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
@@ -36,11 +41,37 @@ export class Telemetry {
     }
   }
 
+  private recordedEvents: Set<string> = new Set();
+
+  recordOnce(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {
+    if (this.disabled) {
+      return;
+    }
+
+    const eventKey = JSON.stringify({ eventName, properties });
+    if (!this.recordedEvents.has(eventKey)) {
+      this.events.push({
+        event: eventName,
+        packageVersion: packageJson.version,
+        properties,
+      });
+      this.recordedEvents.add(eventKey);
+    }
+  }
+
   async recordAndSend(
     eventName: TelemetryEventTypes,
     properties: Record<string, EventValue>,
   ): Promise<void> {
     this.record(eventName, properties);
+    await this.send();
+  }
+
+  async recordAndSendOnce(
+    eventName: TelemetryEventTypes,
+    properties: Record<string, EventValue>,
+  ): Promise<void> {
+    this.recordOnce(eventName, properties);
     await this.send();
   }
 

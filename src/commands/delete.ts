@@ -33,7 +33,6 @@ export function deleteCommand(program: Command) {
     .option('--env-path <path>', 'Path to the environment file')
     .action(async (id: string, cmdObj: { envPath?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'delete',
       });
@@ -54,7 +53,6 @@ export function deleteCommand(program: Command) {
     .option('--env-path <path>', 'Path to the environment file')
     .action(async (evalId, cmdObj) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'delete eval',
         evalId,

@@ -14,6 +14,7 @@ import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
+import telemetry from './telemetry';
 import type {
   CsvRow,
   TestCase,
@@ -71,12 +72,24 @@ export async function readStandaloneTestsFile(
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'csv tests file - google sheet',
+    });
     rows = await fetchCsvFromGoogleSheet(varsPath);
   } else if (fileExtension === 'csv') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'csv tests file - local',
+    });
     rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true });
   } else if (fileExtension === 'json') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'json tests file',
+    });
     rows = parseJson(fs.readFileSync(resolvedVarsPath, 'utf-8'));
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'yaml tests file',
+    });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   }
 
