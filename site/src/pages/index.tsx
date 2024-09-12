@@ -79,8 +79,6 @@ function HomepageWalkthrough() {
       caption: 'Security & Red Teaming',
       image: '/img/riskreport-1.png',
       image2x: '/img/riskreport-1@2x.png',
-      imageDark: '/img/riskreport-1-dark.png',
-      image2xDark: '/img/riskreport-1-dark@2x.png',
       description: (
         <>
           <p>
