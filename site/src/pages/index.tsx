@@ -17,7 +17,7 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1>Find and fix LLM vulnerabilities</h1>
+        <h1>Find & fix problems in your LLM app</h1>
         <p>Open-source LLM testing used by 30,000+ developers</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
