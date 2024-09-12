@@ -42,7 +42,7 @@ redteam:
 
 The RBAC plugin tests whether the agent respects predefined access control policies. The BOLA and BFLA plugins check if the agent can be tricked into accessing or modifying resources or functions beyond its intended scope.
 
-Promptfoo's red teaming capabilities include many other OWASP vulnerabilities. Learn more about them [here](https://promptfoo.com/docs/red-team/owasp-llm-top-10).
+Promptfoo's red teaming capabilities include many other OWASP vulnerabilities. Learn more about them [here](https://promptfoo.dev/docs/red-team/owasp-llm-top-10).
 
 ## Context Poisoning and Data Exfiltration
 
