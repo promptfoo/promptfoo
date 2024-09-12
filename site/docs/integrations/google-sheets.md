@@ -48,6 +48,29 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account-file.json"
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```
 
+## Using Custom Providers for Model-Graded Metrics
+
+When using Google Sheets for test cases, you can still use custom providers for model-graded metrics like `llm-rubric` or `similar`. To do this, override the default LLM grader by adding a `defaultTest` property to your configuration:
+
+```yaml
+prompts:
+  - prompt1.txt
+  - prompt2.txt
+providers:
+  - anthropic:messages:claude-3-5-sonnet-20240620
+  - openai:chat:gpt-4o-mini
+tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
+defaultTest:
+  options:
+    provider:
+      text:
+        id: ollama:llama3.1:70b
+      embedding:
+        id: ollama:embeddings:mxbai-embed-large
+```
+
+For more information on overriding the LLM grader, see the [model-graded metrics documentation](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
+
 ## Writing outputs to a Google Sheet
 
 The `outputPath` parameter (`--output` or `-o` on the command line) supports Google Sheets URLs. In order to write, Default Application Credentials must be configured with a service account that has write access.
