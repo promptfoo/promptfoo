@@ -181,7 +181,7 @@ prompts:
   - file://prompts.txt
 providers:
   - openai:gpt-4o-mini
-tests: tests.csv
+tests: file://tests.csv
 ```
 
 See [example CSV](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-test/tests.csv).
