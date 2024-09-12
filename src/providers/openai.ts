@@ -477,12 +477,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
+    const maxTokens = this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS');
+
     const body = {
       model: this.modelName,
       messages,
       seed: this.config.seed,
-      max_tokens:
-        this.config.max_tokens ?? Number.parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      ...(maxTokens ? { max_tokens: maxTokens } : {}),
       temperature:
         this.config.temperature ?? Number.parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       top_p: this.config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
