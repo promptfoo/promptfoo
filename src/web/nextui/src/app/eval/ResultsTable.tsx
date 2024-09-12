@@ -5,7 +5,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import React, { useEffect, useCallback } from 'react';
+import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { getApiBaseUrl } from '@/api';
 import { useToast } from '@/app/contexts/ToastContext';
@@ -22,9 +22,7 @@ import type {
   FilterMode,
   EvaluateTable,
 } from '@/app/eval/types';
-import LinkIcon from '@mui/icons-material/Link';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { IconButton } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -139,43 +137,6 @@ function ResultsTable({
 }: ResultsTableProps) {
   const { evalId, table, setTable, config, inComparisonMode } = useMainStore();
   const { showToast } = useToast();
-
-  const generateRowLink = useCallback((rowId: string, additionalParams = {}) => {
-    const currentUrl = new URL(window.location.href); // Get the full current URL
-    const params = new URLSearchParams(currentUrl.search); // Get the existing query parameters
-
-    Object.entries(additionalParams).forEach(([key, value]) => {
-      params.set(key, (value as string).toString());
-    });
-
-    params.set('row-id', rowId);
-
-    currentUrl.search = params.toString();
-
-    currentUrl.hash = `row-${rowId}`;
-
-    return currentUrl.toString(); // Return the full URL with the updated search and hash
-  }, []);
-
-  // Function to copy the link to the clipboard
-  const copyToClipboard = useCallback(
-    (text: string) => {
-      navigator.clipboard
-        .writeText(text)
-        .then(() => {
-          showToast('Link copied to clipboard', 'success');
-        })
-        .catch((err) => {
-          console.error('Could not copy text: ', err);
-          showToast('Failed to copy link', 'error');
-        });
-    },
-    [showToast],
-  );
-  const parseQueryParams = (queryString: string) => {
-    return Object.fromEntries(new URLSearchParams(queryString));
-  };
-  // Scroll to the row when the URL contains a hash
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -641,57 +602,6 @@ function ResultsTable({
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
 
-  const [isShiftPressed, setIsShiftPressed] = React.useState(false);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Shift') {
-        setIsShiftPressed(true);
-      }
-    };
-
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key === 'Shift') {
-        setIsShiftPressed(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-  useEffect(() => {
-    const params = parseQueryParams(window.location.search);
-    const rowId = params['row-id'];
-
-    if (rowId) {
-      const rowElement = document.querySelector(`#row-${rowId}`);
-
-      if (rowElement) {
-        // Check if the row is on the current page
-        const rowIndex = Number(rowId.split('-').pop()); // Assuming the rowId is in the format 'row-{index}'
-        const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
-
-        // Update pagination if necessary
-        if (rowPageIndex !== pagination.pageIndex) {
-          setPagination((prev) => ({ ...prev, pageIndex: rowPageIndex }));
-        }
-
-        // Wait for pagination to complete and then scroll to the row
-        setTimeout(() => {
-          rowElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          rowElement.classList.add('highlight');
-          setTimeout(() => {
-            rowElement.classList.remove('highlight');
-          }, 2000);
-        }, 300); // Timeout to wait for pagination update (could be adjusted as needed)
-      }
-    }
-  }, [pagination.pageIndex, pagination.pageSize]);
   const reactTable = useReactTable({
     data: filteredBody,
     columns,
@@ -758,18 +668,6 @@ function ResultsTable({
                       }}
                       className={`${isMetadataCol ? 'variable' : ''} ${shouldDrawRowBorder ? 'first-prompt-row' : ''} ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
                     >
-                      {/* Share Button for Metadata Columns */}
-                      {isMetadataCol && isShiftPressed && (
-                        <IconButton
-                          color="primary"
-                          onClick={() => copyToClipboard(generateRowLink(row.id))}
-                          style={{ marginTop: '1px' }}
-                          aria-label="copy link"
-                        >
-                          <LinkIcon />
-                        </IconButton>
-                      )}
-
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   );
