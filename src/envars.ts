@@ -66,6 +66,7 @@ export type EnvVars = {
   OLLAMA_BASE_URL?: string;
   OPENAI_BEST_OF?: number;
   OPENAI_FREQUENCY_PENALTY?: number;
+  OPENAI_MAX_COMPLETION_TOKENS?: number;
   OPENAI_MAX_TOKENS?: number;
   OPENAI_PRESENCE_PENALTY?: number;
   OPENAI_STOP?: string;
