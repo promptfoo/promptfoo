@@ -266,7 +266,7 @@ class RedteamIterativeProvider implements ApiProvider {
       vars: context.vars,
       redteamProvider: await loadRedteamProvider({
         provider: this.redteamProvider,
-        preferSmallModel: true,
+        preferSmallModel: false,
         jsonOnly: true,
       }),
       targetProvider: context.originalProvider,
