@@ -794,6 +794,206 @@ describe('call provider apis', () => {
       jest.restoreAllMocks();
     });
   });
+
+  describe('OpenAiChatCompletionProvider with functionToolCallbacks', () => {
+    it('should call function tool and return result', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  function_call: {
+                    name: 'addNumbers',
+                    arguments: '{"a":5,"b":6}',
+                  },
+                },
+              },
+            ],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+        ),
+        ok: true,
+      };
+      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'addNumbers',
+                description: 'Add two numbers together',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    a: { type: 'number' },
+                    b: { type: 'number' },
+                  },
+                  required: ['a', 'b'],
+                },
+              },
+            },
+          ],
+          functionToolCallbacks: {
+            addNumbers: (parametersJsonString) => {
+              const { a, b } = JSON.parse(parametersJsonString);
+              return Promise.resolve(JSON.stringify(a + b));
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Add 5 and 6');
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('11');
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
+    it('should handle multiple function tool calls', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'addNumbers',
+                        arguments: '{"a":5,"b":6}',
+                      },
+                    },
+                    {
+                      function: {
+                        name: 'multiplyNumbers',
+                        arguments: '{"x":2,"y":3}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 15, prompt_tokens: 7, completion_tokens: 8 },
+          }),
+        ),
+        ok: true,
+      };
+      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'addNumbers',
+                description: 'Add two numbers together',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    a: { type: 'number' },
+                    b: { type: 'number' },
+                  },
+                  required: ['a', 'b'],
+                },
+              },
+            },
+            {
+              type: 'function',
+              function: {
+                name: 'multiplyNumbers',
+                description: 'Multiply two numbers',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    x: { type: 'number' },
+                    y: { type: 'number' },
+                  },
+                  required: ['x', 'y'],
+                },
+              },
+            },
+          ],
+          functionToolCallbacks: {
+            addNumbers: (parametersJsonString) => {
+              const { a, b } = JSON.parse(parametersJsonString);
+              return Promise.resolve(JSON.stringify(a + b));
+            },
+            multiplyNumbers: (parametersJsonString) => {
+              const { x, y } = JSON.parse(parametersJsonString);
+              return Promise.resolve(JSON.stringify(x * y));
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Add 5 and 6, then multiply 2 and 3');
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('11\n6');
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8 });
+    });
+
+    it('should handle errors in function tool callbacks', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  function_call: {
+                    name: 'errorFunction',
+                    arguments: '{}',
+                  },
+                },
+              },
+            ],
+            usage: { total_tokens: 5, prompt_tokens: 2, completion_tokens: 3 },
+          }),
+        ),
+        ok: true,
+      };
+      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'errorFunction',
+                description: 'A function that always throws an error',
+                parameters: {
+                  type: 'object',
+                  properties: {},
+                },
+              },
+            },
+          ],
+          functionToolCallbacks: {
+            errorFunction: () => {
+              throw new Error('Test error');
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Call the error function');
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(result.output).toEqual({ arguments: '{}', name: 'errorFunction' });
+      expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
+    });
+  });
 });
 
 describe('loadApiProvider', () => {
