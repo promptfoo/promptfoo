@@ -554,7 +554,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative:tree',
         jsonOnly: true,
-        preferSmallModel: true,
+        preferSmallModel: false,
       });
     } else {
       redteamProvider = await loadRedteamProvider({

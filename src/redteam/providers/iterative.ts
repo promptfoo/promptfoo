@@ -192,7 +192,7 @@ class RedteamIterativeProvider implements ApiProvider {
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
         jsonOnly: true,
-        preferSmallModel: true,
+        preferSmallModel: false,
       });
     } else {
       this.redteamProvider = config.redteamProvider;
