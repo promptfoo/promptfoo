@@ -49,7 +49,7 @@ docker build -t promptfoo .
 Launch the Docker container using this command:
 
 ```sh
-docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo-ui
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo
 ```
 
 Key points:
