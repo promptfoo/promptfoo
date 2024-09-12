@@ -67,8 +67,8 @@ export async function readStandaloneTestsFile(
 ): Promise<TestCase[]> {
   // This function is confusingly named - it reads a CSV, JSON, or YAML file of
   // TESTS or test equivalents.
-  const resolvedVarsPath = path.resolve(basePath, varsPath);
-  const fileExtension = parsePath(varsPath).ext.slice(1);
+  const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
+  const fileExtension = parsePath(resolvedVarsPath).ext.slice(1);
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {

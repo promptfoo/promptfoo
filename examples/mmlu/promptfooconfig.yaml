@@ -1,0 +1,21 @@
+providers:
+  - id: openai:gpt-4o-mini
+  - id: openai:o1-preview
+  - id: openai:o1-mini
+
+prompts:
+  - |
+    You are an expert in {{subject}}. Answer the following question:
+    {{question}}
+
+    Choose the correct answer from the following options:
+    {{choices}}
+
+    Only output the index of the correct answer. Do not state any other text in your response.
+
+tests: file://mmlu_data.csv
+
+defaultTest:
+  assert:
+    - type: equals
+      value: '{{answer}}'
