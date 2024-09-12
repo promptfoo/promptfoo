@@ -1,6 +1,6 @@
 import { URL } from 'url';
 import { getAuthor } from './accounts';
-import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL } from './constants';
+import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { fetchWithProxy } from './fetch';
 import logger from './logger';
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
@@ -60,7 +60,10 @@ export async function createShareableUrl(
   }
   const appBaseUrl =
     typeof config.sharing === 'object' ? config.sharing.appBaseUrl : SHARE_VIEW_BASE_URL;
-  const fullUrl = `${appBaseUrl}/eval/${responseJson.id}`;
+  const fullUrl =
+    SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
+      ? `${appBaseUrl}/eval/${responseJson.id}`
+      : `${appBaseUrl}/eval/?evalId=${responseJson.id}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }
