@@ -241,7 +241,7 @@ npx promptfoo eval -p prompts.txt -r openai:gpt-4o openai:gpt-4o-mini -o output.
 
 Produces this HTML table:
 
-![Side-by-side evaluation of LLM model quality, gpt4o vs gpt4o-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+![Side-by-side evaluation of LLM model quality, gpt-4o vs gpt-4o-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
 ## Usage (node package)
 
