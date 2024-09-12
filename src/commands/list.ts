@@ -15,7 +15,6 @@ export function listCommand(program: Command) {
     .option('-n <limit>', 'Number of evals to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list evals',
       });
@@ -47,7 +46,6 @@ export function listCommand(program: Command) {
     .option('-n <limit>', 'Number of prompts to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list prompts',
       });
@@ -80,7 +78,6 @@ export function listCommand(program: Command) {
     .option('-n <limit>', 'Number of datasets to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list datasets',
       });

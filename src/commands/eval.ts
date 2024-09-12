@@ -170,8 +170,6 @@ export async function doEval(
       logger.info(chalk.yellow(`Writing output to ${outputPath}`));
     }
 
-    telemetry.maybeShowNotice();
-
     printBorder();
     if (cmdObj.write) {
       if (shareableUrl) {

@@ -96,7 +96,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   if (options.cache === false || (options.repeat && options.repeat > 1)) {
     cache.disableCache();
   }
-  telemetry.maybeShowNotice();
 
   // Run the eval!
   const ret = await doEvaluate(constructedTestSuite, {

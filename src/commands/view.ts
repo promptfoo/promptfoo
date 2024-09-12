@@ -26,7 +26,6 @@ export function viewCommand(program: Command) {
         } & Command,
       ) => {
         setupEnv(cmdObj.envFile);
-        telemetry.maybeShowNotice();
         telemetry.record('command_used', {
           name: 'view',
         });
