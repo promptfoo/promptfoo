@@ -3,6 +3,7 @@
   "editor.formatOnSave": true,
   "cSpell.words": [
     "apidevtools",
+    "chatcompletion",
     "cybercrime",
     "Dedup",
     "deduped",
@@ -21,7 +22,8 @@
     "redteam",
     "TEMPLATING",
     "TESTCASE",
-    "unindented"
+    "unindented",
+    "uuidv"
   ],
   "jest.jestCommandLine": "npm run test --"
 }
