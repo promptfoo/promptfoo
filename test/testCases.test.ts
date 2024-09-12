@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../src/csv';
+import { fetchCsvFromGoogleSheet } from '../src/googleSheets';
 import { loadApiProvider } from '../src/providers';
 import {
   generatePersonasPrompt,
@@ -52,46 +53,97 @@ describe('readStandaloneTestsFile', () => {
     jest.clearAllMocks();
   });
 
-  it('readStandaloneTestsFile with CSV input', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValue('var1,var2\nvalue1,value2\nvalue3,value4');
-    const varsPath = 'vars.csv';
-
-    const result = await readStandaloneTestsFile(varsPath);
-
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result).toHaveLength(2);
-    expect(result[0].vars).toEqual({ var1: 'value1', var2: 'value2' });
-    expect(result[1].vars).toEqual({ var1: 'value3', var2: 'value4' });
-  });
-
-  it('readStandaloneTestsFile with JSON input', async () => {
+  it('should read CSV file and return test cases', async () => {
     jest
       .mocked(fs.readFileSync)
-      .mockReturnValue(
-        '[{"var1": "value1", "var2": "value2"}, {"var3": "value3", "var4": "value4"}]',
-      );
-    const varsPath = 'vars.json';
+      .mockReturnValue('var1,var2,__expected\nvalue1,value2,expected1\nvalue3,value4,expected2');
+    const result = await readStandaloneTestsFile('test.csv');
 
-    const result = await readStandaloneTestsFile(varsPath);
-
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result).toHaveLength(2);
-    expect(result[0].vars).toEqual({ var1: 'value1', var2: 'value2' });
-    expect(result[1].vars).toEqual({ var3: 'value3', var4: 'value4' });
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'), 'utf-8');
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
   });
 
-  it('readStandaloneTestsFile with YAML input', async () => {
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValue('- var1: value1\n  var2: value2\n- var3: value3\n  var4: value4');
-    const varsPath = 'vars.yaml';
+  it('should read JSON file and return test cases', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify([
+        { var1: 'value1', var2: 'value2' },
+        { var1: 'value3', var2: 'value4' },
+      ]),
+    );
+    const result = await readStandaloneTestsFile('test.json');
 
-    const result = await readStandaloneTestsFile(varsPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.json'), 'utf-8');
+    expect(result).toEqual([
+      { assert: [], description: 'Row #1', options: {}, vars: { var1: 'value1', var2: 'value2' } },
+      { assert: [], description: 'Row #2', options: {}, vars: { var1: 'value3', var2: 'value4' } },
+    ]);
+  });
 
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result).toHaveLength(2);
-    expect(result[0].vars).toEqual({ var1: 'value1', var2: 'value2' });
-    expect(result[1].vars).toEqual({ var3: 'value3', var4: 'value4' });
+  it('should read YAML file and return test cases', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue(dedent`
+      - var1: value1
+        var2: value2
+      - var1: value3
+        var2: value4
+    `);
+    const result = await readStandaloneTestsFile('test.yaml');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.yaml'), 'utf-8');
+    expect(result).toEqual([
+      { assert: [], description: 'Row #1', options: {}, vars: { var1: 'value1', var2: 'value2' } },
+      { assert: [], description: 'Row #2', options: {}, vars: { var1: 'value3', var2: 'value4' } },
+    ]);
+  });
+
+  it('should read Google Sheets and return test cases', async () => {
+    const mockFetchCsvFromGoogleSheet = jest.mocked(fetchCsvFromGoogleSheet);
+    mockFetchCsvFromGoogleSheet.mockResolvedValue([
+      { var1: 'value1', var2: 'value2', __expected: 'expected1' },
+      { var1: 'value3', var2: 'value4', __expected: 'expected2' },
+    ]);
+    const result = await readStandaloneTestsFile('https://docs.google.com/spreadsheets/d/example');
+
+    expect(mockFetchCsvFromGoogleSheet).toHaveBeenCalledWith(
+      'https://docs.google.com/spreadsheets/d/example',
+    );
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
+  });
+
+  it('should handle file:// prefix in file path', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('var1,var2\nvalue1,value2');
+    await readStandaloneTestsFile('file://test.csv');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.not.stringContaining('file://'), 'utf-8');
+  });
+
+  it('should return an empty array for unsupported file types', async () => {
+    await expect(readStandaloneTestsFile('test.txt')).resolves.toEqual([]);
   });
 });
 
