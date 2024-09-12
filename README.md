@@ -97,7 +97,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - ollama:llama2:70b
+  - ollama:llama3.1:70b
 tests:
   - description: 'Test translation to French'
     vars:
@@ -415,14 +415,6 @@ npx path/to/promptfoo-source eval
 ```
 
 The web UI is located in `src/web/nextui`. To run it in dev mode, run `npm run local:web`. This will host the web UI at http://localhost:3000. The web UI expects `promptfoo view` to be running separately.
-
-In order to build the next.js app, you'll have to set some placeholder envars (it is _not_ necessary to sign up for a supabase account). You can edit `src/web/nextui/.env` to include the following placeholders:
-
-```sh
-DATABASE_URL="postgresql://..."
-
-NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE=1
-```
 
 Then run:
 
