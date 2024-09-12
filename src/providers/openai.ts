@@ -23,6 +23,20 @@ import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 // see https://platform.openai.com/docs/models
 const OPENAI_CHAT_MODELS = [
+  ...['o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
+    id: model,
+    cost: {
+      input: 15 / 1e6,
+      output: 60 / 1e6,
+    },
+  })),
+  ...['o1-mini', 'o1-mini-2024-09-12'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6,
+      output: 12 / 1e6,
+    },
+  })),
   ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
     id: model,
     cost: {
