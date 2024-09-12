@@ -20,6 +20,7 @@ import { showCommand } from './commands/show';
 import { versionCommand } from './commands/version';
 import { viewCommand } from './commands/view';
 import { maybeReadConfig } from './config';
+import { runDbMigrations } from './migrate';
 import { type EvaluateOptions, type UnifiedConfig } from './types';
 import { checkForUpdates } from './updates';
 
@@ -48,6 +49,7 @@ export async function loadDefaultConfig(): Promise<{
 
 async function main() {
   await checkForUpdates();
+  await runDbMigrations();
 
   const program = new Command();
 
