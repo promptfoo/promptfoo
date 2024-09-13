@@ -11,9 +11,9 @@ export function cacheCommand(program: Command) {
     .description('Manage cache')
     .command('clear')
     .description('Clear cache')
-    .option('--env-file <path>', 'Path to .env file')
-    .action(async (cmdObj: { envFile?: string }) => {
-      setupEnv(cmdObj.envFile);
+    .option('--env-file, --env-path <path>', 'Path to .env file')
+    .action(async (cmdObj: { envPath?: string }) => {
+      setupEnv(cmdObj.envPath);
       logger.info('Clearing cache...');
 
       const cuteMessages = [

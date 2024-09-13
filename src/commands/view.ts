@@ -12,7 +12,7 @@ export function viewCommand(program: Command) {
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
-    .option('--env-file <path>', 'Path to .env file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(
       async (
         directory: string | undefined,
@@ -21,11 +21,11 @@ export function viewCommand(program: Command) {
           yes: boolean;
           no: boolean;
           apiBaseUrl?: string;
-          envFile?: string;
+          envPath?: string;
           filterDescription?: string;
         } & Command,
       ) => {
-        setupEnv(cmdObj.envFile);
+        setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {
           name: 'view',
         });

@@ -19,7 +19,7 @@ export function shareCommand(program: Command) {
     .command('share [evalId]')
     .description('Create a shareable URL of an eval (defaults to most recent)')
     .option('-y, --yes', 'Skip confirmation')
-    .option('--env-file <path>', 'Path to .env file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '--show-auth',
       'Show username/password authentication information in the URL if exists',
@@ -28,9 +28,9 @@ export function shareCommand(program: Command) {
     .action(
       async (
         evalId: string | undefined,
-        cmdObj: { yes: boolean; envFile?: string; showAuth: boolean } & Command,
+        cmdObj: { yes: boolean; envPath?: string; showAuth: boolean } & Command,
       ) => {
-        setupEnv(cmdObj.envFile);
+        setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {
           name: 'share',
         });

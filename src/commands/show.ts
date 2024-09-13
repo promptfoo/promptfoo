@@ -141,7 +141,7 @@ export async function showCommand(program: Command) {
   const showCommand = program
     .command('show <id>')
     .description('Show details of a specific resource')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (id: string, cmdObj: { envPath?: string }) => {
       setupEnv(cmdObj.envPath);
       telemetry.record('command_used', {

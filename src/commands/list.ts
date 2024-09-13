@@ -11,7 +11,7 @@ export function listCommand(program: Command) {
   listCommand
     .command('evals')
     .description('List evaluations.')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of evals to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
@@ -42,7 +42,7 @@ export function listCommand(program: Command) {
   listCommand
     .command('prompts')
     .description('List prompts used')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of prompts to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
@@ -74,7 +74,7 @@ export function listCommand(program: Command) {
   listCommand
     .command('datasets')
     .description('List datasets used')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of datasets to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);

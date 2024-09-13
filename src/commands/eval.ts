@@ -40,7 +40,7 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
 ) {
-  setupEnv(cmdObj.envFile);
+  setupEnv(cmdObj.envPath);
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
@@ -384,7 +384,7 @@ export function evalCommand(
     )
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('-w, --watch', 'Watch for changes in config and re-run')
-    .option('--env-file <path>', 'Path to .env file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')
     .option(
       '--filter-pattern <pattern>',
