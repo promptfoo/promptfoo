@@ -13,8 +13,6 @@ import { resolveConfigs } from '../../config';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
-import type { RedteamStrategyObject, SynthesizeOptions } from '../../types/redteam';
-import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../../types/redteam';
 import { printBorder, setupEnv } from '../../util';
 import { writePromptfooConfig } from '../../util/config';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
@@ -25,6 +23,8 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../constants';
+import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
+import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
 import { shouldGenerateRemote } from '../util';
 
 export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
