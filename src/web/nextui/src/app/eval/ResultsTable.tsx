@@ -616,12 +616,13 @@ function ResultsTable({
       pagination,
     },
   });
+
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
     const rowId = params['row-id'];
 
     if (rowId) {
-      const rowIndex = Number(rowId.split('-').pop());
+      const rowIndex = Number(rowId.split('-').pop()); // Extract the row index from the rowId
 
       // Calculate the page number where the row is located
       const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
@@ -637,7 +638,7 @@ function ResultsTable({
 
       // Wait for the correct page to load and scroll to the correct row
       const scrollToRow = () => {
-        const globalRowIndex = rowIndex % pagination.pageSize;
+        const globalRowIndex = rowIndex % pagination.pageSize; // Calculate the local row index on the page
         const rowElement = document.querySelector(`#row-${globalRowIndex}`);
 
         if (rowElement) {
@@ -666,7 +667,8 @@ function ResultsTable({
       // Cleanup the observer when the component unmounts
       return () => observer.disconnect();
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable.getPageCount()]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable]);
+
   return (
     <div>
       <table
