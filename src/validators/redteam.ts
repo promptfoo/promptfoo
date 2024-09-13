@@ -13,7 +13,7 @@ import {
   ALIASED_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
 } from '../redteam/constants';
-import type { RedteamFileConfig, RedteamPluginObject } from '../types/redteam';
+import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
 import { ProviderSchema } from '../validators/providers';
 
 /**
