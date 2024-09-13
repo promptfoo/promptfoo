@@ -246,15 +246,17 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
-  const seenPrompts = new Set<string | Prompt>();
+  const seenPrompts = new Map<string, Prompt>();
   for (const [idx, config] of configs.entries()) {
     const parsedPrompts = await readPrompts(config.prompts, path.dirname(configPaths[idx]));
     for (const prompt of parsedPrompts) {
-      seenPrompts.add(prompt as Prompt);
-      logger.warn(`Prompt ${prompt.label} is duplicated in config ${configPaths[idx]}`);
+      const key = typeof prompt === 'string' ? prompt : prompt.raw;
+      if (!seenPrompts.has(key)) {
+        seenPrompts.set(key, prompt as Prompt);
+      }
     }
   }
-  const prompts: UnifiedConfig['prompts'] = Array.from(seenPrompts);
+  const prompts: UnifiedConfig['prompts'] = Array.from(seenPrompts.values());
 
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {

@@ -286,7 +286,7 @@ describe('readConfigs', () => {
     );
   });
 
-  fit('de-duplicates prompts when reading configs', async () => {
+  it('de-duplicates prompts when reading configs', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
     jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
