@@ -154,7 +154,7 @@ export async function doEval(
 
     await migrateResultsFromFileSystemToDatabase();
 
-    if (getEnvBool('PROMPTFOO_LIGHTWEIGHT_RESLUTS')) {
+    if (getEnvBool('PROMPTFOO_LIGHTWEIGHT_RESULTS')) {
       config = {};
       summary.results = [];
       summary.table.head.vars = [];
