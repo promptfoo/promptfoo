@@ -14,15 +14,29 @@ Almost every LLM app has potential issues with generation of off-topic, inapprop
 
 The purpose of red teaming is to identify and address these vulnerabilities before they make it to production.
 
-In order to do this, we need to systematically generate a wide range of adversarial inputs and evaluate the LLM's responses.
+In order to do this, we need to systematically generate a wide range of adversarial inputs and evaluate the LLM's responses. This process is known as "red teaming".
+
+By systematically probing the LLM application, you can produce a report that quantifies the risk of misuse and provides suggestions for mitigation.
 
 :::tip
 Ready to run a red team? Jump to **[Quickstart](/docs/red-team/quickstart/)**.
 :::
 
-## How generative AI red teaming works
+![llm red team report](/img/riskreport-1@2x.png)
 
-The process of red teaming gen AI generally requires some degree of automation for a comprehensive evaluation. This is because LLMs have such a wide attack surface and are stochastic in nature (i.e. they are not consistent from one generation to the next).
+## Red teaming is a core requirement of AI security
+
+Red teaming is different from other AI security approaches because it provides a quantitative measure of risk _before_ deployment.
+
+By running thousands of probes and evaluating the AI's performance, developers can make informed decisions about acceptable risk levels in offline testbeds. Many organizations build this into their development cycle and into processes like CI/CD.
+
+This is an emerging field and new standards are emerging around the world, ranging from [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) to [NIST's AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) and the [EU AI Act](https://www.europarl.europa.eu/topics/en/article/20230601STO93804/eu-ai-act-first-regulation-on-artificial-intelligence).
+
+From what we've seen so far, most regulations/standards support a systematic benchmarking/red teaming process that quantifies risk via testing prior to deployment.
+
+## How LLM red teaming works
+
+The process of red teaming LLMs generally requires some degree of automation for a comprehensive evaluation. This is because LLMs have such a wide attack surface and are stochastic in nature (i.e. they are not consistent from one generation to the next).
 
 A systematic approach looks like this:
 
@@ -35,11 +49,35 @@ Once a process is set up, it can be applied in two primary ways:
 - **One-off runs**: Generate a comprehensive report that allows you to examine vulnerabilities and suggested mitigations.
 - **CI/CD integration**: Continuously monitor for vulnerabilities in your deployment pipeline, ensuring ongoing safety as your application evolves.
 
-By systematically probing the LLM application, the end result is a report that quantifies the risk of misuse and provides suggestions for mitigation:
+The magic moment for managing AI risk usually comes after an organization is able to set up some continuous measurement of AI risk: whether through CI/CD, internal requirements, or some other form of scheduled runs.
 
-![llm red team report](/img/riskreport-1@2x.png)
+![llm security continuous monitoring](/img/continuous-monitoring.png)
 
-### White box vs black box testing
+## Model vs application layer threats
+
+In general, threats fall into two main categories: model ("foundation") or application layer. While there is some overlap, it helps to be explicit in your red teaming goals which side you want to test.
+
+When research labs like OpenAI or Anthropic train a new model, they have internal (and external) testers stress-test the chat-tuned model for safety and research purposes. Model-layer vulnerabilities include things like ability to produce:
+
+- Prompt injections and jailbreaks
+- Hate speech, bias, toxicity, and other harmful outputs
+- Hallucinations
+- Copyright violations
+- Specialized advice (medical, financial)
+- Results that exhibit excessive agency or exploit overreliance
+- PII leaks (from training data)
+
+On the other hand, there are classes of vulnerabilities that only manifest once you've connected the model to a larger application environment. These include:
+
+- Indirect prompt injections
+- PII leaks (from context, e.g. in RAG architectures)
+- Tool-based vulnerabilities (e.g. unauthorized data access, privilege escalations, SQL injections - depending on API and database access)
+- Hijacking (aka off-topic use)
+- Data/chat exfiltration techniques (e.g. markdown images, link unfurling)
+
+Most applications do not require their own models, but rather integrate existing models into applications. For this reason, application layer threats are often the focus of red teaming efforts for LLM-based software, as they are likely to cause the greatest technical risks.
+
+## White box vs black box testing
 
 White box testing of LLMs involves having full access to the model's architecture, training data, and internal weights. This enables highly effective attack algorithms like [greedy coordinate descent](https://github.com/llm-attacks/llm-attacks) and [AutoDAN](https://arxiv.org/abs/2310.04451).
 
@@ -52,9 +90,11 @@ Both methods have their merits in red teaming:
 - White box testing can uncover deeper, structural vulnerabilities.
 - Black box testing is more representative of real-world attack scenarios and can reveal unexpected behaviors.
 
-For most developers and AppSec teams, black box testing is the most practical approach, especially because more easily incorporates the real world infra of RAGs and agents.
+For most developers and AppSec teams, black box testing is the more practical approach, because in most cases testers do not have access to model internals. A black-box approach more easily incorporates the real world infrastructure associated with RAGs and agents.
 
-### Examples
+![llm testing: white-box vs black-box](/img/docs/llm-testing-diagram.svg)
+
+## Examples
 
 Promptfoo is an open-source tool for red teaming LLMs that supports all the above. It can generate a wide range of adversarial inputs to test various vulnerabilities:
 
@@ -63,17 +103,9 @@ Promptfoo is an open-source tool for red teaming LLMs that supports all the abov
 - [Broken function-level authorization (BFLA)](/docs/red-team/plugins/bfla/#how-it-works): Prompts attempting to perform actions beyond authorized scope or role.
 - [Competitor endorsement](/docs/red-team/plugins/competitors/#example-test-cases): Scenarios where AI might inadvertently promote competing products or services.
 
-See [LLM vulnerability types](/docs/red-team/llm-vulnerability-types/) for more info.
+See [LLM vulnerability types](/docs/red-team/llm-vulnerability-types/) for more info on model and application vulnerabilities.
 
-## Red teaming is a core requirement of AI security
-
-What's the point of it all? Red teaming is different from other AI security approaches because it provides a quantitative measure of risk _before_ deployment.
-
-By running thousands of probes and evaluating the AI's performance, developers can make informed decisions about acceptable risk levels in offline testbeds. Many organizations build this into their development cycle and into processes like CI/CD.
-
-This is an emerging field and new standards are emerging around the world, ranging from OWASP LLM Top 10 to NIST's AI Risk Management Framework and the EU AI Act. From what we've seen so far, most regulations/standards support a systematic benchmarking/red teaming process that quantifies risk via testing prior to deployment.
-
-### Best practices for LLM red teaming
+## Best practices
 
 We recommend implementing a systematic process:
 
