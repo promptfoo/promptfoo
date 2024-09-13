@@ -5,7 +5,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { getApiBaseUrl } from '@/api';
 import { useToast } from '@/app/contexts/ToastContext';
@@ -291,6 +291,9 @@ function ResultsTable({
   ]);
 
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
+  const parseQueryParams = (queryString: string) => {
+    return Object.fromEntries(new URLSearchParams(queryString));
+  };
 
   React.useEffect(() => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
@@ -613,7 +616,57 @@ function ResultsTable({
       pagination,
     },
   });
+  useEffect(() => {
+    const params = parseQueryParams(window.location.search);
+    const rowId = params['row-id'];
 
+    if (rowId) {
+      const rowIndex = Number(rowId.split('-').pop());
+
+      // Calculate the page number where the row is located
+      const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
+
+      // Make sure the pageIndex doesn't exceed the total number of pages
+      const maxPageIndex = reactTable.getPageCount() - 1;
+      const safeRowPageIndex = Math.min(rowPageIndex, maxPageIndex);
+
+      // If the current page isn't the correct page, set the pagination
+      if (pagination.pageIndex !== safeRowPageIndex) {
+        setPagination((prev) => ({ ...prev, pageIndex: safeRowPageIndex }));
+      }
+
+      // Wait for the correct page to load and scroll to the correct row
+      const scrollToRow = () => {
+        const globalRowIndex = rowIndex % pagination.pageSize;
+        const rowElement = document.querySelector(`#row-${globalRowIndex}`);
+
+        if (rowElement) {
+          rowElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          rowElement.classList.add('highlight');
+          setTimeout(() => {
+            rowElement.classList.remove('highlight');
+          }, 2000);
+        }
+      };
+
+      // Observe DOM changes and trigger scrolling once the page is ready
+      const observer = new MutationObserver(() => {
+        const rowElement = document.querySelector(`#row-${rowIndex % pagination.pageSize}`);
+        if (rowElement) {
+          scrollToRow();
+          observer.disconnect(); // Disconnect the observer once scrolling is done
+        }
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+
+      // Cleanup the observer when the component unmounts
+      return () => observer.disconnect();
+    }
+  }, [pagination.pageIndex, pagination.pageSize, reactTable.getPageCount()]);
   return (
     <div>
       <table
@@ -651,7 +704,7 @@ function ResultsTable({
             let colBorderDrawn = false;
 
             return (
-              <tr key={row.id} id={`row-${row.id}`}>
+              <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
                 {row.getVisibleCells().map((cell) => {
                   const isMetadataCol =
                     cell.column.id.startsWith('Variable') || cell.column.id === 'description';
