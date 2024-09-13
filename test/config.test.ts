@@ -56,7 +56,6 @@ jest.mock('../src/testCases', () => {
   };
 });
 
-// At the top of the file, update the mock
 jest.mock('../src/prompts', () => ({
   ...jest.requireActual('../src/prompts'),
   readPrompts: jest.fn(),
