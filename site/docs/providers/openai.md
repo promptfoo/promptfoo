@@ -73,7 +73,7 @@ Supported parameters include:
 | `organization`          | Your OpenAI organization key.                                                                                                                                   |
 | `passthrough`           | Additional parameters to pass through to the API.                                                                                                               |
 | `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                   |
-| `response_format`       | Response format restrictions.                                                                                                                                   |
+| `response_format`       | Specifies the desired output format, including `json_object` and `json_schema`                                                                                  |
 | `seed`                  | Seed used for deterministic output.                                                                                                                             |
 | `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                     |
 | `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic. |
