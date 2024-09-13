@@ -785,6 +785,18 @@ export async function runAssertion({
         return ret;
       }
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
+
+      /**
+       * Removes trailing newline from the rendered value.
+       * This is necessary for handling multi-line string literals in YAML
+       * that are defined on a single line in the YAML file.
+       *
+       * @example
+       * value: |
+       *   output === 'true'
+       */
+      renderedValue = renderedValue.trimEnd();
+
       let result: boolean | number | GradingResult;
       if (typeof valueFromScript === 'undefined') {
         const functionBody = renderedValue.includes('\n')

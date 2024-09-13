@@ -69,7 +69,8 @@ tests:
       - type: is-json
         metric: ValidJSON
       - type: javascript
-        value: output.category === 'billing'
+        value: |
+          output.category === 'billing'
         metric: CategoryAccuracy
       - type: javascript
         value: output.sentiment === 'negative'
@@ -138,7 +139,8 @@ tests:
         value: output.sentiment === 'negative'
         metric: SentimentAccuracy
       - type: javascript
-        value: output.urgency === '5'
+        value: |
+          output.urgency === '5'
         metric: UrgencyAccuracy
       - type: javascript
         value: output.suggested_actions.some(action => action.priority === 'high')
