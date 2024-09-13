@@ -413,8 +413,6 @@ export function evalCommand(
     )
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
     .action((opts) => {
-      logger.warn(JSON.stringify(opts));
-
       if (opts.interactiveProviders) {
         logger.warn(
           chalk.yellow(dedent`
