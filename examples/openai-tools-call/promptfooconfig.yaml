@@ -1,156 +1,69 @@
 prompts:
-  - 'Analyze the following customer support query: "{{query}}"'
+  - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: openai:chat:gpt-4o-2024-08-06
+  - id: openai:chat:gpt-4o-mini
     config:
-      response_format:
-        type: json_schema
-        json_schema:
-          name: customer_support_analysis
-          strict: true
-          schema:
-            type: object
-            properties:
-              query_summary:
-                type: string
-                description: "A brief summary of the customer's query"
-              category:
-                type: string
-                enum:
-                  [
-                    'billing',
-                    'technical_issue',
-                    'product_inquiry',
-                    'complaint',
-                    'feature_request',
-                    'other',
-                  ]
-                description: "The main category of the customer's query"
-              sentiment:
-                type: string
-                enum: ['positive', 'neutral', 'negative']
-                description: "The overall sentiment of the customer's query"
-              urgency:
-                type: string
-                enum: ['1', '2', '3', '4', '5']
-                description: 'The urgency level of the query, where 1 is lowest and 5 is highest'
-              suggested_actions:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    action:
-                      type: string
-                      description: 'A specific action to be taken'
-                    priority:
-                      type: string
-                      enum: ['low', 'medium', 'high']
-                  required: ['action', 'priority']
-                  additionalProperties: false
-              estimated_resolution_time:
-                type: string
-                description: "Estimated time to resolve the query (e.g., '2 hours', '1 day')"
-            required:
-              [
-                'query_summary',
-                'category',
-                'sentiment',
-                'urgency',
-                'suggested_actions',
-                'estimated_resolution_time',
-              ]
-            additionalProperties: false
+      tools:
+        [
+          {
+            'type': 'function',
+            'function':
+              {
+                'name': 'get_current_weather',
+                'description': 'Get the current weather in a given location',
+                'parameters':
+                  {
+                    'type': 'object',
+                    'properties':
+                      {
+                        'location':
+                          {
+                            'type': 'string',
+                            'description': 'The city and state, e.g. San Francisco, CA',
+                          },
+                        'unit': { 'type': 'string', 'enum': ['celsius', 'fahrenheit'] },
+                      },
+                    'required': ['location'],
+                  },
+              },
+          },
+        ]
 
 tests:
   - vars:
-      query: "I've been charged twice for my subscription this month. Can you please refund the extra charge?"
+      city: Boston
     assert:
       - type: is-json
-        metric: ValidJSON
+      - type: is-valid-openai-tools-call
       - type: javascript
-        value: |
-          output.category === 'billing'
-        metric: CategoryAccuracy
+        value: output[0].function.name === 'get_current_weather'
       - type: javascript
-        value: output.sentiment === 'negative'
-        metric: SentimentAccuracy
-      - type: javascript
-        value: parseInt(output.urgency) >= 3
-        metric: UrgencyAccuracy
-      - type: javascript
-        value: output.suggested_actions.length > 0 && output.suggested_actions.some(action => action.action.toLowerCase().includes('refund'))
-        metric: ActionRelevance
-      - type: llm-rubric
-        value: "Does the query summary accurately reflect the customer's issue about being charged twice?"
-        metric: SummaryAccuracy
+        value: JSON.parse(output[0].function.arguments).location === 'Boston, MA'
 
   - vars:
-      query: "How do I change my password? I can't find the option in my account settings."
+      city: New York
+    options:
+      # Transform is a cleaner way to pick out specific properties.
+      # This transform returns only the 'name' property
+      transform: output[0].function.name
     assert:
-      - type: is-json
-        metric: ValidJSON
-      - type: javascript
-        value: output.category === 'technical_issue'
-        metric: CategoryAccuracy
-      - type: javascript
-        value: output.sentiment === 'neutral'
-        metric: SentimentAccuracy
-      - type: javascript
-        value: parseInt(output.urgency) <= 3
-        metric: UrgencyAccuracy
-      - type: javascript
-        value: output.suggested_actions.some(action => action.action.toLowerCase().includes('password'))
-        metric: ActionRelevance
-      - type: llm-rubric
-        value: "Does the query summary accurately reflect the customer's issue about changing their password?"
-        metric: SummaryAccuracy
+      - type: equals
+        value: get_current_weather
 
   - vars:
-      query: "I love your new feature! It's made my work so much easier. Any plans to expand on it?"
+      city: Paris
     assert:
-      - type: is-json
-        metric: ValidJSON
-      - type: javascript
-        value: output.category === 'feature_request'
-        metric: CategoryAccuracy
-      - type: javascript
-        value: output.sentiment === 'positive'
-        metric: SentimentAccuracy
-      - type: javascript
-        value: parseInt(output.urgency) <= 2
-        metric: UrgencyAccuracy
-      - type: javascript
-        value: output.suggested_actions.some(action => action.action.toLowerCase().includes('feedback'))
-        metric: ActionRelevance
-      - type: llm-rubric
-        value: "Does the query summary accurately reflect the customer's positive feedback and interest in feature expansion?"
-        metric: SummaryAccuracy
+      - type: equals
+        value: get_current_weather
+        # Transform is a cleaner way to pick out specific properties.
+        # This transform returns only the 'name' property
+        transform: output[0].function.name
+      - type: similar
+        value: Paris, France
+        threshold: 0.5
+        # This transform returns only the parsed location argument.
+        transform: JSON.parse(output[0].function.arguments).location
 
   - vars:
-      query: "Your product is terrible and never works! I want a full refund and I'm cancelling my account!"
-    assert:
-      - type: is-json
-        metric: ValidJSON
-      - type: javascript
-        value: output.category === 'complaint'
-        metric: CategoryAccuracy
-      - type: javascript
-        value: output.sentiment === 'negative'
-        metric: SentimentAccuracy
-      - type: javascript
-        value: |
-          output.urgency === '5'
-        metric: UrgencyAccuracy
-      - type: javascript
-        value: output.suggested_actions.some(action => action.priority === 'high')
-        metric: ActionRelevance
-      - type: llm-rubric
-        value: "Does the query summary accurately reflect the customer's severe complaint and refund request?"
-        metric: SummaryAccuracy
-
-derivedMetrics:
-  - name: 'OverallAccuracy'
-    value: '(CategoryAccuracy + SentimentAccuracy + UrgencyAccuracy + ActionRelevance + SummaryAccuracy) / 5'
-  - name: 'ResponseQuality'
-    value: '(ValidJSON + OverallAccuracy) / 2'
+      city: Mars
