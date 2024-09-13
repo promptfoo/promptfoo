@@ -142,7 +142,6 @@ describe('readConfigs', () => {
       throw new Error('File does not exist');
     });
 
-    // Update the mock implementation
     jest
       .mocked(readPrompts)
       .mockImplementation((prompts) =>
@@ -304,7 +303,6 @@ describe('readConfigs', () => {
       return Buffer.from('');
     });
 
-    // Update the mock implementation
     jest.mocked(readPrompts).mockImplementation((prompts) =>
       Promise.resolve(
         Array.isArray(prompts)
@@ -726,7 +724,6 @@ describe('resolveConfigs', () => {
 
     jest.mocked(globSync).mockReturnValue(['config.json']);
 
-    // Update the mock implementation
     jest
       .mocked(readPrompts)
       .mockImplementation((prompts) =>
