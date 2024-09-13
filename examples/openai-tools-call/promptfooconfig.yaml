@@ -2,68 +2,58 @@ prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4o-2024-08-06
     config:
-      tools:
-        [
-          {
-            'type': 'function',
-            'function':
-              {
-                'name': 'get_current_weather',
-                'description': 'Get the current weather in a given location',
-                'parameters':
-                  {
-                    'type': 'object',
-                    'properties':
-                      {
-                        'location':
-                          {
-                            'type': 'string',
-                            'description': 'The city and state, e.g. San Francisco, CA',
-                          },
-                        'unit': { 'type': 'string', 'enum': ['celsius', 'fahrenheit'] },
-                      },
-                    'required': ['location'],
-                  },
-              },
-          },
-        ]
+      response_format:
+        type: json_schema
+        json_schema:
+          name: weather_response
+          strict: true
+          schema:
+            type: object
+            properties:
+              temperature:
+                type: number
+              description:
+                type: string
+              unit:
+                type: string
+                enum: [celsius, fahrenheit]
+            required: [temperature, description, unit]
+            additionalProperties: false
 
 tests:
   - vars:
       city: Boston
     assert:
       - type: is-json
-      - type: is-valid-openai-tools-call
+        value:
+          required:
+            - 'temperature'
+            - 'description'
+            - 'unit'
+          type: object
+          properties:
+            temperature:
+              type: number
+            description:
+              type: string
+            unit:
+              type: string
+              enum: [celsius, fahrenheit]
       - type: javascript
-        value: output[0].function.name === 'get_current_weather'
-      - type: javascript
-        value: JSON.parse(output[0].function.arguments).location === 'Boston, MA'
+        value: typeof output.temperature === 'number' && typeof output.description === 'string' && ['celsius', 'fahrenheit'].includes(output.unit)
 
   - vars:
       city: New York
-    options:
-      # Transform is a cleaner way to pick out specific properties.
-      # This transform returns only the 'name' property
-      transform: output[0].function.name
     assert:
-      - type: equals
-        value: get_current_weather
+      - type: is-json
+      - type: javascript
+        value: Object.keys(output).length === 3
 
   - vars:
       city: Paris
     assert:
-      - type: equals
-        value: get_current_weather
-        # Transform is a cleaner way to pick out specific properties.
-        # This transform returns only the 'name' property
-        transform: output[0].function.name
-      - type: similar
-        value: Paris, France
-        threshold: 0.5
-        # This transform returns only the parsed location argument.
-        transform: JSON.parse(output[0].function.arguments).location
-
-  - vars:
-      city: Mars
+      - type: is-json
+      - type: javascript
+        value: output.unit === 'celsius'
