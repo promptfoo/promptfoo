@@ -573,6 +573,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (message.refusal) {
         return {
           error: `Model refused to generate a response: ${message.refusal}`,
+          tokenUsage: getTokenUsage(data, cached),
         };
       }
 
