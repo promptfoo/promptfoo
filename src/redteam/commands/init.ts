@@ -15,6 +15,9 @@ import { getUserEmail, setUserEmail } from '../../accounts';
 import { getEnvString } from '../../envars';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig';
 import logger from '../../logger';
+import telemetry, { type EventValue } from '../../telemetry';
+import type { ProviderOptions, RedteamPluginObject } from '../../types';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
   type Plugin,
   ADDITIONAL_STRATEGIES,
@@ -23,10 +26,7 @@ import {
   DEFAULT_STRATEGIES,
   type Strategy,
   subCategoryDescriptions,
-} from '../../redteam/constants';
-import telemetry, { type EventValue } from '../../telemetry';
-import type { ProviderOptions, RedteamPluginObject } from '../../types';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+} from '../constants';
 import { doGenerateRedteam } from './generate';
 
 const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration

@@ -12,15 +12,15 @@ import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
-import { generateRedteamCommand } from './commands/redteam/generate';
-import { initCommand as redteamInitCommand } from './commands/redteam/init';
-import { pluginsCommand as redteamPluginsCommand } from './commands/redteam/plugins';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { versionCommand } from './commands/version';
 import { viewCommand } from './commands/view';
 import { maybeReadConfig } from './config';
 import { runDbMigrations } from './migrate';
+import { generateRedteamCommand } from './redteam/commands/generate';
+import { initCommand as redteamInitCommand } from './redteam/commands/init';
+import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { type EvaluateOptions, type UnifiedConfig } from './types';
 import { checkForUpdates } from './updates';
 
