@@ -1,5 +1,5 @@
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 prompts:
   - file://prompts/name_capitals_concise.txt
   - file://prompts/name_capitals_verbose.txt

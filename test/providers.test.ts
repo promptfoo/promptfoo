@@ -139,7 +139,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -162,7 +162,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
     );
@@ -193,7 +193,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -220,7 +220,7 @@ describe('call provider apis', () => {
       temperature: 3.1415926,
       max_tokens: 201,
     };
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', { config });
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', { config });
     const prompt = 'Test prompt';
     await provider.callApi(prompt);
 
@@ -266,7 +266,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -301,7 +301,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo', {
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { dataSources },
     });
     const result = await provider.callApi(
@@ -330,7 +330,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
