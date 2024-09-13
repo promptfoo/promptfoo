@@ -140,7 +140,23 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   function_call?: 'none' | 'auto' | { name: string };
   tools?: OpenAiTool[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
-  response_format?: { type: 'json_object' };
+  response_format?:
+    | {
+        type: 'json_object';
+      }
+    | {
+        type: 'json_schema';
+        json_schema: {
+          name: string;
+          strict: boolean;
+          schema: {
+            type: 'object';
+            properties: Record<string, any>;
+            required?: string[];
+            additionalProperties: false;
+          };
+        };
+      };
   stop?: string[];
   seed?: number;
   passthrough?: object;
@@ -554,6 +570,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     try {
       const message = data.choices[0].message;
+      if (message.refusal) {
+        return {
+          error: `Model refused to generate a response: ${message.refusal}`,
+          tokenUsage: getTokenUsage(data, cached),
+        };
+      }
+
       let output = '';
       if (message.content && (message.function_call || message.tool_calls)) {
         output = message;
@@ -565,6 +588,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
+
+      // Handle structured output
+      if (this.config.response_format?.type === 'json_schema' && typeof output === 'string') {
+        try {
+          output = JSON.parse(output);
+        } catch (error) {
+          logger.error(`Failed to parse JSON output: ${error}`);
+        }
+      }
 
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
