@@ -272,36 +272,33 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   };
 
   const seenPrompts = new Set<string | Prompt>();
-  const addSeenPrompt = (prompt: string | Prompt) => {
-    if (typeof prompt === 'string') {
-      seenPrompts.add(prompt);
-    } else if (typeof prompt === 'object' && prompt.id) {
-      seenPrompts.add(prompt);
-    } else {
-      throw new Error('Invalid prompt object');
-    }
-  };
-  configs.forEach((config, idx) => {
+  for (const [idx, config] of configs.entries()) {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
       const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
-      addSeenPrompt(absolutePrompt);
+      seenPrompts.add(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
-      config.prompts.forEach((prompt) => {
+      logger.warn(`config.prompts: ${JSON.stringify(config.prompts)}`);
+      const parsedPrompts = await readPrompts(config.prompts, path.dirname(configPaths[idx]));
+      logger.error(`parsedPrompts: ${JSON.stringify(parsedPrompts)}`);
+      for (const prompt of parsedPrompts) {
         invariant(
           typeof prompt === 'string' ||
             (typeof prompt === 'object' && typeof prompt.raw === 'string'),
           'Invalid prompt',
         );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
-      });
+        seenPrompts.add(prompt as Prompt);
+      }
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
-      invariant(typeof prompts === 'object', 'Cannot mix configs with map and array-type prompts');
+      invariant(
+        typeof prompts === 'object',
+        'Cannot mix configs with map and array-type prompts',
+      );
       prompts = { ...prompts, ...config.prompts };
     }
-  });
+  }
   if (Array.isArray(prompts)) {
     prompts.push(...Array.from(seenPrompts));
   }

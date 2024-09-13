@@ -140,7 +140,11 @@ describe('readConfigs', () => {
       description: 'test1',
       tags: { tag1: 'value1' },
       providers: ['provider1'],
-      prompts: ['prompt1'],
+      prompts: [{
+        raw: 'prompt1',
+        config: undefined, 
+        label: 'prompt1',
+      }],
       extensions: [],
       tests: ['test1'],
       scenarios: ['scenario1'],
@@ -169,7 +173,11 @@ describe('readConfigs', () => {
       description: 'test2',
       tags: {},
       providers: ['provider2'],
-      prompts: ['prompt2'],
+      prompts: [{
+        raw: 'prompt2',
+        config: undefined,
+        label: 'prompt2',
+      }],
       extensions: [],
       tests: ['test2'],
       scenarios: ['scenario2'],
@@ -200,7 +208,15 @@ describe('readConfigs', () => {
       description: 'test1, test2',
       tags: { tag1: 'value1' },
       providers: ['provider1', 'provider2'],
-      prompts: ['prompt1', 'prompt2'],
+      prompts: [{
+        raw: 'prompt1',
+        config: undefined,
+        label: 'prompt1',
+      }, {
+        raw: 'prompt2',
+        config: undefined,
+        label: 'prompt2',
+      }],
       tests: ['test1', 'test2'],
       extensions: [],
       scenarios: ['scenario1', 'scenario2'],
@@ -264,10 +280,16 @@ describe('readConfigs', () => {
     const result = await readConfigs(configPaths);
 
     expect(result.prompts).toEqual([
-      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt1.txt')}`,
-      'prompt2',
-      `file://${path.resolve(path.dirname(configPaths[1]), 'prompt3.txt')}`,
-      'prompt4',
+      {
+        raw: 'prompt1',
+        config: undefined,
+        label: 'prompt1',
+      },
+      {
+        raw: 'prompt2',
+        config: undefined,
+        label: 'prompt2',
+      },
     ]);
   });
 
