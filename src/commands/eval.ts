@@ -7,7 +7,7 @@ import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { resolveConfigs } from '../config';
-import { getEnvFloat, getEnvInt } from '../envars';
+import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { loadApiProvider } from '../providers';
@@ -154,7 +154,7 @@ export async function doEval(
 
     await migrateResultsFromFileSystemToDatabase();
 
-    if (process.env.PROMPTFOO_LIGHTWEIGHT_RESULTS) {
+    if (getEnvBool('PROMPTFOO_LIGHTWEIGHT_RESLUTS')) {
       config = {};
       summary.results = [];
       summary.table.head.vars = [];
