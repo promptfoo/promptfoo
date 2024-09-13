@@ -35,7 +35,7 @@ It works on the command line too:
 
 It also produces high-level vulnerability and risk reports:
 
-![gen ai red team](https://www.promptfoo.dev/assets/images/riskreport-1@2x-22b983ff8344206c7120824cd1adde6f.png)
+![gen ai red team](https://www.promptfoo.dev/img/riskreport-1@2x.png)
 
 ## Why choose promptfoo?
 
