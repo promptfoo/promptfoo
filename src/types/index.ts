@@ -1,6 +1,7 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
+import type { RedteamAssertionTypes, RedteamFileConfig } from '../redteam/types';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import {
   ApiProviderSchema,
@@ -11,12 +12,11 @@ import {
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
-import type { RedteamAssertionTypes, RedteamFileConfig } from './redteam';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
 export * from './prompts';
 export * from './providers';
-export * from './redteam';
+export * from '../redteam/types';
 export * from './shared';
 
 export const CommandLineOptionsSchema = z.object({
