@@ -156,6 +156,7 @@ export const CompletedPromptSchema = PromptSchema.extend({
       totalLatencyMs: z.number(),
       tokenUsage: TokenUsageSchema,
       namedScores: z.record(z.string(), z.number()),
+      namedScoresCount: z.record(z.string(), z.number()),
       cost: z.number(),
     })
     .optional(),

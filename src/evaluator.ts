@@ -402,6 +402,7 @@ class Evaluator {
               cached: 0,
             },
             namedScores: {},
+            namedScoresCount: {},
             cost: 0,
           },
         };
@@ -653,6 +654,7 @@ class Evaluator {
       metrics.score += row.score;
       for (const [key, value] of Object.entries(row.namedScores)) {
         metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+        metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
       }
 
       if (testSuite.derivedMetrics) {
