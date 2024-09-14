@@ -116,7 +116,10 @@ interface AnthropicMessageInput {
   cache_control?: { type: 'ephemeral' };
 }
 
-export function parseMessages(messages: string) {
+export function parseMessages(messages: string): {
+  system?: Anthropic.TextBlockParam[];
+  extractedMessages: Anthropic.MessageParam[];
+} {
   // We need to be able to handle the 'system' role prompts that
   // are in the style of OpenAI's chat prompts.
   // As a result, AnthropicMessageInput is the same as Anthropic.MessageParam
@@ -139,7 +142,13 @@ export function parseMessages(messages: string) {
         return { role, content };
       }
     });
-  return { system, extractedMessages };
+  if (extractedMessages.length === 0 && system) {
+    return {
+      system: undefined,
+      extractedMessages: [{ role: 'user', content: [{ type: 'text', text: system }] }],
+    };
+  }
+  return { system: system ? [{ type: 'text', text: system }] : undefined, extractedMessages };
 }
 
 export function calculateCost(
