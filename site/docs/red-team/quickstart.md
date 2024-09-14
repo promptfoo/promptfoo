@@ -14,7 +14,7 @@ This guide describes how to get started with Promptfoo's gen AI red teaming tool
 ## Prerequisites
 
 - Install [Node 18 or later](https://nodejs.org/en/download/package-manager/)
-- Set the `OPENAI_API_KEY` environment variable or [override the provider](/docs/red-team/configuration/#providers) with your preferred service.
+- Optional but recommended: Set the `OPENAI_API_KEY` environment variable or [override the provider](/docs/red-team/configuration/#providers) with your preferred service.
 
 ## Initialize the project
 
