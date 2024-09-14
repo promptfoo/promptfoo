@@ -68,7 +68,7 @@ interface AzureOpenAiCompletionOptions {
   passthrough?: object;
 }
 
-class AzureOpenAiGenericProvider implements ApiProvider {
+export class AzureOpenAiGenericProvider implements ApiProvider {
   deploymentName: string;
   apiHost?: string;
   apiBaseUrl?: string;
@@ -137,8 +137,15 @@ class AzureOpenAiGenericProvider implements ApiProvider {
     return this._cachedApiKey;
   }
 
-  getApiBaseUrl(): string {
-    return this.apiBaseUrl || `https://${this.apiHost}`;
+  getApiBaseUrl(): string | undefined {
+    if (this.apiBaseUrl) {
+      return this.apiBaseUrl.replace(/\/$/, '');
+    }
+    const host = this.apiHost?.replace(/^(https?:\/\/)/, '').replace(/\/$/, '');
+    if (!host) {
+      return undefined;
+    }
+    return `https://${host}`;
   }
 
   id(): string {
@@ -485,10 +492,11 @@ export class AzureOpenAiAssistantProvider extends AzureOpenAiGenericProvider {
 
     const { AssistantsClient, AzureKeyCredential } = await import('@azure/openai-assistants');
 
-    this.assistantsClient = new AssistantsClient(
-      this.getApiBaseUrl(),
-      new AzureKeyCredential(apiKey),
-    );
+    const apiBaseUrl = this.getApiBaseUrl();
+    if (!apiBaseUrl) {
+      throw new Error('Azure OpenAI API host must be set');
+    }
+    this.assistantsClient = new AssistantsClient(apiBaseUrl, new AzureKeyCredential(apiKey));
     this.initializationPromise = null;
   }
 

@@ -1,4 +1,5 @@
 import { AzureOpenAiCompletionProvider } from '../src/providers/azureopenai';
+import { AzureOpenAiGenericProvider } from '../src/providers/azureopenai';
 import { maybeEmitAzureOpenAiWarning } from '../src/providers/azureopenaiUtil';
 import { HuggingfaceTextGenerationProvider } from '../src/providers/huggingface';
 import { OpenAiCompletionProvider } from '../src/providers/openai';
@@ -98,5 +99,53 @@ describe('maybeEmitAzureOpenAiWarning', () => {
     ];
     const result = maybeEmitAzureOpenAiWarning(testSuite, tests);
     expect(result).toBe(false);
+  });
+});
+
+describe('AzureOpenAiGenericProvider', () => {
+  describe('getApiBaseUrl', () => {
+    beforeEach(() => {
+      delete process.env.AZURE_OPENAI_API_HOST;
+    });
+
+    it('should return apiBaseUrl if set', () => {
+      const provider = new AzureOpenAiGenericProvider('test-deployment', {
+        config: { apiBaseUrl: 'https://custom.azure.com' },
+      });
+      expect(provider.getApiBaseUrl()).toBe('https://custom.azure.com');
+    });
+
+    it('should return apiBaseUrl without trailing slash if set', () => {
+      const provider = new AzureOpenAiGenericProvider('test-deployment', {
+        config: { apiBaseUrl: 'https://custom.azure.com/' },
+      });
+      expect(provider.getApiBaseUrl()).toBe('https://custom.azure.com');
+    });
+
+    it('should construct URL from apiHost without protocol', () => {
+      const provider = new AzureOpenAiGenericProvider('test-deployment', {
+        config: { apiHost: 'api.azure.com' },
+      });
+      expect(provider.getApiBaseUrl()).toBe('https://api.azure.com');
+    });
+
+    it('should remove protocol from apiHost if present', () => {
+      const provider = new AzureOpenAiGenericProvider('test-deployment', {
+        config: { apiHost: 'https://api.azure.com' },
+      });
+      expect(provider.getApiBaseUrl()).toBe('https://api.azure.com');
+    });
+
+    it('should remove trailing slash from apiHost if present', () => {
+      const provider = new AzureOpenAiGenericProvider('test-deployment', {
+        config: { apiHost: 'api.azure.com/' },
+      });
+      expect(provider.getApiBaseUrl()).toBe('https://api.azure.com');
+    });
+
+    it('should return undefined if neither apiBaseUrl nor apiHost is set', () => {
+      const provider = new AzureOpenAiGenericProvider('test-deployment', {});
+      expect(provider.getApiBaseUrl()).toBeUndefined();
+    });
   });
 });
