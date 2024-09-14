@@ -30,6 +30,8 @@ Red teaming is different from other AI security approaches because it provides a
 
 By running thousands of probes and evaluating the AI's performance, developers can make informed decisions about acceptable risk levels in offline testbeds. Many organizations build this into their development cycle and into processes like CI/CD.
 
+This process is how the big foundation labs - OpenAI, Anthropic, Microsoft, and Google - evaluate their models before they release them to the public. For a while, AI red teams were confined to these elite labs. Now, AI red teaming is becoming more common as tools proliferate and best practices emerge.
+
 This is an emerging field and new standards are emerging around the world, ranging from [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) to [NIST's AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) and the [EU AI Act](https://www.europarl.europa.eu/topics/en/article/20230601STO93804/eu-ai-act-first-regulation-on-artificial-intelligence).
 
 From what we've seen so far, most regulations/standards support a systematic benchmarking/red teaming process that quantifies risk via testing prior to deployment.
@@ -109,13 +111,13 @@ See [LLM vulnerability types](/docs/red-team/llm-vulnerability-types/) for more 
 
 We recommend implementing a systematic process:
 
-1. **Generate diverse adversarial inputs**: Create a wide range of inputs targeting various [vulnerability types](/docs/red-team/llm-vulnerability-types/).
+- **Generate diverse adversarial inputs**: Start by cataloging the failure modes that your organization actually cares about. Then, create a wide range of inputs targeting various [vulnerability types](/docs/red-team/llm-vulnerability-types/).
 
-2. **Set up routine evaluations**: Use an evaluation framework for LLMs to run these inputs through your system.
+- **Set up routine evaluations**: Use an evaluation framework for LLMs to run these inputs through your system. This helps to catch fluctuations and regressions in quality.
 
-3. **Prioritize and address vulnerabilities**: Set a cadence for reviewing flagged outputs and determine priorities for both the red team and developers based on severity and impact.
+- **Prioritize and address vulnerabilities**: Set a cadence for reviewing flagged outputs and determine priorities for both the red team and developers based on severity and impact.
 
-Additional best practices to consider:
+Other things to think about:
 
 - **Define your pre-deployment vs post-deployment strategies**, typically with a focus on quantifying risk before changes are shipped to production.
 
@@ -124,6 +126,70 @@ Additional best practices to consider:
 - **Focus on vulnerabilities for your specific application type**, e.g. [RAG](/docs/red-team/rag/), [LLM agents](/docs/red-team/agents/)
 
 - Although industry frameworks are nascent, frameworks like [OWASP LLM Top 10](/docs/red-team/owasp-llm-top-10/) and NIST AI Risk Management Framework can be used as starting points.
+
+## Best practices
+
+### Step 1: Define your strategy
+
+Before running a red team, define a systematic process that encompasses:
+
+1. **Vulnerability focus**: Identify which types of vulnerabilities are most critical for your application. This will depend on your use case (e.g., [RAG](/docs/red-team/rag/), [agents](/docs/red-team/agents/), chatbots) and industry.
+
+2. **Timing in development cycle**: Decide where in your process red teaming will occur. Checkpoints to consider include:
+
+   - **Model testing**, which can happen even before you start building the application, and is especially important when fine tuning.
+   - **Pre-deployment testing**, once the model has been hooked up to the application, tools, databases, etc.
+   - **Continuous integration/deployment (CI/CD) checks** to catch regressions and anomalies.
+   - **Post-deployment monitoring** to establish a feedback loop and maintain an understanding of how your application is behaving in production.
+
+3. **Resource allocation**: Balance the depth of testing with available time and resources. Certain automated attack strategies consume a large number of tokens, and a single red team can range anywhere from a few cents to hundreds of dollars!
+
+4. **Regulatory compliance**: Consider any industry-specific or regional requirements (e.g., GDPR, HIPAA) as well as standards (e.g. NIST AI RMF, OWASP LLM).
+
+### Step 2: Implementation
+
+Once you've defined your objectives, your process will probably look like this:
+
+1. **Generate diverse adversarial inputs**:
+
+   - Create a wide range of inputs targeting your identified vulnerability types.
+   - Automated generation tools are a huge help, especially to cover a breadth of use cases. But human ingenuity is still useful, especially for known problem areas.
+
+2. **Set up evaluation framework**:
+
+   - Choose or develop a tool for systematic LLM testing.
+   - Integrate with your development pipeline if applicable.
+
+3. **Execute tests**:
+
+   - Run your adversarial inputs through your LLM application.
+   - Ensure you're testing in an environment that closely mimics production. It's best to test end-to-end - so you can stress-test full tool access and/or guardrails.
+
+4. **Collect and organize results**:
+   - Store outputs in a structured format that can be subsequently analyzed. Most evaluation frameworks will do this for you.
+
+### Step 3: Analysis and remediation
+
+1. **Review flagged outputs**:
+
+   - Set a regular cadence for reviewing test results. This could involve both the security and development teams in the review process.
+
+2. **Prioritize vulnerabilities**:
+
+   - Not all issues are created equal. There's a fuzzy line between AI security and AI safety issues, and as alluded to above, some fall on the model side versus the application side.
+   - Most teams we talk to find it most productive to focus on technical security vulnerabilities, as the foundation model problems are improving over time as AI research advances and tend to have smaller impact.
+
+3. **Develop mitigation strategies**:
+
+   - For each priority vulnerability, brainstorm potential fixes.
+   - This might include prompt engineering, additional safeguards, or architectural changes.
+
+4. **Implement and verify fixes**:
+
+   - Apply chosen mitigations and re-run the evaluation suite to confirm the effectiveness of your solutions.
+
+5. **Continuous improvement**:
+   - Regularly update your test suite with new adversarial inputs, and regenerate the redteam inputs to test variations and updated methods.
 
 ## What's next?
 
