@@ -23,7 +23,7 @@ export async function runPython(
     `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
   const pythonOptions: PythonShellOptions = {
-    mode: 'text',
+    mode: 'binary',
     pythonPath: options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON') || 'python',
     scriptPath: __dirname,
     args: [absPath, method, tempJsonPath, outputPath],
