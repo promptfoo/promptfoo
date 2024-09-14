@@ -10,10 +10,12 @@ WORKDIR /app
 
 # Set environment variables for the build
 ENV NEXT_PUBLIC_HOSTED=1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY . .
 
 RUN npm install --install-links --include=peer
+RUN mkdir -p src/web/nextui/out
 RUN npm run build
 
 FROM base AS server
