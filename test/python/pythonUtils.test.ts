@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { promises as fs } from 'fs';
 import { PythonShell } from 'python-shell';
+import logger from '../../src/logger';
 import { runPython, validatePythonPath, state } from '../../src/python/pythonUtils';
 
 jest.mock('../../src/esm');
@@ -94,6 +95,42 @@ describe('pythonUtils', () => {
 
       await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'Invalid JSON:',
+      );
+    });
+
+    it('should log and throw an error with stack trace when Python script execution fails', async () => {
+      const mockError = new Error('Test Error');
+      mockError.stack = '--- Python Traceback ---\nError details';
+
+      const mockPythonShellRun = jest.mocked(PythonShell.run);
+      mockPythonShellRun.mockRejectedValue(mockError);
+
+      const loggerErrorSpy = jest.spyOn(logger, 'error');
+
+      await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
+        'Error running Python script: Test Error\nStack Trace: Python Traceback: \nError details',
+      );
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Error running Python script: Test Error\nStack Trace: Python Traceback: \nError details',
+      );
+    });
+
+    it('should handle error without stack trace', async () => {
+      const mockError = new Error('Test Error Without Stack');
+      mockError.stack = undefined;
+
+      const mockPythonShellRun = jest.mocked(PythonShell.run);
+      mockPythonShellRun.mockRejectedValue(mockError);
+
+      const loggerErrorSpy = jest.spyOn(logger, 'error');
+
+      await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
+        'Error running Python script: Test Error Without Stack\nStack Trace: No Python traceback available',
+      );
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Error running Python script: Test Error Without Stack\nStack Trace: No Python traceback available',
       );
     });
   });
