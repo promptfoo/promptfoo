@@ -2707,6 +2707,63 @@ describe('runAssertion', () => {
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
       );
     });
+
+    it('should pass when the latency is 0ms', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
+        latencyMs: 0,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should throw an error when threshold is not provided', async () => {
+      const output = 'Expected output';
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4'),
+          assertion: {
+            type: 'latency',
+          },
+          latencyMs: 50,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        }),
+      ).rejects.toThrow('Latency assertion must have a threshold in milliseconds');
+    });
+
+    it('should handle latency equal to threshold', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
+        latencyMs: 100,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
   });
 
   describe('perplexity assertion', () => {
