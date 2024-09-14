@@ -139,7 +139,7 @@ This case highlights several practical aspects of AI red teaming:
 
 ### Other examples
 
-Promptfoo is an open-source software that breaks down LLM failure modes into adversarial testers known as "[plugins](/docs/red-team/plugins/)". Here are some examples of plugins:
+Promptfoo is an open-source software that breaks down LLM failure modes into adversarial testers known as "[plugins](/docs/category/plugins/)". Here are some examples of plugins:
 
 - [Harmful content](/docs/red-team/plugins/harmful/#examples): Examples of hate speech, offensive content, and other harmful outputs triggered in leading AI models.
 - [Broken object-level authorization (BOLA)](/docs/red-team/plugins/bola/#example-test-cases): Test cases for unauthorized access to resources belonging to other users.
