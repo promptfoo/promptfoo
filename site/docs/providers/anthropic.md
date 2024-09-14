@@ -86,7 +86,7 @@ Example configuration with options and prompts:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-opus-20240229
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
     config:
       temperature: 0.0
       max_tokens: 512
@@ -100,7 +100,7 @@ The Anthropic provider supports tool use (or function calling). Here's an exampl
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-opus-20240229
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
     config:
       tools:
         - name: get_weather
@@ -180,9 +180,9 @@ The easiest way to do this for _all_ your test cases is to add the [`defaultTest
 defaultTest:
   options:
     provider:
-      id: anthropic:messages:claude-3-opus-20240229
+      id: anthropic:messages:claude-3-5-sonnet-20240620
       config:
-        # Provider config options
+        # optional provider config options
 ```
 
 However, you can also do this for individual assertions:
@@ -193,9 +193,9 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: anthropic:messages:claude-3-opus-20240229
+      id: anthropic:messages:claude-3-5-sonnet-20240620
       config:
-        # Provider config options
+        # optional provider config options
 ```
 
 Or individual tests:
@@ -207,9 +207,9 @@ tests:
       # ...
     options:
       provider:
-        id: anthropic:messages:claude-3-opus-20240229
+        id: anthropic:messages:claude-3-5-sonnet-20240620
         config:
-          # Provider config options
+          # optional provider config options
     assert:
       - type: llm-rubric
         value: Do not mention that you are an AI or chat assistant
