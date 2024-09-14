@@ -32,7 +32,7 @@ By running thousands of probes and evaluating the AI's performance, developers c
 
 This process is how the big foundation labs - OpenAI, Anthropic, Microsoft, and Google - evaluate their models before they release them to the public. For a while, AI red teams were confined to these elite labs. Now, AI red teaming is becoming more common as tools proliferate and best practices emerge.
 
-This is an emerging field and new standards are emerging around the world, ranging from [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) to [NIST's AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) and the [EU AI Act](https://www.europarl.europa.eu/topics/en/article/20230601STO93804/eu-ai-act-first-regulation-on-artificial-intelligence).
+This is a new field and standards are emerging around the world, ranging from [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) to [NIST's AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) and the [EU AI Act](https://www.europarl.europa.eu/topics/en/article/20230601STO93804/eu-ai-act-first-regulation-on-artificial-intelligence).
 
 From what we've seen so far, most regulations/standards support a systematic benchmarking/red teaming process that quantifies risk via testing prior to deployment.
 
@@ -106,26 +106,6 @@ Promptfoo is an open-source tool for red teaming LLMs that supports all the abov
 - [Competitor endorsement](/docs/red-team/plugins/competitors/#example-test-cases): Scenarios where AI might inadvertently promote competing products or services.
 
 See [LLM vulnerability types](/docs/red-team/llm-vulnerability-types/) for more info on model and application vulnerabilities.
-
-## Best practices
-
-We recommend implementing a systematic process:
-
-- **Generate diverse adversarial inputs**: Start by cataloging the failure modes that your organization actually cares about. Then, create a wide range of inputs targeting various [vulnerability types](/docs/red-team/llm-vulnerability-types/).
-
-- **Set up routine evaluations**: Use an evaluation framework for LLMs to run these inputs through your system. This helps to catch fluctuations and regressions in quality.
-
-- **Prioritize and address vulnerabilities**: Set a cadence for reviewing flagged outputs and determine priorities for both the red team and developers based on severity and impact.
-
-Other things to think about:
-
-- **Define your pre-deployment vs post-deployment strategies**, typically with a focus on quantifying risk before changes are shipped to production.
-
-- **Integrate red teaming into your development pipeline** to flag vulnerabilities early, meet developers where they are, and address issues before they reach production.
-
-- **Focus on vulnerabilities for your specific application type**, e.g. [RAG](/docs/red-team/rag/), [LLM agents](/docs/red-team/agents/)
-
-- Although industry frameworks are nascent, frameworks like [OWASP LLM Top 10](/docs/red-team/owasp-llm-top-10/) and NIST AI Risk Management Framework can be used as starting points.
 
 ## Best practices
 
