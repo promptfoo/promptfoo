@@ -29,41 +29,42 @@ export function safeJsonStringify(value: any, prettyPrint: boolean = false): str
 }
 
 export function extractJsonObjects(str: string): object[] {
-  // This will extract all json objects from a string
-
   const jsonObjects = [];
-  let openBracket = str.indexOf('{');
-  let closeBracket = str.indexOf('}', openBracket);
-  // Iterate over the string until we find a valid JSON-like pattern
-  // Iterate over all trailing } until the contents parse as json
+  let startIndex = 0;
   const MAX_ATTEMPTS = 10;
-  let openBracketAttempts = 0;
-  while (openBracket !== -1 && openBracketAttempts < MAX_ATTEMPTS) {
-    const jsonStr = str.slice(openBracket, closeBracket + 1);
-    try {
-      jsonObjects.push(JSON.parse(jsonStr));
-      // This is a valid JSON object, so start looking for
-      // an opening bracket after the last closing bracket
-      openBracket = str.indexOf('{', closeBracket + 1);
-      closeBracket = str.indexOf('}', openBracket);
-    } catch (err) {
-      // Not a valid object, move on to the next closing bracket
-      closeBracket = str.indexOf('}', closeBracket + 1);
-      let closeBracketAttempts = 0;
-      while (closeBracket === -1 && closeBracketAttempts < MAX_ATTEMPTS) {
-        // No closing brackets made a valid json object, so
-        // start looking with the next opening bracket
-        openBracket = str.indexOf('{', openBracket + 1);
-        closeBracket = str.indexOf('}', openBracket);
-        closeBracketAttempts++;
-      }
-      if (closeBracketAttempts >= MAX_ATTEMPTS) {
-        // If we've reached the maximum number of attempts, break out of the loop
-        break;
-      }
+
+  while (startIndex < str.length) {
+    const openBracket = str.indexOf('{', startIndex);
+    if (openBracket === -1) break;
+
+    let bracketCount = 1;
+    let closeBracket = openBracket + 1;
+
+    while (bracketCount > 0 && closeBracket < str.length) {
+        if (str[closeBracket] === '{') bracketCount++;
+        if (str[closeBracket] === '}') bracketCount--;
+        closeBracket++;
     }
-    openBracketAttempts++;
+
+    if (bracketCount === 0) {
+        let attempts = 0;
+        while (attempts < MAX_ATTEMPTS) {
+            const jsonStr = str.slice(openBracket, closeBracket);
+            try {
+                jsonObjects.push(JSON.parse(jsonStr));
+                break;
+            } catch (err) {
+                // Try including the next closing bracket
+                closeBracket = str.indexOf('}', closeBracket) + 1;
+                if (closeBracket === 0) break; // No more closing brackets
+            }
+            attempts++;
+        }
+    }
+
+    startIndex = closeBracket;
   }
+
   return jsonObjects;
 }
 
