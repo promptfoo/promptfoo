@@ -36,7 +36,7 @@ describe('loadDefaultConfig', () => {
 
     expect(result).toEqual({
       defaultConfig: mockConfig,
-      defaultConfigPath: path.normalize('/test/path/redteam.json'),
+      defaultConfigPath: path.normalize('/test/path/redteam.yml'),
     });
     expect(maybeReadConfig).toHaveBeenCalledTimes(3);
   });
@@ -47,10 +47,10 @@ describe('loadDefaultConfig', () => {
     await loadDefaultConfig();
 
     const expectedExtensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
-    ['redteam', 'promptfooconfig'].forEach((configName, index) => {
-      expectedExtensions.forEach((ext, extIndex) => {
+    expectedExtensions.forEach((ext, extIndex) => {
+      ['redteam', 'promptfooconfig'].forEach((configName, index) => {
         expect(maybeReadConfig).toHaveBeenNthCalledWith(
-          index * expectedExtensions.length + extIndex + 1,
+          extIndex * 2 + index + 1,
           path.normalize(`/test/path/${configName}.${ext}`),
         );
       });

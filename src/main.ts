@@ -36,8 +36,8 @@ export async function loadDefaultConfig(): Promise<{
   const extensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
   const configNames = ['redteam', 'promptfooconfig'];
 
-  for (const name of configNames) {
-    for (const ext of extensions) {
+  for (const ext of extensions) {
+    for (const name of configNames) {
       const configPath = path.join(pwd, `${name}.${ext}`);
       const maybeConfig = await maybeReadConfig(configPath);
       if (maybeConfig) {
