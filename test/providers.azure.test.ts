@@ -143,9 +143,9 @@ describe('AzureOpenAiGenericProvider', () => {
       expect(provider.getApiBaseUrl()).toBe('https://api.azure.com');
     });
 
-    it('should throw an error if neither apiBaseUrl nor apiHost is set', () => {
+    it('should return undefined if neither apiBaseUrl nor apiHost is set', () => {
       const provider = new AzureOpenAiGenericProvider('test-deployment', {});
-      expect(() => provider.getApiBaseUrl()).toThrow('Azure OpenAI API host must be set');
+      expect(provider.getApiBaseUrl()).toBeUndefined();
     });
   });
 });

@@ -143,7 +143,7 @@ export class AzureOpenAiGenericProvider implements ApiProvider {
     }
     const host = this.apiHost?.replace(/^(https?:\/\/)/, '').replace(/\/$/, '');
     if (!host) {
-      throw new Error('Azure OpenAI API host must be set');
+      return undefined;
     }
     return `https://${host}`;
   }
