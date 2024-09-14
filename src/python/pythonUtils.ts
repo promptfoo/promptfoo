@@ -64,18 +64,14 @@ export async function runPython(
   const pythonPath = options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON') || 'python';
 
   const pythonOptions: PythonShellOptions = {
-    mode: 'binary',
+    mode: 'text',
     pythonPath,
     scriptPath: __dirname,
     args: [absPath, method, tempJsonPath, outputPath],
   };
 
-  try {
-    await validatePythonPath(pythonPath);
-  } catch (error) {
-    logger.error(`Error validating Python path: ${(error as Error).message}`);
-    throw error;
-  }
+  await validatePythonPath(pythonPath);
+
   try {
     await fs.writeFile(tempJsonPath, safeJsonStringify(args), 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
