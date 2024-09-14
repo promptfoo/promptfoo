@@ -21,7 +21,7 @@ import { runDbMigrations } from './migrate';
 import { generateRedteamCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
-import { type EvaluateOptions, type UnifiedConfig } from './types';
+import { type UnifiedConfig } from './types';
 import { checkForUpdates } from './updates';
 
 export async function loadDefaultConfig(): Promise<{
@@ -53,19 +53,9 @@ async function main() {
 
   const program = new Command();
 
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
-
-  const evaluateOptions: EvaluateOptions = {};
-  if (defaultConfig.evaluateOptions) {
-    evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
-    evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
-    evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
-  }
-
   cacheCommand(program);
   configCommand(program);
   deleteCommand(program);
-  evalCommand(program, defaultConfig, defaultConfigPath, evaluateOptions);
   exportCommand(program);
   feedbackCommand(program);
   importCommand(program);
@@ -77,12 +67,14 @@ async function main() {
   viewCommand(program);
 
   const generateCommand = program.command('generate').description('Generate synthetic data');
-  generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
-  generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
-
   const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
   redteamInitCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
+
+  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+  evalCommand(program, defaultConfig, defaultConfigPath);
+  generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+  generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
   generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
 
   if (!process.argv.slice(2).length) {
