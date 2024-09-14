@@ -72,51 +72,48 @@ export async function runPython(
 
   try {
     await validatePythonPath(pythonPath);
-
-    try {
-      await fs.writeFile(tempJsonPath, safeJsonStringify(args), 'utf-8');
-      logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
-      await PythonShell.run('wrapper.py', pythonOptions);
-      const output = await fs.readFile(outputPath, 'utf-8');
-      logger.debug(`Python script ${absPath} returned: ${output}`);
-      let result: { type: 'final_result'; data: any } | undefined;
-      try {
-        result = JSON.parse(output);
-      } catch (error) {
-        throw new Error(
-          `Invalid JSON: ${(error as Error).message} when parsing result: ${
-            output
-          }\nStack Trace: ${(error as Error).stack}`,
-        );
-      }
-      if (result?.type !== 'final_result') {
-        throw new Error(
-          'The Python script `call_api` function must return a dict with an `output`',
-        );
-      }
-      return result.data;
-    } catch (error) {
-      logger.error(
-        `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-          (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-          'No Python traceback available'
-        }`,
-      );
-      throw new Error(
-        `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-          (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-          'No Python traceback available'
-        }`,
-      );
-    } finally {
-      await Promise.all(
-        [tempJsonPath, outputPath].map((file) =>
-          fs.unlink(file).catch((error) => logger.error(`Error removing ${file}: ${error}`)),
-        ),
-      );
-    }
   } catch (error) {
     logger.error(`Error validating Python path: ${(error as Error).message}`);
     throw error;
+  }
+  try {
+    await fs.writeFile(tempJsonPath, safeJsonStringify(args), 'utf-8');
+    logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
+    await PythonShell.run('wrapper.py', pythonOptions);
+    const output = await fs.readFile(outputPath, 'utf-8');
+    logger.debug(`Python script ${absPath} returned: ${output}`);
+    let result: { type: 'final_result'; data: any } | undefined;
+    try {
+      result = JSON.parse(output);
+    } catch (error) {
+      throw new Error(
+        `Invalid JSON: ${(error as Error).message} when parsing result: ${
+          output
+        }\nStack Trace: ${(error as Error).stack}`,
+      );
+    }
+    if (result?.type !== 'final_result') {
+      throw new Error('The Python script `call_api` function must return a dict with an `output`');
+    }
+    return result.data;
+  } catch (error) {
+    logger.error(
+      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
+        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
+        'No Python traceback available'
+      }`,
+    );
+    throw new Error(
+      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
+        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
+        'No Python traceback available'
+      }`,
+    );
+  } finally {
+    await Promise.all(
+      [tempJsonPath, outputPath].map((file) =>
+        fs.unlink(file).catch((error) => logger.error(`Error removing ${file}: ${error}`)),
+      ),
+    );
   }
 }
