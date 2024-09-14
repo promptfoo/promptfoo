@@ -11,7 +11,7 @@ import { safeJsonStringify } from '../util/json';
 
 const execAsync = util.promisify(exec);
 
-let cachedPythonPath: string | null = null;
+export const state: { cachedPythonPath: string | null } = { cachedPythonPath: null };
 
 /**
  * Validates the given Python path and caches the result.
@@ -21,15 +21,15 @@ let cachedPythonPath: string | null = null;
  * @throws An error if the Python path is invalid.
  */
 export async function validatePythonPath(pythonPath: string): Promise<string> {
-  if (cachedPythonPath) {
-    return cachedPythonPath;
+  if (state.cachedPythonPath) {
+    return state.cachedPythonPath;
   }
 
   const command = process.platform === 'win32' ? 'where' : 'which';
   try {
     const { stdout } = await execAsync(`${command} ${pythonPath}`);
-    cachedPythonPath = stdout.trim();
-    return cachedPythonPath;
+    state.cachedPythonPath = stdout.trim();
+    return state.cachedPythonPath;
   } catch (error) {
     throw new Error(`Invalid Python path: ${pythonPath}`);
   }

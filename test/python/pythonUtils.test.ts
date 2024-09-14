@@ -1,6 +1,7 @@
+import { execSync } from 'child_process';
 import { promises as fs } from 'fs';
 import { PythonShell } from 'python-shell';
-import { runPython } from '../../src/python/pythonUtils';
+import { runPython, validatePythonPath, state } from '../../src/python/pythonUtils';
 
 jest.mock('../../src/esm');
 jest.mock('../../src/logger');
@@ -93,6 +94,49 @@ describe('pythonUtils', () => {
 
       await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'Invalid JSON:',
+      );
+    });
+  });
+
+  describe('validatePythonPath', () => {
+    let pythonAvailable: boolean = false;
+
+    beforeAll(() => {
+      try {
+        execSync('python --version', { stdio: 'ignore' });
+        pythonAvailable = true;
+      } catch {
+        pythonAvailable = false;
+      }
+    });
+
+    beforeEach(() => {
+      jest.resetModules();
+      state.cachedPythonPath = null;
+    });
+
+    it('should validate an existing Python path', async () => {
+      if (!pythonAvailable) {
+        console.warn('Python not available, skipping test');
+        return;
+      }
+      const result = await validatePythonPath('python');
+      expect(result).toMatch(/python/);
+    });
+
+    it('should return the cached path on subsequent calls', async () => {
+      if (!pythonAvailable) {
+        console.warn('Python not available, skipping test');
+        return;
+      }
+      const firstResult = await validatePythonPath('python');
+      const secondResult = await validatePythonPath('python');
+      expect(firstResult).toBe(secondResult);
+    });
+
+    it('should throw an error for a non-existent program', async () => {
+      await expect(validatePythonPath('non_existent_program_12345')).rejects.toThrow(
+        'Invalid Python path: non_existent_program_12345',
       );
     });
   });
