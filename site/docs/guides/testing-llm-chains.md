@@ -61,7 +61,7 @@ Now, let's configure promptfoo to run this LangChain script with a bunch of test
 ```yaml
 prompts: prompt.txt
 providers:
-  - openai:chat:gpt-4-0613
+  - openai:chat:gpt-4o
   - exec:python langchain_example.py
 tests:
   - vars:

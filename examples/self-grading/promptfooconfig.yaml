@@ -1,7 +1,7 @@
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-4-0613
+  - openai:chat:gpt-4o
 defaultTest:
   assert:
     - type: llm-rubric

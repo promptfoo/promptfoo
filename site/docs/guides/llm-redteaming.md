@@ -155,9 +155,9 @@ You should choose at least one provider. If desired, set multiple in order to co
 
 ```yaml
 providers:
-  - openai:gpt-4
-  - anthropic:messages:claude-3-opus-20240229
-  - ollama:chat:llama3:70b
+  - openai:gpt-4o
+  - anthropic:messages:claude-3-5-sonnet-20240620
+  - ollama:chat:llama3.1:70b
 ```
 
 To learn more, find your preferred LLM provider [here](/docs/providers).

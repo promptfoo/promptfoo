@@ -32,7 +32,7 @@ redteam:
 prompts:
   - 'Your prompt template here: {{variable}}'
 providers:
-  - openai:gpt-4-turbo
+  - openai:gpt-4o
 ```
 
 ### Configuration Fields
@@ -670,7 +670,7 @@ redteam:
 redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
-  provider: 'openai:chat:gpt-4-turbo'
+  provider: 'openai:chat:gpt-4o'
   language: 'French'
   numTests: 20
   plugins:

@@ -515,7 +515,7 @@ providers:
   // highlight-start
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ
     config:
-      model: gpt-4-1106-preview
+      model: gpt-4o
       instructions: "You always speak like a pirate"
       temperature: 0.2
       toolChoice:
@@ -551,7 +551,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
       id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
       config:
         /** @type {InstanceType<import('promptfoo')["providers"]["OpenAiAssistantProvider"]>["config"]} */ ({
-          model: 'gpt-4-1106-preview',
+          model: 'gpt-4o',
           instructions: 'You can add two numbers together using the `addNumbers` tool',
           tools: [
             {

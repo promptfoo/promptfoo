@@ -15,8 +15,8 @@ prompts:
   - prompt1.txt
   - prompt2.txt
 providers:
-  - anthropic:messages:claude-3-opus-20240229
-  - openai:chat:gpt-4-0125-preview
+  - anthropic:messages:claude-3-5-sonnet-20240620
+  - openai:chat:gpt-4o
 // highlight-start
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 // highlight-end
