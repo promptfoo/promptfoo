@@ -77,7 +77,7 @@ On the other hand, there are classes of vulnerabilities that only manifest once 
 - Hijacking (aka off-topic use)
 - Data/chat exfiltration techniques (e.g. markdown images, link unfurling)
 
-Most applications do not require their own models, but rather integrate existing models into applications. For this reason, application layer threats are often the focus of red teaming efforts for LLM-based software, as they are likely to cause the greatest technical risks.
+Most applications integrate existing models rather than requiring their own dedicated ones. For this reason, application layer threats are often the focus of red teaming efforts for LLM-based software, as they are likely to cause the greatest technical risks.
 
 ## White box vs black box testing
 
@@ -96,9 +96,50 @@ For most developers and AppSec teams, black box testing is the more practical ap
 
 ![llm testing: white-box vs black-box](/img/docs/llm-testing-diagram.svg)
 
-## Examples
+## Case Study: Discord's Clyde AI
 
-Promptfoo is an open-source tool for red teaming LLMs that supports all the above. It can generate a wide range of adversarial inputs to test various vulnerabilities:
+Discord's launch of Clyde AI in March 2023 is a perfect example of why thorough red teaming is important. Clyde, an OpenAI-powered chatbot, was meant to help users by answering questions and facilitating conversations. But its high-profile rollout also came with lessons learned.
+
+### Deployment
+
+Discord played it smart by introducing Clyde gradually. They only made it available to a small percentage of servers at first, which allowed them to test and refine as they went. At first, things looked promising. A [survey](https://subo.ai/blog/discord-survey-clyde-mysterious-disappearance/) found that 74% of Discord moderators who used Clyde were happy with it.
+
+### Vulnerabilities in the wild
+
+It didn't take long for users to find ways to game the system. Famously, a Discord user discovered the GPT "[grandma exploit](https://www.polygon.com/23690187/discord-ai-chatbot-clyde-grandma-exploit-chatgpt)," a classic jailbreak attack. Users figured out they could trick Clyde into spitting out forbidden content by framing requests as roleplaying scenarios. For instance:
+
+![clyde jailbreak](/img/docs/clyde-jailbreak.jpg)
+
+This kind of prompt let users sidestep OpenAI's alignment and Clyde's content filters, posing several risks:
+
+- **Policy Violations**: Clyde generated content that breached Discord's guidelines, potentially exposing users to harmful or inappropriate material.
+- **Reputational Damage**: The exploit gained attention, leading to negative publicity and raising concerns about Discord's commitment to user safety.
+- **User Trust Erosion**: Users began to question the reliability of Clyde and Discord's ability to protect them from harmful content.
+
+### Red teaming and evaluation
+
+There were many teams involved in this report and others in the same vein: engineering, product, security, legal, policy, and marketing.
+
+- Adopting an evaluation framework (in fact, they used an early version of Promptfoo!). An evaluation framwork is a way to automatically run inputs through an LLM and test its outputs.
+- Setting a convention in which every prompt/workflow change required an evaluation.
+- Making evaluations as automatic and frictionless as possible.
+
+This gave all stakeholders a quantitative, data-driven way to measure changes in risk and flag unusual fluctuations.
+
+In addition to red teaming, Discord deployed passive moderation and observability tools to detect trends in adversarial inputs, and developed dedicating reporting mecahnisms.
+
+### Key Takeaways
+
+This case highlights several practical aspects of AI red teaming:
+
+1. **Comprehensive pre-deployment testing**: Test a wide range of adversarial inputs to uncover potential exploits before launch.
+2. **Gradual rollouts**: Limit potential damage and gather real-world usage data through controlled, incremental deployment.
+3. **Continuous monitoring**: Develop a culture of continuous testing and risk monitoring to catch regressions.
+4. **User feedback loop**: Encourage users to report issues and feed these issues back into your red teaming setup.
+
+### Other examples
+
+Promptfoo is an open-source software that breaks down LLM failure modes into adversarial testers known as "[plugins](/docs/red-team/plugins/)". Here are some examples of plugins:
 
 - [Harmful content](/docs/red-team/plugins/harmful/#examples): Examples of hate speech, offensive content, and other harmful outputs triggered in leading AI models.
 - [Broken object-level authorization (BOLA)](/docs/red-team/plugins/bola/#example-test-cases): Test cases for unauthorized access to resources belonging to other users.
@@ -108,6 +149,8 @@ Promptfoo is an open-source tool for red teaming LLMs that supports all the abov
 See [LLM vulnerability types](/docs/red-team/llm-vulnerability-types/) for more info on model and application vulnerabilities.
 
 ## Best practices
+
+Based on our experience as practitioners deploying LLMs, we recommend the following best practices for effective red teaming:
 
 ### Step 1: Define your strategy
 
