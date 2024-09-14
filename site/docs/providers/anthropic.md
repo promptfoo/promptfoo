@@ -6,6 +6,8 @@ sidebar_position: 10
 
 This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) series of models.
 
+> **Note:** Anthropic models can also be accessed through Amazon Bedrock. For information on using Anthropic models via Bedrock, please refer to our [AWS Bedrock documentation](/docs/providers/aws-bedrock).
+
 ## Setup
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
