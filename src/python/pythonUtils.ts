@@ -17,22 +17,50 @@ export const state: { cachedPythonPath: string | null } = { cachedPythonPath: nu
  * Validates the given Python path and caches the result.
  *
  * @param pythonPath - The path to the Python executable to validate.
+ * @param isExplicit - Whether the Python path is explicitly set by the user.
  * @returns A promise that resolves to the validated Python path.
  * @throws An error if the Python path is invalid.
  */
-export async function validatePythonPath(pythonPath: string): Promise<string> {
+export async function validatePythonPath(pythonPath: string, isExplicit: boolean): Promise<string> {
   if (state.cachedPythonPath) {
     return state.cachedPythonPath;
   }
 
-  const command = process.platform === 'win32' ? 'where' : 'which';
-  try {
-    const { stdout } = await execAsync(`${command} ${pythonPath}`);
-    state.cachedPythonPath = stdout.trim();
-    return state.cachedPythonPath;
-  } catch (error) {
-    throw new Error(`Invalid Python path: ${pythonPath}`);
+  const isWindows = process.platform === 'win32';
+  const command = isWindows ? 'where' : 'which';
+  const alternativePath = isWindows ? 'py -3' : 'python3';
+
+  async function tryPath(path: string): Promise<string | null> {
+    try {
+      const { stdout } = await execAsync(`${command} ${path}`);
+      return stdout.trim();
+    } catch (error) {
+      return null;
+    }
   }
+  const primaryPath = await tryPath(pythonPath);
+  if (primaryPath) {
+    state.cachedPythonPath = primaryPath;
+    return primaryPath;
+  }
+  if (isExplicit) {
+    throw new Error(
+      `Python not found. Tried "${pythonPath}" ` +
+        `Please ensure Python is installed and set the PROMPTFOO_PYTHON environment variable ` +
+        `to your Python executable path (e.g., '${isWindows ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
+    );
+  }
+  const secondaryPath = await tryPath(alternativePath);
+  if (secondaryPath) {
+    logger.warn(`Secondary path found: ${secondaryPath}`);
+    state.cachedPythonPath = secondaryPath;
+    return secondaryPath;
+  }
+  throw new Error(
+    `Python not found. Tried "${pythonPath}" and "${alternativePath}". ` +
+      `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
+      `to your Python 3 executable path (e.g., '${isWindows ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
+  );
 }
 
 /**
@@ -63,14 +91,17 @@ export async function runPython(
   );
   const pythonPath = options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON') || 'python';
 
+  await validatePythonPath(
+    pythonPath,
+    typeof (options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON')) === 'string',
+  );
+
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
     pythonPath,
     scriptPath: __dirname,
     args: [absPath, method, tempJsonPath, outputPath],
   };
-
-  await validatePythonPath(pythonPath);
 
   try {
     await fs.writeFile(tempJsonPath, safeJsonStringify(args), 'utf-8');
