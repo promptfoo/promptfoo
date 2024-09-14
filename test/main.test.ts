@@ -21,7 +21,7 @@ describe('loadDefaultConfig', () => {
       defaultConfig: {},
       defaultConfigPath: undefined,
     });
-    expect(maybeReadConfig).toHaveBeenCalledTimes(9); // Once for each extension
+    expect(maybeReadConfig).toHaveBeenCalledTimes(18); // Once for each extension * 2 (redteam and promptfooconfig)
   });
 
   it('should return the first valid config file found', async () => {
@@ -36,7 +36,7 @@ describe('loadDefaultConfig', () => {
 
     expect(result).toEqual({
       defaultConfig: mockConfig,
-      defaultConfigPath: path.normalize('/test/path/promptfooconfig.json'),
+      defaultConfigPath: path.normalize('/test/path/redteam.json'),
     });
     expect(maybeReadConfig).toHaveBeenCalledTimes(3);
   });
@@ -47,11 +47,13 @@ describe('loadDefaultConfig', () => {
     await loadDefaultConfig();
 
     const expectedExtensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
-    expectedExtensions.forEach((ext, index) => {
-      expect(maybeReadConfig).toHaveBeenNthCalledWith(
-        index + 1,
-        path.normalize(`/test/path/promptfooconfig.${ext}`),
-      );
+    ['redteam', 'promptfooconfig'].forEach((configName, index) => {
+      expectedExtensions.forEach((ext, extIndex) => {
+        expect(maybeReadConfig).toHaveBeenNthCalledWith(
+          index * expectedExtensions.length + extIndex + 1,
+          path.normalize(`/test/path/${configName}.${ext}`),
+        );
+      });
     });
   });
 });
