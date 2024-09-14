@@ -878,13 +878,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     return {
       output: outputBlocks.join('\n\n').trim(),
-      /*
-      tokenUsage: {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens,
-        completion: data.usage.completion_tokens,
-      },
-      */
+      tokenUsage: getTokenUsage(run, false),
     };
   }
 }
