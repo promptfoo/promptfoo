@@ -74,9 +74,9 @@ async function main() {
   generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
-  generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamInitCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
+  generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
 
   if (!process.argv.slice(2).length) {
     program.outputHelp();
