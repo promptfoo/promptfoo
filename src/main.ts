@@ -51,11 +51,14 @@ async function main() {
   await checkForUpdates();
   await runDbMigrations();
 
+  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+
   const program = new Command();
 
   cacheCommand(program);
   configCommand(program);
   deleteCommand(program);
+  evalCommand(program, defaultConfig, defaultConfigPath);
   exportCommand(program);
   feedbackCommand(program);
   importCommand(program);
@@ -67,15 +70,13 @@ async function main() {
   viewCommand(program);
 
   const generateCommand = program.command('generate').description('Generate synthetic data');
-  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
-  redteamInitCommand(redteamBaseCommand);
-  redteamPluginsCommand(redteamBaseCommand);
-
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
-  evalCommand(program, defaultConfig, defaultConfigPath);
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
+
+  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
   generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+  redteamInitCommand(redteamBaseCommand);
+  redteamPluginsCommand(redteamBaseCommand);
 
   if (!process.argv.slice(2).length) {
     program.outputHelp();
