@@ -673,5 +673,28 @@ describe('Anthropic', () => {
         },
       ]);
     });
+
+    it('should handle multi-line messages', () => {
+      const inputMessages = dedent`
+        user: This is a
+        multi-line
+        message
+        assistant: And this is a
+        multi-line response`;
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toBeUndefined();
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'This is a\nmulti-line\nmessage' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'And this is a\nmulti-line response' }],
+        },
+      ]);
+    });
   });
 });
