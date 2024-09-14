@@ -1288,7 +1288,7 @@ ${
     if (!assertion.threshold) {
       throw new Error('Latency assertion must have a threshold in milliseconds');
     }
-    if (!latencyMs) {
+    if (latencyMs === undefined) {
       throw new Error(
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
       );
