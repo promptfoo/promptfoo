@@ -14,11 +14,6 @@ jest.mock('../../src/envars', () => ({
 }));
 
 describe('pythonUtils', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    state.cachedPythonPath = null;
-  });
-
   // TODO(mldangelo): Tests fail on Windows. Make platform-independent. (2024-09-15)
   if (process.platform !== 'win32') {
     describe('validatePythonPath', () => {
@@ -27,6 +22,10 @@ describe('pythonUtils', () => {
       beforeAll(() => {
         originalEnv = { ...process.env };
         delete process.env.PROMPTFOO_PYTHON;
+      });
+
+      beforeEach(() => {
+        state.cachedPythonPath = null;
       });
 
       afterEach(() => {
@@ -109,6 +108,10 @@ describe('pythonUtils', () => {
   }
 
   describe('runPython', () => {
+    beforeAll(() => {
+      state.cachedPythonPath = '/usr/bin/python3';
+    });
+
     it('should correctly run a Python script with provided arguments and read the output file', async () => {
       const mockOutput = JSON.stringify({ type: 'final_result', data: 'test result' });
 
