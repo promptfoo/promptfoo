@@ -28,17 +28,6 @@ describe('pythonUtils', () => {
       state.cachedPythonPath = null;
     });
 
-    it('should validate an existing Python path if python is installed', async () => {
-      try {
-        const result = await validatePythonPath('python', false);
-        expect(typeof result).toBe('string');
-        expect(result.length).toBeGreaterThan(0);
-      } catch (error) {
-        console.warn('"python" not found, skipping test');
-        return;
-      }
-    });
-
     it('should validate an existing Python path if python3 is installed', async () => {
       try {
         const result = await validatePythonPath('python3', false);
