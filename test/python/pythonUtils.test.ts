@@ -14,101 +14,94 @@ jest.mock('../../src/envars', () => ({
 }));
 
 describe('pythonUtils', () => {
-  // TODO(mldangelo): Tests fail on Windows. Make platform-independent. (2024-09-15)
-  if (process.platform !== 'win32') {
-    describe('validatePythonPath', () => {
-      let originalEnv: NodeJS.ProcessEnv;
+  describe('validatePythonPath', () => {
+    let originalEnv: NodeJS.ProcessEnv;
 
-      beforeAll(() => {
-        originalEnv = { ...process.env };
-        delete process.env.PROMPTFOO_PYTHON;
-      });
+    beforeAll(() => {
+      originalEnv = { ...process.env };
+      delete process.env.PROMPTFOO_PYTHON;
+    });
 
-      beforeEach(() => {
-        state.cachedPythonPath = null;
-      });
+    beforeEach(() => {
+      state.cachedPythonPath = null;
+    });
 
-      afterEach(() => {
-        state.cachedPythonPath = null;
-      });
+    afterAll(() => {
+      process.env = originalEnv;
+    });
 
-      afterAll(() => {
-        process.env = originalEnv;
-      });
-
-      it('should validate an existing Python path if python is installed', async () => {
-        try {
-          const result = await validatePythonPath('python', false);
-          expect(typeof result).toBe('string');
-          expect(result.length).toBeGreaterThan(0);
-        } catch (error) {
-          console.warn('"python" not found, skipping test');
-          return;
-        }
-      });
-
-      it('should validate an existing Python path if python3 is installed', async () => {
-        try {
-          const result = await validatePythonPath('python3', false);
-          expect(typeof result).toBe('string');
-          expect(result.length).toBeGreaterThan(0);
-        } catch (error) {
-          console.warn('"python3" not found, skipping test');
-          return;
-        }
-      });
-
-      it('should return the cached path on subsequent calls', async () => {
-        try {
-          const firstResult = await validatePythonPath('python', false);
-          expect(state.cachedPythonPath).toBe(firstResult);
-          const secondResult = await validatePythonPath('python', false);
-          expect(secondResult).toBe(firstResult);
-        } catch (error) {
-          console.warn('"python" not found, skipping test');
-          return;
-        }
-      });
-
-      it('should fall back to alternative paths for non-existent programs when not explicit', async () => {
-        jest.mocked(getEnvString).mockReturnValue('');
-
-        jest.spyOn(require('child_process'), 'exec').mockImplementation((cmd, callback) => {
-          if (typeof callback === 'function') {
-            callback(null, '/usr/bin/python3', '');
-          }
-          return {} as childProcess.ChildProcess;
-        });
-
-        const invalidPythonPath = 'non_existent_program_12345';
-
-        const result = await validatePythonPath(invalidPythonPath, false);
+    it('should validate an existing Python path if python is installed', async () => {
+      try {
+        const result = await validatePythonPath('python', false);
         expect(typeof result).toBe('string');
         expect(result.length).toBeGreaterThan(0);
-        expect(state.cachedPythonPath).toBe(result);
-      });
-
-      it('should throw an error for non-existent programs when explicit', async () => {
-        jest.mocked(getEnvString).mockReturnValue('');
-
-        jest.spyOn(require('child_process'), 'exec').mockImplementation((cmd, callback) => {
-          if (typeof callback === 'function') {
-            callback(new Error('Command failed'), '', '');
-          }
-          return {} as childProcess.ChildProcess;
-        });
-
-        const invalidPythonPath = 'non_existent_program_12345';
-
-        await expect(validatePythonPath(invalidPythonPath, true)).rejects.toThrow(
-          `Python not found. Tried "${invalidPythonPath}"`,
-        );
-      });
+      } catch (error) {
+        console.warn('"python" not found, skipping test');
+        return;
+      }
     });
-  }
+
+    it('should validate an existing Python path if python3 is installed', async () => {
+      try {
+        const result = await validatePythonPath('python3', false);
+        expect(typeof result).toBe('string');
+        expect(result.length).toBeGreaterThan(0);
+      } catch (error) {
+        console.warn('"python3" not found, skipping test');
+        return;
+      }
+    });
+
+    it('should return the cached path on subsequent calls', async () => {
+      try {
+        const firstResult = await validatePythonPath('python', false);
+        expect(state.cachedPythonPath).toBe(firstResult);
+        const secondResult = await validatePythonPath('python', false);
+        expect(secondResult).toBe(firstResult);
+      } catch (error) {
+        console.warn('"python" not found, skipping test');
+        return;
+      }
+    });
+
+    it('should fall back to alternative paths for non-existent programs when not explicit', async () => {
+      jest.mocked(getEnvString).mockReturnValue('');
+
+      jest.spyOn(require('child_process'), 'exec').mockImplementation((cmd, callback) => {
+        if (typeof callback === 'function') {
+          callback(null, '/usr/bin/python3', '');
+        }
+        return {} as childProcess.ChildProcess;
+      });
+
+      const invalidPythonPath = 'non_existent_program_12345';
+
+      const result = await validatePythonPath(invalidPythonPath, false);
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+      expect(state.cachedPythonPath).toBe(result);
+    });
+
+    it('should throw an error for non-existent programs when explicit', async () => {
+      jest.mocked(getEnvString).mockReturnValue('');
+
+      jest.spyOn(require('child_process'), 'exec').mockImplementation((cmd, callback) => {
+        if (typeof callback === 'function') {
+          callback(new Error('Command failed'), '', '');
+        }
+        return {} as childProcess.ChildProcess;
+      });
+
+      const invalidPythonPath = 'non_existent_program_12345';
+
+      await expect(validatePythonPath(invalidPythonPath, true)).rejects.toThrow(
+        `Python not found. Tried "${invalidPythonPath}"`,
+      );
+    });
+  });
 
   describe('runPython', () => {
-    beforeAll(() => {
+    beforeEach(() => {
       state.cachedPythonPath = '/usr/bin/python3';
     });
 
