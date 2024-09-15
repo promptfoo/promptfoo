@@ -2,15 +2,28 @@
 # runs the Docker container, performs a health check to ensure the application
 # is running correctly, and then publishes the image to GitHub Container Registry
 # if all checks pass. This action is triggered on release creation, workflow dispatch,
-# and pull requests to main that modify the Dockerfile.
+# pull requests to main that modify the Dockerfile, and pushes to main.
 
 name: Test and Publish Multi-arch Docker Image
+run-name: |
+  ${{ github.event_name == 'release' && 'Release' || 
+      github.event_name == 'workflow_dispatch' && 'Manual' || 
+      github.event_name == 'pull_request' && 'PR' || 
+      'Push' }} 
+  Docker build for ${{ github.ref_name }} 
+  ${{ github.event_name == 'pull_request' && format('(PR #{0})', github.event.number) || '' }} 
+  by @${{ github.actor }}
 
 on:
   release:
     types: [created]
   workflow_dispatch:
   pull_request:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile'
+  push:
     branches:
       - main
     paths:
