@@ -1,9 +1,5 @@
 import { getEnvBool } from '../src/envars';
-import {
-  parseChatPrompt,
-  toTitleCase,
-  calculateCost,
-} from '../src/providers/shared';
+import { parseChatPrompt, toTitleCase, calculateCost } from '../src/providers/shared';
 
 jest.mock('../src/envars');
 
