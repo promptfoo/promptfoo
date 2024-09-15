@@ -561,16 +561,14 @@ describe('Anthropic', () => {
       const { system, extractedMessages } = parseMessages(inputMessages);
 
       expect(system).toBeUndefined();
-      expect(extractedMessages).toMatchObject([
+      expect(extractedMessages).toEqual([
         {
           role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: dedent`user: What is the weather?
-                    assistant: The weather is sunny.`,
-            },
-          ],
+          content: [{ type: 'text', text: 'What is the weather?' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'The weather is sunny.' }],
         },
       ]);
     });
@@ -582,18 +580,15 @@ describe('Anthropic', () => {
 
       const { system, extractedMessages } = parseMessages(inputMessages);
 
-      expect(system).toBeUndefined();
-      expect(extractedMessages).toMatchObject([
+      expect(system).toEqual([{ type: 'text', text: 'This is a system message.' }]);
+      expect(extractedMessages).toEqual([
         {
           role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: dedent`system: This is a system message.
-              user: What is the weather?
-              assistant: The weather is sunny.`,
-            },
-          ],
+          content: [{ type: 'text', text: 'What is the weather?' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'The weather is sunny.' }],
         },
       ]);
     });
@@ -604,10 +599,100 @@ describe('Anthropic', () => {
       const { system, extractedMessages } = parseMessages(inputMessages);
 
       expect(system).toBeUndefined();
-      expect(extractedMessages).toMatchObject([
+      expect(extractedMessages).toEqual([
         {
           role: 'user',
           content: [{ type: 'text', text: '' }],
+        },
+      ]);
+    });
+
+    it('should handle only system message', () => {
+      const inputMessages = 'system: This is a system message.';
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toEqual([{ type: 'text', text: 'This is a system message.' }]);
+      expect(extractedMessages).toEqual([]);
+    });
+
+    it('should handle messages with image content', () => {
+      const inputMessages = dedent`user: Here's an image: [image-1.jpg]
+        assistant: I see the image.`;
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toBeUndefined();
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: "Here's an image: [image-1.jpg]" }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'I see the image.' }],
+        },
+      ]);
+    });
+
+    it('should handle multiple messages of the same role', () => {
+      const inputMessages = dedent`
+        user: First question
+        user: Second question
+        assistant: Here's the answer`;
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toBeUndefined();
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'First question' }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Second question' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: "Here's the answer" }],
+        },
+      ]);
+    });
+
+    it('should handle a single user message', () => {
+      const inputMessages = 'Hello, Claude';
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toBeUndefined();
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Hello, Claude' }],
+        },
+      ]);
+    });
+
+    it('should handle multi-line messages', () => {
+      const inputMessages = dedent`
+        user: This is a
+        multi-line
+        message
+        assistant: And this is a
+        multi-line response`;
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toBeUndefined();
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'This is a\nmulti-line\nmessage' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'And this is a\nmulti-line response' }],
         },
       ]);
     });
