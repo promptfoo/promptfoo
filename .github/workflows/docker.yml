@@ -55,12 +55,19 @@ jobs:
       - name: Run Docker container for testing
         run: docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
 
-      - name: Verify Python
+      - name: Verify Python and promptfoo
         run: |
           echo "Checking Python version:"
           docker exec promptfoo-container python --version
           if [ $? -ne 0 ]; then
             echo "Python check failed"
+            exit 1
+          fi
+
+          echo "Checking promptfoo version:"
+          docker exec promptfoo-container promptfoo --version
+          if [ $? -ne 0 ]; then
+            echo "promptfoo check failed"
             exit 1
           fi
 
