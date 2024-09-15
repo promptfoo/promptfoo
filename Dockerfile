@@ -29,7 +29,8 @@ ARG PYTHON_VERSION=3.12
 
 # Install Python for python providers, prompts, asserts, etc.
 RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
-    ln -sf python3 /usr/bin/python
+    ln -sf python3 /usr/bin/python && \
+    npm link promptfoo
 
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
