@@ -1,7 +1,8 @@
 # This GitHub Action builds the Docker image Promptfoo,
 # runs the Docker container, performs a health check to ensure the application
 # is running correctly, and then publishes the image to GitHub Container Registry
-# if all checks pass. This action is exclusively triggered via workflow dispatch.
+# if all checks pass. This action is triggered on release creation, workflow dispatch,
+# and pull requests to main that modify the Dockerfile.
 
 name: Test and Publish Multi-arch Docker Image
 
@@ -9,6 +10,11 @@ on:
   release:
     types: [created]
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -46,10 +52,27 @@ jobs:
           tags: local-test-image:latest
           platforms: linux/amd64
 
-      - name: Run Docker container and health check
-        run: |
-          docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
+      - name: Run Docker container for testing
+        run: docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
 
+      - name: Verify Python and promptfoo
+        run: |
+          echo "Checking Python version:"
+          docker exec promptfoo-container python --version
+          if [ $? -ne 0 ]; then
+            echo "Python check failed"
+            exit 1
+          fi
+
+          echo "Checking promptfoo version:"
+          docker exec promptfoo-container promptfoo --version
+          if [ $? -ne 0 ]; then
+            echo "promptfoo check failed"
+            exit 1
+          fi
+
+      - name: Run health check
+        run: |
           # Loop to check if the server is up
           for i in {1..10}; do
             if curl -f http://localhost:3000/health; then
@@ -62,18 +85,20 @@ jobs:
             fi
           done
 
-          # Stop and remove the Docker container
-          docker stop promptfoo-container
-          docker rm promptfoo-container
-
           # If health check did not pass after retries, exit with an error
           if [ -z "$HEALTH_CHECK_PASS" ]; then
             echo -e "\nHealth check failed after multiple attempts" >&2
             exit 1
           fi
 
+      - name: Stop and remove Docker container
+        if: always()
+        run: |
+          docker stop promptfoo-container
+          docker rm promptfoo-container
+
       - name: Log in to the Container registry
-        if: success()
+        if: success() && (github.event_name != 'pull_request')
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
