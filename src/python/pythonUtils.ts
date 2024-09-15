@@ -14,12 +14,12 @@ const execAsync = util.promisify(exec);
 export const state: { cachedPythonPath: string | null } = { cachedPythonPath: null };
 
 /**
- * Validates the given Python path and caches the result.
+ * Validates and caches the Python executable path.
  *
- * @param pythonPath - The path to the Python executable to validate.
- * @param isExplicit - Whether the Python path is explicitly set by the user.
- * @returns A promise that resolves to the validated Python path.
- * @throws An error if the Python path is invalid.
+ * @param pythonPath - Path to the Python executable.
+ * @param isExplicit - If true, only tries the provided path.
+ * @returns Validated Python executable path.
+ * @throws {Error} If no valid Python executable is found.
  */
 export async function validatePythonPath(pythonPath: string, isExplicit: boolean): Promise<string> {
   if (state.cachedPythonPath) {
@@ -32,8 +32,13 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
 
   async function tryPath(path: string): Promise<string | null> {
     try {
-      const { stdout } = await execAsync(`${command} ${path}`);
-      return stdout.trim();
+      const result = await Promise.race([
+        execAsync(`${command} ${path}`),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Command timed out')), 250),
+        ),
+      ]);
+      return (result as { stdout: string }).stdout.trim();
     } catch (error) {
       return null;
     }
