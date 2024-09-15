@@ -35,34 +35,44 @@ export function extractJsonObjects(str: string): object[] {
 
   while (startIndex < str.length) {
     const openBracket = str.indexOf('{', startIndex);
-    if (openBracket === -1) { break; }
+    if (openBracket === -1) {
+      break;
+    }
 
     let bracketCount = 1;
     let closeBracket = openBracket + 1;
 
     while (bracketCount > 0 && closeBracket < str.length) {
-        if (str[closeBracket] === '{') { bracketCount++; }
-        if (str[closeBracket] === '}') { bracketCount--; }
-        closeBracket++;
+      if (str[closeBracket] === '{') {
+        bracketCount++;
+      }
+      if (str[closeBracket] === '}') {
+        bracketCount--;
+      }
+      closeBracket++;
     }
 
     if (bracketCount === 0) {
-        let attempts = 0;
-        while (attempts < MAX_ATTEMPTS) {
-            const jsonStr = str.slice(openBracket, closeBracket);
-            try {
-                jsonObjects.push(JSON.parse(jsonStr));
-                break;
-            } catch (err) {
-                // Try including the next closing bracket
-                closeBracket = str.indexOf('}', closeBracket) + 1;
-                if (closeBracket === 0) { break; } // No more closing brackets
-            }
-            attempts++;
+      let attempts = 0;
+      while (attempts < MAX_ATTEMPTS) {
+        const jsonStr = str.slice(openBracket, closeBracket);
+        try {
+          const parsedObj = JSON.parse(jsonStr);
+
+          jsonObjects.push(parsedObj);
+          break;
+        } catch (err) {
+          // If parsing fails, try including the next closing bracket
+          closeBracket = str.indexOf('}', closeBracket) + 1;
+          if (closeBracket === 0) {
+            break; // No more closing brackets
+          }
         }
+        attempts++;
+      }
     }
 
-    startIndex = closeBracket;
+    startIndex = openBracket + 1; // Move to the next character after the opening bracket
   }
 
   return jsonObjects;
