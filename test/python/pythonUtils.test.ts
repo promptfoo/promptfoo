@@ -14,10 +14,6 @@ jest.mock('../../src/envars', () => ({
 }));
 
 describe('pythonUtils', () => {
-  beforeAll(() => {
-    delete process.env.PROMPTFOO_PYTHON;
-  });
-
   beforeEach(() => {
     jest.clearAllMocks();
     state.cachedPythonPath = null;
@@ -26,8 +22,19 @@ describe('pythonUtils', () => {
   // TODO(mldangelo): Tests fail on Windows. Make platform-independent. (2024-09-15)
   if (process.platform !== 'win32') {
     describe('validatePythonPath', () => {
+      let originalEnv: NodeJS.ProcessEnv;
+
+      beforeAll(() => {
+        originalEnv = { ...process.env };
+        delete process.env.PROMPTFOO_PYTHON;
+      });
+
       afterEach(() => {
         state.cachedPythonPath = null;
+      });
+
+      afterAll(() => {
+        process.env = originalEnv;
       });
 
       it('should validate an existing Python path if python is installed', async () => {
