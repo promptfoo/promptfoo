@@ -52,7 +52,6 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
   }
   const secondaryPath = await tryPath(alternativePath);
   if (secondaryPath) {
-    logger.warn(`Secondary path found: ${secondaryPath}`);
     state.cachedPythonPath = secondaryPath;
     return secondaryPath;
   }
