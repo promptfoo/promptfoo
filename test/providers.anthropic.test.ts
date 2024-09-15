@@ -5,7 +5,7 @@ import {
   AnthropicCompletionProvider,
   AnthropicLlmRubricProvider,
   AnthropicMessagesProvider,
-  calculateCost,
+  calculateAnthropicCost,
   outputFromMessage,
   parseMessages,
 } from '../src/providers/anthropic';
@@ -407,21 +407,21 @@ describe('Anthropic', () => {
     });
   });
 
-  describe('calculateCost', () => {
+  describe('calculateAnthropicCost', () => {
     it('should calculate cost for valid input and output tokens', () => {
-      const cost = calculateCost('claude-3-opus-20240229', { cost: 0.015 }, 100, 200);
+      const cost = calculateAnthropicCost('claude-3-opus-20240229', { cost: 0.015 }, 100, 200);
 
       expect(cost).toBe(4.5); // (0.015 * 100) + (0.075 * 200)
     });
 
     it('should return undefined for missing model', () => {
-      const cost = calculateCost('non-existent-model', { cost: 0.015 });
+      const cost = calculateAnthropicCost('non-existent-model', { cost: 0.015 });
 
       expect(cost).toBeUndefined();
     });
 
     it('should return undefined for missing tokens', () => {
-      const cost = calculateCost('claude-3-opus-20240229', { cost: 0.015 });
+      const cost = calculateAnthropicCost('claude-3-opus-20240229', { cost: 0.015 });
 
       expect(cost).toBeUndefined();
     });

@@ -19,7 +19,7 @@ import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
+import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 // see https://platform.openai.com/docs/models
 const OPENAI_CHAT_MODELS = [
@@ -337,26 +337,16 @@ function formatOpenAiError(data: {
   return errorMessage;
 }
 
-function calculateCost(
+export function calculateOpenAICost(
   modelName: string,
   config: OpenAiSharedOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = [...OPENAI_CHAT_MODELS, ...OPENAI_COMPLETION_MODELS].find(
-    (m) => m.id === modelName,
-  );
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  return calculateCost(modelName, config, promptTokens, completionTokens, [
+    ...OPENAI_CHAT_MODELS,
+    ...OPENAI_COMPLETION_MODELS,
+  ]);
 }
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
@@ -448,7 +438,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),
         cached,
-        cost: calculateCost(
+        cost: calculateOpenAICost(
           this.modelName,
           this.config,
           data.usage?.prompt_tokens,
@@ -621,7 +611,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             tokenUsage: getTokenUsage(data, cached),
             cached,
             logProbs,
-            cost: calculateCost(
+            cost: calculateOpenAICost(
               this.modelName,
               this.config,
               data.usage?.prompt_tokens,
@@ -636,7 +626,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         tokenUsage: getTokenUsage(data, cached),
         cached,
         logProbs,
-        cost: calculateCost(
+        cost: calculateOpenAICost(
           this.modelName,
           this.config,
           data.usage?.prompt_tokens,

@@ -33,3 +33,43 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
 export function toTitleCase(str: string) {
   return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
 }
+
+interface ModelCost {
+  input: number;
+  output: number;
+}
+
+interface ProviderModel {
+  id: string;
+  cost?: ModelCost;
+}
+
+interface ProviderConfig {
+  cost?: number;
+}
+
+export function calculateCost(
+  modelName: string,
+  config: ProviderConfig,
+  promptTokens: number | undefined,
+  completionTokens: number | undefined,
+  models: ProviderModel[],
+): number | undefined {
+  if (
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens) ||
+    typeof promptTokens === 'undefined' ||
+    typeof completionTokens === 'undefined'
+  ) {
+    return undefined;
+  }
+
+  const model = models.find((m) => m.id === modelName);
+  if (!model || !model.cost) {
+    return undefined;
+  }
+
+  const inputCost = config.cost ?? model.cost.input;
+  const outputCost = config.cost ?? model.cost.output;
+  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+}
