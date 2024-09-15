@@ -28,11 +28,15 @@ COPY --from=builder /app/dist ./dist
 ARG PYTHON_VERSION=3.12
 
 # Install Python for python providers, prompts, asserts, etc.
-RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools && \
+RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
     ln -sf python3 /usr/bin/python
 
 ENV API_PORT=3000
+ENV HOST=0.0.0.0
 
 EXPOSE 3000
+
+# Set up healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD curl -f http://localhost:3000/health || exit 1
 
 CMD ["node", "dist/src/server/index.js"]
