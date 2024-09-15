@@ -4,6 +4,7 @@ import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
+import { calculateCost } from './shared';
 
 const ANTHROPIC_MODELS = [
   ...['claude-instant-1.2'].map((model) => ({
@@ -160,24 +161,13 @@ export function parseMessages(messages: string): {
   return { system, extractedMessages };
 }
 
-export function calculateCost(
+export function calculateAnthropicCost(
   modelName: string,
   config: AnthropicMessageOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = ANTHROPIC_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  return calculateCost(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
 }
 
 export class AnthropicMessagesProvider implements ApiProvider {
@@ -278,7 +268,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
       return {
         output: outputFromMessage(response),
         tokenUsage: getTokenUsage(response, false),
-        cost: calculateCost(
+        cost: calculateAnthropicCost(
           this.modelName,
           this.config,
           response.usage?.input_tokens,

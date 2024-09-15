@@ -8,7 +8,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const MISTRAL_CHAT_MODELS = [
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
@@ -127,31 +127,16 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-function calculateCost(
+function calculateMistralCost(
   modelName: string,
   config: MistralChatCompletionOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  if (
-    !Number.isFinite(promptTokens) ||
-    !Number.isFinite(completionTokens) ||
-    typeof promptTokens !== 'number' ||
-    typeof completionTokens !== 'number'
-  ) {
-    return undefined;
-  }
-
-  const model =
-    MISTRAL_CHAT_MODELS.find((m) => m.id === modelName) ||
-    MISTRAL_EMBEDDING_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  return calculateCost(modelName, config, promptTokens, completionTokens, [
+    ...MISTRAL_CHAT_MODELS,
+    ...MISTRAL_EMBEDDING_MODELS,
+  ]);
 }
 
 export class MistralChatCompletionProvider implements ApiProvider {
@@ -296,7 +281,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
       output: data.choices[0].message.content,
       tokenUsage: getTokenUsage(data, cached),
       cached,
-      cost: calculateCost(
+      cost: calculateMistralCost(
         this.modelName,
         this.config,
         data.usage?.prompt_tokens,
@@ -434,7 +419,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
           ...tokenUsage,
           completion: completionTokens,
         },
-        cost: calculateCost(this.modelName, this.config, promptTokens, completionTokens),
+        cost: calculateMistralCost(this.modelName, this.config, promptTokens, completionTokens),
       };
     } catch (err) {
       logger.error(data.error?.message || 'Unknown error');
