@@ -24,6 +24,11 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
+# Install Python and set up environment
+RUN apk add --no-cache python3 py3-pip
+RUN ln -sf python3 /usr/bin/python
+RUN pip3 install --no-cache --upgrade pip setuptools
+
 ENV API_PORT=3000
 
 EXPOSE 3000

@@ -46,6 +46,15 @@ jobs:
           tags: local-test-image:latest
           platforms: linux/amd64
 
+      - name: Verify Python
+        run: |
+          echo "Checking Python version:"
+          docker run --rm local-test-image:latest python --version
+          if [ $? -ne 0 ]; then
+            echo "Python check failed"
+            exit 1
+          fi
+
       - name: Run Docker container and health check
         run: |
           docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
