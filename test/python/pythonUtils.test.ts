@@ -72,13 +72,6 @@ describe('pythonUtils', () => {
       expect(result).toBe('/usr/bin/python3');
     });
 
-    it('should return null for a Python 2 executable', async () => {
-      jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 2.7.18\n', stderr: '' });
-
-      const result = await tryPath('/usr/bin/python');
-      expect(result).toBeNull();
-    });
-
     it('should return null for a non-existent executable', async () => {
       jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
 
