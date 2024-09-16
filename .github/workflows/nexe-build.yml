@@ -12,6 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,6 +29,7 @@ jobs:
   nexe-build:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     strategy:
       matrix:
         os: [linux, macos, win]
