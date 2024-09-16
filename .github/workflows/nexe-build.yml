@@ -40,6 +40,13 @@ jobs:
           name: dist
           path: dist/
       - run: npm ci
+      - name: Cache nexe build artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.nexe
+          key: ${{ runner.os }}-${{ matrix.arch }}-nexe-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-nexe-
       - name: Install nexe globally
         run: npm install -g nexe
       - name: Build executable
