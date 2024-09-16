@@ -6,8 +6,7 @@ const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
 // Get all assertion types from the schema, join them with '|' for the regex
 const assertionTypesRegex = BaseAssertionTypesSchema.options.join('|');
-// Construct the full regex
-const fullRegex = new RegExp(
+const assertionRegex = new RegExp(
   `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
 );
 
@@ -51,8 +50,7 @@ export function assertionFromString(expected: string): Assertion {
     };
   }
 
-  // Use fullRegex instead of the hardcoded regex
-  const regexMatch = expected.match(fullRegex);
+  const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
     const [_, notPrefix, type, thresholdStr, value] = regexMatch;
@@ -60,10 +58,10 @@ export function assertionFromString(expected: string): Assertion {
     const threshold = Number.parseFloat(thresholdStr);
 
     if (
-      type === 'contains-any' ||
       type === 'contains-all' ||
-      type === 'icontains-any' ||
-      type === 'icontains-all'
+      type === 'contains-any' ||
+      type === 'icontains-all' ||
+      type === 'icontains-any'
     ) {
       return {
         type: fullType as AssertionType,
@@ -75,19 +73,19 @@ export function assertionFromString(expected: string): Assertion {
         value,
       };
     } else if (
-      type === 'rouge-n' ||
-      type === 'similar' ||
-      type === 'starts-with' ||
-      type === 'levenshtein' ||
-      type === 'classifier' ||
       type === 'answer-relevance' ||
+      type === 'classifier' ||
+      type === 'context-faithfulness' ||
       type === 'context-recall' ||
       type === 'context-relevance' ||
-      type === 'context-faithfulness' ||
+      type === 'cost' ||
       type === 'latency' ||
-      type === 'perplexity' ||
+      type === 'levenshtein' ||
       type === 'perplexity-score' ||
-      type === 'cost'
+      type === 'perplexity' ||
+      type === 'rouge-n' ||
+      type === 'similar' ||
+      type === 'starts-with'
     ) {
       return {
         type: fullType as AssertionType,
