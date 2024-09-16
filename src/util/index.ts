@@ -1127,7 +1127,7 @@ export function parsePathOrGlob(
 
 /**
  * Loads content from an external file if the input is a file path, otherwise
- * returns the input as-is.
+ * returns the input as-is. Supports Nunjucks templating for file paths.
  *
  * @param filePath - The input to process. Can be a file path string starting with "file://",
  * an array of file paths, or any other type of data.
@@ -1152,7 +1152,10 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
     return filePath;
   }
 
-  const finalPath = path.resolve(cliState.basePath || '', filePath.slice('file://'.length));
+  // Render the file path using Nunjucks
+  const renderedFilePath = getNunjucksEngine().renderString(filePath, {});
+
+  const finalPath = path.resolve(cliState.basePath || '', renderedFilePath.slice('file://'.length));
   if (!fs.existsSync(finalPath)) {
     throw new Error(`File does not exist: ${finalPath}`);
   }
