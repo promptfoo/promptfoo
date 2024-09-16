@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
+import logoPanda from '@app/assets/logo-panda.svg';
 import Box from '@mui/material/Box';
-import logoPanda from '../assets/logo-panda.svg';
 import './Logo.css';
 
 export default function Logo() {

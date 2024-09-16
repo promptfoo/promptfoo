@@ -26,6 +26,7 @@
     "dist",
     "src/web/client/**/*",
     "src/web/nextui/**/*",
-    "src/workers/**/*"
+    "src/workers/**/*",
+    "src/app/**/*"
   ]
 }

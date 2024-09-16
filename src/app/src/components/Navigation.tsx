@@ -36,7 +36,7 @@ export default function Navigation({
   const navigationContent = (
     <>
       <Logo />
-      {!import.meta.env.NEXT_PUBLIC_NO_BROWSING && (
+      {!import.meta.env.VITE_PUBLIC_NO_BROWSING && (
         <>
           <NavLink href="/setup" label="New Eval" />
           <NavLink href="/eval" label="Evals" />

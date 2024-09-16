@@ -78,6 +78,7 @@ const RiskCard: React.FC<{
             >
               <Gauge
                 value={progressValue}
+                // @ts-ignore
                 max={100}
                 thickness={10}
                 arc={{

@@ -53,7 +53,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     useStore.persist.rehydrate();
   }, []);
 
-  if (process.env.NEXT_PUBLIC_NO_BROWSING) {
+  if (process.env.VITE_PUBLIC_NO_BROWSING) {
     return null;
   }
 

@@ -11,9 +11,9 @@ export interface ShareConfigState {
 const useShareConfig = create<ShareConfigState>()(
   persist(
     (set) => ({
-      apiShareBaseUrl: import.meta.env.NEXT_PUBLIC_PROMPTFOO_SHARE_API_URL || '',
+      apiShareBaseUrl: import.meta.env.VITE_PUBLIC_PROMPTFOO_SHARE_API_URL || '',
       setApiShareBaseUrl: (apiShareBaseUrl: string) => set({ apiShareBaseUrl }),
-      appShareBaseUrl: import.meta.env.NEXT_PUBLIC_PROMPTFOO_APP_SHARE_URL || undefined,
+      appShareBaseUrl: import.meta.env.VITE_PUBLIC_PROMPTFOO_APP_SHARE_URL || undefined,
       setAppShareBaseUrl: (appShareBaseUrl: string) => set({ appShareBaseUrl }),
     }),
     {

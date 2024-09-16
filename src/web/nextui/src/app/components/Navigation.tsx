@@ -36,7 +36,7 @@ export default function Navigation({
   const navigationContent = (
     <>
       <Logo />
-      {!process.env.NEXT_PUBLIC_NO_BROWSING && (
+      {!process.env.VITE_PUBLIC_NO_BROWSING && (
         <>
           <NavLink href="/setup" label="New Eval" />
           <NavLink href="/eval" label="Evals" />

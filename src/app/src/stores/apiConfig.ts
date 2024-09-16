@@ -11,7 +11,7 @@ export interface ApiConfig {
 const useApiConfig = create<ApiConfig>()(
   persist(
     (set) => ({
-      apiBaseUrl: import.meta.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL,
+      apiBaseUrl: import.meta.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL || '',
       setApiBaseUrl: (apiBaseUrl: string) => set({ apiBaseUrl }),
       fetchingPromise: null,
       setFetchingPromise: (fetchingPromise: Promise<Response> | null) => set({ fetchingPromise }),

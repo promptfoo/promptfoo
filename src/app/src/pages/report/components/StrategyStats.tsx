@@ -4,7 +4,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
-import { styled } from '@mui/material/styles';
+import { styled } from '@mui/system';
 import { displayNameOverrides, subCategoryDescriptions } from './constants';
 import './StrategyStats.css';
 
@@ -22,7 +22,7 @@ const DangerLinearProgress = styled(LinearProgress)(({ theme }) => ({
     borderRadius: 8,
     backgroundColor: theme.palette.mode === 'light' ? '#ff1744' : '#ff8a80',
   },
-}));
+})) as React.FC<React.ComponentProps<typeof LinearProgress>>;
 
 const StrategyStats: React.FC<StrategyStatsProps> = ({ strategyStats }) => {
   const strategies = Object.entries(strategyStats).sort(

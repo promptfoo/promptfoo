@@ -319,6 +319,7 @@ const App: React.FC = () => {
           </Typography>
           <List>
             {prompts.map((prompt, index) => (
+              // @ts-ignore
               <ListItem
                 key={index}
                 button
