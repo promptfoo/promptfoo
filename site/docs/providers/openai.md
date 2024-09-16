@@ -14,11 +14,11 @@ export OPENAI_API_KEY=your_api_key_here
 
 The OpenAI provider supports the following model formats:
 
-- `openai:chat` - defaults to `gpt-3.5-turbo`
+- `openai:chat` - defaults to `gpt-4o-mini`
 - `openai:completion` - defaults to `text-davinci-003`
 - `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
 - `openai:chat:<model name>` - uses any model name against the `/v1/chat/completions` endpoint
-- `openai:chat:ft:gpt-3.5-turbo-0613:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:chat:ft:gpt-4o-mini:company-name:ID` - example of a fine-tuned chat completion model
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:assistant:<assistant id>` - use an assistant
@@ -32,7 +32,7 @@ The OpenAI provider supports a handful of [configuration options](https://github
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: openai:gpt-3.5-turbo
+  - id: openai:gpt-4o-mini
     config:
       temperature: 0
       max_tokens: 1024
@@ -48,7 +48,7 @@ The `providers` list takes a `config` key that allows you to set parameters like
 
 ```yaml
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     config:
       temperature: 0
       max_tokens: 128
@@ -57,28 +57,29 @@ providers:
 
 Supported parameters include:
 
-| Parameter           | Description                                                                                                                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `temperature`       | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic. |
-| `max_tokens`        | Controls the maximum length of the output in tokens.                                                                                                            |
-| `top_p`             | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                   |
-| `frequency_penalty` | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                          |
-| `presence_penalty`  | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                   |
-| `best_of`           | Controls the number of alternative outputs to generate and select from.                                                                                         |
-| `functions`         | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                               |
-| `function_call`     | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                    |
-| `tools`             | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)               |
-| `tool_choice`       | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)       |
-| `stop`              | Defines a list of tokens that signal the end of the output.                                                                                                     |
-| `stop`              | Defines a list of tokens that signal the end of the output.                                                                                                     |
-| `response_format`   | Response format restrictions.                                                                                                                                   |
-| `seed`              | Seed used for deterministic output. Defaults to 0                                                                                                               |
-| `apiKey`            | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                        |
-| `apiKeyEnvar`       | An environment variable that contains the API key                                                                                                               |
-| `apiHost`           | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
-| `apiBaseUrl`        | The base URL of the OpenAI API, please also read `OPENAI_BASE_URL` below.                                                                                       |
-| `organization`      | Your OpenAI organization key.                                                                                                                                   |
-| `headers`           | Additional headers to include in the request.                                                                                                                   |
+| Parameter               | Description                                                                                                                                                     |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiBaseUrl`            | The base URL of the OpenAI API, please also read `OPENAI_BASE_URL` below.                                                                                       |
+| `apiHost`               | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
+| `apiKey`                | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                        |
+| `apiKeyEnvar`           | An environment variable that contains the API key                                                                                                               |
+| `best_of`               | Controls the number of alternative outputs to generate and select from.                                                                                         |
+| `frequency_penalty`     | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                          |
+| `function_call`         | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                    |
+| `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                               |
+| `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                            |
+| `headers`               | Additional headers to include in the request.                                                                                                                   |
+| `max_tokens`            | Controls the maximum length of the output in tokens.                                                                                                            |
+| `organization`          | Your OpenAI organization key.                                                                                                                                   |
+| `passthrough`           | Additional parameters to pass through to the API.                                                                                                               |
+| `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                   |
+| `response_format`       | Specifies the desired output format, including `json_object` and `json_schema`                                                                                  |
+| `seed`                  | Seed used for deterministic output.                                                                                                                             |
+| `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                     |
+| `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic. |
+| `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)       |
+| `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)               |
+| `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                   |
 
 Here are the type declarations of `config` parameters:
 
@@ -91,28 +92,20 @@ interface OpenAiConfig {
   frequency_penalty?: number;
   presence_penalty?: number;
   best_of?: number;
-  functions?: {
-    name: string;
-    description?: string;
-    parameters: any;
-  }[];
+  functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: {
-    type: string;
-    function: {
-      name: string;
-      description?: string;
-      parameters: any;
-    };
-  }[];
-  tool_choice?:
-    | 'none'
-    | 'auto'
-    | { type: 'function'; function?: { name: string } }
-    | { type: 'file_search' };
+  tools?: OpenAiTool[];
+  tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
+  response_format?: { type: 'json_object' | 'json_schema'; json_schema?: object };
   stop?: string[];
-  response_format?: { type: string };
   seed?: number;
+  passthrough?: object;
+
+  // Function tool callbacks
+  functionToolCallbacks?: Record<
+    OpenAI.FunctionDefinition['name'],
+    (arg: string) => Promise<string>
+  >;
 
   // General OpenAI parameters
   apiKey?: string;
@@ -124,24 +117,90 @@ interface OpenAiConfig {
 }
 ```
 
-## Images / gpt-4-vision
+## Images
 
-You can include images in the prompt by using content blocks.
+### Sending images in prompts
 
-See [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/examples/openai-vision).
+You can include images in the prompt by using content blocks. For example, here's an example config:
+
+```yaml
+prompts:
+  - prompt.json
+
+providers:
+  - openai:gpt-4o
+
+tests:
+  - vars:
+      question: 'What do you see?'
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
+  # ...
+```
+
+And an example `prompt.json`:
+
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "{{question}}"
+      },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "{{url}}"
+        }
+      }
+    ]
+  }
+]
+```
+
+See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision).
+
+### Generating images
+
+OpenAI supports Dall-E generations via `openai:image:dalle-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+
+```yaml
+prompts:
+  - 'In the style of Van Gogh: {{subject}}'
+  - 'In the style of Dali: {{subject}}'
+
+providers:
+  - openai:image:dall-e-3
+
+tests:
+  - vars:
+      subject: bananas
+  - vars:
+      subject: new york city
+```
+
+To display images in the web viewer, wrap vars or outputs in markdown image tags like so:
+
+```markdown
+![](/path/to/myimage.png)
+```
+
+Then, enable 'Render markdown' under Table Settings.
 
 ## Using tools and functions
 
-OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/typpo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/typpo/promptfoo/tree/main/examples/openai-function-call).
+OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
 
 ### Using tools
 
 To set `tools` on an OpenAI provider, use the provider's `config` key. Add your function definitions under this key.
 
 ```yaml
-prompts: [prompt.txt]
+prompts:
+  - file://prompt.txt
 providers:
-  - id: openai:chat:gpt-3.5-turbo-0613
+  - id: openai:chat:gpt-4o-mini
     // highlight-start
     config:
       tools: [
@@ -186,7 +245,7 @@ tests:
 # ...
 ```
 
-Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) or [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-tools-call) assertions to enforce an exact schema match between tools and the function definition.
+Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) or [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call) assertions to enforce an exact schema match between tools and the function definition.
 
 To further test `tools` definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
@@ -256,9 +315,10 @@ They can also include functions that dynamically reference vars:
 Use the `functions` config to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
 ```yaml
-prompts: [prompt.txt]
+prompts:
+  - file://prompt.txt
 providers:
-  - id: openai:chat:gpt-3.5-turbo-0613
+  - id: openai:chat:gpt-4o-mini
     // highlight-start
     config:
       functions:
@@ -294,7 +354,7 @@ tests:
   # ...
 ```
 
-Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) assertions to enforce an exact schema match between function calls and the function definition.
+Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/deterministic#is-valid-openai-function-call) assertions to enforce an exact schema match between function calls and the function definition.
 
 To further test function call definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
@@ -311,7 +371,7 @@ tests:
 
   - vars:
       city: New York
-    # transform returns only the 'name' property for this testcase
+    # transform returns only the 'name' property for this test case
     transform: output.name
     assert:
       - type: is-json
@@ -330,10 +390,17 @@ providers:
   - file://./path/to/provider_with_function.yaml
 ```
 
+You can also use a pattern to load multiple files:
+
+```yaml
+providers:
+  - file://./path/to/provider_*.yaml
+```
+
 Here's an example of how your `provider_with_function.yaml` might look:
 
 ```yaml
-id: openai:chat:gpt-3.5-turbo-0613
+id: openai:chat:gpt-4o-mini
 config:
   functions:
     - name: get_current_weather
@@ -354,14 +421,53 @@ config:
           - location
 ```
 
+## Using `response_format`
+
+Promptfoo supports the `response_format` parameter, which allows you to specify the expected output format.
+
+`response_format` can be included in the provider config, or in the prompt config.
+
+#### Prompt config example
+
+```yaml
+prompts:
+  - label: 'Prompt #1'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
+
+#### Provider config example
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4o-mini
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
+
+#### External file references
+
+To make it easier to manage large JSON schemas, external file references are supported:
+
+```yaml
+config:
+  response_format: file://./path/to/response_format.json
+```
+
 ## Supported environment variables
 
 These OpenAI-related environment variables are supported:
 
 | Variable                       | Description                                                                                                      |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0.                                                                      |
-| `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024.                                                                    |
+| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0. Not supported by o1-models.                                          |
+| `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024. Not supported by o1-models.                                        |
+| `OPENAI_MAX_COMPLETION_TOKENS` | Max_completion_tokens model parameter, defaults to 1024. Used by o1-models.                                      |
 | `OPENAI_API_HOST`              | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                |
 | `OPENAI_BASE_URL`              | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.          |
 | `OPENAI_API_KEY`               | OpenAI API key.                                                                                                  |
@@ -398,6 +504,7 @@ The following properties can be overwritten in provider config:
 - `thread.messages` - A list of message objects that the thread is created with.
 - `temperature` - Temperature for the model
 - `toolChoice` - Controls whether the AI should use a tool
+- `attachments` - File attachments to include in messages - see [Assistant v2 attachments](https://platform.openai.com/docs/assistants/migration)
 
 Here's an example of a more detailed config:
 
@@ -408,7 +515,7 @@ providers:
   // highlight-start
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ
     config:
-      model: gpt-4-1106-preview
+      model: gpt-4o
       instructions: "You always speak like a pirate"
       temperature: 0.2
       toolChoice:
@@ -444,7 +551,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
       id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
       config:
         /** @type {InstanceType<import('promptfoo')["providers"]["OpenAiAssistantProvider"]>["config"]} */ ({
-          model: 'gpt-4-1106-preview',
+          model: 'gpt-4o',
           instructions: 'You can add two numbers together using the `addNumbers` tool',
           tools: [
             {

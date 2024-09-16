@@ -1,54 +1,90 @@
 ---
 sidebar_position: 50
+description: Learn how to self-host promptfoo using Docker. This comprehensive guide walks you through setup, configuration, and troubleshooting for your own instance.
+keywords:
+  - AI testing
+  - configuration
+  - Docker
+  - LLM eval
+  - LLM evaluation
+  - promptfoo
+  - self-hosting
+  - setup guide
+  - team collaboration
 ---
 
 # Self-hosting
 
-promptfoo provides a Docker image that allows you to host a central server that stores your team's evals.
+promptfoo provides a Docker image that allows you to host a central server that stores your team's evals. With this, you can:
+
+- Share your evals with your team.
+- Run evals in your CI/CD pipeline and aggregate the results.
+- Keep sensitive data off of your local machine.
 
 The self-hosted app consists of:
 
-- Next.js application that runs the web ui.
-- filesystem store that persists the eval results.
-- key-value (KV) store that persists shared data (redis, filesystem, or memory).
+- he self-hosted app is an Express server that serves the web UI and API.
 
-## Setup
+## Building from Source
 
-Clone the repository and see the provided [Dockerfile](https://github.com/promptfoo/promptfoo/blob/main/Dockerfile). Here's an example Docker command to build and run the container:
+### 1. Clone the Repository
 
-```sh
-docker build --build-arg NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000 -t promptfoo-ui .
-docker run -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo-ui
-```
-
-- `NEXT_PUBLIC_PROMPTFOO_BASE_URL` tells the web app where to send the API request when the user clicks the 'Share' button. This should be configured to match the URL of your self-hosted instance.
-- The `-v` argument maps the working directory `/root/.promptfoo` to a path on your local filesystem `/path/to/local_promptfoo`. Replace this path with your preferred local path. You can omit this argument, but then your evals won't be persisted.
-
-You can also set API credentials on the running Docker instance so that evals can be run on the server. For example, we'll set the OpenAI API key so users can run evals directly from the web ui:
+First, clone the promptfoo repository from GitHub:
 
 ```sh
-docker run -p 3000:3000 -e -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
+git clone https://github.com/promptfoo/promptfoo.git
+cd promptfoo
 ```
 
-## Configuring eval storage
+### 2. Build the Docker Image
 
-promptfoo uses a sqlite database located in `/root/.promptfoo` on the image, as well as some other files in that directory to track state. Be sure to persist this directory (and the `promptfoo.db` file specifically) in order to save evals.
+Build the Docker image with the following command:
 
-## Configuring the KV Store
+```sh
+docker build -t promptfoo .
+```
 
-By default, the application uses an in-memory store for shared results. However, you can configure it to use Redis or the filesystem by setting the appropriate environment variables. Below is a table of environment variables you can set to configure the KV store:
+### 3. Run the Docker Container
 
-| Environment Variable             | Description                                                    | Default Value       |
-| -------------------------------- | -------------------------------------------------------------- | ------------------- |
-| `PROMPTFOO_SHARE_STORE_TYPE`     | The type of store to use (`memory`, `redis`, or `filesystem`). | `memory`            |
-| `PROMPTFOO_SHARE_TTL`            | The time-to-live (TTL) for shared URLs in seconds.             | `1209600` (2 weeks) |
-| `PROMPTFOO_SHARE_REDIS_HOST`     | The Redis host.                                                | -                   |
-| `PROMPTFOO_SHARE_REDIS_PORT`     | The Redis port.                                                | -                   |
-| `PROMPTFOO_SHARE_REDIS_PASSWORD` | The Redis password.                                            | -                   |
-| `PROMPTFOO_SHARE_REDIS_DB`       | The Redis database number.                                     | `0`                 |
-| `PROMPTFOO_SHARE_STORE_PATH`     | The filesystem path for storing shared results.                | `share-store`       |
+Launch the Docker container using this command:
 
-## Pointing the promptfoo client to your hosted instance
+```sh
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo
+```
+
+Key points:
+
+- `-v /path/to/local_promptfoo:/root/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
+- Omitting the `-v` argument will result in non-persistent evals.
+- Add any api keys as environment variables on the docker container. For example, `-e OPENAI_API_KEY=sk-abc123` sets the OpenAI API key so users can run evals directly from the web UI. Replace `sk-abc123` with your actual API key.
+
+## Using Pre-built Docker Images
+
+As an alternative to building from source, we also publish pre-built Docker images on GitHub Container Registry. This can be a quicker way to get started if you don't need to customize the image. However, we generally recommend building from source due to static variable inlining in the pre-built image. Some features, such as the `promptfoo share` command, may not work out of the box with the pre-built image (by default, `promptfoo share` will point to `localhost:3000`).
+
+To use a pre-built image:
+
+1. Pull the image:
+
+```bash
+docker pull ghcr.io/promptfoo/promptfoo:main
+```
+
+2. Run the container:
+
+```bash
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo ghcr.io/promptfoo/promptfoo:main
+```
+
+You can use specific version tags instead of `main` for more stable releases.
+
+## Advanced Configuration
+
+### Eval Storage
+
+promptfoo uses a SQLite database (`promptfoo.db`) located in `/root/.promptfoo` on the image. Ensure this directory is persisted to save your evals. Pass `-v /path/to/local_promptfoo:/root/.promptfoo` to the `docker run` command to persist the evals.
+
+## Pointing promptfoo to your hosted instance
 
 When self-hosting, you need to set the environment variables so that the `promptfoo share` command knows how to reach your hosted application. Here's an example:
 

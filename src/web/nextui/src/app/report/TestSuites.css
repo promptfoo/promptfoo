@@ -1,28 +1,30 @@
+/* FIXME(ian): !important because these are global classes, unfortunately */
+
 .pass-high {
-  color: green;
+  color: green !important;
 }
 
 .pass-medium {
-  color: rgb(203, 133, 3);
+  color: rgb(203, 133, 3) !important;
 }
 
 .pass-low {
-  color: red;
+  color: red !important;
 }
 
 .vuln-critical {
-  color: red;
-  font-weight: bold;
+  color: red !important;
+  font-weight: bold !important;
 }
 
 .vuln-high {
-  color: red;
+  color: red !important;
 }
 
 .vuln-medium {
-  color: rgb(203, 133, 3);
+  color: rgb(203, 133, 3) !important;
 }
 
 .vuln-low {
-  color: green;
+  color: green !important;
 }

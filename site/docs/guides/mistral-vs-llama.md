@@ -1,12 +1,12 @@
 ---
-sidebar_label: Mistral vs Llama 3
+sidebar_label: Mistral vs Llama
 ---
 
-# Mistral vs Llama 3: benchmark on your own data
+# Mistral vs Llama: benchmark on your own data
 
 When Mistral was was released, it was the "best 7B model to date" based on a [number of evals](https://mistral.ai/news/announcing-mistral-7b/). Mixtral, a mixture-of-experts model based on Mistral, was recently [announced](https://mistral.ai/news/mixtral-of-experts/) with even more impressive eval performance.
 
-When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks. This guide describes how to compare Mixtral 8x7b vs Mistral 7B vs Llama 3 8B using the `promptfoo` CLI.
+When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks. This guide describes how to compare Mixtral 8x7b vs Mistral 7B vs Llama 3.1 8B using the `promptfoo` CLI.
 
 The end result is a view that compares the performance of Mistral, Mixtral, and Llama side-by-side:
 
@@ -32,7 +32,7 @@ Now let's start editing `promptfooconfig.yaml`. Create a list of models we'd lik
 providers:
   - openrouter:mistralai/mistral-7b-instruct
   - openrouter:mistralai/mixtral-8x7b-instruct
-  - openrouter:meta-llama/llama-3-8b-instruct
+  - openrouter:meta-llama/llama-3.1-8b-instruct
 ```
 
 We're using OpenRouter for convenience because it wraps everything in an OpenAI-compatible chat format, but you can use any [provider](/docs/providers) that supplies these models, including HuggingFace, Replicate, Groq, and more.
@@ -91,7 +91,7 @@ providers:
   - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
     prompts:
       - mistral prompt
-  - id: replicate:meta/meta-llama-3-8b-instruct
+  - id: replicate:meta/meta-llama-3.1-8b-instruct
     prompts:
       - llama_prompt
 ````
@@ -118,7 +118,7 @@ providers:
     config:
       temperature: 0.5
     // highlight-end
-  - id: openrouter:meta-llama/llama-3-8b-instruct
+  - id: openrouter:meta-llama/llama-3.1-8b-instruct
     // highlight-start
     config:
       temperature: 0.5
@@ -232,9 +232,9 @@ Contrast this with generic public benchmarks, which show that Llama3 >> Mixtral 
 | Model                                                                                     | Average | ARC   | HellaSwag | MMLU  | TruthfulQA | Winogrande | GSM8k | GPQA | MATH | HumanEval | DROP |
 | ----------------------------------------------------------------------------------------- | ------- | ----- | --------- | ----- | ---------- | ---------- | ----- | ---- | ---- | --------- | ---- |
 | [Mixtral-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) | 72.70   | 70.14 | 87.55     | 71.40 | 64.98      | 81.06      | 61.11 |      |      |           |      |
-| [llama2_70b_mmlu](https://huggingface.co/itsliupeng/llama2_70b_mmlu)                      | 68.24   | 65.61 | 87.37     | 71.89 | 49.15      | 82.40      | 52.99 |      |      |           |      |
+| [Llama 2 70B](https://huggingface.co/meta-llama/Llama-2-70b-hf)                           | 68.24   | 65.61 | 87.37     | 71.89 | 49.15      | 82.40      | 52.99 |      |      |           |      |
 | [Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2)     | 65.71   | 63.14 | 84.88     | 60.78 | 68.26      | 77.19      | 40.03 |      |      |           |      |
-| [llama2_7b_mmlu](https://huggingface.co/itsliupeng/llama2_7b_mmlu)                        | 53.10   | 56.14 | 79.13     | 60.04 | 40.95      | 74.43      | 7.88  |      |      |           |      |
+| [Llama 2 7B](https://huggingface.co/meta-llama/Llama-2-7b-hf)                             | 53.10   | 56.14 | 79.13     | 60.04 | 40.95      | 74.43      | 7.88  |      |      |           |      |
 | [Llama 3 8B](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct)                  |         |       |           | 68.4  | 34.2       |            |       | 34.2 | 30.0 | 62.2      | 58.4 |
 | [Llama 3 70B](https://huggingface.co/meta-llama/Meta-Llama-3-70B-Instruct)                |         |       |           | 82.0  | 39.5       |            |       | 39.5 | 50.4 | 81.7      | 79.7 |
 

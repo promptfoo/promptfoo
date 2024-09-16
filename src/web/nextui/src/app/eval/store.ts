@@ -1,7 +1,8 @@
-import { create } from 'zustand';
-import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
+import type { VisibilityState } from '@tanstack/table-core';
 import { get, set, del } from 'idb-keyval';
-
+import { create } from 'zustand';
+import type { StateStorage } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { EvaluateTable, UnifiedConfig } from './types';
 
 const storage: StateStorage = {
@@ -16,9 +17,17 @@ const storage: StateStorage = {
   },
 };
 
+interface ColumnState {
+  selectedColumns: string[];
+  columnVisibility: VisibilityState;
+}
+
 interface TableState {
   evalId: string | null;
   setEvalId: (evalId: string) => void;
+
+  author: string | null;
+  setAuthor: (author: string | null) => void;
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
@@ -40,6 +49,12 @@ interface TableState {
   setShowPrompts: (showPrompts: boolean) => void;
   showPassFail: boolean;
   setShowPassFail: (showPassFail: boolean) => void;
+
+  inComparisonMode: boolean;
+  setInComparisonMode: (inComparisonMode: boolean) => void;
+
+  columnStates: Record<string, ColumnState>;
+  setColumnState: (evalId: string, state: ColumnState) => void;
 }
 
 export const useStore = create<TableState>()(
@@ -47,6 +62,9 @@ export const useStore = create<TableState>()(
     (set, get) => ({
       evalId: null,
       setEvalId: (evalId: string) => set(() => ({ evalId })),
+
+      author: null,
+      setAuthor: (author: string | null) => set(() => ({ author })),
 
       table: null,
       setTable: (table: EvaluateTable | null) => set(() => ({ table })),
@@ -68,6 +86,18 @@ export const useStore = create<TableState>()(
       setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
       showPassFail: true,
       setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
+
+      inComparisonMode: false,
+      setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
+
+      columnStates: {},
+      setColumnState: (evalId: string, state: ColumnState) =>
+        set((prevState) => ({
+          columnStates: {
+            ...prevState.columnStates,
+            [evalId]: state,
+          },
+        })),
     }),
     {
       name: 'ResultsViewStorage',

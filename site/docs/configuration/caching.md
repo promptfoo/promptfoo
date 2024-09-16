@@ -24,7 +24,7 @@ promptfoo.evaluate(testSuite, {
 
 ## Tests
 
-If you're integrating with [jest](/docs/integrations/jest), [mocha](/docs/integrations/mocha-chai), or any other external framework, you'll probably want to set the following for CI:
+If you're integrating with [jest or vitest](/docs/integrations/jest), [mocha](/docs/integrations/mocha-chai), or any other external framework, you'll probably want to set the following for CI:
 
 ```sh
 PROMPTFOO_CACHE_TYPE=disk

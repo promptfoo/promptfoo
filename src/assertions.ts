@@ -1,21 +1,23 @@
-import fs from 'fs';
-import path from 'path';
-import util from 'node:util';
-
-import async from 'async';
-import rouge from 'rouge';
-import invariant from 'tiny-invariant';
-import yaml from 'js-yaml';
-import Ajv, { ValidateFunction } from 'ajv';
+import type { ValidateFunction } from 'ajv';
+import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import Clone from 'rfdc';
+import async from 'async';
+import { XMLParser } from 'fast-xml-parser';
 import { distance as levenshtein } from 'fastest-levenshtein';
-
+import fs from 'fs';
+import * as rouge from 'js-rouge';
+import yaml from 'js-yaml';
+import { type Option as sqlParserOption } from 'node-sql-parser';
+import util from 'node:util';
+import path from 'path';
+import Clone from 'rfdc';
+import invariant from 'tiny-invariant';
+import { AssertionsResult } from './assertions/AssertionsResult';
 import cliState from './cliState';
-import telemetry from './telemetry';
-import logger from './logger';
+import { getEnvBool, getEnvInt } from './envars';
+import { importModule } from './esm';
 import { fetchWithRetries } from './fetch';
-import { transformOutput, getNunjucksEngine } from './util';
+import logger from './logger';
 import {
   matchesSimilarity,
   matchesLlmRubric,
@@ -29,11 +31,14 @@ import {
   matchesSelectBest,
   matchesModeration,
 } from './matchers';
+import type { OpenAiChatCompletionProvider } from './providers/openai';
 import { validateFunctionCall } from './providers/openaiUtil';
-import { OpenAiChatCompletionProvider } from './providers/openai';
-import { runPython, runPythonCode } from './python/wrapper';
-import { importModule } from './esm';
-
+import { parseChatPrompt } from './providers/shared';
+import { runPython } from './python/pythonUtils';
+import { runPythonCode } from './python/wrapper';
+import { getGraderById } from './redteam/graders';
+import telemetry from './telemetry';
+import type { AssertionValue, ProviderResponse } from './types';
 import {
   type ApiProvider,
   type Assertion,
@@ -42,15 +47,13 @@ import {
   type GradingResult,
   type TestCase,
   isGradingResult,
-  AssertionValue,
 } from './types';
-import { AssertionsResult } from './assertions/AssertionsResult';
-import { parseChatPrompt } from './providers/shared';
-import { type Option as sqlParserOption } from 'node-sql-parser';
+import { isJavascriptFile } from './util';
+import { extractJsonObjects } from './util/json';
+import { getNunjucksEngine } from './util/templates';
+import { transform } from './util/transform';
 
-const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
-  ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
-  : 3;
+const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
@@ -63,8 +66,16 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-factuality',
 ]);
 
-const ajv = new Ajv();
-addFormats(ajv);
+export function createAjv(): Ajv {
+  const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
+    strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
+  };
+  const ajv = new Ajv(ajvOptions);
+  addFormats(ajv);
+  return ajv;
+}
+
+const ajv = createAjv();
 
 const nunjucks = getNunjucksEngine();
 
@@ -97,7 +108,7 @@ function handleRougeScore(
 ): GradingResult {
   const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
   const rougeMethod = rouge[fnName];
-  const score = rougeMethod(output, expected);
+  const score = rougeMethod(output, expected, {});
   const pass = score >= (assertion.threshold || 0.75) != inverted;
 
   return {
@@ -114,106 +125,149 @@ function handleRougeScore(
   };
 }
 
-export async function runAssertions({
-  prompt,
-  provider,
-  test,
-  output,
-  latencyMs,
-  logProbs,
-  cost,
-}: {
-  prompt?: string;
-  provider?: ApiProvider;
-  test: AtomicTestCase;
-  output: string | object;
-  latencyMs?: number;
-  logProbs?: number[];
-  cost?: number;
-}): Promise<GradingResult> {
-  if (!test.assert || test.assert.length < 1) {
-    return AssertionsResult.noAssertsResult();
+export function validateXml(
+  xmlString: string,
+  requiredElements?: string[],
+): { isValid: boolean; reason: string } {
+  if (!xmlString.startsWith('<')) {
+    return { isValid: false, reason: 'XML is missing opening tag' };
+  }
+  const parser = new XMLParser({
+    allowBooleanAttributes: true,
+    ignoreAttributes: false,
+    parseAttributeValue: true,
+    parseTagValue: true,
+  });
+
+  try {
+    const parsedXml = parser.parse(xmlString);
+    if (requiredElements && requiredElements.length > 0) {
+      const missingElements = requiredElements.filter((element) => {
+        const path = element.split('.');
+        let current: any = parsedXml;
+        for (const key of path) {
+          if (current[key] === undefined) {
+            return true;
+          }
+          current = current[key];
+        }
+        return false;
+      });
+
+      if (missingElements.length > 0) {
+        return {
+          isValid: false,
+          reason: `XML is missing required elements: ${missingElements.join(', ')}`,
+        };
+      }
+    }
+
+    return { isValid: true, reason: 'XML is valid and contains all required elements' };
+  } catch (err) {
+    return { isValid: false, reason: `XML parsing failed: ${(err as Error).message}` };
+  }
+}
+
+export function containsXml(
+  outputString: string,
+  requiredElements?: string[],
+): { isValid: boolean; reason: string } {
+  const xmlRegex = /<\?xml.*?>[\s\S]*<\/[^>]+>|\S*<[^>]+>[\s\S]*<\/[^>]+>/;
+  const xmlMatches = outputString.match(xmlRegex);
+
+  if (!xmlMatches) {
+    return { isValid: false, reason: 'No XML content found in the output' };
   }
 
-  const mainAssertResult = new AssertionsResult({
-    threshold: test.threshold,
-  });
-  const subAssertResults: AssertionsResult[] = [];
-  const asserts: {
-    assertion: Assertion;
-    assertResult: AssertionsResult;
-    index: number;
-  }[] = test.assert
-    .map((assertion, i) => {
-      if (assertion.type === 'assert-set') {
-        const subAssertResult = new AssertionsResult({
-          threshold: assertion.threshold,
-          parentAssertionSet: {
-            assertionSet: assertion,
-            index: i,
-          },
-        });
+  for (const xmlMatch of xmlMatches) {
+    const { isValid, reason } = validateXml(xmlMatch, requiredElements);
+    if (isValid) {
+      return { isValid: true, reason };
+    }
+  }
 
-        subAssertResults.push(subAssertResult);
+  return { isValid: false, reason: 'No valid XML content found matching the requirements' };
+}
 
-        return assertion.assert.map((subAssert, j) => {
-          return {
-            assertion: subAssert,
-            assertResult: subAssertResult,
-            index: j,
-          };
-        });
-      }
+export async function isSql(
+  outputString: string,
+  renderedValue: AssertionValue | undefined,
+  inverse: boolean,
+  assertion: Assertion,
+): Promise<GradingResult> {
+  let pass = false;
+  let databaseType: string = 'MySQL';
+  let whiteTableList: string[] | undefined;
+  let whiteColumnList: string[] | undefined;
 
-      return { assertion, assertResult: mainAssertResult, index: i };
-    })
-    .flat();
+  if (renderedValue && typeof renderedValue === 'object') {
+    const value = renderedValue as {
+      databaseType?: string;
+      allowedTables?: string[];
+      allowedColumns?: string[];
+    };
 
-  await async.forEachOfLimit(
-    asserts,
-    ASSERTIONS_MAX_CONCURRENCY,
-    async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-')) {
-        // Select-type assertions are handled separately because they depend on multiple outputs.
-        return;
-      }
+    databaseType = value.databaseType || 'MySQL';
+    whiteTableList = value.allowedTables;
+    whiteColumnList = value.allowedColumns;
+  }
 
-      const result = await runAssertion({
-        prompt,
-        provider,
-        assertion,
-        test,
-        output,
-        latencyMs,
-        logProbs,
-        cost,
-      });
+  if (renderedValue && typeof renderedValue !== 'object') {
+    throw new Error('is-sql assertion must have a object value.');
+  }
 
-      assertResult.addResult({
-        index,
-        result,
-        metric: assertion.metric,
-        weight: assertion.weight,
-      });
-    },
-  );
-
-  subAssertResults.forEach((subAssertResult) => {
-    const result = subAssertResult.testResult();
-    const {
-      index,
-      assertionSet: { metric, weight },
-    } = subAssertResult.parentAssertionSet!;
-
-    mainAssertResult.addResult({
-      index,
-      result,
-      metric,
-      weight,
-    });
+  const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
+    throw new Error('node-sql-parser is not installed. Please install it first');
   });
 
-  return mainAssertResult.testResult();
+  const sqlParser = new SqlParser();
+
+  const opt: sqlParserOption = { database: databaseType };
+
+  const failureReasons: string[] = [];
+
+  try {
+    sqlParser.astify(outputString, opt);
+    pass = !inverse;
+  } catch (err) {
+    pass = inverse;
+    failureReasons.push(
+      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
+    );
+  }
+
+  if (whiteTableList) {
+    opt.type = 'table';
+    try {
+      sqlParser.whiteListCheck(outputString, whiteTableList, opt);
+    } catch (err) {
+      pass = inverse;
+      const error = err as Error;
+      failureReasons.push(`SQL validation failed: ${error.message}.`);
+    }
+  }
+
+  if (whiteColumnList) {
+    opt.type = 'column';
+    try {
+      sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
+    } catch (err) {
+      pass = inverse;
+      const error = err as Error;
+      failureReasons.push(`SQL validation failed: ${error.message}.`);
+    }
+  }
+
+  if (inverse && pass === false && failureReasons.length === 0) {
+    failureReasons.push('The output SQL statement is valid');
+  }
+
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass ? 'Assertion passed' : failureReasons.join(' '),
+    assertion,
+  };
 }
 
 export async function runAssertion({
@@ -221,20 +275,18 @@ export async function runAssertion({
   provider,
   assertion,
   test,
-  output,
   latencyMs,
-  logProbs,
-  cost,
+  providerResponse,
 }: {
   prompt?: string;
   provider?: ApiProvider;
   assertion: Assertion;
   test: AtomicTestCase;
-  output: string | object;
+  providerResponse: ProviderResponse;
   latencyMs?: number;
-  logProbs?: number[];
-  cost?: number;
 }): Promise<GradingResult> {
+  const { cost, logProbs, output: originalOutput } = providerResponse;
+  let output = originalOutput;
   let pass: boolean = false;
   let score: number = 0.0;
 
@@ -248,7 +300,7 @@ export async function runAssertion({
   });
 
   if (assertion.transform) {
-    output = await transformOutput(assertion.transform, output, {
+    output = await transform(assertion.transform, output, {
       vars: test.vars,
       prompt: { label: prompt },
     });
@@ -271,7 +323,7 @@ export async function runAssertion({
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(basePath, renderedValue.slice('file://'.length));
 
-      if (filePath.endsWith('.js') || filePath.endsWith('.cjs') || filePath.endsWith('.mjs')) {
+      if (isJavascriptFile(filePath)) {
         const requiredModule = await importModule(filePath);
         if (typeof requiredModule === 'function') {
           valueFromScript = await Promise.resolve(requiredModule(output, context));
@@ -386,8 +438,45 @@ export async function runAssertion({
     };
   }
 
+  if (baseType === 'is-xml' || baseType === 'contains-xml') {
+    let requiredElements: string[] | undefined;
+    if (typeof renderedValue === 'string') {
+      requiredElements = renderedValue.split(',').map((el) => el.trim());
+    } else if (Array.isArray(renderedValue) && renderedValue.length > 0) {
+      requiredElements = renderedValue.map((el) => el.toString());
+    } else if (typeof renderedValue === 'object' && Object.keys(renderedValue).length > 0) {
+      if ('requiredElements' in renderedValue && Array.isArray(renderedValue.requiredElements)) {
+        requiredElements = renderedValue.requiredElements.map((el) => el.toString());
+      } else {
+        throw new Error('xml assertion must contain a string, array value, or no value');
+      }
+    }
+
+    const result = (baseType === 'is-xml' ? validateXml : containsXml)(
+      outputString,
+      requiredElements,
+    );
+    pass = result.isValid !== inverse;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Assertion passed' : result.reason,
+      assertion,
+    };
+  }
+
   if (baseType === 'is-sql') {
     return isSql(outputString, renderedValue, inverse, assertion);
+  }
+
+  if (baseType === 'contains-sql') {
+    const match = outputString.match(/```(?:sql)?([^`]+)```/);
+    if (match) {
+      const sqlCode = match[1].trim();
+      return isSql(sqlCode, renderedValue, inverse, assertion);
+    } else {
+      return isSql(outputString, renderedValue, inverse, assertion);
+    }
   }
 
   if (baseType === 'contains') {
@@ -459,13 +548,14 @@ export async function runAssertion({
       Array.isArray(renderedValue),
       '"contains-all" assertion type must have an array value',
     );
-    pass = renderedValue.every((value) => outputString.includes(String(value))) !== inverse;
+    const missingStrings = renderedValue.filter((value) => !outputString.includes(String(value)));
+    pass = (missingStrings.length === 0) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(', ')}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain all of [${renderedValue.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
       assertion,
     };
   }
@@ -479,16 +569,16 @@ export async function runAssertion({
       Array.isArray(renderedValue),
       '"icontains-all" assertion type must have an array value',
     );
-    pass =
-      renderedValue.every((value) =>
-        outputString.toLowerCase().includes(String(value).toLowerCase()),
-      ) !== inverse;
+    const missingStrings = renderedValue.filter(
+      (value) => !outputString.toLowerCase().includes(String(value).toLowerCase()),
+    );
+    pass = (missingStrings.length === 0) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(', ')}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain all of [${renderedValue.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
       assertion,
     };
   }
@@ -543,10 +633,10 @@ export async function runAssertion({
   }
   if (baseType === 'contains-json') {
     let errorMessage = 'Expected output to contain valid JSON';
-    const jsonOutputs = containsJSON(outputString);
-    for (const jsonMatch of jsonOutputs) {
-      pass = jsonMatch !== inverse;
-      if (pass && renderedValue) {
+    const jsonObjects = extractJsonObjects(outputString);
+    pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
+    for (const jsonObject of jsonObjects) {
+      if (renderedValue) {
         let validate: ValidateFunction;
         if (typeof renderedValue === 'string') {
           if (renderedValue.startsWith('file://')) {
@@ -564,7 +654,7 @@ export async function runAssertion({
         } else {
           throw new Error('contains-json assertion must have a string or object value');
         }
-        pass = validate(jsonMatch);
+        pass = validate(jsonObject);
         if (pass) {
           break;
         } else {
@@ -695,8 +785,26 @@ export async function runAssertion({
         return ret;
       }
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
+
+      /**
+       * Removes trailing newline from the rendered value.
+       * This is necessary for handling multi-line string literals in YAML
+       * that are defined on a single line in the YAML file.
+       *
+       * @example
+       * value: |
+       *   output === 'true'
+       */
+      renderedValue = renderedValue.trimEnd();
+
       let result: boolean | number | GradingResult;
-      if (typeof valueFromScript !== 'undefined') {
+      if (typeof valueFromScript === 'undefined') {
+        const functionBody = renderedValue.includes('\n')
+          ? renderedValue
+          : `return ${renderedValue}`;
+        const customFunction = new Function('output', 'context', functionBody);
+        result = await validateResult(customFunction(output, context));
+      } else {
         invariant(
           typeof valueFromScript === 'boolean' ||
             typeof valueFromScript === 'number' ||
@@ -704,12 +812,6 @@ export async function runAssertion({
           `Javascript assertion script must return a boolean, number, or object (${assertion.value})`,
         );
         result = await validateResult(valueFromScript);
-      } else {
-        const functionBody = renderedValue.includes('\n')
-          ? renderedValue
-          : `return ${renderedValue}`;
-        const customFunction = new Function('output', 'context', functionBody);
-        result = await validateResult(customFunction(output, context));
       }
       if (typeof result === 'boolean') {
         pass = result !== inverse;
@@ -747,9 +849,7 @@ ${renderedValue}`,
     invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
     try {
       let result: string | number | boolean | object | GradingResult | undefined;
-      if (typeof valueFromScript !== 'undefined') {
-        result = valueFromScript;
-      } else {
+      if (typeof valueFromScript === 'undefined') {
         const isMultiline = renderedValue.includes('\n');
         let indentStyle = '    ';
         if (isMultiline) {
@@ -773,6 +873,8 @@ ${
 }
 `;
         result = await runPythonCode(pythonScript, 'main', [output, context]);
+      } else {
+        result = valueFromScript;
       }
 
       if (
@@ -820,9 +922,9 @@ ${
           assertion,
         };
       } else {
-        score = parseFloat(String(result));
+        score = Number.parseFloat(String(result));
         pass = assertion.threshold ? score >= assertion.threshold : score > 0;
-        if (isNaN(score)) {
+        if (Number.isNaN(score)) {
           throw new Error(
             `Python assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
           );
@@ -901,10 +1003,8 @@ ${
       '"llm-rubric" assertion type must have a string value',
     );
 
-    if (test.options?.rubricPrompt) {
-      if (typeof test.options.rubricPrompt === 'object') {
-        test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
-      }
+    if (test.options?.rubricPrompt && typeof test.options.rubricPrompt === 'object') {
+      test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
     }
 
     // Update the assertion value. This allows the web view to display the prompt.
@@ -990,7 +1090,7 @@ ${
     invariant(test.vars, 'context-relevance assertion type must have a vars object');
     invariant(
       typeof test.vars.query === 'string',
-      'context-relevance assertion type must have a question var',
+      'context-relevance assertion type must have a query var',
     );
     invariant(
       typeof test.vars.context === 'string',
@@ -1012,7 +1112,7 @@ ${
     invariant(test.vars, 'context-faithfulness assertion type must have a vars object');
     invariant(
       typeof test.vars.query === 'string',
-      'context-faithfulness assertion type must have a question var',
+      'context-faithfulness assertion type must have a query var',
     );
     invariant(
       typeof test.vars.context === 'string',
@@ -1036,19 +1136,21 @@ ${
   }
 
   if (baseType === 'moderation') {
-    invariant(prompt, 'moderation assertion type must have a prompt');
-    invariant(typeof output === 'string', 'moderation assertion type must have a string output');
+    // Some redteam techniques override the actual prompt that is used, so we need to assess that prompt for moderation.
+    const promptToModerate = providerResponse.metadata?.redteamFinalPrompt || prompt;
+    const outputString = typeof output === 'string' ? output : JSON.stringify(output);
+    invariant(promptToModerate, 'moderation assertion type must have a prompt');
     invariant(
       !assertion.value ||
         (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
       'moderation assertion value must be a string array if set',
     );
 
-    if (prompt[0] === '[' || prompt[0] === '{') {
+    if (promptToModerate[0] === '[' || promptToModerate[0] === '{') {
       // Try to extract the last user message from OpenAI-style prompts.
       try {
         const parsedPrompt = parseChatPrompt<null | { role: string; content: string }[]>(
-          prompt,
+          promptToModerate,
           null,
         );
         if (parsedPrompt && parsedPrompt.length > 0) {
@@ -1061,8 +1163,8 @@ ${
 
     const moderationResult = await matchesModeration(
       {
-        userPrompt: prompt,
-        assistantResponse: output,
+        userPrompt: promptToModerate,
+        assistantResponse: outputString,
         categories: Array.isArray(assertion.value) ? assertion.value : [],
       },
       test.options,
@@ -1095,7 +1197,7 @@ ${
           },
           body: JSON.stringify({ output, context }),
         },
-        process.env.WEBHOOK_TIMEOUT ? parseInt(process.env.WEBHOOK_TIMEOUT, 10) : 5000,
+        getEnvInt('WEBHOOK_TIMEOUT', 5000),
       );
 
       if (!response.ok) {
@@ -1164,8 +1266,6 @@ ${
     );
 
     // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
     const classificationResult = await matchesClassification(
       renderedValue,
       outputString,
@@ -1188,7 +1288,7 @@ ${
     if (!assertion.threshold) {
       throw new Error('Latency assertion must have a threshold in milliseconds');
     }
-    if (!latencyMs) {
+    if (latencyMs === undefined) {
       throw new Error(
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
       );
@@ -1268,119 +1368,123 @@ ${
     };
   }
 
+  if (baseType.startsWith('promptfoo:redteam:')) {
+    const grader = getGraderById(baseType);
+    invariant(grader, `Unknown promptfoo grader: ${baseType}`);
+    invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
+    const { grade, rubric } = await grader.getResult(
+      prompt,
+      outputString,
+      test,
+      provider,
+      renderedValue,
+    );
+    return {
+      assertion: {
+        ...assertion,
+        value: rubric,
+      },
+      ...grade,
+    };
+  }
+
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 
-function containsJSON(str: string): any {
-  // This will extract all json objects from a string
+export async function runAssertions({
+  prompt,
+  provider,
+  providerResponse,
+  test,
+  latencyMs,
+}: {
+  prompt?: string;
+  provider?: ApiProvider;
+  providerResponse: ProviderResponse;
+  test: AtomicTestCase;
+  latencyMs?: number;
+}): Promise<GradingResult> {
+  if (!test.assert || test.assert.length < 1) {
+    return AssertionsResult.noAssertsResult();
+  }
 
-  const jsonObjects = [];
-  let openBracket = str.indexOf('{');
-  let closeBracket = str.indexOf('}', openBracket);
-  // Iterate over the string until we find a valid JSON-like pattern
-  // Iterate over all trailing } until the contents parse as json
-  while (openBracket !== -1) {
-    const jsonStr = str.slice(openBracket, closeBracket + 1);
-    try {
-      jsonObjects.push(JSON.parse(jsonStr));
-      // This is a valid JSON object, so start looking for
-      // an opening bracket after the last closing bracket
-      openBracket = str.indexOf('{', closeBracket + 1);
-      closeBracket = str.indexOf('}', openBracket);
-    } catch (err) {
-      // Not a valid object, move on to the next closing bracket
-      closeBracket = str.indexOf('}', closeBracket + 1);
-      while (closeBracket === -1) {
-        // No closing brackets made a valid json object, so
-        // start looking with the next opening bracket
-        openBracket = str.indexOf('{', openBracket + 1);
-        closeBracket = str.indexOf('}', openBracket);
+  const mainAssertResult = new AssertionsResult({
+    threshold: test.threshold,
+  });
+  const subAssertResults: AssertionsResult[] = [];
+  const asserts: {
+    assertion: Assertion;
+    assertResult: AssertionsResult;
+    index: number;
+  }[] = test.assert
+    .map((assertion, i) => {
+      if (assertion.type === 'assert-set') {
+        const subAssertResult = new AssertionsResult({
+          threshold: assertion.threshold,
+          parentAssertionSet: {
+            assertionSet: assertion,
+            index: i,
+          },
+        });
+
+        subAssertResults.push(subAssertResult);
+
+        return assertion.assert.map((subAssert, j) => {
+          return {
+            assertion: subAssert,
+            assertResult: subAssertResult,
+            index: j,
+          };
+        });
       }
-    }
-  }
-  return jsonObjects;
-}
 
-export async function isSql(
-  outputString: string,
-  renderedValue: AssertionValue | undefined,
-  inverse: boolean,
-  assertion: Assertion,
-): Promise<GradingResult> {
-  let pass = false;
-  let parsedSql;
-  let databaseType: string = 'MySQL';
-  let whiteTableList: string[] | undefined;
-  let whiteColumnList: string[] | undefined;
+      return { assertion, assertResult: mainAssertResult, index: i };
+    })
+    .flat();
 
-  if (renderedValue && typeof renderedValue === 'object') {
-    const value = renderedValue as {
-      database?: string;
-      allowedTables?: string[];
-      allowedColumns?: string[];
-    };
+  await async.forEachOfLimit(
+    asserts,
+    ASSERTIONS_MAX_CONCURRENCY,
+    async ({ assertion, assertResult, index }) => {
+      if (assertion.type.startsWith('select-')) {
+        // Select-type assertions are handled separately because they depend on multiple outputs.
+        return;
+      }
 
-    databaseType = value.database || 'MySQL';
-    whiteTableList = value.allowedTables;
-    whiteColumnList = value.allowedColumns;
-  }
+      const result = await runAssertion({
+        prompt,
+        provider,
+        providerResponse,
+        assertion,
+        test,
+        latencyMs,
+      });
 
-  if (renderedValue && typeof renderedValue !== 'object') {
-    throw new Error('is-sql assertion must have a object value.');
-  }
+      assertResult.addResult({
+        index,
+        result,
+        metric: assertion.metric,
+        weight: assertion.weight,
+      });
+    },
+  );
 
-  const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
-    throw new Error('node-sql-parser is not installed. Please install it first');
+  subAssertResults.forEach((subAssertResult) => {
+    const result = subAssertResult.testResult();
+    const {
+      index,
+      assertionSet: { metric, weight },
+    } = subAssertResult.parentAssertionSet!;
+
+    mainAssertResult.addResult({
+      index,
+      result,
+      metric,
+      weight,
+    });
   });
 
-  const sqlParser = new SqlParser();
-
-  const opt: sqlParserOption = { database: databaseType };
-
-  const failureReasons: string[] = [];
-
-  try {
-    parsedSql = sqlParser.astify(outputString, opt);
-    pass = !inverse;
-  } catch (err) {
-    pass = inverse;
-    failureReasons.push(
-      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-    );
-  }
-
-  if (whiteTableList) {
-    opt.type = 'table';
-    try {
-      sqlParser.whiteListCheck(outputString, whiteTableList, opt);
-    } catch (err) {
-      pass = inverse;
-      const error = err as Error;
-      failureReasons.push(`SQL validation failed: ${error.message}.`);
-    }
-  }
-
-  if (whiteColumnList) {
-    opt.type = 'column';
-    try {
-      sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
-    } catch (err) {
-      pass = inverse;
-      const error = err as Error;
-      failureReasons.push(`SQL validation failed: ${error.message}.`);
-    }
-  }
-
-  if (inverse && pass === false && failureReasons.length === 0) {
-    failureReasons.push('The output SQL statement is valid');
-  }
-
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: pass ? 'Assertion passed' : failureReasons.join(' '),
-    assertion,
-  };
+  return mainAssertResult.testResult();
 }
 
 export async function runCompareAssertion(
@@ -1389,9 +1493,7 @@ export async function runCompareAssertion(
   outputs: string[],
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
-  test.options = test.options || {};
-  test.options.provider = assertion.provider || test.options.provider;
-  test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
+  test = getFinalTest(test, assertion);
   const comparisonResults = await matchesSelectBest(
     assertion.value,
     outputs,
@@ -1418,6 +1520,8 @@ export async function readAssertions(filePath: string): Promise<Assertion[]> {
 
 // These exports are used by the node.js package (index.ts)
 export default {
+  runAssertion,
+  runAssertions,
   matchesSimilarity,
   matchesClassification,
   matchesLlmRubric,

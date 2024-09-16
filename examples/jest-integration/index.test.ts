@@ -1,6 +1,5 @@
-import { installJestMatchers } from './matchers';
-
 import type { GradingConfig } from '../../dist/src/types.js';
+import { installJestMatchers } from './matchers';
 
 installJestMatchers();
 
@@ -26,7 +25,7 @@ describe('toMatchSemanticSimilarity', () => {
 });
 
 const gradingConfig: GradingConfig = {
-  provider: 'openai:chat:gpt-3.5-turbo',
+  provider: 'openai:chat:gpt-4o-mini',
 };
 
 describe('toPassLLMRubric', () => {

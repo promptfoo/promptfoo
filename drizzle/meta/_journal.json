@@ -15,6 +15,34 @@
       "when": 1710706957023,
       "tag": "0001_wide_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1719636070237,
+      "tag": "0002_tidy_juggernaut",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1722936175344,
+      "tag": "0003_lively_naoko",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1724977752728,
+      "tag": "0004_minor_peter_quill",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1725929907379,
+      "tag": "0005_silky_millenium_guard",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@ prompts:
   - 'Translate this to French: {{message}}'
 
 providers:
-  - openai:chat:gpt-3.5-turbo
+  - openai:chat:gpt-4o-mini
 
 tests:
   - vars:

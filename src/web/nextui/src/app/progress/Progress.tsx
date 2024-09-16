@@ -1,23 +1,24 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { callApi } from '@app/api';
+import DownloadIcon from '@mui/icons-material/Download';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import DownloadIcon from '@mui/icons-material/Download';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TextField from '@mui/material/TextField';
-
-import type { StandaloneEval } from '@/../../../util';
+import type { StandaloneEval } from '@promptfoo/util';
+import Link from 'next/link';
 
 export default function Cols() {
   const [cols, setCols] = useState<StandaloneEval[]>([]);
@@ -32,7 +33,7 @@ export default function Cols() {
 
   useEffect(() => {
     (async () => {
-      const response = await fetch(`/api/progress`);
+      const response = await callApi(`/progress`);
       const data = await response.json();
       if (data && data.data) {
         setCols(data.data);
@@ -51,17 +52,6 @@ export default function Cols() {
   };
 
   const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleExport = (format: string) => {
-    const dataStr = format === 'json' ? JSON.stringify(cols) : convertToCSV(cols);
-    const blob = new Blob([dataStr], { type: `text/${format};charset=utf-8;` });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `cols_export.${format}`;
-    link.click();
-    URL.revokeObjectURL(link.href);
     setAnchorEl(null);
   };
 
@@ -96,12 +86,23 @@ export default function Cols() {
       calculatePassRate(col.metrics),
       col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`,
       col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`,
-      col.metrics?.score == null ? '-' : col.metrics.score.toFixed(2),
+      col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2),
     ]);
     return [headers]
       .concat(rows)
       .map((it) => it.map((value) => value ?? '').join(','))
       .join('\n');
+  };
+
+  const handleExport = (format: string) => {
+    const dataStr = format === 'json' ? JSON.stringify(cols) : convertToCSV(cols);
+    const blob = new Blob([dataStr], { type: `text/${format};charset=utf-8;` });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `cols_export.${format}`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setAnchorEl(null);
   };
 
   const filteredCols = React.useMemo(() => {
@@ -116,10 +117,12 @@ export default function Cols() {
 
   const sortedCols = React.useMemo(() => {
     return filteredCols.sort((a, b) => {
-      if (!sortField) return 0;
+      if (!sortField) {
+        return 0;
+      }
       if (sortField === 'passRate') {
-        const aValue = parseFloat(calculatePassRate(a.metrics));
-        const bValue = parseFloat(calculatePassRate(b.metrics));
+        const aValue = Number.parseFloat(calculatePassRate(a.metrics));
+        const bValue = Number.parseFloat(calculatePassRate(b.metrics));
         return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
       } else {
         // Ensure sortField is a key of StandaloneEval
@@ -135,9 +138,6 @@ export default function Cols() {
     });
   }, [filteredCols, sortField, sortOrder]);
 
-  const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setFilter({ ...filter, [event.target.name]: event.target.value });
-  };
   const evalIdOptions = React.useMemo(
     () => Array.from(new Set(cols.map((col) => col.evalId))),
     [cols],
@@ -185,7 +185,7 @@ export default function Cols() {
         </div>
       </Box>
       <Box>This page shows performance metrics for recent evals.</Box>
-      <Box display="flex" flexDirection="row" gap={2} mt={2}>
+      <Box display="flex" flexDirection="row" gap={2} my={2}>
         <Autocomplete
           options={evalIdOptions}
           value={filter.evalId}
@@ -231,113 +231,115 @@ export default function Cols() {
           sx={{ width: 220 }}
         />
       </Box>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>
-              <TableSortLabel
-                active={sortField === 'evalId'}
-                direction={sortField === 'evalId' ? sortOrder : 'asc'}
-                onClick={() => handleSort('evalId')}
-              >
-                Eval
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>Dataset</TableCell>
-            <TableCell>Provider</TableCell>
-            <TableCell>Prompt</TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={sortField === 'passRate'}
-                direction={sortField === 'passRate' ? sortOrder : 'asc'}
-                onClick={() => handleSort('passRate')}
-              >
-                Pass Rate %
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={sortField === 'testPassCount'}
-                direction={sortField === 'testPassCount' ? sortOrder : 'asc'}
-                onClick={() => handleSort('testPassCount')}
-              >
-                Pass Count
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={sortField === 'testFailCount'}
-                direction={sortField === 'testFailCount' ? sortOrder : 'asc'}
-                onClick={() => handleSort('testFailCount')}
-              >
-                Fail Count
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={sortField === 'score'}
-                direction={sortField === 'score' ? sortOrder : 'asc'}
-                onClick={() => handleSort('score')}
-              >
-                Raw score
-              </TableSortLabel>
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {sortedCols.slice((page - 1) * rowsPerPage, page * rowsPerPage).map((col, index) => (
-            <TableRow
-              key={index}
-              hover
-              onClick={() =>
-                setFilter({
-                  ...filter,
-                  evalId: col.evalId,
-                  datasetId: col.datasetId || '',
-                  promptId: col.promptId || '',
-                  provider: col.provider,
-                })
-              }
-            >
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
               <TableCell>
-                <Link href={`/eval?evalId=${col.evalId}`} onClick={(e) => e.stopPropagation()}>
-                  {col.evalId}
-                </Link>
+                <TableSortLabel
+                  active={sortField === 'evalId'}
+                  direction={sortField === 'evalId' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('evalId')}
+                >
+                  Eval
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>Dataset</TableCell>
+              <TableCell>Provider</TableCell>
+              <TableCell>Prompt</TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={sortField === 'passRate'}
+                  direction={sortField === 'passRate' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('passRate')}
+                >
+                  Pass Rate %
+                </TableSortLabel>
               </TableCell>
               <TableCell>
-                <Link href={`/datasets?id=${col.datasetId}`} onClick={(e) => e.stopPropagation()}>
-                  {col.datasetId?.slice(0, 6)}
-                </Link>
-              </TableCell>
-              <TableCell>{col.provider}</TableCell>
-              <TableCell>
-                <Link href={`/prompts?id=${col.promptId}`} onClick={(e) => e.stopPropagation()}>
-                  [{col.promptId?.slice(0, 6)}]
-                </Link>{' '}
-                {col.raw}
-              </TableCell>
-              <TableCell>{calculatePassRate(col.metrics)}</TableCell>
-              <TableCell>
-                {col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`}
+                <TableSortLabel
+                  active={sortField === 'testPassCount'}
+                  direction={sortField === 'testPassCount' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('testPassCount')}
+                >
+                  Pass Count
+                </TableSortLabel>
               </TableCell>
               <TableCell>
-                {col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`}
+                <TableSortLabel
+                  active={sortField === 'testFailCount'}
+                  direction={sortField === 'testFailCount' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('testFailCount')}
+                >
+                  Fail Count
+                </TableSortLabel>
               </TableCell>
               <TableCell>
-                {col.metrics?.score == null ? '-' : col.metrics.score.toFixed(2)}
+                <TableSortLabel
+                  active={sortField === 'score'}
+                  direction={sortField === 'score' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('score')}
+                >
+                  Raw score
+                </TableSortLabel>
               </TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {Math.ceil(filteredCols.length / rowsPerPage) > 1 && (
-        <Pagination
-          count={Math.ceil(sortedCols.length / rowsPerPage)}
-          page={page}
-          onChange={(event, value) => setPage(value)}
-          sx={{ pt: 2, pb: 4, display: 'flex', justifyContent: 'center' }}
-        />
-      )}
+          </TableHead>
+          <TableBody>
+            {sortedCols.slice((page - 1) * rowsPerPage, page * rowsPerPage).map((col, index) => (
+              <TableRow
+                key={index}
+                hover
+                onClick={() =>
+                  setFilter({
+                    ...filter,
+                    evalId: col.evalId,
+                    datasetId: col.datasetId || '',
+                    promptId: col.promptId || '',
+                    provider: col.provider,
+                  })
+                }
+              >
+                <TableCell>
+                  <Link href={`/eval?evalId=${col.evalId}`} onClick={(e) => e.stopPropagation()}>
+                    {col.evalId}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <Link href={`/datasets?id=${col.datasetId}`} onClick={(e) => e.stopPropagation()}>
+                    {col.datasetId?.slice(0, 6)}
+                  </Link>
+                </TableCell>
+                <TableCell>{col.provider}</TableCell>
+                <TableCell>
+                  <Link href={`/prompts?id=${col.promptId}`} onClick={(e) => e.stopPropagation()}>
+                    [{col.promptId?.slice(0, 6)}]
+                  </Link>{' '}
+                  {col.raw}
+                </TableCell>
+                <TableCell>{calculatePassRate(col.metrics)}</TableCell>
+                <TableCell>
+                  {col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`}
+                </TableCell>
+                <TableCell>
+                  {col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`}
+                </TableCell>
+                <TableCell>
+                  {col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {Math.ceil(filteredCols.length / rowsPerPage) > 1 && (
+          <Pagination
+            count={Math.ceil(sortedCols.length / rowsPerPage)}
+            page={page}
+            onChange={(event, value) => setPage(value)}
+            sx={{ pt: 2, pb: 4, display: 'flex', justifyContent: 'center' }}
+          />
+        )}
+      </TableContainer>
     </Box>
   );
 }

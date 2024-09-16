@@ -14,12 +14,18 @@ providers:
 
 defaultTest:
   options:
-    # Use gemini-pro for model-graded evals (e.g. assertions such as llm-rubric)
-    provider: vertex:gemini-pro
+    provider:
+      # Use gemini-pro for model-graded evals (e.g. assertions such as llm-rubric)
+      text: vertex:chat:gemini-pro
+      # Use vertex embeddings for similarity
+      embedding: vertex:embedding:text-embedding-004
 
 tests:
   - vars:
       question: What's the weather in New York?
+    assert:
+      - type: similar
+        value: 75 and sunny
   - vars:
       question: Who won the latest football match between the Giants and 49ers?
   - vars:

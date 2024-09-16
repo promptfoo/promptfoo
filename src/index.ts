@@ -1,12 +1,25 @@
 import invariant from 'tiny-invariant';
-
 import assertions from './assertions';
-import providers, { loadApiProvider } from './providers';
-import telemetry from './telemetry';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
+import { readPrompts } from './prompts';
+import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
+import { extractEntities } from './redteam/extraction/entities';
+import { extractSystemPurpose } from './redteam/extraction/purpose';
+import { GRADERS } from './redteam/graders';
+import { Plugins } from './redteam/plugins';
+import { Strategies } from './redteam/strategies';
+import telemetry from './telemetry';
 import { readTests } from './testCases';
+import type {
+  EvaluateOptions,
+  TestSuite,
+  EvaluateTestSuite,
+  ProviderOptions,
+  PromptFunction,
+  Scenario,
+} from './types';
 import {
   readFilters,
   writeResultsToDatabase,
@@ -14,14 +27,6 @@ import {
   writeOutput,
   migrateResultsFromFileSystemToDatabase,
 } from './util';
-import type {
-  EvaluateOptions,
-  TestSuite,
-  EvaluateTestSuite,
-  ProviderOptions,
-  PromptFunction,
-} from './types';
-import { readPrompts } from './prompts';
 
 export * from './types';
 
@@ -30,6 +35,7 @@ export { generateTable } from './table';
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   const constructedTestSuite: TestSuite = {
     ...testSuite,
+    scenarios: testSuite.scenarios as Scenario[],
     providers: await loadApiProviders(testSuite.providers, {
       env: testSuite.env,
     }),
@@ -48,11 +54,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
               function: promptInput as PromptFunction,
             };
           } else if (typeof promptInput === 'string') {
-            const prompts = await readPrompts(promptInput);
-            return prompts.map((p) => ({
-              raw: p.raw,
-              label: p.label,
-            }));
+            return readPrompts(promptInput);
           } else {
             return {
               raw: JSON.stringify(promptInput),
@@ -94,7 +96,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   if (options.cache === false || (options.repeat && options.repeat > 1)) {
     cache.disableCache();
   }
-  telemetry.maybeShowNotice();
 
   // Run the eval!
   const ret = await doEvaluate(constructedTestSuite, {
@@ -121,11 +122,22 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   return ret;
 }
 
-export { evaluate, assertions, providers };
+const redteam = {
+  Extractors: {
+    extractEntities,
+    extractSystemPurpose,
+  },
+  Graders: GRADERS,
+  Plugins,
+  Strategies,
+};
+
+export { assertions, cache, evaluate, providers, redteam };
 
 export default {
-  evaluate,
   assertions,
-  providers,
   cache,
+  evaluate,
+  providers,
+  redteam,
 };

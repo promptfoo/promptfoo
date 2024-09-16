@@ -6,6 +6,8 @@ sidebar_position: 10
 
 This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) series of models.
 
+> **Note:** Anthropic models can also be accessed through Amazon Bedrock. For information on using Anthropic models via Bedrock, please refer to our [AWS Bedrock documentation](/docs/providers/aws-bedrock).
+
 ## Setup
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
@@ -20,10 +22,17 @@ export ANTHROPIC_API_KEY=your_api_key_here
 
 ### Supported Parameters
 
-| Config Property | Environment Variable | Description                                    |
-| --------------- | -------------------- | ---------------------------------------------- |
-| apiKey          | ANTHROPIC_API_KEY    | Your API key from Anthropic                    |
-| apiBaseUrl      | ANTHROPIC_BASE_URL   | The base URL for requests to the Anthropic API |
+| Config Property | Environment Variable  | Description                                                       |
+| --------------- | --------------------- | ----------------------------------------------------------------- |
+| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                       |
+| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                    |
+| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0)                |
+| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)          |
+| top_p           | -                     | Controls nucleus sampling, affecting the randomness of the output |
+| top_k           | -                     | Only sample from the top K options for each subsequent token      |
+| tools           | -                     | An array of tool or function definitions for the model to call    |
+| tool_choice     | -                     | An object specifying the tool to call                             |
+| headers         | -                     | Additional headers to be sent with the API request                |
 
 ## Latest API (Messages)
 
@@ -31,12 +40,13 @@ export ANTHROPIC_API_KEY=your_api_key_here
 
 The `anthropic` provider supports the following models via the messages API:
 
-- `anthropic:messages:claude-instant-1.2`
-- `anthropic:messages:claude-2.0`
-- `anthropic:messages:claude-2.1`
+- `anthropic:messages:claude-3-5-sonnet-20240620`
 - `anthropic:messages:claude-3-haiku-20240307`
 - `anthropic:messages:claude-3-sonnet-20240229`
 - `anthropic:messages:claude-3-opus-20240229`
+- `anthropic:messages:claude-2.0`
+- `anthropic:messages:claude-2.1`
+- `anthropic:messages:claude-instant-1.2`
 
 ### Prompt Template
 
@@ -72,16 +82,18 @@ The Anthropic provider supports several options to customize the behavior of the
 - `top_p`: Controls nucleus sampling, affecting the randomness of the output.
 - `top_k`: Only sample from the top K options for each subsequent token.
 - `tools`: An array of tool or function definitions for the model to call.
+- `tool_choice`: An object specifying the tool to call.
 
 Example configuration with options and prompts:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-opus-20240229
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
     config:
       temperature: 0.0
       max_tokens: 512
-prompts: [prompt.json]
+prompts:
+  - file://prompt.json
 ```
 
 ### Tool Use
@@ -90,7 +102,7 @@ The Anthropic provider supports tool use (or function calling). Here's an exampl
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-opus-20240229
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
     config:
       tools:
         - name: get_weather
@@ -116,12 +128,12 @@ See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) 
 
 You can include images in the prompts in Claude 3 models.
 
-See the [Claude vision example](https://github.com/typpo/promptfoo/tree/main/examples/claude-vision).
+See the [Claude vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision).
 
 One important note: The Claude API only supports base64 representations of images.
 This is different from how OpenAI's vision works, as it supports grabbing images from a URL. As a result, if you are trying to compare Claude 3 and OpenAI vision capabilities, you will need to have separate prompts for each.
 
-See the [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/examples/openai-vision) to understand the differences.
+See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision) to understand the differences.
 
 ### Additional Capabilities
 
@@ -170,9 +182,9 @@ The easiest way to do this for _all_ your test cases is to add the [`defaultTest
 defaultTest:
   options:
     provider:
-      id: anthropic:messages:claude-3-opus-20240229
+      id: anthropic:messages:claude-3-5-sonnet-20240620
       config:
-        # Provider config options
+        # optional provider config options
 ```
 
 However, you can also do this for individual assertions:
@@ -183,9 +195,9 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: anthropic:messages:claude-3-opus-20240229
+      id: anthropic:messages:claude-3-5-sonnet-20240620
       config:
-        # Provider config options
+        # optional provider config options
 ```
 
 Or individual tests:
@@ -197,9 +209,9 @@ tests:
       # ...
     options:
       provider:
-        id: anthropic:messages:claude-3-opus-20240229
+        id: anthropic:messages:claude-3-5-sonnet-20240620
         config:
-          # Provider config options
+          # optional provider config options
     assert:
       - type: llm-rubric
         value: Do not mention that you are an AI or chat assistant

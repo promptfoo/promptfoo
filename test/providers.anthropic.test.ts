@@ -1,19 +1,19 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
-import { AwsBedrockCompletionProvider } from '../src/providers/bedrock';
+import { clearCache, disableCache, enableCache, getCache } from '../src/cache';
 import {
   AnthropicCompletionProvider,
+  AnthropicLlmRubricProvider,
   AnthropicMessagesProvider,
-  calculateCost,
+  calculateAnthropicCost,
   outputFromMessage,
   parseMessages,
 } from '../src/providers/anthropic';
-import { clearCache, disableCache, enableCache, getCache } from '../src/cache';
-import { loadApiProvider } from '../src/providers';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
+jest.mock('../src/logger');
 
 describe('Anthropic', () => {
   afterEach(async () => {
@@ -48,46 +48,53 @@ describe('Anthropic', () => {
     });
 
     it('should use cache by default for ToolUse requests', async () => {
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
-        content: [
-          {
-            type: 'text',
-            text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
-          },
-          {
-            type: 'tool_use',
-            id: 'toolu_01A09q90qw90lq917835lq9',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA', unit: 'celsius' },
-          },
-        ],
-      } as Anthropic.Messages.Message);
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [
+            {
+              type: 'text',
+              text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
+            },
+            {
+              type: 'tool_use',
+              id: 'toolu_01A09q90qw90lq917835lq9',
+              name: 'get_weather',
+              input: { location: 'San Francisco, CA', unit: 'celsius' },
+            },
+          ],
+        } as Anthropic.Messages.Message);
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
-      expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(1, {
-        model: 'claude-3-opus-20240229',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                text: 'What is the forecast in San Francisco?',
-                type: 'text',
-              },
-            ],
-          },
-        ],
-        tools,
-        temperature: 0,
-        stream: false,
-      });
+      expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(
+        1,
+        {
+          model: 'claude-3-opus-20240229',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  text: 'What is the forecast in San Francisco?',
+                  type: 'text',
+                },
+              ],
+            },
+          ],
+          tools,
+          temperature: 0,
+          stream: false,
+        },
+        {},
+      );
 
       expect(result).toMatchObject({
         cost: undefined,
         output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
-  
+
           {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
         tokenUsage: {},
       });
@@ -97,21 +104,77 @@ describe('Anthropic', () => {
       expect(result).toMatchObject(resultFromCache);
     });
 
+    it('should pass the tool choice if specified', async () => {
+      const toolChoice: Anthropic.MessageCreateParams.ToolChoiceTool = {
+        name: 'get_weather',
+        type: 'tool',
+      };
+      provider.config.tool_choice = toolChoice;
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [
+            {
+              type: 'text',
+              text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
+            },
+            {
+              type: 'tool_use',
+              id: 'toolu_01A09q90qw90lq917835lq9',
+              name: 'get_weather',
+              input: { location: 'San Francisco, CA', unit: 'celsius' },
+            },
+          ],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('What is the forecast in San Francisco?');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(
+        1,
+        {
+          model: 'claude-3-opus-20240229',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  text: 'What is the forecast in San Francisco?',
+                  type: 'text',
+                },
+              ],
+            },
+          ],
+          tools,
+          tool_choice: toolChoice,
+          temperature: 0,
+          stream: false,
+        },
+        {},
+      );
+
+      provider.config.tool_choice = undefined;
+    });
+
     it('should not use cache if caching is disabled for ToolUse requests', async () => {
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
-        content: [
-          {
-            type: 'text',
-            text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
-          },
-          {
-            type: 'tool_use',
-            id: 'toolu_01A09q90qw90lq917835lq9',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA', unit: 'celsius' },
-          },
-        ],
-      } as Anthropic.Messages.Message);
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [
+            {
+              type: 'text',
+              text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
+            },
+            {
+              type: 'tool_use',
+              id: 'toolu_01A09q90qw90lq917835lq9',
+              name: 'get_weather',
+              input: { location: 'San Francisco, CA', unit: 'celsius' },
+            },
+          ],
+        } as Anthropic.Messages.Message);
 
       disableCache();
 
@@ -120,7 +183,7 @@ describe('Anthropic', () => {
 
       expect(result).toMatchObject({
         output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
-  
+
           {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
         tokenUsage: {},
       });
@@ -131,9 +194,12 @@ describe('Anthropic', () => {
     });
 
     it('should return cached response for legacy caching behavior', async () => {
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
-        content: [],
-      } as unknown as Anthropic.Messages.Message);
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [],
+        } as unknown as Anthropic.Messages.Message);
       getCache().set(
         'anthropic:{"model":"claude-3-opus-20240229","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}',
         'Test output',
@@ -146,20 +212,11 @@ describe('Anthropic', () => {
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(0);
     });
 
-    it('should handle missing apiKey', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
-        config: { apiKey: undefined },
-      });
-
-      await expect(provider.callApi('What is the forecast in San Francisco?')).resolves.toEqual({
-        error: 'API call error: invalid x-api-key, status 401, type authentication_error',
-      });
-    });
-
     it('should handle API call error', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
-      provider.anthropic.messages.create = jest
-        .fn()
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
         .mockRejectedValue(new Error('API call failed'));
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
@@ -172,10 +229,13 @@ describe('Anthropic', () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
         config: { max_tokens: 100, temperature: 0.5, cost: 0.015 },
       });
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
-        content: [{ type: 'text', text: 'Test output' }],
-        usage: { input_tokens: 50, output_tokens: 50 },
-      } as Anthropic.Messages.Message);
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test output' }],
+          usage: { input_tokens: 50, output_tokens: 50 },
+        } as Anthropic.Messages.Message);
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
       expect(result).toMatchObject({
@@ -186,10 +246,85 @@ describe('Anthropic', () => {
     });
   });
 
+  describe('AnthropicLlmRubricProvider', () => {
+    let provider: AnthropicLlmRubricProvider;
+
+    beforeEach(() => {
+      provider = new AnthropicLlmRubricProvider('claude-3-5-sonnet-20240620');
+    });
+
+    it('should initialize with forced tool configuration', () => {
+      expect(provider.modelName).toBe('claude-3-5-sonnet-20240620');
+      expect(provider.config.tool_choice).toEqual({ type: 'tool', name: 'grade_output' });
+    });
+
+    it('should call API and parse the result correctly', async () => {
+      const mockApiResponse = {
+        output: JSON.stringify({
+          type: 'tool_use',
+          id: 'test-id',
+          name: 'grade_output',
+          input: {
+            pass: true,
+            score: 0.85,
+            reason: 'The output meets the criteria.',
+          },
+        }),
+      };
+
+      jest.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValue(mockApiResponse);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result).toEqual({
+        output: {
+          pass: true,
+          score: 0.85,
+          reason: 'The output meets the criteria.',
+        },
+      });
+    });
+
+    it('should handle non-string API response', async () => {
+      const mockApiResponse = {
+        output: { confession: 'I am not a string' },
+      };
+
+      jest.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValue(mockApiResponse);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('Anthropic LLM rubric grader - malformed non-string output');
+    });
+
+    it('should handle malformed API response', async () => {
+      const mockApiResponse = {
+        output: 'Invalid JSON',
+      };
+
+      jest.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValue(mockApiResponse);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('Anthropic LLM rubric grader - invalid JSON');
+    });
+
+    it('should handle API errors', async () => {
+      const mockError = new Error('API Error');
+      jest.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockRejectedValue(mockError);
+
+      await expect(provider.callApi('Test prompt')).rejects.toThrow('API Error');
+    });
+  });
+
   describe('AnthropicCompletionProvider callApi', () => {
     it('should return output for default behavior', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+      jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -203,7 +338,11 @@ describe('Anthropic', () => {
 
     it('should return cached output with caching enabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+      jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -226,7 +365,11 @@ describe('Anthropic', () => {
 
     it('should return fresh output with caching disabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+      jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -250,21 +393,11 @@ describe('Anthropic', () => {
       });
     });
 
-    it('should handle missing apiKey', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1', {
-        config: { apiKey: undefined },
-      });
-
-      await expect(provider.callApi('Test prompt')).resolves.toEqual({
-        error:
-          'API call error: Error: 401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
-      });
-    });
-
     it('should handle API call error', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest
-        .fn()
+      jest
+        .spyOn(provider.anthropic.completions, 'create')
+        .mockImplementation()
         .mockRejectedValue(new Error('API call failed'));
 
       const result = await provider.callApi('Test prompt');
@@ -274,21 +407,21 @@ describe('Anthropic', () => {
     });
   });
 
-  describe('calculateCost', () => {
+  describe('calculateAnthropicCost', () => {
     it('should calculate cost for valid input and output tokens', () => {
-      const cost = calculateCost('claude-3-opus-20240229', { cost: 0.015 }, 100, 200);
+      const cost = calculateAnthropicCost('claude-3-opus-20240229', { cost: 0.015 }, 100, 200);
 
       expect(cost).toBe(4.5); // (0.015 * 100) + (0.075 * 200)
     });
 
     it('should return undefined for missing model', () => {
-      const cost = calculateCost('non-existent-model', { cost: 0.015 });
+      const cost = calculateAnthropicCost('non-existent-model', { cost: 0.015 });
 
       expect(cost).toBeUndefined();
     });
 
     it('should return undefined for missing tokens', () => {
-      const cost = calculateCost('claude-3-opus-20240229', { cost: 0.015 });
+      const cost = calculateAnthropicCost('claude-3-opus-20240229', { cost: 0.015 });
 
       expect(cost).toBeUndefined();
     });
@@ -428,16 +561,14 @@ describe('Anthropic', () => {
       const { system, extractedMessages } = parseMessages(inputMessages);
 
       expect(system).toBeUndefined();
-      expect(extractedMessages).toMatchObject([
+      expect(extractedMessages).toEqual([
         {
           role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: dedent`user: What is the weather?
-                    assistant: The weather is sunny.`,
-            },
-          ],
+          content: [{ type: 'text', text: 'What is the weather?' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'The weather is sunny.' }],
         },
       ]);
     });
@@ -449,18 +580,15 @@ describe('Anthropic', () => {
 
       const { system, extractedMessages } = parseMessages(inputMessages);
 
-      expect(system).toBeUndefined();
-      expect(extractedMessages).toMatchObject([
+      expect(system).toEqual([{ type: 'text', text: 'This is a system message.' }]);
+      expect(extractedMessages).toEqual([
         {
           role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: dedent`system: This is a system message.
-              user: What is the weather?
-              assistant: The weather is sunny.`,
-            },
-          ],
+          content: [{ type: 'text', text: 'What is the weather?' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'The weather is sunny.' }],
         },
       ]);
     });
@@ -471,20 +599,102 @@ describe('Anthropic', () => {
       const { system, extractedMessages } = parseMessages(inputMessages);
 
       expect(system).toBeUndefined();
-      expect(extractedMessages).toMatchObject([
+      expect(extractedMessages).toEqual([
         {
           role: 'user',
           content: [{ type: 'text', text: '' }],
         },
       ]);
     });
-  });
-});
 
-// NOTE: test suite fails with: ReferenceError: Cannot access 'AnthropicCompletionProvider' before initialization
-// if this is removed. The test can even be skipped. This is likely due to a circular dependency.
-test('loadApiProvider with bedrock:completion', async () => {
-  await expect(loadApiProvider('bedrock:completion:anthropic.claude-v2:1')).resolves.toBeInstanceOf(
-    AwsBedrockCompletionProvider,
-  );
+    it('should handle only system message', () => {
+      const inputMessages = 'system: This is a system message.';
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toEqual([{ type: 'text', text: 'This is a system message.' }]);
+      expect(extractedMessages).toEqual([]);
+    });
+
+    it('should handle messages with image content', () => {
+      const inputMessages = dedent`user: Here's an image: [image-1.jpg]
+        assistant: I see the image.`;
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toBeUndefined();
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: "Here's an image: [image-1.jpg]" }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'I see the image.' }],
+        },
+      ]);
+    });
+
+    it('should handle multiple messages of the same role', () => {
+      const inputMessages = dedent`
+        user: First question
+        user: Second question
+        assistant: Here's the answer`;
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toBeUndefined();
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'First question' }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Second question' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: "Here's the answer" }],
+        },
+      ]);
+    });
+
+    it('should handle a single user message', () => {
+      const inputMessages = 'Hello, Claude';
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toBeUndefined();
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Hello, Claude' }],
+        },
+      ]);
+    });
+
+    it('should handle multi-line messages', () => {
+      const inputMessages = dedent`
+        user: This is a
+        multi-line
+        message
+        assistant: And this is a
+        multi-line response`;
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toBeUndefined();
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'This is a\nmulti-line\nmessage' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'And this is a\nmulti-line response' }],
+        },
+      ]);
+    });
+  });
 });

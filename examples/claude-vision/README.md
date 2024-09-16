@@ -1,6 +1,9 @@
-To get started, set your OPENAI_API_KEY environment variable.
+Getting Started with claude3 via Anthropic and/or AWS Bedrock
 
-Next, have a look at prompt.json and edit promptfooconfig.yaml.
+To get started, set your environment variables:
+
+- `ANTHROPIC_API_KEY` to call anthropic
+- `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to call aws bedrock. Alternatively, you can use the AWS CLI to configure your credentials.
 
 Then run:
 
@@ -8,4 +11,8 @@ Then run:
 promptfoo eval
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+Afterwards, you can view the results by running:
+
+```sh
+promptfoo view
+```

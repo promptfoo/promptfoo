@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: daily
+    allow:
+      - dependency-name: '@anthropic-ai/sdk'
+      - dependency-name: '@aws-sdk/client-bedrock-runtime'
+      - dependency-name: '@azure/identity'
+      - dependency-name: '@azure/openai-assistants'
+      - dependency-name: 'cloudflare'
+      - dependency-name: 'groq-sdk'
+      - dependency-name: 'openai'
+      - dependency-name: 'replicate'
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - '*'

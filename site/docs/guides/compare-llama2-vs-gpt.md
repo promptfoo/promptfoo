@@ -2,13 +2,13 @@
 sidebar_label: Llama vs GPT benchmark
 ---
 
-# Llama 3 vs GPT: Benchmark on your own data
+# Llama 3.1 vs GPT: Benchmark on your own data
 
-This guide describes how to compare three models - Llama 3 70B, GPT 3.5, and GPT 4 - using the `promptfoo` CLI.
+This guide describes how to compare three models - Llama 3.1 405B, GPT 4o, and GPT 4o-mini - using the `promptfoo` CLI.
 
 LLM use cases vary widely and there is no one-size-fits-all benchmark. We'll use some dummy test cases from the [Hacker News thread on Llama](https://news.ycombinator.com/item?id=36774627), but you can substitute your own.
 
-The end result is a view that compares the performance of Llama, GPT 3.5, and GPT 4 side-by-side:
+The end result is a view that compares the performance of Llama and GPT side-by-side:
 
 ![llama2 and gpt comparison](/img/docs/llama-gpt-comparison.png)
 
@@ -30,9 +30,9 @@ Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of mod
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - openai:gpt-3.5-turbo-0613
-  - openai:gpt-4-turbo-0613
-  - replicate:meta/meta-llama-3-70b-instruct
+  - openai:gpt-4o
+  - openai:gpt-4o-mini
+  - replicate:meta/meta-llama-3.1-405b-instruct
 ```
 
 The first two [providers](/docs/providers) reference built-in OpenAI models. The third provider references the hosted [Replicate](https://replicate.com/replicate/llama70b-v2-chat) version of chat-tuned Llama v2 with 70 billion parameters.
@@ -41,7 +41,7 @@ If you prefer to run against a locally hosted version of Llama, this can be done
 
 ## Set up the prompts
 
-Next, we'll add some prompts. Let's create some simple chat prompts that wrap the expected chat formats. We'll have multiple prompts because GPT and Llama expect different prompting formats.
+Next, we'll add some prompts.
 
 First, we'll put the OpenAI chat prompts in `prompts/chat_prompt.json`:
 
@@ -54,7 +54,37 @@ First, we'll put the OpenAI chat prompts in `prompts/chat_prompt.json`:
 ]
 ```
 
-Next, we'll put the Llama chat prompt in `prompts/llama_prompt.txt`:
+Now, let's go back to `promptfooconfig.yaml` and add our prompts. The Replicate provider supports the OpenAI format.
+
+```yaml title=promptfooconfig.yaml
+// highlight-start
+prompts:
+  - file://prompts/chat_prompt.json
+// highlight-end
+
+providers:
+  - openai:gpt-4o
+  - openai:gpt-4o-mini
+  - replicate:meta/meta-llama-3.1-405b-instruct
+```
+
+<details>
+<summary>Information on setting custom prompts for Llama</summary>
+
+For advanced usage, you may prefer to control the underlying Llama prompt format. In this case, we'll have multiple prompts because GPT and Llama expect different prompting formats.
+
+First, we'll put the OpenAI chat prompts in `prompts/chat_prompt.json`:
+
+```json title=prompts/chat_prompt.json
+[
+  {
+    "role": "user",
+    "content": "{{message}}"
+  }
+]
+```
+
+Put the Llama chat prompt in `prompts/llama_prompt.txt`:
 
 ```title=prompts/llama_prompt.txt
 <|begin_of_text|><|start_header_id|>system<|end_header_id|>
@@ -72,16 +102,18 @@ prompts:
   prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: openai:gpt-3.5-turbo-0613
-    label: gpt-3.5
+  - id: openai:gpt-4o
+    label: GPT 4o
     prompts: chat_prompt
-  - id: openai:gpt-4-0613
-    label: gpt-4
+  - id: openai:gpt-4o-mini
+    label: GPT 4o-mini
     prompts: chat_prompt
-  - id: replicate:meta/meta-llama-3-70b-instruct
-    label: llama70b-v3-chat
+  - id: replicate:meta/meta-llama-3.1-405b-instruct
+    label: Llama 3.1 405B
     prompts: llama_prompt
 ```
+
+</details>
 
 :::info
 These prompt files are [Nunjucks templates](https://mozilla.github.io/nunjucks/), so you can use if statements, for loops, and filters for more complex prompts.
@@ -167,22 +199,19 @@ Each model has a `config` field where you can specify additional parameters. Let
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: openai:gpt-3.5-turbo-0613
-    prompts: chat_prompt
+  - id: openai:gpt-4o
     // highlight-start
     config:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: openai:gpt-4-0613
-    prompts: chat_prompt
+  - id: openai:gpt-4o-mini
     // highlight-start
     config:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: replicate:meta/meta-llama-3-70b-instruct
-    prompts: llama_prompt
+  - id: replicate:meta/meta-llama-3.1-405b-instruct
     // highlight-start
     config:
       temperature: 0.01  # minimum temperature
@@ -231,6 +260,6 @@ Which produces a simple spreadsheet containing the eval results (view on [Google
 
 ## Conclusion
 
-In this example we've constructed, GPT-4 scores 87.50%, GPT-3.5 scores 75.00%, and Llama scores 62.50%.
+In this example we've constructed, GPT-4o scores 100%, GPT-4o-mini scores 75.00%, and Llama 3.1 405B scores 87.50%.
 
 But the key here is that your results may vary based on your LLM needs, so I encourage you to try it out for yourself and choose the model that is best for you.

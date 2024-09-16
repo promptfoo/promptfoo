@@ -1,5 +1,5 @@
 import { filterFailingTests } from '../../../src/commands/eval/filterFailingTests';
-import { EvaluateSummary, TestSuite } from '../../../src/types';
+import type { EvaluateSummary, TestSuite } from '../../../src/types';
 import { readOutput } from '../../../src/util';
 
 jest.mock('../../../src/util', () => {
@@ -65,8 +65,27 @@ describe('filterFailingTests', () => {
 
   it('returns empty array when no failing tests', async () => {
     jest.mocked(readOutput).mockResolvedValue({
-      results: { version: 2, results: [{ success: true }] },
-    });
+      results: {
+        version: 2,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        results: [
+          {
+            success: true,
+            provider: { id: 'provider1' },
+            vars: varsSuccess,
+            prompt: {
+              raw: 'prompt',
+              label: 'prompt',
+            },
+            score: 0.5,
+            latencyMs: 1000,
+            namedScores: {},
+          },
+        ],
+        table: {} as any,
+        stats: {} as any,
+      } as EvaluateSummary,
+    } as any);
 
     const result = await filterFailingTests(testSuite, outputPath);
 

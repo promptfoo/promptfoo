@@ -64,14 +64,22 @@ To investigate and fix this issue, there's a few possible solutions:
 3. Update your OS's [`hosts`](<https://en.wikipedia.org/wiki/Hosts_(file)>) file
    to bind `localhost` to IPv4.
 
-## Evaluating models in serial
+## Evaluating models serially
 
-Many users don't have enough RAM to run all the models. The eval command includes an `--interactive-providers` option that runs evals on only 1 provider at a time:
+By default, promptfoo evaluates all providers concurrently for each prompt. However, you can run evaluations serially using the `-j 1` option:
 
+```bash
+promptfoo eval -j 1
 ```
-promptfoo eval --interactive-providers
-```
 
-When you include this argument, the eval will prompt you when it's time to swap out the currently running model:
+This sets concurrency to 1, which means:
 
-![ollama eval model swap](/img/docs/interactive-providers.png)
+1. Evaluations happen one provider at a time, then one prompt at a time.
+2. Only one model is loaded into memory, conserving system resources.
+3. You can easily swap models between evaluations without conflicts.
+
+This approach is particularly useful for:
+
+- Local setups with limited RAM
+- Testing multiple resource-intensive models
+- Debugging provider-specific issues

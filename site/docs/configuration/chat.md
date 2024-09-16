@@ -3,9 +3,9 @@ sidebar_label: Chat threads
 sidebar_position: 10
 ---
 
-# Chat conversations/threads
+# Chat conversations / threads
 
-The [prompt file](/docs/configuration/parameters#prompt-files) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
+The [prompt file](/docs/configuration/parameters#prompts-from-file) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
 
 ```json
 [
@@ -30,9 +30,11 @@ Most providers support full "multishot" chat conversations, including multiple a
 One way to do this, if you are using the OpenAI format, is by creating a list of `{role, content}` objects. Here's an example:
 
 ```yaml
-prompts: [prompt.json]
+prompts:
+  - file://prompt.json
 
-providers: [openai:gpt-3.5-turbo]
+providers:
+  - openai:gpt-4o-mini
 
 tests:
   - vars:
@@ -136,7 +138,7 @@ Variables containing multiple lines and quotes are automatically escaped in JSON
 If the file is not valid JSON (such as in the case above, due to the nunjucks `{% for %}` loops), use the built-in nunjucks filter [`dump`](https://mozilla.github.io/nunjucks/templating.html#dump) to stringify the object as JSON.
 :::
 
-## Using the `_conversation` variable
+## Using the `_conversation` variable {#using-the-conversation-variable}
 
 A built-in `_conversation` variable contains the full prompt and previous turns of a conversation. Use it to reference previous outputs and test an ongoing chat conversation.
 
@@ -240,8 +242,10 @@ Here's an example that prompts OpenAI with a JSON object of the structure `{quer
 Here's the associated config:
 
 ```yaml
-prompts: [prompt.json]
-providers: [openai:gpt-3.5-turbo-0613]
+prompts:
+  - file://prompt.json
+providers:
+  - openai:gpt-4o-mini
 tests:
   - vars:
       query: how you doing

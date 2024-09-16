@@ -1,16 +1,24 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { callApi } from '@app/api';
+import { USE_SUPABASE } from '@app/constants';
+import { useStore } from '@app/state/evalConfig';
 import { Button, CircularProgress } from '@mui/material';
-
-import { useStore } from '@/state/evalConfig';
-import { NEXTJS_BASE_URL, USE_SUPABASE } from '@/constants';
+import { useRouter } from 'next/navigation';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
-  const { env, description, providers, prompts, testCases, defaultTest, evaluateOptions } =
-    useStore();
+  const {
+    defaultTest,
+    description,
+    env,
+    evaluateOptions,
+    prompts,
+    providers,
+    scenarios,
+    testCases,
+  } = useStore();
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
@@ -18,17 +26,18 @@ const RunTestSuiteButton: React.FC = () => {
     setIsRunning(true);
 
     const testSuite = {
-      env,
-      description,
-      providers,
-      prompts,
-      tests: testCases,
       defaultTest,
+      description,
+      env,
       evaluateOptions,
+      prompts,
+      providers,
+      scenarios,
+      tests: testCases,
     };
 
     try {
-      const response = await fetch(`${NEXTJS_BASE_URL}/api/eval/job/`, {
+      const response = await callApi('/eval/job', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -43,7 +52,7 @@ const RunTestSuiteButton: React.FC = () => {
       const job = await response.json();
 
       const intervalId = setInterval(async () => {
-        const progressResponse = await fetch(`${NEXTJS_BASE_URL}/api/eval/job/${job.id}/`);
+        const progressResponse = await callApi(`/eval/job/${job.id}/`);
 
         if (!progressResponse.ok) {
           clearInterval(intervalId);

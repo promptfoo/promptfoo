@@ -1,11 +1,12 @@
 import React from 'react';
-
-import Button from '@mui/material/Button';
+import { testCaseFromCsvRow } from '@/../../../../dist/src/csv';
+import { useStore } from '@app/state/evalConfig';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';
-import IconButton from '@mui/material/IconButton';
 import Publish from '@mui/icons-material/Publish';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -15,12 +16,8 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-
+import type { CsvRow, TestCase } from '@promptfoo/types';
 import TestCaseDialog from './TestCaseDialog';
-import { useStore } from '@/state/evalConfig';
-import { testCaseFromCsvRow } from '@/../../../../dist/src/csv';
-
-import type { CsvRow, TestCase } from '@/../../../types';
 
 interface TestCasesSectionProps {
   varsList: string[];
@@ -59,7 +56,8 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         if (text) {
           const { parse: parseCsv } = await import('csv-parse/sync');
           const rows: CsvRow[] = parseCsv(text, { columns: true });
-          setTestCases([...testCases, ...rows.map((row) => testCaseFromCsvRow(row))]);
+          const newTestCases: TestCase[] = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
+          setTestCases([...testCases, ...newTestCases]);
         }
       };
       reader.readAsText(file);
@@ -82,7 +80,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
 
   return (
     <>
-      <Stack direction="row" spacing={2} justifyContent="space-between">
+      <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
         <Typography variant="h5">Test Cases</Typography>
         <div>
           <label htmlFor={`file-input-add-test-case`}>
@@ -182,7 +180,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         open={testCaseDialogOpen}
         onAdd={handleAddTestCase}
         varsList={varsList}
-        initialValues={editingTestCaseIndex !== null ? testCases[editingTestCaseIndex] : undefined}
+        initialValues={editingTestCaseIndex === null ? undefined : testCases[editingTestCaseIndex]}
         onCancel={() => {
           setEditingTestCaseIndex(null);
           setTestCaseDialogOpen(false);

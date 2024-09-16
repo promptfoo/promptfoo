@@ -1,8 +1,26 @@
 import readline from 'readline';
-
-import logger from './logger';
 import { fetchWithProxy } from './fetch';
-import { REMOTE_API_BASE_URL } from './constants';
+import logger from './logger';
+
+export async function sendFeedback(feedback: string) {
+  const resp = await fetchWithProxy('https://api.promptfoo.dev/api/feedback', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: feedback,
+    }),
+  });
+
+  if (resp.ok) {
+    logger.info('Feedback sent. Thank you!');
+  } else {
+    logger.info(
+      'Sorry, feedback failed to send for some reason. You can also open an issue at https://github.com/promptfoo/promptfoo/issues/new',
+    );
+  }
+}
 
 export function gatherFeedback(message?: string) {
   if (message) {
@@ -25,26 +43,6 @@ export function gatherFeedback(message?: string) {
         reader.close();
         sendFeedback(input);
       },
-    );
-  }
-}
-
-export async function sendFeedback(feedback: string) {
-  const resp = await fetchWithProxy(`${REMOTE_API_BASE_URL}/api/feedback`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message: feedback,
-    }),
-  });
-
-  if (resp.ok) {
-    logger.info('Feedback sent. Thank you!');
-  } else {
-    logger.info(
-      'Sorry, feedback failed to send for some reason. You can also open an issue at https://github.com/promptfoo/promptfoo/issues/new',
     );
   }
 }

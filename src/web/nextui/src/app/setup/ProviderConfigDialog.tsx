@@ -1,15 +1,13 @@
 import React from 'react';
 import Box from '@mui/material/Box';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import TextField from '@mui/material/TextField';
-import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import TextField from '@mui/material/TextField';
+import type { ProviderOptions } from '@promptfoo/types';
 import JsonTextField from '../components/JsonTextField';
-
-import type { ProviderOptions } from '@/../../../types';
 
 interface ProviderConfigDialogProps {
   open: boolean;
@@ -53,7 +51,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           ) {
             if (typeof value === 'number') {
               handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-                setLocalConfig({ ...localConfig, [key]: parseFloat(e.target.value) });
+                setLocalConfig({ ...localConfig, [key]: Number.parseFloat(e.target.value) });
             } else if (typeof value === 'boolean') {
               handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
                 setLocalConfig({ ...localConfig, [key]: e.target.value === 'true' });

@@ -9,6 +9,7 @@ interface SafetyRating {
     | 'HARM_CATEGORY_SEXUALLY_EXPLICIT'
     | 'HARM_CATEGORY_DANGEROUS_CONTENT';
   probability: Probability;
+  blocked: boolean;
 }
 
 interface PartText {
@@ -31,7 +32,7 @@ interface Content {
 
 interface Candidate {
   content: Content;
-  finishReason?: 'FINISH_REASON_STOP' | 'STOP';
+  finishReason?: 'FINISH_REASON_STOP' | 'STOP' | 'SAFETY';
   safetyRatings: SafetyRating[];
 }
 
@@ -54,7 +55,25 @@ export interface GeminiResponseData {
   usageMetadata?: GeminiUsageMetadata;
 }
 
-export type GeminiApiResponse = (GeminiResponseData | GeminiErrorResponse)[];
+interface GeminiPromptFeedback {
+  blockReason?: 'PROHIBITED_CONTENT';
+}
+
+interface GeminiUsageMetadata {
+  promptTokenCount: number;
+  totalTokenCount: number;
+}
+
+interface GeminiBlockedResponse {
+  promptFeedback: GeminiPromptFeedback;
+  usageMetadata: GeminiUsageMetadata;
+}
+
+export type GeminiApiResponse = (
+  | GeminiResponseData
+  | GeminiErrorResponse
+  | GeminiBlockedResponse
+)[];
 
 export interface Palm2ApiResponse {
   error?: {
@@ -106,4 +125,13 @@ export async function getGoogleClient() {
   const client = await cachedAuth.getClient();
   const projectId = await cachedAuth.getProjectId();
   return { client, projectId };
+}
+
+export async function hasGoogleDefaultCredentials() {
+  try {
+    await getGoogleClient();
+    return true;
+  } catch (err) {
+    return false;
+  }
 }

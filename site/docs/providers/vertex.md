@@ -31,11 +31,14 @@ You can use it by specifying any of the available stable or latest [model versio
 - `vertex:gemini-1.5-pro-latest`
 - `vertex:gemini-1.5-pro-preview-0409`
 - `vertex:gemini-1.5-pro-preview-0514`
+- `vertex:gemini-1.5-pro`
 - `vertex:gemini-1.5-pro-001`
 - `vertex:gemini-1.0-pro-vision-001`
 - `vertex:gemini-1.5-flash-preview-0514`
 - `vertex:gemini-1.5-flash-001`
 - `vertex:aqa`
+
+Embeddings models such as `vertex:embedding:text-embedding-004` are also supported.
 
 :::tip
 If you are using Google AI Studio, see the [`google` provider](/docs/providers/palm).
@@ -94,26 +97,40 @@ AI safety settings can be configured using the `safetySettings` key. For example
         threshold: BLOCK_MEDIUM_AND_ABOVE
 ```
 
-See more details on Google's SafetySetting API [here](https://ai.google.dev/api/rest/v1/SafetySetting).
+See more details on Google's SafetySetting API [here](https://ai.google.dev/api/generate-content#safetysetting).
+
+## Overriding graders
+
+To use Vertex models for model grading (e.g. `llm-rubric` and `factuality` assertions), or to override the embeddings provider for the `similar` assertion, use `defaultTest` to override providers for all tests:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      # Use gemini-pro for model-graded evals (e.g. assertions such as llm-rubric)
+      text: vertex:chat:gemini-pro
+      # Use vertex embeddings for similarity
+      embedding: vertex:embedding:text-embedding-004
+```
 
 ## Other configuration options
 
-| Option                             | Description                                                                                     | Default Value                        |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `apiKey`                           | gcloud API token.                                                                               | None                                 |
-| `apiHost`                          | Full Google API host, e.g., for an LLM proxy.                                                   | `{region}-aiplatform.googleapis.com` |
-| `projectId`                        | gcloud project ID.                                                                              | None                                 |
-| `region`                           | gcloud region.                                                                                  | `us-central1`                        |
-| `publisher`                        | Model publisher.                                                                                | `google`                             |
-| `context`                          | Context for the model to consider when generating responses.                                    | None                                 |
-| `examples`                         | Examples to prime the model.                                                                    | None                                 |
-| `safetySettings`                   | [Safety settings](https://ai.google.dev/api/rest/v1/SafetySetting) to filter generated content. | None                                 |
-| `generationConfig.temperature`     | Controls randomness. Lower values make the model more deterministic.                            | None                                 |
-| `generationConfig.maxOutputTokens` | Maximum number of tokens to generate.                                                           | None                                 |
-| `generationConfig.topP`            | Nucleus sampling: higher values cause the model to consider more candidates.                    | None                                 |
-| `generationConfig.topK`            | Controls diversity via random sampling: lower values make sampling more deterministic.          | None                                 |
-| `generationConfig.stopSequences`   | Set of string outputs that will stop output generation.                                         | []                                   |
-| `toolConfig`                       | Configuration for tool usage                                                                    | None                                 |
-| `systemInstruction`                | System prompt. Nunjucks template variables `{{var}}` are supported                              | None                                 |
+| Option                             | Description                                                                                              | Default Value                        |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `apiKey`                           | gcloud API token.                                                                                        | None                                 |
+| `apiHost`                          | Full Google API host, e.g., for an LLM proxy.                                                            | `{region}-aiplatform.googleapis.com` |
+| `projectId`                        | gcloud project ID.                                                                                       | None                                 |
+| `region`                           | gcloud region.                                                                                           | `us-central1`                        |
+| `publisher`                        | Model publisher.                                                                                         | `google`                             |
+| `context`                          | Context for the model to consider when generating responses.                                             | None                                 |
+| `examples`                         | Examples to prime the model.                                                                             | None                                 |
+| `safetySettings`                   | [Safety settings](https://ai.google.dev/api/generate-content#safetysetting) to filter generated content. | None                                 |
+| `generationConfig.temperature`     | Controls randomness. Lower values make the model more deterministic.                                     | None                                 |
+| `generationConfig.maxOutputTokens` | Maximum number of tokens to generate.                                                                    | None                                 |
+| `generationConfig.topP`            | Nucleus sampling: higher values cause the model to consider more candidates.                             | None                                 |
+| `generationConfig.topK`            | Controls diversity via random sampling: lower values make sampling more deterministic.                   | None                                 |
+| `generationConfig.stopSequences`   | Set of string outputs that will stop output generation.                                                  | []                                   |
+| `toolConfig`                       | Configuration for tool usage                                                                             | None                                 |
+| `systemInstruction`                | System prompt. Nunjucks template variables `{{var}}` are supported                                       | None                                 |
 
 Note that not all models support all parameters. Please consult the [Google documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) on how to use and format parameters.

@@ -59,7 +59,7 @@ And in `personality1.json`:
 ]
 ```
 
-Learn more about [chat conversations with OpenAI message format](/docs/providers/openai#chat-conversations).
+Learn more about [chat conversations with OpenAI message format](/docs/providers/openai#formatting-chat-messages).
 
 ### Prompts from file
 
@@ -71,13 +71,25 @@ prompts:
   - file://path/to/prompt2.txt
   - file://path/to/prompt.json
   - file://path/to/prompt.yaml
+  - file://path/to/prompt.yml
+  - file://path/to/prompt.md
   # Globs are supported
   - file://prompts/*.txt
   - file://path/**/*
   # Prompt functions
+  # Executes entire file
   - file:///root/path/to/prompt.js
   - file://./path/to/prompt.py
+  # Executes individual functions
+  - file:///root/path/to/prompt.js:prompt1
+  - file:///root/path/to/prompt.js:prompt2
+  - file:///root/path/to/prompt.py:prompt1
+  - file:///root/path/to/prompt.py:prompt2
 ```
+
+:::tip
+Check them into version control. This approach helps in tracking changes, collaboration, and ensuring consistency across different environments.
+:::
 
 Example of multiple prompt files:
 
@@ -104,13 +116,13 @@ Prompts can be JSON too. Use this to configure multi-shot prompt formats:
 ]
 ```
 
-### Multiple prompts in a single file
+### Multiple prompts in a single text file
 
-If you have only one file, you can include multiple prompts in the file, separated by the separator `---`. If you have multiple files, each prompt should be in a separate file.
+If you have only one text file, you can include multiple prompts in the file, separated by the separator `---`. If you have multiple files, each prompt should be in a separate file.
 
 Example of a single prompt file with multiple prompts (`prompts.txt`):
 
-```
+```text title=prompts.txt
 Translate the following text to French: "{{name}}: {{text}}"
 ---
 Translate the following text to German: "{{name}}: {{text}}"
@@ -120,11 +132,21 @@ Translate the following text to German: "{{name}}: {{text}}"
 The prompt separator can be overridden with the `PROMPTFOO_PROMPT_SEPARATOR` environment variable.
 :::
 
+### Prompts as Markdown
+
+Prompts as markdown are treated similarly to prompts as raw text. You can define a prompt in a markdown file as:
+
+```markdown title=prompt.md
+You are a helpful assistant for Promptfoo. Please answer the following question: {{question}}
+```
+
+Note that only one prompt per markdown file is supported.
+
 ### Different prompts per model
 
 To set separate prompts for different providers, you can specify the prompt files within the `providers` section of your `promptfooconfig.yaml`. Each provider can have its own set of prompts that are tailored to its specific requirements or input format.
 
-Here's an example of how to set separate prompts for Llama v2 and GPT models:
+Here's an example of how to set separate prompts for llama3.1 and GPT-4o models:
 
 ```yaml title=promptfooconfig.yaml
 prompts:
@@ -134,21 +156,21 @@ prompts:
     label: llama_completion_prompt
 
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     prompts:
       - gpt_chat_prompt
-  - id: openai:gpt-4-turbo-0613
+  - id: openai:gpt-4o
     prompts:
       - gpt_chat_prompt
-  - id: replicate:meta/llama70b-v2-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3
-    label: llama70b-v2-chat
+  - id: replicate:meta/meta-llama-3.1-405b-instruct
+    label: llama-3.1-405b-instruct
     prompts:
       - llama_completion_prompt
 ```
 
-In this configuration, the `gpt_chat_prompt` is used for both GPT-3.5 and GPT-4 models, while the `llama_completion_prompt` is used for the Llama v2 model. The prompts are defined in separate files within the `prompts` directory.
+In this configuration, the `gpt_chat_prompt` is used for both GPT-4o and GPT-4o-mini models, while the `llama_completion_prompt` is used for the llama3.1 model. The prompts are defined in separate files within the `prompts` directory.
 
-Make sure to create the corresponding prompt files with the content formatted as expected by each model. For example, GPT models might expect a JSON array of messages, while Llama might expect a plain text format with a specific prefix.
+Make sure to create the corresponding prompt files with the content formatted as expected by each model. For example, GPT models might expect a JSON array of messages, while llama might expect a plain text format with a specific prefix.
 
 ### Prompt functions
 
@@ -157,21 +179,25 @@ Prompt functions allow you to incorporate custom logic in your prompts. These fu
 To specify a prompt function in `promptfooconfig.yaml`, reference the file directly. For example:
 
 ```yaml
-prompts: ['prompt.js', 'prompt.py']
+prompts:
+  - file://prompt.js
+  - file://prompt.py
 ```
 
-In the prompt function, you can access the test case variables through the `vars` object. The function should return a string or an object that represents the prompt.
+In the prompt function, you can access the test case variables and provider information via the context. The function will have access to a `vars` object and `provider` object. Having access to the provider object allows you to dynamically generate prompts for different providers with different formats.
+
+The function should return a string or an object that represents the prompt.
 
 #### Examples
 
 A Javascript prompt function, `prompt.js`:
 
 ```javascript title=prompt.js
-module.exports = async function ({ vars }) {
+module.exports = async function ({ vars, provider }) {
   return [
     {
       role: 'system',
-      content: `You're an angry pirate. Be concise and stay in character.`,
+      content: `You're an angry pirate named ${provider.label || provider.id}. Be concise and stay in character.`,
     },
     {
       role: 'user',
@@ -190,7 +216,7 @@ module.exports.prompt1 = async function ({ vars, provider }) {
   return [
     {
       role: 'system',
-      content: `You're an angry pirate. Be concise and stay in character.`,
+      content: `You're an angry pirate named ${provider.label || provider.id}. Be concise and stay in character.`,
     },
     {
       role: 'user',
@@ -207,8 +233,15 @@ import json
 import sys
 
 def my_prompt_function(context: dict) -> str:
+
+    provider: dict = context['providers']
+    provider_id: str = provider['id']  # ex. openai:gpt-4o or bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+    provider_label: str | None = provider.get('label') # exists if set in promptfoo config.
+
+    variables: dict = context['vars'] # access the test case variables
+
     return (
-        f"Describe {context['vars']['topic']} concisely, comparing it to the Python"
+        f"Describe {variables['topic']} concisely, comparing it to the Python"
         " programming language."
     )
 
@@ -220,8 +253,8 @@ if __name__ == "__main__":
 To verify that your function is producing the correct prompt:
 
 1. Run `promptfoo view`
-1. Check that the table header contains your function code.
-1. Hover over a particular output that you want to investigate and click the Magnifying Glass (🔎) to view the final prompt in the details pane.
+2. Check that the table header contains your function code.
+3. Hover over a particular output that you want to investigate and click the Magnifying Glass (🔎) to view the final prompt in the details pane.
 
 :::info
 By default, promptfoo runs the `python` executable in your shell.
@@ -236,6 +269,24 @@ Prompt functions show source code at the top of the results table because they c
 In order to see the prompts for each test case, toggle `Table Settings` > `Show full prompt in output cell`. This will display the final prompt for each test case/provider combination.
 
 ![final prompt shown for each test case](/img/docs/final-prompt-for-test-case.png)
+
+### Prompt configs
+
+Prompts can be configured with a `config` object. This object is merged with the provider configuration object and the combined object is used to call the provider API.
+
+A good use case for this is to set the `response_format` for a specific prompt.
+
+#### Example
+
+```yaml
+prompts:
+  - label: 'Prompt #1'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
 
 ### Nunjucks filters
 
@@ -253,11 +304,13 @@ module.exports = function (str) {
 };
 ```
 
-To use a custom Nunjucks filter in PromptFoo, add it to your configuration file (`promptfooconfig.yaml`). The `nunjucksFilters` field should contain a mapping of filter names to the paths of the JavaScript files that define them:
+To use a custom Nunjucks filter in Promptfoo, add it to your configuration file (`promptfooconfig.yaml`). The `nunjucksFilters` field should contain a mapping of filter names to the paths of the JavaScript files that define them:
 
 ```yaml
-prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4o-mini
 // highlight-start
 nunjucksFilters:
   allcaps: ./allcaps.js
@@ -278,7 +331,7 @@ In this example, the `body` variable is passed through the `allcaps` filter befo
 
 If you have a lot of tests, you can optionally keep them separate from the main config file.
 
-The easiest way to do this is by creating `tests.yaml` that contains a list of tests. Then, include it in your `promptfooconfig.yaml` like so:
+The easiest way to do this is by creating a `tests.yaml` file that contains a list of tests. Then, include it in your `promptfooconfig.yaml` like so:
 
 ```yaml
 prompts:
@@ -287,16 +340,16 @@ prompts:
 providers:
   # ...
 
-tests: tests.yaml
+tests: file://path/to/tests.yaml
 ```
 
 You can even break it into multiple files or globs:
 
 ```yaml
 tests:
-  - normal_test.yaml
-  - special_test.yaml
-  - path/to/more_tests/*.yaml
+  - file://relative/path/to/normal_test.yaml
+  - file://relative/path/to/special_test.yaml
+  - file:///absolute/path/to/more_tests/*.yaml
 ```
 
 ### Import from CSV
@@ -343,7 +396,7 @@ Several file formats are supported, including JSON, YAML, CSV, and HTML.
 
 Each record in the output file corresponds to a test case and includes the original prompt, the output generated by the LLM, and the values of the variables used in the test case.
 
-For example outputs, see the [examples/](https://github.com/typpo/promptfoo/tree/main/examples/simple-cli) directory.
+For example outputs, see the [examples/](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-cli) directory.
 
 ## Permuting inputs and assertions
 

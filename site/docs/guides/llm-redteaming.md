@@ -14,6 +14,7 @@ This guide shows you how to automatically generate adversarial tests specificall
 - Competitor recommendations (when the LLM suggests alternatives to your business)
 - Unintended contracts (when the LLM makes commitments or agreements on behalf of your business)
 - Political statements
+- Custom policy violations (tailored to your specific use case)
 - Safety risks from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241): violent crimes, non-violent crimes, sex crimes, child exploitation, specialized financial/legal/medical advice, privacy, intellectual property, indiscriminate weapons, hate, self-harm, sexual content.
 - Safety risks from the [HarmBench](https://www.harmbench.org/) framework: Cybercrime & Unauthorized Intrusion, Chemical & Biological Weapons, Illegal Drugs, Copyright Violations, Misinformation & Disinformation, Harassment & Bullying, Illegal Activities, Graphic & age-restricted content, Promotion of unsafe practices, Privacy violations & data exploitation.
 
@@ -32,7 +33,7 @@ First, install [Node 18 or later](https://nodejs.org/en/download/package-manager
 Then create a new project for your red teaming needs:
 
 ```sh
-npx promptfoo@latest init my-redteam-project
+npx promptfoo@latest redteam init my-redteam-project
 cd my-redteam-project
 ```
 
@@ -47,19 +48,25 @@ prompts:
   - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 ```
+
+:::tip
+You can specify your redteam configuration directly in `promptfooconfig.yaml`. See the [configuration guide](/docs/red-team/configuration) for more information.
+:::
 
 Then create adversarial test cases:
 
 ```sh
-npx promptfoo@latest generate redteam -w
+npx promptfoo@latest redteam generate
 ```
+
+This will create a file `redteam.yaml` with the test cases.
 
 Run the eval:
 
 ```
-npx promptfoo@latest eval
+npx promptfoo@latest eval -c redteam.yaml
 ```
 
 And view the results:
@@ -67,6 +74,8 @@ And view the results:
 ```sh
 npx promptfoo@latest view
 ```
+
+By default, this will open the eval logs. Click "Vulnerability Report" in the top right corner to see the report view.
 
 Continue reading for more detailed information on each step, including how to point it to your app’s existing prompts, agent flow, and API.
 
@@ -124,7 +133,7 @@ prompts:
 
 The equivalent Javascript is also supported:
 
-```yaml
+```js
 function getPrompt(context) {
   if (context.vars.destination === 'Australia') {
     return `Act as a travel agent, mate: ${context.query}`;
@@ -140,15 +149,15 @@ LLMs are configured with the `providers` property in `promptfooconfig.yaml`. An 
 
 ### LLM APIs
 
-Promptfoo supports [many LLM providers](https://www.notion.so/docs/providers) including OpenAI, Anthropic, Mistral, Azure, Groq, Perplexity, Cohere, and more. In most cases all you need to do is set the appropriate API key environment variable.
+Promptfoo supports [many LLM providers](/docs/providers) including OpenAI, Anthropic, Mistral, Azure, Groq, Perplexity, Cohere, and more. In most cases all you need to do is set the appropriate API key environment variable.
 
 You should choose at least one provider. If desired, set multiple in order to compare their performance in the red team eval. In this example, we’re comparing performance of GPT, Claude, and Llama:
 
 ```yaml
 providers:
-  - openai:gpt-4
-  - anthropic:messages:claude-3-opus-20240229
-  - ollama:chat:llama3:70b
+  - openai:gpt-4o
+  - anthropic:messages:claude-3-5-sonnet-20240620
+  - ollama:chat:llama3.1:70b
 ```
 
 To learn more, find your preferred LLM provider [here](/docs/providers).
@@ -171,10 +180,10 @@ providers:
 
 To learn more, see:
 
-- [Javascript provider](https://www.notion.so/docs/providers/custom-api)
-- [Python provider](https://www.notion.so/docs/providers/python)
-- [Exec provider](https://www.notion.so/docs/providers/custom-script) (Used to run any executable from any programming language)
-- [Webhook provider](https://www.notion.so/docs/providers/webhook) (HTTP requests, useful for testing an app that is online or running locally)
+- [Javascript provider](/docs/providers/custom-api/)
+- [Python provider](/docs/providers/python)
+- [Exec provider](/docs/providers/custom-script) (Used to run any executable from any programming language)
+- [Webhook provider](/docs/providers/webhook) (HTTP requests, useful for testing an app that is online or running locally)
 
 ### HTTP endpoints
 
@@ -198,7 +207,7 @@ If your API responds with a JSON object and you want to pick out a specific valu
 
 For example, `json.nested.output` will reference the output in the following API response:
 
-```yaml
+```js
 { 'nested': { 'output': '...' } }
 ```
 
@@ -231,10 +240,10 @@ For more information, see [Overriding the LLM grader](/docs/configuration/expect
 
 ## Step 3: Generate adversarial test cases
 
-Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo generate redteam` command:
+Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo redteam generate` command:
 
 ```sh
-npx promptfoo@latest generate redteam -w
+npx promptfoo@latest redteam generate -w
 ```
 
 This command works by reading your prompts and providers, and then generating a set of adversarial inputs that stress-test your prompts/models in a variety of situations. Test generation usually takes about 5 minutes.
@@ -251,6 +260,7 @@ The adversarial tests include:
 - Competitor recommendations (when the LLM suggests alternatives to your business)
 - Unintended contracts (when the LLM makes unintended commitments or agreements)
 - Political statements
+- Imitation of a person, brand, or organization
 
 It also tests for a variety of harmful input and output scenarios from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241) and [HarmBench](https://www.harmbench.org/) framework:
 
@@ -284,29 +294,30 @@ It also tests for a variety of harmful input and output scenarios from the [ML C
 By default, all of the above will be included in the redteam. To use specific types of tests, use `--plugins`:
 
 ```yaml
-npx promptfoo@latest generate redteam -w --plugins 'harmful,jailbreak,hijacking'
+npx promptfoo@latest redteam generate -w --plugins 'harmful,jailbreak,hijacking'
 ```
 
 The following plugins are enabled by default:
 
-| Plugin Name      | Description                                                                  | Enabled by Default |
-| ---------------- | ---------------------------------------------------------------------------- | ------------------ |
-| contracts        | Tests if the model makes unintended commitments or agreements.               | Yes                |
-| excessive-agency | Tests if the model exhibits too much autonomy or makes decisions on its own. | Yes                |
-| hallucination    | Tests if the model generates false or misleading content.                    | Yes                |
-| harmful          | Tests for the generation of harmful or offensive content.                    | Yes                |
-| hijacking        | Tests the model's vulnerability to being used for unintended tasks.          | Yes                |
-| jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       | Yes                |
-| overreliance     | Tests for excessive trust in LLM output without oversight.                   | Yes                |
-| pii              | Tests for inadvertent disclosure of personally identifiable information.     | Yes                |
-| politics         | Tests for political opinions and statements about political figures.         | Yes                |
-| prompt-injection | Tests the model's susceptibility to prompt injection attacks.                | Yes                |
+| Plugin Name      | Description                                                                  |
+| ---------------- | ---------------------------------------------------------------------------- |
+| contracts        | Tests if the model makes unintended commitments or agreements.               |
+| excessive-agency | Tests if the model exhibits too much autonomy or makes decisions on its own. |
+| hallucination    | Tests if the model generates false or misleading content.                    |
+| harmful          | Tests for the generation of harmful or offensive content.                    |
+| imitation        | Tests if the model imitates a person, brand, or organization.                |
+| hijacking        | Tests the model's vulnerability to being used for unintended tasks.          |
+| jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       |
+| overreliance     | Tests for excessive trust in LLM output without oversight.                   |
+| pii              | Tests for inadvertent disclosure of personally identifiable information.     |
+| politics         | Tests for political opinions and statements about political figures.         |
+| prompt-injection | Tests the model's susceptibility to prompt injection attacks.                |
 
 These additional plugins can be optionally enabled:
 
-| Plugin Name | Description                                                 | Enabled by Default |
-| ----------- | ----------------------------------------------------------- | ------------------ |
-| competitors | Tests if the model recommends alternatives to your service. | No                 |
+| Plugin Name | Description                                                 |
+| ----------- | ----------------------------------------------------------- |
+| competitors | Tests if the model recommends alternatives to your service. |
 
 The adversarial test cases will be written to `promptfooconfig.yaml`.
 

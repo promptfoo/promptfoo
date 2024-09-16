@@ -1,5 +1,5 @@
 import Ajv from 'ajv';
-import { renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 
 const ajv = new Ajv();
 
@@ -20,7 +20,9 @@ export function validateFunctionCall(
   vars?: Record<string, string | object>,
 ) {
   // Parse function call and validate it against schema
-  const interpolatedFunctions = renderVarsInObject(functions, vars);
+  const interpolatedFunctions = maybeLoadFromExternalFile(
+    renderVarsInObject(functions, vars),
+  ) as OpenAiFunction[];
   const functionArgs = JSON.parse(functionCall.arguments);
   const functionName = functionCall.name;
   const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;

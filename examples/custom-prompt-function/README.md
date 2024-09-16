@@ -1,11 +1,11 @@
-To get started, set your OPENAI_API_KEY environment variable.
+To get started, set your `OPENAI_API_KEY` environment variable.
 
-Next, have a look at the various prompt .js files. These prompts are constructed programmatically, and you can include custom logic in them.
+This example contains most supported prompt format. Browse the examples or see https://www.promptfoo.dev/docs/configuration/parameters/#prompts for more information on specific formats.
 
 Then run:
 
 ```
-promptfoo eval
+npx promptfoo@latest eval
 ```
 
 Afterwards, you can view the results by running `promptfoo view`

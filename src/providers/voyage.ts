@@ -1,8 +1,8 @@
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from './shared';
-
 import type { ApiEmbeddingProvider, ProviderResponse, ProviderEmbeddingResponse } from '../types';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   modelName: string;
@@ -26,13 +26,16 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
         ? process.env[this.config.apiKeyEnvar] || this.env?.[this.config.apiKeyEnvar as keyof any]
         : undefined) ||
       this.env?.VOYAGE_API_KEY ||
-      process.env.VOYAGE_API_KEY
+      getEnvString('VOYAGE_API_KEY')
     );
   }
 
   getApiUrl(): string {
     return (
-      this.config.apiBaseUrl || process.env.VOYAGE_API_BASE_URL || 'https://api.voyageai.com/v1'
+      this.config.apiBaseUrl ||
+      this.env?.VOYAGE_API_BASE_URL ||
+      getEnvString('VOYAGE_API_BASE_URL') ||
+      'https://api.voyageai.com/v1'
     );
   }
 
@@ -50,10 +53,9 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       model: this.modelName,
     };
 
-    let data,
-      cached = false;
+    let data;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data } = (await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',

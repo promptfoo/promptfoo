@@ -4,7 +4,7 @@ sidebar_label: Phi vs Llama
 
 # Phi vs Llama: Benchmark on your own data
 
-When choosing between LLMs like Phi 3 and Llama 3, it's important to benchmark them on your specific use cases rather than relying solely on public benchmarks. When models are in the same ballpark, the specific application makes a big difference.
+When choosing between LLMs like Phi 3 and Llama 3.1, it's important to benchmark them on your specific use cases rather than relying solely on public benchmarks. When models are in the same ballpark, the specific application makes a big difference.
 
 This guide walks you through the steps to set up a comprehensive benchmark of Llama and Phi using promptfoo + Ollama.
 
@@ -56,7 +56,7 @@ providers:
       temperature: 0.01
       num_predict: 128
 
-  - id: ollama:chat:llama3
+  - id: ollama:chat:llama3.1
     config:
       temperature: 0.01
       num_predict: 128

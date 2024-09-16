@@ -1,14 +1,20 @@
+import checkbox from '@inquirer/checkbox';
+import confirm from '@inquirer/confirm';
+import { ExitPromptError } from '@inquirer/core';
+import rawlist from '@inquirer/rawlist';
+import chalk from 'chalk';
+import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
-
-import chalk from 'chalk';
-import inquirer from 'inquirer';
-
+import { getEnvString } from './envars';
 import logger from './logger';
-import { getNunjucksEngine } from './util';
+import { redteamInit } from './redteam/commands/init';
+import telemetry, { type EventValue } from './telemetry';
+import type { EnvOverrides } from './types';
+import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
-description: 'My eval'
+description: "My eval"
 
 prompts:
   {% for prompt in prompts -%}
@@ -29,7 +35,7 @@ tests:
       {%- elif language == 'javascript' -%}
       context: file://context.js
       {%- else -%}
-      context: file://context.txt
+      context: file://context.py
       {%- endif %}
 
   - vars:
@@ -199,7 +205,9 @@ module.exports = function (varName, prompt, otherVars) {
 
   if (varName === 'context') {
     // Return value based on the variable name and test context
-    return \`... Documents for \${otherVars.inquiry} for prompt: \${prompt} ...\`;
+    return {
+      output: \`... Documents for \${otherVars.inquiry} for prompt: \${prompt} ...\`
+    };
   }
 
   // Default variable value
@@ -224,65 +232,124 @@ promptfoo eval
 Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
+function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+  telemetry.recordAndSend('funnel', {
+    type: 'eval onboarding',
+    step,
+    ...properties,
+  });
+}
+
+/**
+ * Iterate through user choices and determine if the user has selected a provider that needs an API key
+ * but has not set and API key in their environment.
+ */
+export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[]): string[] {
+  const ids = providerChoices.map((c) => (typeof c === 'object' ? (c as any).id : c));
+
+  const map: Record<string, keyof EnvOverrides> = {
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+  };
+
+  return Object.entries(map)
+    .filter(([prefix, key]) => ids.some((id) => id.startsWith(prefix)) && !getEnvString(key))
+    .map(
+      ([prefix, key]) => dedent`
+    ${chalk.bold(`Warning: ${key} environment variable is not set.`)}
+    Please set this environment variable like: export ${key}=<my-api-key>
+  `,
+    );
+}
+
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
-  if (directory) {
-    // Make the directory if it doesn't exist
-    if (!fs.existsSync(directory)) {
-      fs.mkdirSync(directory);
+  console.clear();
+
+  if (directory && !fs.existsSync(directory)) {
+    fs.mkdirSync(directory);
+  }
+
+  directory = directory || '.';
+
+  // Check for existing files and prompt for overwrite
+  const filesToCheck = ['promptfooconfig.yaml', 'README.md'];
+  const existingFiles = filesToCheck.filter((file) =>
+    fs.existsSync(path.join(process.cwd(), directory, file)),
+  );
+
+  if (existingFiles.length > 0) {
+    const fileList = existingFiles.join(' and ');
+    const overwrite = await confirm({
+      message: `${fileList} already exist${existingFiles.length > 1 ? '' : 's'}${directory === '.' ? '' : ` in ${directory}`}. Do you want to overwrite ${existingFiles.length > 1 ? 'them' : 'it'}?`,
+      default: false,
+    });
+    if (!overwrite) {
+      const isNpx = getEnvString('npm_execpath')?.includes('npx');
+      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
+      logger.info(
+        chalk.red(
+          `Please run \`${runCommand}\` in a different directory or use \`${runCommand} <directory>\` to specify a new location.`,
+        ),
+      );
+      process.exit(1);
     }
   }
 
-  if (directory) {
-    if (!fs.existsSync(directory)) {
-      logger.info(`Creating directory ${directory} ...`);
-      fs.mkdirSync(directory);
-    }
-  } else {
-    directory = '.';
-  }
-
+  // Rest of the onboarding flow
   const prompts: string[] = [];
   const providers: (string | object)[] = [];
   let action: string;
   let language: string;
+
   if (interactive) {
+    recordOnboardingStep('start');
+
     // Choose use case
-    let resp = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'action',
-        message: 'What would you like to do?',
-        choices: [
-          { name: 'Not sure yet', value: 'compare' },
-          { name: 'Improve prompt and model performance', value: 'compare' },
-          { name: 'Improve RAG performance', value: 'rag' },
-          { name: 'Improve agent/chain of thought performance', value: 'agent' },
-        ],
-      },
-    ]);
-    action = resp.action;
+    action = await rawlist({
+      message: 'What would you like to do?',
+      choices: [
+        { name: 'Not sure yet', value: 'compare' },
+        { name: 'Improve prompt and model performance', value: 'compare' },
+        { name: 'Improve RAG performance', value: 'rag' },
+        { name: 'Improve agent/chain of thought performance', value: 'agent' },
+        { name: 'Run a red team evaluation', value: 'redteam' },
+      ],
+    });
+
+    recordOnboardingStep('choose app type', {
+      value: action,
+    });
+
+    if (action === 'redteam') {
+      await redteamInit(directory || '.');
+      return {
+        numPrompts: 0,
+        providerPrefixes: [],
+        action: 'redteam',
+        language: 'not_applicable',
+      };
+    }
 
     language = 'not_sure';
     if (action === 'rag' || action === 'agent') {
-      resp = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'language',
-          message: 'What programming language are you developing the app in?',
-          choices: [
-            { name: 'Not sure yet', value: 'not_sure' },
-            { name: 'Python', value: 'python' },
-            { name: 'Javascript', value: 'javascript' },
-          ],
-        },
-      ]);
-      language = resp.language;
+      language = await rawlist({
+        message: 'What programming language are you developing the app in?',
+        choices: [
+          { name: 'Not sure yet', value: 'not_sure' },
+          { name: 'Python', value: 'python' },
+          { name: 'Javascript', value: 'javascript' },
+        ],
+      });
+
+      recordOnboardingStep('choose language', {
+        value: language,
+      });
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
-      { name: 'Choose later', value: ['openai:gpt-3.5-turbo', 'openai:gpt-4o'] },
+      { name: `I'll choose later`, value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
       {
-        name: '[OpenAI] GPT 4o, GPT-3.5, ...',
+        name: '[OpenAI] GPT 4o, GPT 4o-mini, GPT-3.5, ...',
         value:
           action === 'agent'
             ? [
@@ -311,12 +378,12 @@ export async function createDummyFiles(directory: string | null, interactive: bo
                   },
                 },
               ]
-            : ['openai:gpt-3.5-turbo', 'openai:gpt-4o'],
+            : ['openai:gpt-4o-mini', 'openai:gpt-4o'],
       },
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-3-haiku-20240307',
+          'anthropic:messages:claude-3-5-sonnet-20240620',
           'anthropic:messages:claude-3-opus-20240307',
         ],
       },
@@ -361,45 +428,62 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
       },
     ];
-    const { providerChoices } = (await inquirer.prompt([
-      {
-        type: 'checkbox',
-        name: 'providerChoices',
-        message: 'Which model providers would you like to use? (press enter to skip)',
+
+    /**
+     * The potential of the object type here is given by the agent action conditional
+     * for openai as a value choice
+     */
+    const providerChoices: (string | Object)[] = (
+      await checkbox({
+        message:
+          'Which model providers would you like to use? (press space to select, enter to complete selection)',
         choices,
-      },
-    ])) as { providerChoices: (string | object)[] };
+        required: true,
+        loop: false,
+        pageSize: process.stdout.rows - 6,
+      })
+    ).flat();
+
+    recordOnboardingStep('choose providers', {
+      value: providerChoices.map((choice) =>
+        typeof choice === 'string' ? choice : JSON.stringify(choice),
+      ),
+    });
+
+    // Tell the user if they have providers selected without relevant API keys set in env.
+    reportProviderAPIKeyWarnings(providerChoices).forEach((warningText) =>
+      logger.warn(warningText),
+    );
 
     if (providerChoices.length > 0) {
-      const flatProviders = providerChoices.flat();
-      if (flatProviders.length > 3) {
+      if (providerChoices.length > 3) {
         providers.push(
           ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
         );
       } else {
-        providers.push(...flatProviders);
+        providers.push(...providerChoices);
       }
 
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
+        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.js'), JAVASCRIPT_PROVIDER);
         logger.info('⌛ Wrote provider.js');
       }
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
+        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.sh'), BASH_PROVIDER);
         logger.info('⌛ Wrote provider.sh');
       }
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
+        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.py'), PYTHON_PROVIDER);
         logger.info('⌛ Wrote provider.py');
       }
     } else {
-      providers.push('openai:gpt-3.5-turbo');
+      providers.push('openai:gpt-4o-mini');
       providers.push('openai:gpt-4o');
     }
 
@@ -425,12 +509,14 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         logger.info('⌛ Wrote context.py');
       }
     }
+
+    recordOnboardingStep('complete');
   } else {
     action = 'compare';
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-3.5-turbo');
+    providers.push('openai:gpt-4o-mini');
     providers.push('openai:gpt-4o');
   }
 
@@ -441,10 +527,11 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     type: action,
     language,
   });
+
   fs.writeFileSync(path.join(process.cwd(), directory, 'promptfooconfig.yaml'), config);
   fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
-  const isNpx = process.env.npm_execpath?.includes('npx');
+  const isNpx = getEnvString('npm_execpath')?.includes('npx');
   const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
   if (directory === '.') {
     logger.info(
@@ -469,4 +556,28 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     action,
     language,
   };
+}
+
+export async function initializeProject(directory: string | null, interactive: boolean = true) {
+  try {
+    return await createDummyFiles(directory, interactive);
+  } catch (err) {
+    if (err instanceof ExitPromptError) {
+      const isNpx = getEnvString('npm_execpath')?.includes('npx');
+      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
+      logger.info(
+        '\n' +
+          chalk.blue('Initialization paused. To continue setup later, use the command: ') +
+          chalk.bold(runCommand),
+      );
+      logger.info(
+        chalk.blue('For help or feedback, visit ') +
+          chalk.green('https://www.promptfoo.dev/contact/'),
+      );
+      await recordOnboardingStep('early exit');
+      process.exit(130);
+    } else {
+      throw err;
+    }
+  }
 }

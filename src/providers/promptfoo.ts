@@ -1,19 +1,23 @@
-import fetch from 'node-fetch';
-
+import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
+import { fetchWithRetries } from '../fetch';
+import logger from '../logger';
+import { REMOTE_GENERATION_URL } from '../redteam/constants';
 import type {
   ApiProvider,
   ProviderResponse,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
 } from '../types';
-import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   purpose: string;
   harmCategory: string;
 }
 
-class PromptfooHarmfulCompletionProvider implements ApiProvider {
+export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   purpose: string;
   harmCategory: string;
 
@@ -45,8 +49,8 @@ class PromptfooHarmfulCompletionProvider implements ApiProvider {
       // We're using the promptfoo API to avoid having users provide their own unaligned model.
       // See here for a prompt you can use with Llama 3 base to host your own inference endpoint:
       // https://gist.github.com/typpo/3815d97a638f1a41d28634293aff33a0
-      const response = await fetch(
-        process.env.PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT ||
+      const response = await fetchWithRetries(
+        getEnvString('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT') ||
           'https://api.promptfoo.dev/redteam/generateHarmful',
         {
           method: 'POST',
@@ -55,10 +59,11 @@ class PromptfooHarmfulCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
+        10000,
       );
 
       if (!response.ok) {
-        throw new Error(`API call failed with status ${response.status}`);
+        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
       }
 
       const data = await response.json();
@@ -74,4 +79,69 @@ class PromptfooHarmfulCompletionProvider implements ApiProvider {
   }
 }
 
-export default PromptfooHarmfulCompletionProvider;
+interface PromptfooChatCompletionOptions {
+  env?: EnvOverrides;
+  id?: string;
+  jsonOnly: boolean;
+  preferSmallModel: boolean;
+  task: 'crescendo' | 'iterative' | 'iterative:image' | 'iterative:tree';
+}
+
+export class PromptfooChatCompletionProvider implements ApiProvider {
+  private options: PromptfooChatCompletionOptions;
+
+  constructor(options: PromptfooChatCompletionOptions) {
+    this.options = options;
+  }
+
+  id(): string {
+    return this.options.id || 'promptfoo:chatcompletion';
+  }
+
+  toString(): string {
+    return `[Promptfoo Chat Completion Provider]`;
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const body = {
+      jsonOnly: this.options.jsonOnly,
+      preferSmallModel: this.options.preferSmallModel,
+      prompt,
+      step: context?.prompt.label,
+      task: this.options.task,
+    };
+
+    try {
+      const { data } = await fetchWithCache(
+        REMOTE_GENERATION_URL,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+
+      const { result, tokenUsage } = data;
+
+      if (!result) {
+        throw new Error('No choices returned from API');
+      }
+
+      return {
+        output: result,
+        tokenUsage,
+      };
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+  }
+}

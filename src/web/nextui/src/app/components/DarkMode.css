@@ -2,7 +2,7 @@
   display: flex;
   background-color: transparent;
   border: none;
-  color: var(--text-color);
+  color: #f0f0f0;
   cursor: pointer;
   font-size: 16px;
   padding: 8px;

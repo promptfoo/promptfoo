@@ -1,10 +1,17 @@
-import invariant from 'tiny-invariant';
-
-import logger from '../logger';
-import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-
 import type Cloudflare from 'cloudflare';
+import invariant from 'tiny-invariant';
+import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  EnvOverrides,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 /**
  * These are parameters that have nothing to do with model invocation
@@ -38,15 +45,6 @@ export type ICloudflareTextGenerationOptions = {
 
 export type ICloudflareProviderConfig = ICloudflareProviderBaseConfig &
   ICloudflareTextGenerationOptions;
-
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  EnvOverrides,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-} from '../types';
 
 export type ICloudflareSuccessResponse<SuccessData extends Record<string, unknown>> = {
   success: true;
@@ -91,7 +89,7 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.CLOUDFLARE_API_KEY ||
-      process.env.CLOUDFLARE_API_KEY;
+      getEnvString('CLOUDFLARE_API_KEY');
 
     invariant(
       apiTokenCandidate,
@@ -105,7 +103,7 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.CLOUDFLARE_ACCOUNT_ID ||
-      process.env.CLOUDFLARE_ACCOUNT_ID;
+      getEnvString('CLOUDFLARE_ACCOUNT_ID');
 
     invariant(
       accountIdCandidate,

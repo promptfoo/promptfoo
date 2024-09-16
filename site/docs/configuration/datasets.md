@@ -8,10 +8,6 @@ Your dataset is the heart of your LLM eval. To the extent possible, it should cl
 
 promptfoo can extend existing datasets and help make them more comprehensive and diverse using the `promptfoo generate dataset` command. This guide will walk you through the process of generating datasets using `promptfoo`.
 
-:::info
-Dataset generation is in beta. During this time, it requires an `OPENAI_API_KEY` environment variable and access to `gpt-4-1106-preview`.
-:::
-
 ### Prepare your prompts
 
 Before generating a dataset, you need to have your `prompts` ready, and _optionally_ `tests`:
@@ -68,6 +64,7 @@ You can customize the dataset generation process by providing additional options
 | `-w, --write`              | Write the generated test cases directly to the configuration file.      |
 | `--numPersonas`            | Number of personas to generate for the dataset.                         |
 | `--numTestCasesPerPersona` | Number of test cases to generate per persona.                           |
+| `--provider`               | Provider to use for the dataset generation. Eg: openai:chat:gpt-4o      |
 
 For example:
 

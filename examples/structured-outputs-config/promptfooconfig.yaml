@@ -1,0 +1,61 @@
+description: 'Structured prompts'
+
+prompts:
+  # Schema output with `steps` array
+  - label: 'With step-by-step'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema:
+          name: math_response
+          strict: true
+          schema:
+            type: object
+            properties:
+              steps:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    explanation:
+                      type: string
+                    output:
+                      type: string
+                  required:
+                    - explanation
+                    - output
+                  additionalProperties: false
+              final_answer:
+                type: string
+            required:
+              - steps
+              - final_answer
+            additionalProperties: false
+
+  # Schema output without `steps` array
+  - label: 'Without step-by-step'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema:
+          name: math_response
+          strict: true
+          schema:
+            type: object
+            properties:
+              final_answer:
+                type: string
+            required:
+              - final_answer
+            additionalProperties: false
+
+providers:
+  - openai:chat:gpt-4o-2024-08-06
+
+tests:
+  - vars:
+      problem: '8x + 31 = 2'
+  - vars:
+      problem: 'sqrt(x) = 4.9'

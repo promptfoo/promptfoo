@@ -1,0 +1,3 @@
+'Retrieve detailed information about {{topic}} from the knowledge base.'
+---
+'Provide a summary of the most important aspects of {{topic}}, based on available knowledge base information.'

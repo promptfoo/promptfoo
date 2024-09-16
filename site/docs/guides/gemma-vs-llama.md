@@ -96,13 +96,10 @@ prompts:
   - '{{message}}'
 
 providers:
-  - id: replicate:meta/llama-2-7b-chat
+  - id: replicate:meta/meta-llama-3.1-405b-instruct
     config:
       temperature: 0.01
       max_new_tokens: 128
-      prompt:
-        prefix: '[INST] '
-        suffix: '[/INST] '
 
   - id: replicate:google-deepmind/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:

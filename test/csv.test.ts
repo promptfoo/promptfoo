@@ -1,5 +1,4 @@
 import { assertionFromString, testCaseFromCsvRow } from '../src/csv';
-
 import type { Assertion, CsvRow, TestCase } from '../src/types';
 
 describe('testCaseFromCsvRow', () => {

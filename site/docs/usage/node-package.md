@@ -95,7 +95,7 @@ import promptfoo from 'promptfoo';
 const results = await promptfoo.evaluate(
   {
     prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
-    providers: ['openai:gpt-3.5-turbo'],
+    providers: ['openai:gpt-4o-mini'],
     tests: [
       {
         vars: {
@@ -134,7 +134,7 @@ import promptfoo from 'promptfoo';
       },
     ],
     providers: [
-      'openai:gpt-3.5-turbo',
+      'openai:gpt-4o-mini',
       (prompt, context) => {
         // Call LLM here...
         console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
@@ -174,7 +174,7 @@ import promptfoo from 'promptfoo';
 })();
 ```
 
-There's a full example on Github [here](https://github.com/typpo/promptfoo/tree/main/examples/node-package).
+There's a full example on Github [here](https://github.com/promptfoo/promptfoo/tree/main/examples/node-package).
 
 Here's the example output in JSON format:
 

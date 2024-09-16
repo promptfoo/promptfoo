@@ -1,10 +1,9 @@
 import chalk from 'chalk';
-import { Command } from 'commander';
-
-import { getEvals, getPrompts, getTestCases, printBorder, setupEnv, sha256 } from '../util';
-import { wrapTable } from '../table';
+import type { Command } from 'commander';
 import logger from '../logger';
+import { wrapTable } from '../table';
 import telemetry from '../telemetry';
+import { getEvals, getPrompts, getTestCases, printBorder, setupEnv, sha256 } from '../util';
 
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');
@@ -12,11 +11,10 @@ export function listCommand(program: Command) {
   listCommand
     .command('evals')
     .description('List evaluations.')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of evals to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list evals',
       });
@@ -44,11 +42,10 @@ export function listCommand(program: Command) {
   listCommand
     .command('prompts')
     .description('List prompts used')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of prompts to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list prompts',
       });
@@ -77,11 +74,10 @@ export function listCommand(program: Command) {
   listCommand
     .command('datasets')
     .description('List datasets used')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of datasets to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list datasets',
       });

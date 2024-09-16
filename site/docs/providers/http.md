@@ -40,6 +40,36 @@ tests:
 
 If not specified, HTTP POST with content-type application/json is assumed.
 
+### Nested objects
+
+Nested objects are supported and should be passed to the `dump` function.
+
+```yaml
+providers:
+  - id: 'https://example.com/generateTranslation'
+    config:
+      body:
+        // highlight-start
+        messages: '{{messages | dump}}'
+        // highlight-end
+        model: '{{model}}'
+        translate: '{{language}}'
+
+tests:
+  - vars:
+      // highlight-start
+      messages:
+        - role: 'user'
+          content: 'foobar'
+        - role: 'assistant'
+          content: 'baz'
+      // highlight-end
+      model: 'gpt-4'
+      language: 'French'
+```
+
+Note that any valid JSON string within `body` will be converted to a JSON object.
+
 ## Parsing a JSON response
 
 If your API responds with a JSON object and you want to pick out a specific value, use the `responseParser` property to set a Javascript snippet that manipulates the provided `json` object.
@@ -61,7 +91,7 @@ Extracts the message content from this response:
   "id": "chatcmpl-abc123",
   "object": "chat.completion",
   "created": 1677858242,
-  "model": "gpt-3.5-turbo-0613",
+  "model": "gpt-4o-mini",
   "usage": {
     "prompt_tokens": 13,
     "completion_tokens": 7,

@@ -1,10 +1,3 @@
-import invariant from 'tiny-invariant';
-
-import logger from '../logger';
-import { fetchWithCache } from '../cache';
-import { renderVarsInObject } from '../util';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
-
 import type {
   AssistantsClient,
   AssistantCreationOptions,
@@ -12,7 +5,10 @@ import type {
   RunStepToolCallDetails,
   RunStepMessageCreationDetails,
 } from '@azure/openai-assistants';
-
+import invariant from 'tiny-invariant';
+import { fetchWithCache } from '../cache';
+import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
+import logger from '../logger';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -21,6 +17,8 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 interface AzureOpenAiCompletionOptions {
   // Azure identity params
@@ -70,7 +68,7 @@ interface AzureOpenAiCompletionOptions {
   passthrough?: object;
 }
 
-class AzureOpenAiGenericProvider implements ApiProvider {
+export class AzureOpenAiGenericProvider implements ApiProvider {
   deploymentName: string;
   apiHost?: string;
   apiBaseUrl?: string;
@@ -88,13 +86,13 @@ class AzureOpenAiGenericProvider implements ApiProvider {
     this.deploymentName = deploymentName;
 
     this.apiHost =
-      config?.apiHost || env?.AZURE_OPENAI_API_HOST || process.env.AZURE_OPENAI_API_HOST;
+      config?.apiHost || env?.AZURE_OPENAI_API_HOST || getEnvString('AZURE_OPENAI_API_HOST');
     this.apiBaseUrl =
       config?.apiBaseUrl ||
       env?.AZURE_OPENAI_API_BASE_URL ||
       env?.AZURE_OPENAI_BASE_URL ||
-      process.env.AZURE_OPENAI_API_BASE_URL ||
-      process.env.AZURE_OPENAI_BASE_URL;
+      getEnvString('AZURE_OPENAI_API_BASE_URL') ||
+      getEnvString('AZURE_OPENAI_BASE_URL');
 
     this.config = config || {};
     this.id = id ? () => id : this.id;
@@ -130,7 +128,7 @@ class AzureOpenAiGenericProvider implements ApiProvider {
               this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
             : undefined) ||
           this.env?.AZURE_OPENAI_API_KEY ||
-          process.env.AZURE_OPENAI_API_KEY;
+          getEnvString('AZURE_OPENAI_API_KEY');
         if (!this._cachedApiKey) {
           throw new Error('Azure OpenAI API key must be set');
         }
@@ -139,8 +137,15 @@ class AzureOpenAiGenericProvider implements ApiProvider {
     return this._cachedApiKey;
   }
 
-  getApiBaseUrl(): string {
-    return this.apiBaseUrl || `https://${this.apiHost}`;
+  getApiBaseUrl(): string | undefined {
+    if (this.apiBaseUrl) {
+      return this.apiBaseUrl.replace(/\/$/, '');
+    }
+    const host = this.apiHost?.replace(/^(https?:\/\/)/, '').replace(/\/$/, '');
+    if (!host) {
+      return undefined;
+    }
+    return `https://${host}`;
   }
 
   id(): string {
@@ -256,8 +261,8 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
 
     let stop: string;
     try {
-      stop = process.env.OPENAI_STOP
-        ? JSON.parse(process.env.OPENAI_STOP)
+      stop = getEnvString('OPENAI_STOP')
+        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
         : this.config?.stop || ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
@@ -265,15 +270,14 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
     const body = {
       model: this.deploymentName,
       prompt,
-      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
-      presence_penalty:
-        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+      top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
+      presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty:
-        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
-      ...(this.config.seed !== undefined ? { seed: this.config.seed } : {}),
+        this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
+      best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
+      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
@@ -344,32 +348,39 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
 
     let stop: string;
     try {
-      stop = process.env.OPENAI_STOP ? JSON.parse(process.env.OPENAI_STOP) : this.config?.stop;
+      stop = getEnvString('OPENAI_STOP')
+        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
+        : this.config?.stop;
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
     const body = {
       model: this.deploymentName,
-      messages: messages,
-      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
-      presence_penalty:
-        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+      messages,
+      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+      top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
+      presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty:
-        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+        this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       ...(this.config.functions
-        ? { functions: renderVarsInObject(this.config.functions, context?.vars) }
+        ? {
+            functions: maybeLoadFromExternalFile(
+              renderVarsInObject(this.config.functions, context?.vars),
+            ),
+          }
         : {}),
       ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
-      ...(this.config.seed !== undefined ? { seed: this.config.seed } : {}),
-      ...(this.config.tools ? { tools: renderVarsInObject(this.config.tools, context?.vars) } : {}),
+      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
+      ...(this.config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+        : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(this.config.stop ? { stop: this.config.stop } : {}),
+      ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
@@ -481,10 +492,11 @@ export class AzureOpenAiAssistantProvider extends AzureOpenAiGenericProvider {
 
     const { AssistantsClient, AzureKeyCredential } = await import('@azure/openai-assistants');
 
-    this.assistantsClient = new AssistantsClient(
-      this.getApiBaseUrl(),
-      new AzureKeyCredential(apiKey),
-    );
+    const apiBaseUrl = this.getApiBaseUrl();
+    if (!apiBaseUrl) {
+      throw new Error('Azure OpenAI API host must be set');
+    }
+    this.assistantsClient = new AssistantsClient(apiBaseUrl, new AzureKeyCredential(apiKey));
     this.initializationPromise = null;
   }
 

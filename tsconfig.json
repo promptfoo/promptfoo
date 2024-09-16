@@ -1,4 +1,7 @@
 {
+  "ts-node": {
+    "require": ["tsconfig-paths/register"]
+  },
   "compilerOptions": {
     "declaration": true,
     "declarationMap": true,
@@ -10,9 +13,14 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "paths": {
+      "@promptfoo/*": ["./src/*"],
+      "@server/*": ["./src/server/*"],
+      "@app/*": ["./src/web/nextui/src/*"]
+    }
   },
-  "include": ["src/", "typings/**/*"],
+  "include": ["src/", "typings/**/*", "test/"],
   "exclude": [
     "node_modules",
     "dist",

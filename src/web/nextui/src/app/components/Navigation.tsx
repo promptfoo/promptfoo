@@ -1,12 +1,15 @@
+import { useState } from 'react';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@app/constants';
+import EngineeringIcon from '@mui/icons-material/Engineering';
+import InfoIcon from '@mui/icons-material/Info';
+import { Stack, IconButton, Tooltip } from '@mui/material';
 import Link from 'next/link';
-import { Stack } from '@mui/material';
 import { usePathname } from 'next/navigation';
-
-import Logo from './Logo';
-import LoggedInAs from './LoggedInAs';
+import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
-import { USE_SUPABASE } from '@/constants';
-
+import InfoModal from './InfoModal';
+import LoggedInAs from './LoggedInAs';
+import Logo from './Logo';
 import './Navigation.css';
 
 function NavLink({ href, label }: { href: string; label: string }) {
@@ -25,26 +28,47 @@ export default function Navigation({
   darkMode: boolean;
   onToggleDarkMode: () => void;
 }) {
-  if (process.env.NEXT_PUBLIC_NO_BROWSING) {
-    return (
-      <Stack direction="row" spacing={2} className="nav">
-        <Logo />
-        <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
-      </Stack>
-    );
-  }
-  return (
-    <Stack direction="row" spacing={2} className="nav">
+  const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
+  const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
+
+  const handleModalToggle = () => setShowInfoModal((prevState) => !prevState);
+  const handleApiSettingsModalToggle = () => setShowApiSettingsModal((prevState) => !prevState);
+  const navigationContent = (
+    <>
       <Logo />
-      <NavLink href="/setup" label="New Eval" />
-      <NavLink href="/eval" label="Evals" />
-      <NavLink href="/prompts" label="Prompts" />
-      <NavLink href="/datasets" label="Datasets" />
-      <NavLink href="/progress" label="Progress" />
+      {!process.env.NEXT_PUBLIC_NO_BROWSING && (
+        <>
+          <NavLink href="/setup" label="New Eval" />
+          <NavLink href="/eval" label="Evals" />
+          <NavLink href="/prompts" label="Prompts" />
+          <NavLink href="/datasets" label="Datasets" />
+          <NavLink href="/progress" label="Progress" />
+        </>
+      )}
       <div className="right-aligned">
         {USE_SUPABASE ? <LoggedInAs /> : null}
+        <IconButton onClick={handleModalToggle} sx={{ color: '#f0f0f0' }}>
+          <InfoIcon />
+        </IconButton>
+        {IS_RUNNING_LOCALLY && (
+          <Tooltip title="API and Sharing Settings">
+            <IconButton onClick={handleApiSettingsModalToggle} sx={{ color: '#f0f0f0' }}>
+              <EngineeringIcon />
+            </IconButton>
+          </Tooltip>
+        )}
         <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
       </div>
-    </Stack>
+    </>
+  );
+
+  return (
+    <>
+      <InfoModal open={showInfoModal} onClose={handleModalToggle} />
+      <ApiSettingsModal open={showApiSettingsModal} onClose={handleApiSettingsModalToggle} />
+      <Stack direction="row" spacing={2} className="nav">
+        {navigationContent}
+      </Stack>
+    </>
   );
 }

@@ -1,5 +1,6 @@
+import type { Response } from 'node-fetch';
+import fetch from 'node-fetch';
 import { fetchWithCache, disableCache, enableCache, clearCache } from '../src/cache';
-import fetch, { Response } from 'node-fetch';
 
 jest.mock('node-fetch');
 const mockedFetch = jest.mocked(fetch);
@@ -7,6 +8,7 @@ const mockedFetch = jest.mocked(fetch);
 const mockedFetchResponse = (ok: boolean, response: object) => {
   return {
     ok,
+    status: 200,
     text: () => Promise.resolve(JSON.stringify(response)),
     headers: {
       get: (name: string) => {

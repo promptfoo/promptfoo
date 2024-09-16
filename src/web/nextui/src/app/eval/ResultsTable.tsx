@@ -1,7 +1,3 @@
-import * as React from 'react';
-
-import ReactMarkdown from 'react-markdown';
-import invariant from 'tiny-invariant';
 import {
   createColumnHelper,
   flexRender,
@@ -9,31 +5,39 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import * as React from 'react';
+import ReactMarkdown from 'react-markdown';
+import { callApi } from '@app/api';
+import { useToast } from '@app/app/contexts/ToastContext';
+import CustomMetrics from '@app/app/eval/CustomMetrics';
+import EvalOutputPromptDialog from '@app/app/eval/EvalOutputPromptDialog';
+import GenerateTestCases from '@app/app/eval/GenerateTestCases';
+import type { TruncatedTextProps } from '@app/app/eval/TruncatedText';
+import TruncatedText from '@app/app/eval/TruncatedText';
+import { useStore as useMainStore } from '@app/app/eval/store';
+import { useStore as useResultsViewStore } from '@app/app/eval/store';
+import type {
+  EvaluateTableRow,
+  EvaluateTableOutput,
+  FilterMode,
+  EvaluateTable,
+} from '@app/app/eval/types';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import MenuItem from '@mui/material/MenuItem';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import Link from 'next/link';
-
-import CustomMetrics from '@/app/eval/CustomMetrics';
-import EvalOutputCell from './EvalOutputCell';
-import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
-import GenerateTestCases from '@/app/eval/GenerateTestCases';
-import TruncatedText, { TruncatedTextProps } from '@/app/eval/TruncatedText';
-import { getApiBaseUrl } from '@/api';
-import { useStore as useMainStore } from '@/app/eval/store';
-import { useStore as useResultsViewStore } from '@/app/eval/store';
-
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
-
-import { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from '@/app/eval/types';
-
+import yaml from 'js-yaml';
+import Link from 'next/link';
+import remarkGfm from 'remark-gfm';
+import invariant from 'tiny-invariant';
+import EvalOutputCell from './EvalOutputCell';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -131,7 +135,8 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
 }: ResultsTableProps) {
-  const { evalId: filePath, table, setTable } = useMainStore();
+  const { evalId, table, setTable, config, inComparisonMode } = useMainStore();
+  const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -167,10 +172,10 @@ function ResultsTable({
           assertion: { type: 'human' as const },
         };
 
-        if (humanResultIndex !== -1) {
-          componentResults[humanResultIndex] = newResult;
-        } else {
+        if (humanResultIndex === -1) {
           componentResults.push(newResult);
+        } else {
+          componentResults[humanResultIndex] = newResult;
         }
       }
 
@@ -191,22 +196,26 @@ function ResultsTable({
         body: updatedData,
       };
       setTable(newTable);
-      try {
-        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${filePath}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ table: newTable }),
-        });
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
+      if (inComparisonMode) {
+        showToast('Ratings are not saved in comparison mode', 'warning');
+      } else {
+        try {
+          const response = await callApi(`/eval/${evalId}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ table: newTable }),
+          });
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
+        } catch (error) {
+          console.error('Failed to update table:', error);
         }
-      } catch (error) {
-        console.error('Failed to update table:', error);
       }
     },
-    [body, head, setTable, filePath],
+    [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
   const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
@@ -281,6 +290,8 @@ function ResultsTable({
     searchRegex,
   ]);
 
+  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
+
   React.useEffect(() => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [failureFilter, filterMode, searchText]);
@@ -345,7 +356,7 @@ function ResultsTable({
                 return (
                   <div className="cell">
                     {renderMarkdown ? (
-                      <ReactMarkdown>{value}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
                     ) : (
                       <TruncatedText text={value} maxLength={maxTextLength} />
                     )}
@@ -374,6 +385,25 @@ function ResultsTable({
     },
     [filteredBody],
   );
+
+  const metricTotals = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    table?.body.forEach((row) => {
+      row.test.assert?.forEach((assertion) => {
+        if (assertion.metric) {
+          totals[assertion.metric] = (totals[assertion.metric] || 0) + 1;
+        }
+        if ('assert' in assertion && Array.isArray(assertion.assert)) {
+          assertion.assert.forEach((subAssertion) => {
+            if ('metric' in subAssertion && subAssertion.metric) {
+              totals[subAssertion.metric] = (totals[subAssertion.metric] || 0) + 1;
+            }
+          });
+        }
+      });
+    });
+    return totals;
+  }, [table]);
 
   const promptColumns = React.useMemo(() => {
     return [
@@ -436,15 +466,21 @@ function ResultsTable({
                 </div>
               ) : null;
 
+              const providerConfig = Array.isArray(config?.providers)
+                ? config.providers[idx]
+                : undefined;
               const providerParts = prompt.provider ? prompt.provider.split(':') : [];
-              const providerDisplay =
-                providerParts.length > 1 ? (
-                  <>
-                    {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
-                  </>
-                ) : (
-                  <strong>{prompt.provider}</strong>
-                );
+              const providerDisplay = (
+                <Tooltip title={providerConfig ? <pre>{yaml.dump(providerConfig)}</pre> : ''}>
+                  {providerParts.length > 1 ? (
+                    <>
+                      {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
+                    </>
+                  ) : (
+                    <strong>{prompt.provider}</strong>
+                  )}
+                </Tooltip>
+              );
               return (
                 <div className="output-header">
                   <div className="pills">
@@ -458,6 +494,7 @@ function ResultsTable({
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
                       <CustomMetrics
                         lookup={prompt.metrics.namedScores}
+                        metricTotals={metricTotals}
                         onSearchTextChange={onSearchTextChange}
                       />
                     ) : null}
@@ -517,23 +554,25 @@ function ResultsTable({
       }),
     ];
   }, [
-    columnHelper,
-    head.prompts,
-    numGoodTests,
     body.length,
-    highestPassingCount,
+    config?.providers,
+    columnHelper,
     failureFilter,
-    showStats,
+    filterMode,
+    getFirstOutput,
+    getOutput,
+    handleRating,
+    head.prompts,
+    highestPassingCount,
+    maxTextLength,
+    metricTotals,
     numAsserts,
     numGoodAsserts,
-    maxTextLength,
+    numGoodTests,
     onFailureFilterToggle,
-    filterMode,
-    searchText,
-    getOutput,
-    getFirstOutput,
-    handleRating,
     onSearchTextChange,
+    searchText,
+    showStats,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -544,7 +583,9 @@ function ResultsTable({
         id: 'description',
         header: () => <span className="font-bold">Description</span>,
         cell: (info: CellContext<EvaluateTableRow, unknown>) => (
-          <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
+          <div className="cell">
+            <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
+          </div>
         ),
         size: 50,
       };
@@ -560,8 +601,6 @@ function ResultsTable({
     cols.push(...variableColumns, ...promptColumns);
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
-
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
 
   const reactTable = useReactTable({
     data: filteredBody,
@@ -640,7 +679,7 @@ function ResultsTable({
         </tbody>
       </table>
       {reactTable.getPageCount() > 1 && (
-        <Box className="pagination" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             onClick={() => {
               setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));

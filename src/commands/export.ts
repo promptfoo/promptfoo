@@ -1,8 +1,8 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { eq, desc } from 'drizzle-orm';
-
-import { getDb, evals } from '../database';
 import fs from 'fs';
+import { getDb } from '../database';
+import { evals } from '../database/tables';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
@@ -57,7 +57,7 @@ export function exportCommand(program: Command) {
 
         telemetry.record('command_used', {
           name: 'export',
-          evalId: evalId,
+          evalId,
         });
         await telemetry.send();
       } catch (error) {

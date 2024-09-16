@@ -1,10 +1,9 @@
 // Example from @Codeshark-NET https://github.com/promptfoo/promptfoo/issues/922
-
 // @ts-check
-import { generateObject } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
-import { promptSchema } from './schemaValidation.mjs';
+import { generateObject } from 'ai';
 import promptfoo from 'promptfoo';
+import { promptSchema } from './schemaValidation.mjs';
 
 class CustomProvider {
   constructor(options) {

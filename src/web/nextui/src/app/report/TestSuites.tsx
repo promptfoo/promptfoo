@@ -1,7 +1,6 @@
 import React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -12,23 +11,23 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-
 import {
-  riskCategories,
-  subCategoryDescriptions,
   categoryAliases,
+  displayNameOverrides,
+  riskCategories,
   riskCategorySeverityMap,
+  subCategoryDescriptions,
 } from './constants';
 import './TestSuites.css';
-import { useRouter } from 'next/navigation';
 
 const getSubCategoryStats = (
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,
 ) => {
   const subCategoryStats = [];
-  for (const [category, subCategories] of Object.entries(riskCategories)) {
+  for (const subCategories of Object.values(riskCategories)) {
     for (const subCategory of subCategories) {
       subCategoryStats.push({
+        pluginName: subCategory,
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
         description:
           subCategoryDescriptions[subCategory as keyof typeof subCategoryDescriptions] || '',
@@ -52,9 +51,13 @@ const getSubCategoryStats = (
     subCategoryStats
       //.filter((subCategory) => subCategory.passRate !== 'N/A')
       .sort((a, b) => {
-        if (a.passRate === 'N/A') return 1;
-        if (b.passRate === 'N/A') return -1;
-        return parseFloat(a.passRate) - parseFloat(b.passRate);
+        if (a.passRate === 'N/A') {
+          return 1;
+        }
+        if (b.passRate === 'N/A') {
+          return -1;
+        }
+        return Number.parseFloat(a.passRate) - Number.parseFloat(b.passRate);
       })
   );
 };
@@ -63,7 +66,6 @@ const TestSuites: React.FC<{
   evalId: string;
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
 }> = ({ evalId, categoryStats }) => {
-  const router = useRouter();
   const subCategoryStats = getSubCategoryStats(categoryStats).filter(
     (subCategory) => subCategory.passRate !== 'N/A',
   );
@@ -75,7 +77,7 @@ const TestSuites: React.FC<{
   };
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
+    setRowsPerPage(Number.parseInt(event.target.value, 10));
     setPage(0);
   };
 
@@ -89,10 +91,10 @@ const TestSuites: React.FC<{
 
   return (
     <Box>
-      <Typography variant="h6" gutterBottom id="table">
+      <Typography variant="h5" gutterBottom id="table">
         Vulnerabilities and Mitigations
       </Typography>
-      <TableContainer component={Paper}>
+      <TableContainer>
         <Table>
           <TableHead>
             <TableRow>
@@ -116,21 +118,29 @@ const TestSuites: React.FC<{
                   Severity
                 </TableSortLabel>
               </TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell style={{ minWidth: '275px' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {subCategoryStats
               .sort((a, b) => {
                 if (orderBy === 'passRate') {
-                  if (a.passRate === 'N/A') return 1;
-                  if (b.passRate === 'N/A') return -1;
+                  if (a.passRate === 'N/A') {
+                    return 1;
+                  }
+                  if (b.passRate === 'N/A') {
+                    return -1;
+                  }
                   return order === 'asc'
-                    ? parseFloat(a.passRate) - parseFloat(b.passRate)
-                    : parseFloat(b.passRate) - parseFloat(a.passRate);
+                    ? Number.parseFloat(a.passRate) - Number.parseFloat(b.passRate)
+                    : Number.parseFloat(b.passRate) - Number.parseFloat(a.passRate);
                 } else if (orderBy === 'severity') {
-                  if (a.passRate === 'N/A') return 1;
-                  if (b.passRate === 'N/A') return -1;
+                  if (a.passRate === 'N/A') {
+                    return 1;
+                  }
+                  if (b.passRate === 'N/A') {
+                    return -1;
+                  }
                   const severityOrder = {
                     Critical: 4,
                     High: 3,
@@ -149,7 +159,7 @@ const TestSuites: React.FC<{
                     Low: 1,
                   };
                   if (a.severity === b.severity) {
-                    return parseFloat(a.passRate) - parseFloat(b.passRate);
+                    return Number.parseFloat(a.passRate) - Number.parseFloat(b.passRate);
                   } else {
                     return severityOrder[b.severity] - severityOrder[a.severity];
                   }
@@ -159,7 +169,7 @@ const TestSuites: React.FC<{
               .map((subCategory, index) => {
                 let passRateClass = '';
                 if (subCategory.passRate !== 'N/A') {
-                  const passRate = parseFloat(subCategory.passRate);
+                  const passRate = Number.parseFloat(subCategory.passRate);
                   if (passRate >= 75) {
                     passRateClass = 'pass-high';
                   } else if (passRate >= 50) {
@@ -170,23 +180,26 @@ const TestSuites: React.FC<{
                 }
                 return (
                   <TableRow key={index}>
-                    <TableCell>{subCategory.type}</TableCell>
+                    <TableCell>
+                      <span style={{ fontWeight: 500 }}>
+                        {displayNameOverrides[
+                          subCategory.pluginName as keyof typeof displayNameOverrides
+                        ] || subCategory.type}
+                      </span>
+                    </TableCell>
                     <TableCell>{subCategory.description}</TableCell>
                     <TableCell className={passRateClass}>
-                      {subCategory.passRate} (
-                      {subCategory.passRateWithFilter !== subCategory.passRate ? (
+                      <strong>{subCategory.passRate}</strong>
+                      {subCategory.passRateWithFilter === subCategory.passRate ? null : (
                         <>
-                          <strong>{subCategory.passRateWithFilter} with filter</strong>
+                          <br />({subCategory.passRateWithFilter} with mitigation)
                         </>
-                      ) : (
-                        subCategory.passRateWithFilter
                       )}
-                      )
                     </TableCell>
                     <TableCell className={`vuln-${subCategory.severity.toLowerCase()}`}>
                       {subCategory.severity}
                     </TableCell>
-                    <TableCell>
+                    <TableCell style={{ minWidth: 270 }}>
                       <Button
                         variant="contained"
                         size="small"

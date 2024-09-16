@@ -1,18 +1,23 @@
+import dedent from 'dedent';
 import * as fs from 'fs';
-import * as path from 'path';
-
 import { Response } from 'node-fetch';
-
-import { runAssertions, runAssertion } from '../src/assertions';
+import * as path from 'path';
+import {
+  containsXml,
+  createAjv,
+  runAssertion,
+  runAssertions,
+  validateXml,
+} from '../src/assertions';
+import { fetchWithRetries } from '../src/fetch';
 import {
   DefaultGradingJsonProvider,
   DefaultEmbeddingProvider,
   OpenAiChatCompletionProvider,
 } from '../src/providers/openai';
 import { ReplicateModerationProvider } from '../src/providers/replicate';
-import { runPythonCode, runPython } from '../src/python/wrapper';
-import { fetchWithRetries } from '../src/fetch';
-
+import { runPython } from '../src/python/pythonUtils';
+import { runPythonCode } from '../src/python/wrapper';
 import type {
   Assertion,
   ApiProvider,
@@ -38,8 +43,15 @@ jest.mock('../src/python/wrapper', () => {
   const actual = jest.requireActual('../src/python/wrapper');
   return {
     ...actual,
-    runPython: jest.fn(actual.runPython),
     runPythonCode: jest.fn(actual.runPythonCode),
+  };
+});
+
+jest.mock('../src/python/pythonUtils', () => {
+  const actual = jest.requireActual('../src/python/pythonUtils');
+  return {
+    ...actual,
+    runPython: jest.fn(actual.runPython),
   };
 });
 
@@ -55,13 +67,56 @@ jest.mock('fs', () => ({
 }));
 
 jest.mock('../src/esm');
-jest.mock('../src/database');
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
 
 jest.mock('../src/cliState', () => ({
   basePath: '/config_path',
 }));
+jest.mock('../src/matchers', () => {
+  const actual = jest.requireActual('../src/matchers');
+  return {
+    ...actual,
+    matchesContextRelevance: jest
+      .fn()
+      .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
+    matchesContextFaithfulness: jest
+      .fn()
+      .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
+  };
+});
 
 const Grader = new TestGrader();
+
+describe('createAjv', () => {
+  beforeAll(() => {
+    delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
+    jest.resetModules();
+  });
+
+  afterAll(() => {
+    delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
+  });
+
+  it('should create an Ajv instance with default options', () => {
+    const ajv = createAjv();
+    expect(ajv).toBeDefined();
+    expect(ajv.opts.strictSchema).toBe(true);
+  });
+
+  it('should disable strict mode when PROMPTFOO_DISABLE_AJV_STRICT_MODE is set', () => {
+    process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE = 'true';
+    const ajv = createAjv();
+    expect(ajv.opts.strictSchema).toBe(false);
+  });
+
+  it('should add formats to the Ajv instance', () => {
+    const ajv = createAjv();
+    expect(ajv.formats).toBeDefined();
+    expect(Object.keys(ajv.formats)).not.toHaveLength(0);
+  });
+});
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
@@ -88,7 +143,7 @@ describe('runAssertions', () => {
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       test,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -103,7 +158,7 @@ describe('runAssertions', () => {
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       test,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -118,7 +173,7 @@ describe('runAssertions', () => {
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       test,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -145,7 +200,7 @@ describe('runAssertions', () => {
           },
         ],
       },
-      output: 'Hi there world',
+      providerResponse: { output: 'Hi there world' },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -172,7 +227,7 @@ describe('runAssertions', () => {
           },
         ],
       },
-      output: 'Hi there world',
+      providerResponse: { output: 'Hi there world' },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -204,7 +259,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -232,7 +287,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -267,7 +322,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -302,7 +357,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -337,7 +392,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result.namedScores).toStrictEqual({
         [metric]: 0.5,
@@ -370,14 +425,14 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result.score).toBe(0.9);
     });
   });
 
   it('preserves default provider', async () => {
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const output = 'Expected output';
     const test: AtomicTestCase = {
       assert: [
@@ -403,7 +458,7 @@ describe('runAssertions', () => {
       prompt: 'foobar',
       provider,
       test,
-      output,
+      providerResponse: { output },
     });
 
     expect(result.pass).toBeTruthy();
@@ -597,7 +652,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: equalityAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -613,7 +668,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: equalityAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -633,7 +688,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notEqualsAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -649,7 +704,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notEqualsAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -665,7 +720,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: equalityAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -681,7 +736,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: equalityAssertionWithObject,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -697,7 +752,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: equalityAssertionWithObject,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -720,7 +775,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
     expect(result).toMatchObject({
@@ -744,7 +799,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
     expect(result).toMatchObject({
@@ -761,7 +816,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -777,7 +832,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -793,7 +848,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -809,7 +864,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -825,7 +880,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertionWithSchemaYamlString,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -841,7 +896,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertionWithSchemaYamlString,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -867,7 +922,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: { type: 'is-json', value: schemaWithFormat },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
 
     expect(result).toMatchObject({
@@ -894,7 +949,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: { type: 'is-json', value: schemaWithFormat },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
 
     expect(result).toMatchObject({
@@ -936,7 +991,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
     expect(result).toMatchObject({
@@ -977,7 +1032,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
     expect(result).toMatchObject({
@@ -994,7 +1049,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1010,7 +1065,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1026,7 +1081,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: notIsSqlAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1042,7 +1097,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: notIsSqlAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1058,7 +1113,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabase,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1074,7 +1129,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabase,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1090,7 +1145,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1106,7 +1161,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1122,7 +1177,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1138,7 +1193,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1154,7 +1209,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1170,7 +1225,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1186,7 +1241,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1202,11 +1257,99 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
       reason: `SQL validation failed: authority = 'delete::null::employees' is required in table whiteList to execute SQL = 'DELETE FROM employees;'. SQL validation failed: authority = 'delete::employees::(.*)' is required in column whiteList to execute SQL = 'DELETE FROM employees;'.`,
+    });
+  });
+
+  it('should pass when the contains-sql assertion passes', async () => {
+    const output = 'wassup\n```\nSELECT id, name FROM users\n```\nyolo';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: {
+        type: 'contains-sql',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when the contains-sql assertion sees `sql` in code block', async () => {
+    const output = 'wassup\n```sql\nSELECT id, name FROM users\n```\nyolo';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: {
+        type: 'contains-sql',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when the contains-sql assertion sees sql without code block', async () => {
+    const output = 'SELECT id, name FROM users';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: {
+        type: 'contains-sql',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when the contains-sql does not contain code block', async () => {
+    const output = 'nothin';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: {
+        type: 'contains-sql',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+    });
+  });
+
+  it('should fail when the contains-sql does not contain sql in code block', async () => {
+    const output = '```python\nprint("Hello, World!")\n```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: {
+        type: 'contains-sql',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
     });
   });
 
@@ -1219,7 +1362,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1236,7 +1379,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1252,7 +1395,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1268,7 +1411,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1284,7 +1427,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1300,7 +1443,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1340,7 +1483,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
     expect(result).toMatchObject({
@@ -1381,7 +1524,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
     expect(result).toMatchObject({
@@ -1398,7 +1541,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toEqual(
       expect.objectContaining({
@@ -1417,7 +1560,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1433,7 +1576,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertionWithNumber,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1450,7 +1593,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertionWithNumberAndThreshold,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1467,7 +1610,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertionWithNumberAndThreshold,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1489,7 +1632,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1506,7 +1649,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1526,7 +1669,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: { vars: { foo: 'Expected output' } } as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1546,7 +1689,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertionWithVars,
       test: { vars: { foo: 'bar' } } as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1566,7 +1709,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertionWithVars,
       test: { vars: { foo: 'bar' } } as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1583,7 +1726,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptFunctionAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1600,7 +1743,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptFunctionFailAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1616,7 +1759,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: javascriptMultilineStringAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1632,7 +1775,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: javascriptMultilineStringAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1653,7 +1796,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1669,7 +1812,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1691,7 +1834,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsLowerAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1707,7 +1850,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsLowerAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1729,7 +1872,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsLowerAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1745,7 +1888,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsLowerAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1767,7 +1910,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsAnyAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1783,7 +1926,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsAnyAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1802,7 +1945,7 @@ describe('runAssertion', () => {
         value: ['option1', 'option2', 'option3'],
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1821,7 +1964,7 @@ describe('runAssertion', () => {
         value: ['option1', 'option2', 'option3'],
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1843,7 +1986,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsAllAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1859,12 +2002,12 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsAllAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output to contain all of "option1, option2, option3"',
+      reason: 'Expected output to contain all of [option1, option2, option3]. Missing: [option3]',
     });
   });
 
@@ -1878,7 +2021,7 @@ describe('runAssertion', () => {
         value: ['option1', 'option2', 'option3'],
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1897,12 +2040,13 @@ describe('runAssertion', () => {
         value: ['option1', 'option2', 'option3', 'option4'],
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output to contain all of "option1, option2, option3, option4"',
+      reason:
+        'Expected output to contain all of [option1, option2, option3, option4]. Missing: [option4]',
     });
   });
 
@@ -1919,7 +2063,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsRegexAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1935,7 +2079,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsRegexAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1957,7 +2101,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsRegexAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1973,7 +2117,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsRegexAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1991,15 +2135,20 @@ describe('runAssertion', () => {
   it('should pass when the webhook assertion passes', async () => {
     const output = 'Expected output';
 
-    fetchWithRetries.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
+    jest.mocked(fetchWithRetries).mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ pass: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       assertion: webhookAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2010,16 +2159,20 @@ describe('runAssertion', () => {
 
   it('should fail when the webhook assertion fails', async () => {
     const output = 'Different output';
-
-    fetchWithRetries.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
+    jest.mocked(fetchWithRetries).mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ pass: false }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       assertion: webhookAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2031,13 +2184,20 @@ describe('runAssertion', () => {
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 
-    fetchWithRetries.mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
+    jest.mocked(fetchWithRetries).mockImplementation(() =>
+      Promise.resolve(
+        new Response('', {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       assertion: webhookAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2060,7 +2220,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: rougeNAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2076,7 +2236,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: rougeNAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2098,7 +2258,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: startsWithAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2114,7 +2274,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: startsWithAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2151,9 +2311,9 @@ describe('runAssertion', () => {
     // Expect test to pass because assertion grader takes priority
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      assertion: assertion,
-      test: test,
-      output: output,
+      assertion,
+      test,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2177,7 +2337,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: levenshteinAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -2193,7 +2353,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: levenshteinAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -2251,7 +2411,7 @@ describe('runAssertion', () => {
         provider: new OpenAiChatCompletionProvider('gpt-4'),
         assertion: fileAssertion,
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(mockFn).toHaveBeenCalledWith('Expected output', {
@@ -2282,7 +2442,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: fileAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
 
     expect(mockFn).toHaveBeenCalledWith('Expected output', {
@@ -2299,7 +2459,7 @@ describe('runAssertion', () => {
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
     const expectedPythonValue = '0.5';
 
-    runPythonCode.mockResolvedValueOnce(expectedPythonValue);
+    jest.mocked(runPythonCode).mockResolvedValueOnce(expectedPythonValue);
 
     const output =
       'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
@@ -2314,7 +2474,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: pythonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
 
     expect(runPythonCode).toHaveBeenCalledTimes(1);
@@ -2379,14 +2539,14 @@ describe('runAssertion', () => {
         threshold,
       };
 
-      runPythonCode.mockResolvedValueOnce(resolvedValue);
+      jest.mocked(runPythonCode).mockResolvedValueOnce(resolvedValue);
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider: new OpenAiChatCompletionProvider('gpt-4'),
         assertion: pythonAssertion,
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(runPythonCode).toHaveBeenCalledTimes(1);
@@ -2426,7 +2586,7 @@ describe('runAssertion', () => {
     'should handle when the file:// assertion with .py file returns a %s',
     async (type, pythonOutput, expectedPass, expectedReason) => {
       const output = 'Expected output';
-      runPython.mockResolvedValueOnce(pythonOutput);
+      jest.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
 
       const fileAssertion: Assertion = {
         type: 'python',
@@ -2438,7 +2598,7 @@ describe('runAssertion', () => {
         provider: new OpenAiChatCompletionProvider('gpt-4'),
         assertion: fileAssertion,
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(runPython).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
@@ -2460,9 +2620,11 @@ describe('runAssertion', () => {
 
   it('should handle when python file assertions throw an error', async () => {
     const output = 'Expected output';
-    runPython.mockRejectedValue(
-      new Error('The Python script `call_api` function must return a dict with an `output`'),
-    );
+    jest
+      .mocked(runPython)
+      .mockRejectedValue(
+        new Error('The Python script `call_api` function must return a dict with an `output`'),
+      );
     const fileAssertion: Assertion = {
       type: 'python',
       value: 'file:///path/to/assert.py',
@@ -2472,7 +2634,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: fileAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(runPython).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
@@ -2499,7 +2661,7 @@ describe('runAssertion', () => {
         },
         latencyMs: 50,
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -2519,7 +2681,7 @@ describe('runAssertion', () => {
         },
         latencyMs: 1000,
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -2539,11 +2701,68 @@ describe('runAssertion', () => {
             threshold: 100,
           },
           test: {} as AtomicTestCase,
-          output,
+          providerResponse: { output },
         }),
       ).rejects.toThrow(
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
       );
+    });
+
+    it('should pass when the latency is 0ms', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
+        latencyMs: 0,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should throw an error when threshold is not provided', async () => {
+      const output = 'Expected output';
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4'),
+          assertion: {
+            type: 'latency',
+          },
+          latencyMs: 50,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        }),
+      ).rejects.toThrow('Latency assertion must have a threshold in milliseconds');
+    });
+
+    it('should handle latency equal to threshold', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
+        latencyMs: 100,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
   });
 
@@ -2562,8 +2781,7 @@ describe('runAssertion', () => {
           threshold: 2,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        logProbs,
+        providerResponse: { output: 'Some output', logProbs },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -2585,8 +2803,7 @@ describe('runAssertion', () => {
           threshold: 0.2,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        logProbs,
+        providerResponse: { output: 'Some output', logProbs },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -2610,8 +2827,7 @@ describe('runAssertion', () => {
           threshold: 0.25,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        logProbs,
+        providerResponse: { output: 'Some output', logProbs },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -2633,8 +2849,7 @@ describe('runAssertion', () => {
           threshold: 0.5,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        logProbs,
+        providerResponse: { output: 'Some output', logProbs },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -2658,8 +2873,7 @@ describe('runAssertion', () => {
           threshold: 0.001,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        cost,
+        providerResponse: { output: 'Some output', cost },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -2681,8 +2895,7 @@ describe('runAssertion', () => {
           threshold: 0.001,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        cost,
+        providerResponse: { output: 'Some output', cost },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -2718,7 +2931,7 @@ describe('runAssertion', () => {
           type: 'is-valid-openai-function-call',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2753,7 +2966,7 @@ describe('runAssertion', () => {
           type: 'is-valid-openai-function-call',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2795,7 +3008,7 @@ describe('runAssertion', () => {
           type: 'is-valid-openai-tools-call',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2835,7 +3048,7 @@ describe('runAssertion', () => {
           type: 'is-valid-openai-tools-call',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2877,7 +3090,7 @@ describe('runAssertion', () => {
           value: 'Similar output',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2896,7 +3109,7 @@ describe('runAssertion', () => {
           value: 'Different output',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2915,7 +3128,7 @@ describe('runAssertion', () => {
           value: ['Similar output 1', 'Different output 1'],
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2934,12 +3147,773 @@ describe('runAssertion', () => {
           value: ['Different output 1', 'Different output 2'],
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: false,
         reason: 'None of the provided values met the similarity threshold',
       });
     });
+  });
+
+  describe('is-xml', () => {
+    const provider = {
+      callApi: jest.fn().mockResolvedValue({ cost: 0.001 }),
+    } as unknown as ApiProvider;
+
+    it('should pass when the output is valid XML', async () => {
+      const output = '<root><child>Content</child></root>';
+      const assertion: Assertion = { type: 'is-xml' };
+
+      const result = await runAssertion({
+        prompt: 'Generate XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should fail when the output is not valid XML', async () => {
+      const output = '<root><child>Content</child></root';
+      const assertion: Assertion = { type: 'is-xml' };
+
+      const result = await runAssertion({
+        prompt: 'Generate XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringMatching(/XML parsing failed/),
+        assertion,
+      });
+    });
+
+    it('should pass when required elements are present', async () => {
+      const output =
+        '<analysis><classification>T-shirt</classification><color>Red</color></analysis>';
+      const assertion: Assertion = {
+        type: 'is-xml',
+        value: 'analysis.classification,analysis.color',
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should fail when required elements are missing', async () => {
+      const output = '<analysis><classification>T-shirt</classification></analysis>';
+      const assertion: Assertion = {
+        type: 'is-xml',
+        value: 'analysis.classification,analysis.color',
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'XML is missing required elements: analysis.color',
+        assertion,
+      });
+    });
+
+    it('should pass when nested elements are present', async () => {
+      const output =
+        '<root><parent><child><grandchild>Content</grandchild></child></parent></root>';
+      const assertion: Assertion = {
+        type: 'is-xml',
+        value: 'root.parent.child.grandchild',
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should handle inverse assertion correctly', async () => {
+      const output = 'This is not XML';
+      const assertion: Assertion = { type: 'not-is-xml' };
+
+      const result = await runAssertion({
+        prompt: 'Generate non-XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should pass when required elements are specified as an array', async () => {
+      const output = '<root><element1>Content1</element1><element2>Content2</element2></root>';
+      const assertion: Assertion = {
+        type: 'is-xml',
+        value: ['root.element1', 'root.element2'],
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should pass when required elements are specified as an object', async () => {
+      const output = '<root><element1>Content1</element1><element2>Content2</element2></root>';
+      const assertion: Assertion = {
+        type: 'contains-xml',
+        value: {
+          requiredElements: ['root.element1', 'root.element2'],
+        },
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should throw an error when xml assertion value is invalid', async () => {
+      const output = '<root><element1>Content1</element1><element2>Content2</element2></root>';
+      const assertion: Assertion = {
+        type: 'is-xml',
+        value: { invalidKey: ['root.element1', 'root.element2'] },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Generate XML',
+          provider,
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        }),
+      ).rejects.toThrow('xml assertion must contain a string, array value, or no value');
+    });
+
+    it('should handle multiple XML blocks in contains-xml assertion', async () => {
+      const output = 'Some text <xml1>content1</xml1> more text <xml2>content2</xml2>';
+      const assertion: Assertion = {
+        type: 'contains-xml',
+        value: ['xml1', 'xml2'],
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate text with multiple XML blocks',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+  });
+
+  describe('contains-xml', () => {
+    const provider = {
+      callApi: jest.fn().mockResolvedValue({ cost: 0.001 }),
+    } as unknown as ApiProvider;
+    it('should pass when the output contains valid XML', async () => {
+      const output = 'Some text before <root><child>Content</child></root> and after';
+      const assertion: Assertion = { type: 'contains-xml' };
+
+      const result = await runAssertion({
+        prompt: 'Generate text with XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should fail when the output does not contain valid XML', async () => {
+      const output = 'This is just plain text without any XML';
+      const assertion: Assertion = { type: 'contains-xml' };
+
+      const result = await runAssertion({
+        prompt: 'Generate text without XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'No XML content found in the output',
+        assertion,
+      });
+    });
+
+    it('should pass when required elements are present in the XML', async () => {
+      const output =
+        'Before <analysis><classification>T-shirt</classification><color>Red</color></analysis> After';
+      const assertion: Assertion = {
+        type: 'contains-xml',
+        value: 'analysis.classification,analysis.color',
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate text with specific XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should fail when required elements are missing in the XML', async () => {
+      const output = 'Before <analysis><classification>T-shirt</classification></analysis> After';
+      const assertion: Assertion = {
+        type: 'contains-xml',
+        value: 'analysis.classification,analysis.color',
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate text with specific XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'No valid XML content found matching the requirements',
+        assertion,
+      });
+    });
+
+    it('should pass when nested elements are present in the XML', async () => {
+      const output =
+        'Start <root><parent><child><grandchild>Content</grandchild></child></parent></root> End';
+      const assertion: Assertion = {
+        type: 'contains-xml',
+        value: 'root.parent.child.grandchild',
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate text with nested XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should handle inverse assertion correctly', async () => {
+      const output = 'This is just plain text without any XML';
+      const assertion: Assertion = { type: 'not-contains-xml' };
+
+      const result = await runAssertion({
+        prompt: 'Generate text without XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should fail inverse assertion when XML is present', async () => {
+      const output = 'Some text with <xml>content</xml> in it';
+      const assertion: Assertion = { type: 'not-contains-xml' };
+
+      const result = await runAssertion({
+        prompt: 'Generate text without XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'XML is valid and contains all required elements',
+        assertion,
+      });
+    });
+  });
+
+  describe('context-relevance assertion', () => {
+    it('should pass when all required vars are present', async () => {
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+      };
+
+      const result = await runAssertion({
+        assertion,
+        test,
+        providerResponse: { output: 'Some output' },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Mocked reason',
+        assertion,
+      });
+    });
+
+    it('should throw an error when vars object is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {};
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-relevance assertion type must have a vars object');
+    });
+
+    it('should throw an error when query var is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          context: 'Paris is the capital of France.',
+        },
+      };
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-relevance assertion type must have a query var');
+    });
+
+    it('should throw an error when context var is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+        },
+      };
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-relevance assertion type must have a context var');
+    });
+  });
+
+  describe('context-faithfulness assertion', () => {
+    it('should pass when all required vars are present', async () => {
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+      };
+
+      const result = await runAssertion({
+        assertion,
+        test,
+        providerResponse: { output: 'The capital of France is Paris.' },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Mocked reason',
+        assertion,
+      });
+    });
+
+    it('should throw an error when vars object is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {};
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-faithfulness assertion type must have a vars object');
+    });
+
+    it('should throw an error when query var is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          context: 'Paris is the capital of France.',
+        },
+      };
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-faithfulness assertion type must have a query var');
+    });
+
+    it('should throw an error when context var is missing', async () => {
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+        },
+      };
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: 'Some output' },
+        }),
+      ).rejects.toThrow('context-faithfulness assertion type must have a context var');
+    });
+
+    it('should throw an error when output is not a string', async () => {
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+      };
+
+      await expect(
+        runAssertion({
+          assertion,
+          test,
+          providerResponse: { output: { some: 'object' } },
+        }),
+      ).rejects.toThrow('context-faithfulness assertion type must have a string output');
+    });
+  });
+});
+
+describe('validateXml', () => {
+  it('should validate a simple valid XML string', () => {
+    expect(validateXml('<root><child>Content</child></root>')).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should invalidate a malformed XML string', () => {
+    expect(validateXml('<root><child>Content</child></root')).toEqual({
+      isValid: false,
+      reason: expect.stringContaining('XML parsing failed'),
+    });
+  });
+
+  it('should validate XML with attributes', () => {
+    expect(validateXml('<root><child id="1">Content</child></root>')).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should validate XML with namespaces', () => {
+    expect(
+      validateXml('<root xmlns:ns="http://example.com"><ns:child>Content</ns:child></root>'),
+    ).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should validate when all required elements are present', () => {
+    expect(
+      validateXml(
+        '<analysis><classification>T-shirt</classification><color>Red</color></analysis>',
+        ['analysis.classification', 'analysis.color'],
+      ),
+    ).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should invalidate when a required element is missing', () => {
+    expect(
+      validateXml('<analysis><classification>T-shirt</classification></analysis>', [
+        'analysis.classification',
+        'analysis.color',
+      ]),
+    ).toEqual({
+      isValid: false,
+      reason: 'XML is missing required elements: analysis.color',
+    });
+  });
+
+  it('should validate nested elements correctly', () => {
+    expect(
+      validateXml('<root><parent><child><grandchild>Content</grandchild></child></parent></root>', [
+        'root.parent.child.grandchild',
+      ]),
+    ).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should invalidate when a nested required element is missing', () => {
+    expect(
+      validateXml('<root><parent><child></child></parent></root>', [
+        'root.parent.child.grandchild',
+      ]),
+    ).toEqual({
+      isValid: false,
+      reason: 'XML is missing required elements: root.parent.child.grandchild',
+    });
+  });
+
+  it('should handle empty elements correctly', () => {
+    expect(
+      validateXml('<root><emptyChild></emptyChild><nonEmptyChild>Content</nonEmptyChild></root>', [
+        'root.emptyChild',
+        'root.nonEmptyChild',
+      ]),
+    ).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should validate XML with multiple siblings', () => {
+    expect(
+      validateXml('<root><child>Content1</child><child>Content2</child></root>', ['root.child']),
+    ).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should handle XML with CDATA sections', () => {
+    expect(
+      validateXml('<root><child><![CDATA[<p>This is CDATA content</p>]]></child></root>', [
+        'root.child',
+      ]),
+    ).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should validate XML with processing instructions', () => {
+    const xml =
+      '<?xml version="1.0" encoding="UTF-8"?><?xml-stylesheet type="text/xsl" href="style.xsl"?><root><child>Content</child></root>';
+    expect(validateXml(xml, ['root.child'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should handle XML with comments', () => {
+    expect(
+      validateXml('<root><!-- This is a comment --><child>Content</child></root>', ['root.child']),
+    ).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should validate the example XML structure', () => {
+    const xml = dedent`
+      <analysis>
+        <classification>T-shirt/top</classification>
+        <color>White with black print</color>
+        <features>Large circular graphic design on the front, resembling a smiley face or emoji</features>
+        <style>Modern, casual streetwear</style>
+        <confidence>9</confidence>
+        <reasoning>The image clearly shows a short-sleeved garment with a round neckline, which is characteristic of a T-shirt. The large circular graphic on the front is distinctive and appears to be a stylized smiley face or emoji design, which is popular in contemporary casual fashion. The stark contrast between the white fabric and black print is very clear, leaving little room for misinterpretation. The style is unmistakably modern and aligned with current trends in graphic tees. My confidence is high (9) because all elements of the image are clear and consistent with a typical graphic T-shirt design.</reasoning>
+      </analysis>
+    `;
+    expect(
+      validateXml(xml, [
+        'analysis.classification',
+        'analysis.color',
+        'analysis.features',
+        'analysis.style',
+        'analysis.confidence',
+        'analysis.reasoning',
+      ]),
+    ).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+});
+
+describe('containsXml', () => {
+  it('should return true when valid XML is present', () => {
+    const input = 'Some text <root><child>Content</child></root> more text';
+    const result = containsXml(input);
+    expect(result.isValid).toBe(true);
+  });
+
+  it('should return false when no XML is present', () => {
+    const input = 'This is just plain text';
+    expect(containsXml(input)).toEqual({
+      isValid: false,
+      reason: 'No XML content found in the output',
+    });
+  });
+
+  it('should validate required elements', () => {
+    const input = 'Text <root><child>Content</child></root> more';
+    const result = containsXml(input, ['root.child']);
+    expect(result.isValid).toBe(true);
+  });
+
+  it('should return false when required elements are missing', () => {
+    const input = 'Text <root><child>Content</child></root> more';
+    expect(containsXml(input, ['root.missing'])).toEqual({
+      isValid: false,
+      reason: 'No valid XML content found matching the requirements',
+    });
+  });
+
+  it('should handle multiple XML fragments', () => {
+    const input = '<root1>Content</root1> text <root2><child>More</child></root2>';
+    const result = containsXml(input, ['root2.child']);
+    expect(result.isValid).toBe(true);
   });
 });

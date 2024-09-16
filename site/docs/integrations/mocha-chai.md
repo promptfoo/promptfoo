@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 # Testing prompts with Mocha/Chai
 
-`promptfoo` can be integrated with test frameworks like [Mocha](https://mochajs.org/) and assertion libraries like [Chai](https://www.chaijs.org/) in order to evaluate prompts as part of existing testing and CI workflows.
+`promptfoo` can be integrated with test frameworks like [Mocha](https://mochajs.org/) and assertion libraries like [Chai](https://www.chaijs.com/) in order to evaluate prompts as part of existing testing and CI workflows.
 
 This guide includes examples that show how to create Mocha test cases for desired prompt quality using semantic similarity and LLM grading.
 
@@ -37,8 +37,8 @@ Create a new file called `assertions.js` and add the following:
 
 ```javascript
 import { Assertion } from 'chai';
-
 import { assertions } from 'promptfoo';
+
 const { matchesSimilarity, matchesLlmRubric } = assertions;
 
 Assertion.addAsyncMethod('toMatchSemanticSimilarity', async function (expected, threshold = 0.8) {
@@ -96,11 +96,10 @@ Assertion.addAsyncMethod('toMatchClosedQA', async function (input, expected, gra
 
 ```typescript
 import { Assertion } from 'chai';
-
 import { assertions } from 'promptfoo';
-const { matchesSimilarity, matchesLlmRubric } = assertions;
-
 import type { GradingConfig } from 'promptfoo';
+
+const { matchesSimilarity, matchesLlmRubric } = assertions;
 
 Assertion.addAsyncMethod(
   'toMatchSemanticSimilarity',
@@ -148,7 +147,7 @@ import { expect } from 'chai';
 import './assertions';
 
 const gradingConfig = {
-  provider: 'openai:chat:gpt-3.5-turbo',
+  provider: 'openai:chat:gpt-4o-mini',
 };
 
 describe('semantic similarity tests', () => {

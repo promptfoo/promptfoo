@@ -1,22 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useStore } from '@app/state/evalConfig';
+import Copy from '@mui/icons-material/ContentCopy';
+import Delete from '@mui/icons-material/Delete';
+import Edit from '@mui/icons-material/Edit';
+import Publish from '@mui/icons-material/Publish';
 import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
-import Stack from '@mui/material/Stack';
-import Edit from '@mui/icons-material/Edit';
-import Delete from '@mui/icons-material/Delete';
-import Publish from '@mui/icons-material/Publish';
-import Copy from '@mui/icons-material/ContentCopy';
-
+import Typography from '@mui/material/Typography';
 import PromptDialog from './PromptDialog';
-import { useStore } from '@/state/evalConfig';
-
 import './PromptsSection.css';
 
 const PromptsSection: React.FC = () => {
@@ -74,7 +72,7 @@ const PromptsSection: React.FC = () => {
 
   return (
     <div>
-      <Stack direction="row" spacing={2} justifyContent="space-between">
+      <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
         <Typography variant="h5">Prompts</Typography>
         <div>
           <label htmlFor={`file-input-add-prompt`}>
@@ -163,13 +161,13 @@ const PromptsSection: React.FC = () => {
       </TableContainer>
       <PromptDialog
         open={promptDialogOpen}
-        prompt={editingPromptIndex !== null ? prompts[editingPromptIndex] : ''}
-        index={editingPromptIndex !== null ? editingPromptIndex : 0}
+        prompt={editingPromptIndex === null ? '' : prompts[editingPromptIndex]}
+        index={editingPromptIndex === null ? 0 : editingPromptIndex}
         onAdd={(newPrompt) => {
-          if (editingPromptIndex !== null) {
-            handleChangePrompt(editingPromptIndex, newPrompt);
-          } else {
+          if (editingPromptIndex === null) {
             setPrompts([...prompts, newPrompt]);
+          } else {
+            handleChangePrompt(editingPromptIndex, newPrompt);
           }
           setEditingPromptIndex(null);
         }}

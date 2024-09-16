@@ -115,8 +115,11 @@ The example pictured above includes 150 examples of hallucination-prone question
 To set this up, we use the `defaultTest` property to set a requirement on every test:
 
 ```yaml
-providers: [openai:gpt-3.5-turbo]
-prompts: [prompt1.txt, prompt2.txt]
+providers:
+  - openai:gpt-4o-mini
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 // highlight-start
 defaultTest:
   assert:
@@ -154,7 +157,7 @@ Determining the perplexity threshold is a bit of trial and error. You can also r
 ```yaml
 providers:
   - openai:gpt-4
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 
 tests:
   # ...
@@ -164,7 +167,7 @@ tests:
 
 The evaluation will output the perplexity scores of each model, and you can get a feel for what scores you're comfortable with. Keep in mind that different models and domains may require different thresholds for optimal performance.
 
-For more detailed information on perplexity and other useful metrics, refer to the [perplexity assertion](/docs/configuration/expected-outputs/#perplexity).
+For more detailed information on perplexity and other useful metrics, refer to the [perplexity assertion](/docs/configuration/expected-outputs/deterministic#perplexity).
 
 ### Retrieval-Augmented Generation
 
@@ -203,10 +206,11 @@ We use LangChain in this example because it's a popular library, but any custom 
 Then, we can use this provider in our evaluation and compare the results:
 
 ```yaml
-prompts: [prompt1.txt]
+prompts:
+  - file://prompt1.txt
 // highlight-start
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
   - exec:python langchain_provider.py
 // highlight-end
 tests:
@@ -228,7 +232,8 @@ Suppose you spent some time fine-tuning a model and wanted to compare different 
 In this example, we use the Ollama provider to test two versions of Meta's Llama 2 model that are fine-tuned on different data:
 
 ```yaml
-prompts: [prompt1.txt]
+prompts:
+  - file://prompt1.txt
 providers:
   - ollama:llama2
   - ollama:llama2-uncensored
