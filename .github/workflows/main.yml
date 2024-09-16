@@ -81,7 +81,7 @@ jobs:
           npm run lint
 
       - name: Lint UI
-        working-directory: src/web/nextui
+        working-directory: src/app
         run: |
           npm run lint
 

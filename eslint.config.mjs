@@ -28,14 +28,7 @@ export default [
     },
   },
   {
-    ignores: [
-      '**/src/web/nextui/_next/**/*',
-      '**/src/web/nextui/.next/**/*',
-      '**/src/web/nextui/out/**/*',
-      'dist/**/*',
-      'site/.docusaurus/**/*',
-      'site/build/**/*',
-    ],
+    ignores: ['dist/**/*', 'site/.docusaurus/**/*', 'site/build/**/*'],
   },
   {
     languageOptions: {
