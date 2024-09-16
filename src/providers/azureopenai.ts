@@ -183,7 +183,13 @@ export function calculateAzureOpenAICost(
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  return calculateCost(modelName, { cost: undefined }, promptTokens, completionTokens, AZURE_OPENAI_MODELS);
+  return calculateCost(
+    modelName,
+    { cost: undefined },
+    promptTokens,
+    completionTokens,
+    AZURE_OPENAI_MODELS,
+  );
 }
 
 export class AzureOpenAiGenericProvider implements ApiProvider {
