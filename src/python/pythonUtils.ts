@@ -1,15 +1,12 @@
-import { exec } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
-import util from 'util';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
-
-export const execAsync = util.promisify(exec);
+import { execAsync } from './execAsync';
 
 export const state: { cachedPythonPath: string | null } = { cachedPythonPath: null };
 
