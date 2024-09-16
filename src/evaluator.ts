@@ -655,6 +655,21 @@ class Evaluator {
         metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
       }
 
+      for (const gradingResult of row.gradingResult?.componentResults || []) {
+        const pluginId = gradingResult.metadata?.pluginId;
+        const strategyId = gradingResult.metadata?.strategyId;
+        if (pluginId) {
+          metrics.redteam = metrics.redteam || { pluginScores: {}, strategyScores: {} };
+          metrics.redteam.pluginScores[pluginId] =
+            (metrics.redteam.pluginScores[pluginId] || 0) + gradingResult.score;
+        }
+        if (strategyId) {
+          metrics.redteam = metrics.redteam || { pluginScores: {}, strategyScores: {} };
+          metrics.redteam.strategyScores[strategyId] =
+            (metrics.redteam.strategyScores[strategyId] || 0) + gradingResult.score;
+        }
+      }
+
       if (testSuite.derivedMetrics) {
         const math = await import('mathjs'); // TODO: move this
         for (const metric of testSuite.derivedMetrics) {

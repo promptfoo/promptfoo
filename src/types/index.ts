@@ -156,6 +156,12 @@ export const CompletedPromptSchema = PromptSchema.extend({
       totalLatencyMs: z.number(),
       tokenUsage: TokenUsageSchema,
       namedScores: z.record(z.string(), z.number()),
+      redteam: z
+        .object({
+          pluginScores: z.record(z.string(), z.number()),
+          strategyScores: z.record(z.string(), z.number()),
+        })
+        .optional(),
       cost: z.number(),
     })
     .optional(),
@@ -259,6 +265,13 @@ export interface GradingResult {
 
   // User comment
   comment?: string;
+
+  // Additional info
+  metadata?: {
+    pluginId?: string;
+    strategyId?: string;
+    [key: string]: any;
+  };
 }
 
 export function isGradingResult(result: any): result is GradingResult {
