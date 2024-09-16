@@ -1154,7 +1154,7 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
 
   // Render the file path using Nunjucks
   const renderedFilePath = nunjucks.renderString(filePath, { env: process.env });
-  
+
   const finalPath = path.resolve(cliState.basePath || '', renderedFilePath.slice('file://'.length));
   if (!fs.existsSync(finalPath)) {
     throw new Error(`File does not exist: ${finalPath}`);
