@@ -1,6 +1,8 @@
 import { assertionFromString, testCaseFromCsvRow } from '../src/csv';
 import type { Assertion, CsvRow, TestCase } from '../src/types';
 
+jest.mock('../src/logger');
+
 describe('testCaseFromCsvRow', () => {
   it('should create a TestCase with assertions and options from a CSV row', () => {
     const row: CsvRow = {
@@ -297,5 +299,21 @@ describe('assertionFromString', () => {
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('javascript');
     expect(result.value).toBe('x > 10');
+  });
+
+  it('should create an llm-rubric assertion with "grade:" prefix', () => {
+    const expected = 'grade:Evaluate the response based on clarity and accuracy';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('llm-rubric');
+    expect(result.value).toBe('Evaluate the response based on clarity and accuracy');
+  });
+
+  it('should create an llm-rubric assertion with "llm-rubric:" prefix', () => {
+    const expected = 'llm-rubric:Rate the answer on a scale of 1-10 for completeness';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('llm-rubric');
+    expect(result.value).toBe('Rate the answer on a scale of 1-10 for completeness');
   });
 });
