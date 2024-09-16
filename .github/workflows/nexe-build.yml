@@ -56,7 +56,9 @@ jobs:
         run: npm install -g nexe
       - name: Build executable
         run: npx nexe --build -r drizzle/ -r package.json -r "dist/**/*" -i dist/src/main.js -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+
       - name: Upload Release Asset
+        if: github.event_name == 'release'
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -65,3 +67,10 @@ jobs:
           asset_path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
           asset_name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}
           asset_content_type: application/octet-stream
+
+      - name: Upload Artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+          path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
