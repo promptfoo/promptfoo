@@ -1,5 +1,8 @@
 name: nexe build
-run-name: promptfoo nexe build by @${{ github.actor }}
+run-name: |
+  ${{ github.event_name == 'release' && 'Release ' || 'Manual ' }}
+  Nexe build for ${{ github.ref_name }}:
+  Promptfoo CLI executables by @${{ github.actor }}
 
 on:
   release:
