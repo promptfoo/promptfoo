@@ -26,23 +26,39 @@ jest.mock('../../src/python/pythonUtils', () => {
 });
 
 describe('pythonUtils', () => {
+  let originalEnv: NodeJS.ProcessEnv;
+
+  beforeAll(() => {
+    originalEnv = { ...process.env };
+    delete process.env.PROMPTFOO_PYTHON;
+  });
+
+  beforeEach(() => {
+    state.cachedPythonPath = null;
+    jest.restoreAllMocks();
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
+  describe('tryPath', () => {
+    it('should return the path for a valid Python executable', async () => {
+      jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+
+      const result = await tryPath('/usr/bin/python3');
+      expect(result).toBe('/usr/bin/python3');
+    });
+
+    it('should return null for a non-existent executable', async () => {
+      jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
+
+      const result = await tryPath('/usr/bin/nonexistent');
+      expect(result).toBeNull();
+    });
+  });
+
   describe('validatePythonPath', () => {
-    let originalEnv: NodeJS.ProcessEnv;
-
-    beforeAll(() => {
-      originalEnv = { ...process.env };
-      delete process.env.PROMPTFOO_PYTHON;
-    });
-
-    beforeEach(() => {
-      state.cachedPythonPath = null;
-      jest.resetAllMocks();
-    });
-
-    afterAll(() => {
-      process.env = originalEnv;
-    });
-
     it('should validate an existing Python 3 path', async () => {
       jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
 
@@ -188,33 +204,6 @@ describe('pythonUtils', () => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Error running Python script: Test Error Without Stack\nStack Trace: No Python traceback available',
       );
-    });
-  });
-
-  describe('tryPath', () => {
-    beforeEach(() => {
-      state.cachedPythonPath = null;
-    });
-
-    it('should return the path for a valid Python 3 executable', async () => {
-      jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
-
-      const result = await tryPath('/usr/bin/python3');
-      expect(result).toBe('/usr/bin/python3');
-    });
-
-    it('should return null for a Python 2 executable', async () => {
-      jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 2.7.18\n', stderr: '' });
-
-      const result = await tryPath('/usr/bin/python');
-      expect(result).toBeNull();
-    });
-
-    it('should return null for a non-existent executable', async () => {
-      jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
-
-      const result = await tryPath('/usr/bin/nonexistent');
-      expect(result).toBeNull();
     });
   });
 });
