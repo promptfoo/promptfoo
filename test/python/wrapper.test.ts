@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { PythonShell } from 'python-shell';
+import { state } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 
 jest.mock('../../src/esm');
@@ -27,6 +28,7 @@ describe('wrapper', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    state.cachedPythonPath = '/usr/bin/python3';
   });
 
   describe('runPythonCode', () => {

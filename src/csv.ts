@@ -1,9 +1,11 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
+import logger from './logger';
 import type { Assertion, AssertionType, CsvRow, TestCase } from './types';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
 export function assertionFromString(expected: string): Assertion {
+  logger.warn(`begin expected: ${expected}`);
   // Legacy options
   if (
     expected.startsWith('javascript:') ||
@@ -47,7 +49,7 @@ export function assertionFromString(expected: string): Assertion {
   const assertionRegex =
     /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|is-sql|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity|perplexity-score|cost)(?:\((\d+(?:\.\d+)?)\))?(?::([\s\S]*))?$/;
   const regexMatch = expected.match(assertionRegex);
-
+  logger.warn(`expected: ${expected}`);
   if (regexMatch) {
     const [_, notPrefix, type, thresholdStr, value] = regexMatch;
     const fullType = notPrefix ? `not-${type}` : type;
