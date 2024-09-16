@@ -10,6 +10,15 @@ jest.mock('fs', () => ({
   readFileSync: jest.fn(),
   unlinkSync: jest.fn(),
 }));
+jest.mock('../../src/python/pythonUtils', () => {
+  const originalModule = jest.requireActual('../../src/python/pythonUtils');
+  return {
+    ...originalModule,
+    state: {
+      cachedPythonPath: '/usr/bin/python3',
+    },
+  };
+});
 
 describe('wrapper', () => {
   beforeAll(() => {
