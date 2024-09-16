@@ -1,9 +1,13 @@
-import type * as childProcess from 'child_process';
 import { promises as fs } from 'fs';
 import { PythonShell } from 'python-shell';
-import { getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
-import { runPython, validatePythonPath, state } from '../../src/python/pythonUtils';
+import {
+  runPython,
+  validatePythonPath,
+  state,
+  execAsync,
+  tryPath,
+} from '../../src/python/pythonUtils';
 
 jest.mock('../../src/esm');
 jest.mock('../../src/logger');
@@ -12,6 +16,14 @@ jest.mock('python-shell');
 jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn(),
 }));
+
+jest.mock('../../src/python/pythonUtils', () => {
+  const originalModule = jest.requireActual('../../src/python/pythonUtils');
+  return {
+    ...originalModule,
+    execAsync: jest.fn(originalModule.execAsync),
+  };
+});
 
 describe('pythonUtils', () => {
   describe('validatePythonPath', () => {
@@ -24,83 +36,42 @@ describe('pythonUtils', () => {
 
     beforeEach(() => {
       state.cachedPythonPath = null;
+      jest.resetAllMocks();
     });
 
     afterAll(() => {
       process.env = originalEnv;
     });
 
-    it('should validate an existing Python path if python is installed', async () => {
-      try {
-        const result = await validatePythonPath('python', false);
-        expect(typeof result).toBe('string');
-        expect(result.length).toBeGreaterThan(0);
-      } catch (error) {
-        console.warn('"python" not found, skipping test');
-        return;
-      }
-    });
+    it('should validate an existing Python 3 path', async () => {
+      jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
 
-    it('should validate an existing Python path if python3 is installed', async () => {
-      try {
-        const result = await validatePythonPath('python3', false);
-        expect(typeof result).toBe('string');
-        expect(result.length).toBeGreaterThan(0);
-      } catch (error) {
-        console.warn('"python3" not found, skipping test');
-        return;
-      }
+      const result = await validatePythonPath('python', false);
+      expect(result).toBe('python');
+      expect(state.cachedPythonPath).toBe('python');
     });
 
     it('should return the cached path on subsequent calls', async () => {
-      try {
-        const firstResult = await validatePythonPath('python', false);
-        expect(state.cachedPythonPath).toBe(firstResult);
-        const secondResult = await validatePythonPath('python', false);
-        expect(secondResult).toBe(firstResult);
-      } catch (error) {
-        console.warn('"python" not found, skipping test');
-        return;
-      }
+      state.cachedPythonPath = '/usr/bin/python3';
+      const result = await validatePythonPath('python', false);
+      expect(result).toBe('/usr/bin/python3');
     });
 
     it('should fall back to alternative paths for non-existent programs when not explicit', async () => {
-      jest.mocked(getEnvString).mockReturnValue('');
+      jest
+        .mocked(execAsync)
+        .mockRejectedValueOnce(new Error('Command failed'))
+        .mockResolvedValueOnce({ stdout: 'Python 3.9.5\n', stderr: '' });
 
-      jest.spyOn(require('child_process'), 'exec').mockImplementation((cmd, callback) => {
-        if (typeof callback === 'function') {
-          callback(null, '/usr/bin/python3', '');
-        }
-        return {} as childProcess.ChildProcess;
-      });
-
-      const invalidPythonPath = 'non_existent_program_12345';
-      let result: string | undefined;
-      try {
-        result = await validatePythonPath(invalidPythonPath, false);
-        expect(typeof result).toBe('string');
-        expect(result.length).toBeGreaterThan(0);
-        expect(state.cachedPythonPath).toBe(result);
-      } catch {
-        console.warn('"non_existent_program_12345" not found, skipping test');
-        return;
-      }
+      const result = await validatePythonPath('non_existent_program', false);
+      expect(result).toBe(process.platform === 'win32' ? 'py -3' : 'python3');
     });
 
     it('should throw an error for non-existent programs when explicit', async () => {
-      jest.mocked(getEnvString).mockReturnValue('');
+      jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
 
-      jest.spyOn(require('child_process'), 'exec').mockImplementation((cmd, callback) => {
-        if (typeof callback === 'function') {
-          callback(new Error('Command failed'), '', '');
-        }
-        return {} as childProcess.ChildProcess;
-      });
-
-      const invalidPythonPath = 'non_existent_program_12345';
-
-      await expect(validatePythonPath(invalidPythonPath, true)).rejects.toThrow(
-        `Python not found. Tried "${invalidPythonPath}"`,
+      await expect(validatePythonPath('non_existent_program', true)).rejects.toThrow(
+        'Python 3 not found. Tried "non_existent_program"',
       );
     });
   });
@@ -217,6 +188,33 @@ describe('pythonUtils', () => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Error running Python script: Test Error Without Stack\nStack Trace: No Python traceback available',
       );
+    });
+  });
+
+  describe('tryPath', () => {
+    beforeEach(() => {
+      state.cachedPythonPath = null;
+    });
+
+    it('should return the path for a valid Python 3 executable', async () => {
+      jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+
+      const result = await tryPath('/usr/bin/python3');
+      expect(result).toBe('/usr/bin/python3');
+    });
+
+    it('should return null for a Python 2 executable', async () => {
+      jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 2.7.18\n', stderr: '' });
+
+      const result = await tryPath('/usr/bin/python');
+      expect(result).toBeNull();
+    });
+
+    it('should return null for a non-existent executable', async () => {
+      jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
+
+      const result = await tryPath('/usr/bin/nonexistent');
+      expect(result).toBeNull();
     });
   });
 });
