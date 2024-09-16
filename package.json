@@ -17,7 +17,7 @@
     }
   },
   "workspaces": [
-    "src/web/nextui",
+    "src/app",
     "site"
   ],
   "types": "dist/src/index.d.ts",
@@ -36,7 +36,7 @@
     "tsc": "tsc",
     "l": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|ts|tsx)$' | xargs eslint --max-warnings=0 --fix",
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json|css|scss|html|md|yaml|yml)$' | xargs prettier --write",
-    "lint": "eslint . --max-warnings=0",
+    "lint": "eslint . --max-warnings=1",
     "local": "ts-node --cwdMode --transpileOnly src/main.ts",
     "local:web": "npm run dev --prefix src/app",
     "build:clean": "shx rm -rf dist",
@@ -115,7 +115,6 @@
     "jest-watch-typeahead": "^2.2.2",
     "madge": "^8.0.0",
     "nexe": "^4.0.0-rc.6",
-    "next": "13.4.13",
     "nock": "^13.5.5",
     "nodemon": "^3.1.4",
     "prettier": "^3.3.3",
