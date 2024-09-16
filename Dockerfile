@@ -9,7 +9,8 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Set environment variables for the build
-ENV VITE_PUBLIC_HOSTED=1
+ENV VITE_PUBLIC_HOSTED=1 \
+VITE_TELEMETRY_DISABLED=1
 
 COPY . .
 
