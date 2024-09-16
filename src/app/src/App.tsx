@@ -1,6 +1,7 @@
 import {
   createBrowserRouter,
   createRoutesFromElements,
+  Navigate,
   Route,
   RouterProvider,
 } from 'react-router-dom';
@@ -13,9 +14,12 @@ import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/report/page';
 import './App.css';
 
+const DEFAULT_ROUTE = import.meta.env.VITE_PUBLIC_HOSTED ? '/setup' : '/eval';
+
 const router = createBrowserRouter(
   createRoutesFromElements([
     <Route path="/" element={<PageShell />}>
+      <Route index element={<Navigate to={DEFAULT_ROUTE} replace />} />
       <Route path="/eval" element={<EvalPage />} />
       <Route path="/eval/:evalId" element={<EvalPage />} />
       <Route path="/prompts" element={<PromptsPage />} />

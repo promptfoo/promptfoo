@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import Pagination from '@mui/material/Pagination';
@@ -14,13 +14,12 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
-import { useSearchParams } from 'next/navigation';
 import DatasetDialog from './DatasetDialog';
 
 const rowsPerPage = 10;
 
 export default function Datasets() {
-  const searchParams = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   const [testCases, setTestCases] = useState<
     (TestCasesWithMetadata & { recentEvalDate: string })[]
@@ -62,7 +61,7 @@ export default function Datasets() {
   };
 
   useEffect(() => {
-    const testCaseId = searchParams?.get('id');
+    const testCaseId = searchParams.get('id');
     if (testCaseId) {
       const testCaseIndex = testCases.findIndex((testCase) => testCase.id.startsWith(testCaseId));
       if (testCaseIndex !== -1) {

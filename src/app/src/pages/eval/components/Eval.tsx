@@ -139,7 +139,7 @@ export default function Eval({
       console.log('Eval init: Using Supabase');
     } else {
       console.log('Eval init: Fetching eval via recent');
-      // Fetch from next.js server
+      // Fetch from server
       const run = async () => {
         const evals = await fetchRecentFileEvals();
         if (evals && evals.length > 0) {

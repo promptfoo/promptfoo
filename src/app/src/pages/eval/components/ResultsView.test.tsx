@@ -57,15 +57,6 @@ vi.mock('@app/state/evalConfig', () => ({
   })),
 }));
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: vi.fn(),
-  }),
-  useSearchParams: () => ({
-    get: vi.fn(),
-  }),
-}));
-
 const renderWithToastProvider = (ui: React.ReactNode) => {
   return render(<ToastProvider>{ui}</ToastProvider>);
 };
