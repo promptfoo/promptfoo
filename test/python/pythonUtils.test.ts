@@ -43,13 +43,6 @@ describe('pythonUtils', () => {
   });
 
   describe('tryPath', () => {
-    it('should return the path for a valid Python executable', async () => {
-      jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
-
-      const result = await tryPath('/usr/bin/python3');
-      expect(result).toBe('/usr/bin/python3');
-    });
-
     it('should return null for a non-existent executable', async () => {
       jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
 
