@@ -15,6 +15,7 @@ jest.mock('../../src/python/pythonUtils', () => {
   const originalModule = jest.requireActual('../../src/python/pythonUtils');
   return {
     ...originalModule,
+    validatePythonPath: jest.fn(),
     state: {
       cachedPythonPath: '/usr/bin/python3',
     },
