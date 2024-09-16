@@ -5,13 +5,37 @@ import {
   runPython,
   validatePythonPath,
   state,
-  execAsync,
   tryPath,
+  execAsync,
 } from '../../src/python/pythonUtils';
 
-jest.mock('../../src/esm');
-jest.mock('../../src/logger');
-jest.mock('python-shell');
+jest.mock('fs', () => ({
+  promises: {
+    writeFile: jest.fn(),
+    readFile: jest.fn(),
+    unlink: jest.fn().mockImplementation(() => Promise.resolve()),
+  },
+}));
+
+jest.mock('python-shell', () => ({
+  PythonShell: {
+    run: jest.fn(),
+  },
+}));
+
+jest.mock('../../src/logger', () => {
+  const originalModule = jest.requireActual('../../src/logger');
+  return {
+    ...originalModule,
+    debug: jest.fn(),
+    error: jest.fn(),
+    default: {
+      ...originalModule.default,
+      debug: jest.fn(),
+      error: jest.fn(),
+    },
+  };
+});
 
 jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn(),
@@ -21,7 +45,7 @@ jest.mock('../../src/python/pythonUtils', () => {
   const originalModule = jest.requireActual('../../src/python/pythonUtils');
   return {
     ...originalModule,
-    execAsync: jest.fn(originalModule.execAsync),
+    execAsync: jest.fn(),
   };
 });
 
@@ -34,8 +58,8 @@ describe('pythonUtils', () => {
   });
 
   beforeEach(() => {
+    jest.resetAllMocks();
     state.cachedPythonPath = null;
-    jest.restoreAllMocks();
   });
 
   afterAll(() => {
@@ -43,6 +67,20 @@ describe('pythonUtils', () => {
   });
 
   describe('tryPath', () => {
+    it('should return the path for a valid Python 3 executable', async () => {
+      jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+
+      const result = await tryPath('/usr/bin/python3');
+      expect(result).toBe('/usr/bin/python3');
+    });
+
+    it('should return null for a Python 2 executable', async () => {
+      jest.mocked(execAsync).mockResolvedValue({ stdout: 'Python 2.7.18\n', stderr: '' });
+
+      const result = await tryPath('/usr/bin/python');
+      expect(result).toBeNull();
+    });
+
     it('should return null for a non-existent executable', async () => {
       jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
 
@@ -93,17 +131,15 @@ describe('pythonUtils', () => {
     it('should correctly run a Python script with provided arguments and read the output file', async () => {
       const mockOutput = JSON.stringify({ type: 'final_result', data: 'test result' });
 
-      jest.spyOn(fs, 'writeFile').mockResolvedValue();
-      jest.spyOn(fs, 'readFile').mockResolvedValue(mockOutput);
-      jest.spyOn(fs, 'unlink').mockResolvedValue();
-
-      const mockPythonShellRun = jest.mocked(PythonShell.run);
-      mockPythonShellRun.mockResolvedValue([]);
+      jest.mocked(fs.writeFile).mockResolvedValue();
+      jest.mocked(fs.readFile).mockResolvedValue(mockOutput);
+      jest.mocked(fs.unlink).mockResolvedValue();
+      jest.mocked(PythonShell.run).mockResolvedValue([]);
 
       const result = await runPython('testScript.py', 'testMethod', ['arg1', { key: 'value' }]);
 
       expect(result).toBe('test result');
-      expect(mockPythonShellRun).toHaveBeenCalledWith(
+      expect(PythonShell.run).toHaveBeenCalledWith(
         'wrapper.py',
         expect.objectContaining({
           args: expect.arrayContaining([
@@ -123,12 +159,11 @@ describe('pythonUtils', () => {
         expect.stringContaining('promptfoo-python-output-json'),
         'utf-8',
       );
-      expect(fs.unlink).toHaveBeenCalledTimes(2); // Once for input JSON, once for output JSON
+      expect(fs.unlink).toHaveBeenCalledTimes(2);
     });
 
     it('should throw an error if the Python script execution fails', async () => {
-      const mockPythonShellRun = jest.mocked(PythonShell.run);
-      mockPythonShellRun.mockRejectedValue(new Error('Test Error'));
+      jest.mocked(PythonShell.run).mockRejectedValue(new Error('Test Error'));
 
       await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'Error running Python script: Test Error',
@@ -138,12 +173,10 @@ describe('pythonUtils', () => {
     it('should handle Python script returning incorrect result type', async () => {
       const mockOutput = JSON.stringify({ type: 'unexpected_result', data: 'test result' });
 
-      jest.spyOn(fs, 'writeFile').mockResolvedValue();
-      jest.spyOn(fs, 'readFile').mockResolvedValue(mockOutput);
-      jest.spyOn(fs, 'unlink').mockResolvedValue();
-
-      const mockPythonShellRun = jest.mocked(PythonShell.run);
-      mockPythonShellRun.mockResolvedValue([]);
+      jest.mocked(fs.writeFile).mockResolvedValue();
+      jest.mocked(fs.readFile).mockResolvedValue(mockOutput);
+      jest.mocked(fs.unlink).mockResolvedValue();
+      jest.mocked(PythonShell.run).mockResolvedValue([]);
 
       await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'The Python script `call_api` function must return a dict with an `output`',
@@ -151,12 +184,10 @@ describe('pythonUtils', () => {
     });
 
     it('should handle invalid JSON in the output file', async () => {
-      jest.spyOn(fs, 'writeFile').mockResolvedValue();
-      jest.spyOn(fs, 'readFile').mockResolvedValue('Invalid JSON');
-      jest.spyOn(fs, 'unlink').mockResolvedValue();
-
-      const mockPythonShellRun = jest.mocked(PythonShell.run);
-      mockPythonShellRun.mockResolvedValue([]);
+      jest.mocked(fs.writeFile).mockResolvedValue();
+      jest.mocked(fs.readFile).mockResolvedValue('Invalid JSON');
+      jest.mocked(fs.unlink).mockResolvedValue();
+      jest.mocked(PythonShell.run).mockResolvedValue([]);
 
       await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'Invalid JSON:',
@@ -167,16 +198,13 @@ describe('pythonUtils', () => {
       const mockError = new Error('Test Error');
       mockError.stack = '--- Python Traceback ---\nError details';
 
-      const mockPythonShellRun = jest.mocked(PythonShell.run);
-      mockPythonShellRun.mockRejectedValue(mockError);
-
-      const loggerErrorSpy = jest.spyOn(logger, 'error');
+      jest.mocked(PythonShell.run).mockRejectedValue(mockError);
 
       await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'Error running Python script: Test Error\nStack Trace: Python Traceback: \nError details',
       );
 
-      expect(loggerErrorSpy).toHaveBeenCalledWith(
+      expect(logger.error).toHaveBeenCalledWith(
         'Error running Python script: Test Error\nStack Trace: Python Traceback: \nError details',
       );
     });
@@ -185,16 +213,13 @@ describe('pythonUtils', () => {
       const mockError = new Error('Test Error Without Stack');
       mockError.stack = undefined;
 
-      const mockPythonShellRun = jest.mocked(PythonShell.run);
-      mockPythonShellRun.mockRejectedValue(mockError);
-
-      const loggerErrorSpy = jest.spyOn(logger, 'error');
+      jest.mocked(PythonShell.run).mockRejectedValue(mockError);
 
       await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'Error running Python script: Test Error Without Stack\nStack Trace: No Python traceback available',
       );
 
-      expect(loggerErrorSpy).toHaveBeenCalledWith(
+      expect(logger.error).toHaveBeenCalledWith(
         'Error running Python script: Test Error Without Stack\nStack Trace: No Python traceback available',
       );
     });
