@@ -847,8 +847,7 @@
         }
       },
       "required": [
-        "providers",
-        "prompts"
+        "providers"
       ],
       "additionalProperties": false
     }

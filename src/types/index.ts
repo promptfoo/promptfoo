@@ -578,21 +578,23 @@ export const TestSuiteConfigSchema = z.object({
   providers: ProvidersSchema,
 
   // One or more prompt files to load
-  prompts: z.union([
-    z.string(),
-    z.array(
-      z.union([
-        z.string(),
-        z.object({
-          id: z.string(),
-          label: z.string().optional(),
-          raw: z.string().optional(),
-        }),
-        PromptSchema,
-      ]),
-    ),
-    z.record(z.string(), z.string()),
-  ]),
+  prompts: z
+    .union([
+      z.string(),
+      z.array(
+        z.union([
+          z.string(),
+          z.object({
+            id: z.string(),
+            label: z.string().optional(),
+            raw: z.string().optional(),
+          }),
+          PromptSchema,
+        ]),
+      ),
+      z.record(z.string(), z.string()),
+    ])
+    .optional(),
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]).optional(),

@@ -453,6 +453,47 @@ describe('readConfigs', () => {
     );
     consoleSpy.mockRestore();
   });
+
+  it('should use default passthrough prompt when no prompts are provided', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(
+      JSON.stringify({
+        providers: ['provider1'],
+        tests: ['test1'],
+      }),
+    );
+
+    const config = await readConfigs(['config.json']);
+
+    expect(config.prompts).toMatchObject([
+      {
+        raw: '{{prompt}}',
+        label: '{{prompt}}',
+      },
+    ]);
+  });
+
+  it('should use provided prompts when available', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(
+      JSON.stringify({
+        providers: ['provider1'],
+        tests: ['test1'],
+        prompts: ['Custom prompt 1', 'Custom prompt 2'],
+      }),
+    );
+
+    const config = await readConfigs(['config.json']);
+
+    expect(config.prompts).toEqual([
+      {
+        raw: 'Custom prompt 1',
+        label: 'Custom prompt 1',
+      },
+      {
+        raw: 'Custom prompt 2',
+        label: 'Custom prompt 2',
+      },
+    ]);
+  });
 });
 
 describe('dereferenceConfig', () => {

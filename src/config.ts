@@ -248,7 +248,11 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
 
   const seenPrompts = new Map<string, Prompt>();
   for (const [idx, config] of configs.entries()) {
-    const parsedPrompts = await readPrompts(config.prompts, path.dirname(configPaths[idx]));
+    // If there are no prompts, use a default passthrough prompt
+    const parsedPrompts = await readPrompts(
+      config.prompts || '{{prompt}}',
+      path.dirname(configPaths[idx]),
+    );
     for (const prompt of parsedPrompts) {
       const key = typeof prompt === 'string' ? prompt : prompt.raw;
       if (!seenPrompts.has(key)) {
