@@ -5,12 +5,14 @@ const NUM_METRICS_TO_DISPLAY_ABOVE_FOLD = 10;
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
+  counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
   onSearchTextChange?: (searchText: string) => void;
 }
 
 const CustomMetrics: React.FC<CustomMetricsProps> = ({
   lookup,
+  counts,
   metricTotals,
   onSearchTextChange,
 }) => {
@@ -36,6 +38,11 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
               <>
                 {((score / metricTotals[metric]) * 100).toFixed(2)}% ({score.toFixed(2)}/
                 {metricTotals[metric].toFixed(2)})
+              </>
+            ) : counts && counts[metric] ? (
+              <>
+                {(score / counts[metric]).toFixed(2)} ({score.toFixed(2)}/
+                {counts[metric].toFixed(2)})
               </>
             ) : (
               score.toFixed(2)
