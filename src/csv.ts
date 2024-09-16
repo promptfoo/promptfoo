@@ -1,7 +1,15 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import type { Assertion, AssertionType, CsvRow, TestCase } from './types';
+import { BaseAssertionTypesSchema } from './types';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
+
+// Get all assertion types from the schema, join them with '|' for the regex
+const assertionTypesRegex = BaseAssertionTypesSchema.options.join('|');
+// Construct the full regex
+const fullRegex = new RegExp(
+  `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
+);
 
 export function assertionFromString(expected: string): Assertion {
   // Legacy options
@@ -31,7 +39,7 @@ export function assertionFromString(expected: string): Assertion {
   if (expected.startsWith('grade:') || expected.startsWith('llm-rubric:')) {
     return {
       type: 'llm-rubric',
-      value: expected.slice(6),
+      value: expected.slice(expected.startsWith('grade:') ? 6 : 11),
     };
   }
   if (expected.startsWith('python:')) {
@@ -43,10 +51,8 @@ export function assertionFromString(expected: string): Assertion {
     };
   }
 
-  // New options
-  const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|is-sql|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity|perplexity-score|cost)(?:\((\d+(?:\.\d+)?)\))?(?::([\s\S]*))?$/;
-  const regexMatch = expected.match(assertionRegex);
+  // Use fullRegex instead of the hardcoded regex
+  const regexMatch = expected.match(fullRegex);
 
   if (regexMatch) {
     const [_, notPrefix, type, thresholdStr, value] = regexMatch;
