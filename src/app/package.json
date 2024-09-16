@@ -8,7 +8,9 @@
     "tsc": "tsc",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:ci": "vitest run"
   },
   "dependencies": {
     "@mui/icons-material": "^6.1.0",
