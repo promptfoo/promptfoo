@@ -51,6 +51,9 @@ export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250
 }
 
 export function wrapTable(rows: Record<string, string | number>[]) {
+  if (rows.length === 0) {
+    return 'No data to display';
+  }
   const head = Object.keys(rows[0]);
   const table = new Table({
     head,

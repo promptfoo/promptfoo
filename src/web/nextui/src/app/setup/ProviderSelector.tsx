@@ -1,12 +1,13 @@
 import React from 'react';
-import type { ProviderOptions } from '@/../../../types';
 import { Autocomplete, Box, Chip, TextField } from '@mui/material';
+import type { ProviderOptions } from '@promptfoo/types';
 import ProviderConfigDialog from './ProviderConfigDialog';
 
 const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: string })[])
   .concat(
     [
       'openai:gpt-4o',
+      'openai:gpt-4o-2024-08-06',
       'openai:gpt-4o-2024-05-13',
       'openai:gpt-4o-mini',
       'openai:gpt-4o-mini-2024-07-18',

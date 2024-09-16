@@ -13,7 +13,7 @@ import {
   ALIASED_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
 } from '../redteam/constants';
-import type { RedteamFileConfig, RedteamPluginObject } from '../types/redteam';
+import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
 import { ProviderSchema } from '../validators/providers';
 
 /**
@@ -40,7 +40,7 @@ export const RedteamPluginSchema = z.union([
     .union([
       z.enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]]),
       z.string().refine((value) => value.startsWith('file://'), {
-        message: 'Custom plugin must be one of `promptfoo redteam plugins` or start with "file://"',
+        message: 'Plugin must be one of `promptfoo redteam plugins` or start with "file://"',
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),

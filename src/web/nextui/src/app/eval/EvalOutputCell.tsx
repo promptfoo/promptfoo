@@ -1,14 +1,14 @@
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
-import CustomMetrics from '@/app/eval/CustomMetrics';
-import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
-import FailReasonCarousel from '@/app/eval/FailReasonCarousel';
-import CommentDialog from '@/app/eval/TableCommentDialog';
-import TruncatedText from '@/app/eval/TruncatedText';
-import { useStore as useResultsViewStore } from '@/app/eval/store';
-import type { EvaluateTableOutput } from '@/app/eval/types';
-import { useShiftKey } from '@/app/hooks/useShiftKey';
+import CustomMetrics from '@app/app/eval/CustomMetrics';
+import EvalOutputPromptDialog from '@app/app/eval/EvalOutputPromptDialog';
+import FailReasonCarousel from '@app/app/eval/FailReasonCarousel';
+import CommentDialog from '@app/app/eval/TableCommentDialog';
+import TruncatedText from '@app/app/eval/TruncatedText';
+import { useStore as useResultsViewStore } from '@app/app/eval/store';
+import { useShiftKey } from '@app/app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
+import type { EvaluateTableOutput } from '@promptfoo/types';
 import { diffSentences, diffJson, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
 

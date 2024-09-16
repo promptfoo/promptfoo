@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import React from 'react';
-import { ToastProvider } from '@/app/contexts/ToastContext';
+import { ToastProvider } from '@app/app/contexts/ToastContext';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ResultsView from './ResultsView';
 
@@ -51,7 +51,7 @@ vi.mock('./store', () => ({
   })),
 }));
 
-vi.mock('@/state/evalConfig', () => ({
+vi.mock('@app/state/evalConfig', () => ({
   useStore: vi.fn(() => ({
     setStateFromConfig: vi.fn(),
   })),

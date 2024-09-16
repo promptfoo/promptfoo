@@ -28,7 +28,7 @@ describe('AssertionSchema', () => {
       value: 'expected value',
       threshold: 0.8,
       weight: 2,
-      provider: 'openai:gpt-3.5-turbo',
+      provider: 'openai:gpt-4o-mini',
       rubricPrompt: 'Custom rubric prompt',
       metric: 'similarity_score',
       transform: 'toLowerCase()',

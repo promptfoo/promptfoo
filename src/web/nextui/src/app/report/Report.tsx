@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@app/api';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
@@ -13,14 +13,14 @@ import Modal from '@mui/material/Modal';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { EvaluateResult, ResultsFile, SharedResults } from '../eval/types';
+import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import TestSuites from './TestSuites';
-import type { categoryAliases } from './constants';
-import { categoryAliasesReverse } from './constants';
+import { categoryAliasesReverse, type categoryAliases } from './constants';
 import './Report.css';
 
 function getStrategyIdFromMetric(metric: string): string | null {
@@ -93,7 +93,7 @@ const App: React.FC = () => {
 
   React.useEffect(() => {
     const fetchEvalById = async (id: string) => {
-      const resp = await fetch(`${await getApiBaseUrl()}/api/results/${id}`, {
+      const resp = await callApi(`/results/${id}`, {
         cache: 'no-store',
       });
       const body = (await resp.json()) as SharedResults;
@@ -275,6 +275,7 @@ const App: React.FC = () => {
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} />
+        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
         <StrategyStats strategyStats={strategyStats} />
         <RiskCategories
           categoryStats={categoryStats}

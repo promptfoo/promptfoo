@@ -1,5 +1,5 @@
 prompts:
-  - prompts.txt
+  - file://prompts.txt
 providers:
   - openai:gpt-4o-mini
 tests:

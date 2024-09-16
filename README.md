@@ -35,7 +35,7 @@ It works on the command line too:
 
 It also produces high-level vulnerability and risk reports:
 
-![gen ai red team](https://www.promptfoo.dev/assets/images/riskreport-1@2x-22b983ff8344206c7120824cd1adde6f.png)
+![gen ai red team](https://www.promptfoo.dev/img/riskreport-1@2x.png)
 
 ## Why choose promptfoo?
 
@@ -97,7 +97,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - ollama:llama2:70b
+  - ollama:llama3.1:70b
 tests:
   - description: 'Test translation to French'
     vars:
@@ -181,7 +181,7 @@ prompts:
   - file://prompts.txt
 providers:
   - openai:gpt-4o-mini
-tests: tests.csv
+tests: file://tests.csv
 ```
 
 See [example CSV](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-test/tests.csv).
@@ -233,15 +233,15 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 #### Model quality
 
-In the [next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-vs-4), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
+In the [next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
 
 ```
-npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4 -o output.html
+npx promptfoo eval -p prompts.txt -r openai:gpt-4o openai:gpt-4o-mini -o output.html
 ```
 
 Produces this HTML table:
 
-![Side-by-side evaluation of LLM model quality, gpt3 vs gpt4, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+![Side-by-side evaluation of LLM model quality, gpt-4o vs gpt-4o-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
 ## Usage (node package)
 
@@ -415,14 +415,6 @@ npx path/to/promptfoo-source eval
 ```
 
 The web UI is located in `src/web/nextui`. To run it in dev mode, run `npm run local:web`. This will host the web UI at http://localhost:3000. The web UI expects `promptfoo view` to be running separately.
-
-In order to build the next.js app, you'll have to set some placeholder envars (it is _not_ necessary to sign up for a supabase account). You can edit `src/web/nextui/.env` to include the following placeholders:
-
-```sh
-DATABASE_URL="postgresql://..."
-
-NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE=1
-```
 
 Then run:
 

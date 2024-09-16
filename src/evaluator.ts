@@ -423,6 +423,9 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
+      telemetry.recordAndSendOnce('feature_used', {
+        feature: 'scenarios',
+      });
       for (const scenario of testSuite.scenarios) {
         for (const data of scenario.config) {
           // Merge defaultTest with scenario config
@@ -751,7 +754,26 @@ class Evaluator {
     if (this.options.showProgressBar) {
       await createMultiBars(runEvalOptions);
     }
-    await async.forEachOfLimit(runEvalOptions, concurrency, processEvalStep);
+
+    // Separate serial and concurrent eval options
+    const serialRunEvalOptions: RunEvalOptions[] = [];
+    const concurrentRunEvalOptions: RunEvalOptions[] = [];
+
+    for (const evalOption of runEvalOptions) {
+      if (evalOption.test.options?.runSerially) {
+        serialRunEvalOptions.push(evalOption);
+      } else {
+        concurrentRunEvalOptions.push(evalOption);
+      }
+    }
+
+    // Run serial evaluations first
+    for (const evalStep of serialRunEvalOptions) {
+      await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
+    }
+
+    // Then run concurrent evaluations
+    await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, processEvalStep);
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = table.body.reduce(

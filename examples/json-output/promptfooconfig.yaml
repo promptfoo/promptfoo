@@ -4,7 +4,7 @@ prompts:
   - 'Output a JSON object that contains the keys `color` and `countries`, describing the following object: {{item}}'
 
 providers:
-  - openai:chat:gpt-3.5-turbo
+  - openai:chat:gpt-4o-mini
 
 tests:
   - vars:

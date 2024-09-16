@@ -10,7 +10,6 @@ export function initCommand(program: Command) {
     .description('Initialize project with dummy files')
     .option('--no-interactive', 'Run in interactive mode')
     .action(async (directory: string | null, cmdObj: { interactive: boolean }) => {
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'init - started',
       });

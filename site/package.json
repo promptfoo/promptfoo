@@ -28,14 +28,14 @@
     "@segment/ajv-human-errors": "^2.13.0",
     "clsx": "^2.1.1",
     "docusaurus-plugin-image-zoom": "^2.0.0",
-    "prism-react-renderer": "^2.3.1",
+    "prism-react-renderer": "^2.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.5.2",
     "@tsconfig/docusaurus": "^2.0.3",
-    "typescript": "^5.5.4"
+    "typescript": "^5.6.2"
   },
   "browserslist": {
     "production": [

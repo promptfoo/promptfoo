@@ -561,11 +561,11 @@ describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {
     const provider = await getGradingProvider(
       'text',
-      'openai:chat:gpt-3.5-turbo-foobar',
+      'openai:chat:gpt-4o-mini-foobar',
       DefaultGradingProvider,
     );
     // ok for this not to match exactly when the string is parsed
-    expect(provider?.id()).toBe('openai:gpt-3.5-turbo-foobar');
+    expect(provider?.id()).toBe('openai:gpt-4o-mini-foobar');
   });
 
   it('should return the correct provider when provider is an ApiProvider', async () => {
@@ -579,14 +579,14 @@ describe('getGradingProvider', () => {
 
   it('should return the correct provider when provider is ProviderOptions', async () => {
     const providerOptions = {
-      id: 'openai:chat:gpt-3.5-turbo-foobar',
+      id: 'openai:chat:gpt-4o-mini-foobar',
       config: {
         apiKey: 'abc123',
         temperature: 3.1415926,
       },
     };
     const provider = await getGradingProvider('text', providerOptions, DefaultGradingProvider);
-    expect(provider?.id()).toBe('openai:chat:gpt-3.5-turbo-foobar');
+    expect(provider?.id()).toBe('openai:chat:gpt-4o-mini-foobar');
   });
 
   it('should return the default provider when provider is not provided', async () => {

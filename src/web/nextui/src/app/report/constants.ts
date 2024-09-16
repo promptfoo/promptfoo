@@ -182,31 +182,32 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides = {
-  bola: 'Unauthorized Data Access',
-  bfla: 'Privilege Escalation',
-  ssrf: 'Malicious Resource Fetching',
+  'debug-access': 'Debug Access',
   'excessive-agency': 'Excessive Agency',
-  'prompt-injection': 'Prompt Injection',
-  competitors: 'Competitor Endorsements',
-  contracts: 'Unsupervised Contracts',
-  jailbreak: 'Single-shot optimization',
+  'harmful:copyright-violations': 'Copyright Violations',
+  'harmful:cybercrime': 'Cybercrime',
+  'harmful:illegal-activities': 'Illegal Activities',
+  'harmful:misinformation-disinformation': 'Misinformation & disinformation',
+  'harmful:specialized-advice': 'Specialized Advice',
+  'indirect-prompt-injection': 'Indirect Prompt Injection',
   'jailbreak:tree': 'Tree-based optimization',
-  pii: 'PII Leaks',
-  politics: 'Political Opinions',
+  'prompt-extraction': 'Prompt Extraction',
+  'prompt-injection': 'Prompt Injection',
   'shell-injection': 'Shell Injection',
   'sql-injection': 'SQL Injection',
-  rbac: 'RBAC Enforcement',
-  'debug-access': 'Debug Access',
-  'harmful:specialized-advice': 'Specialized Advice',
-  'harmful:illegal-activities': 'Illegal Activities',
-  'harmful:cybercrime': 'Cybercrime',
-  'harmful:copyright-violations': 'Copyright Violations',
-  'harmful:misinformation-disinformation': 'Misinformation & disinformation',
-  policy: 'Custom Policy',
   basic: 'Basic',
+  bfla: 'Privilege Escalation',
+  bola: 'Unauthorized Data Access',
+  competitors: 'Competitor Endorsements',
+  contracts: 'Unsupervised Contracts',
   crescendo: 'Multi-turn',
-  'indirect-prompt-injection': 'Indirect Prompt Injection',
-  'prompt-extraction': 'Prompt Extraction',
+  jailbreak: 'Single-shot optimization',
+  multilingual: 'Multilingual',
+  pii: 'PII Leaks',
+  policy: 'Custom Policy',
+  politics: 'Political Opinions',
+  rbac: 'RBAC Enforcement',
+  ssrf: 'Malicious Resource Fetching',
 };
 
 // Duplicated in src/redteam/constants.ts for backend
@@ -214,6 +215,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
   basic: 'Raw attacks without any special attack strategies',
   'ascii-smuggling': 'Attempts to obfuscate malicious content using ASCII smuggling',
+  'cross-session-leak': 'Checks for information sharing between unrelated sessions',
   multilingual: 'Translates the input into low-resource languages',
   bola: 'Broken Object Level Authorization (BOLA) tests',
   bfla: 'Broken Function Level Authorization (BFLA) tests',
@@ -270,4 +272,245 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
   'indirect-prompt-injection':
     'Evaluates how susceptible the prompt is to harmful instructions injected into the prompt',
+};
+
+export const OWASP_LLM_TOP_10_MAPPING: Record<
+  string,
+  { plugins: Plugin[]; strategies: Strategy[] }
+> = {
+  'owasp:llm:01': {
+    plugins: ['harmful'],
+    strategies: ['prompt-injection', 'jailbreak'],
+  },
+  'owasp:llm:02': {
+    plugins: ['harmful', 'overreliance'],
+    strategies: [],
+  },
+  'owasp:llm:03': {
+    plugins: ['harmful', 'overreliance', 'hallucination'],
+    strategies: [],
+  },
+  'owasp:llm:06': {
+    plugins: ['harmful:privacy', 'pii:direct', 'pii:api-db', 'pii:session', 'pii:social'],
+    strategies: ['prompt-injection', 'jailbreak'],
+  },
+  'owasp:llm:07': {
+    plugins: ['rbac', 'bola', 'bfla', 'sql-injection', 'shell-injection', 'debug-access'],
+    strategies: [],
+  },
+  'owasp:llm:08': {
+    plugins: ['excessive-agency', 'rbac'],
+    strategies: [],
+  },
+  'owasp:llm:09': {
+    plugins: ['overreliance', 'hallucination'],
+    strategies: [],
+  },
+};
+
+export const OWASP_API_TOP_10_MAPPING: Record<
+  string,
+  { plugins: Plugin[]; strategies: Strategy[] }
+> = {
+  'owasp:api:01': {
+    plugins: ['bola', 'rbac'],
+    strategies: [],
+  },
+  'owasp:api:02': {
+    plugins: ['bfla', 'rbac'],
+    strategies: [],
+  },
+  'owasp:api:03': {
+    plugins: ['excessive-agency', 'overreliance'],
+    strategies: [],
+  },
+  'owasp:api:04': {
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session'],
+    strategies: [],
+  },
+  'owasp:api:05': {
+    plugins: ['rbac', 'bola', 'bfla'],
+    strategies: [],
+  },
+  'owasp:api:06': {
+    plugins: ['harmful:misinformation-disinformation', 'overreliance'],
+    strategies: [],
+  },
+  'owasp:api:07': {
+    plugins: ['sql-injection', 'shell-injection'],
+    strategies: [],
+  },
+  'owasp:api:08': {
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session'],
+    strategies: [],
+  },
+  'owasp:api:09': {
+    plugins: ['overreliance', 'harmful:specialized-advice'],
+    strategies: [],
+  },
+  'owasp:api:10': {
+    plugins: ['debug-access', 'harmful:privacy'],
+    strategies: [],
+  },
+};
+
+export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'nist:ai:measure:1.1': {
+    plugins: ['harmful:misinformation-disinformation', 'overreliance', 'excessive-agency'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'nist:ai:measure:1.2': {
+    plugins: ['harmful:misinformation-disinformation', 'overreliance', 'excessive-agency'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'nist:ai:measure:2.1': {
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session', 'pii:direct', 'pii:social'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.2': {
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session', 'pii:direct', 'pii:social'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.3': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.4': {
+    plugins: ['overreliance', 'excessive-agency', 'harmful:misinformation-disinformation'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'nist:ai:measure:2.5': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.6': {
+    plugins: [
+      'harmful:unsafe-practices',
+      'harmful:chemical-biological-weapons',
+      'harmful:indiscriminate-weapons',
+    ],
+    strategies: [],
+  },
+  'nist:ai:measure:2.7': {
+    plugins: ['harmful:cybercrime', 'sql-injection', 'shell-injection'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'nist:ai:measure:2.8': {
+    plugins: ['rbac', 'bola', 'bfla'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.9': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.10': {
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session', 'pii:direct', 'pii:social'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.11': {
+    plugins: ['harmful:hate', 'harmful:harassment-bullying', 'harmful:insults'],
+    strategies: [],
+  },
+  'nist:ai:measure:2.12': {
+    plugins: [],
+    strategies: [],
+  },
+  'nist:ai:measure:2.13': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:3.1': {
+    plugins: ['overreliance', 'excessive-agency', 'harmful:misinformation-disinformation'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'nist:ai:measure:3.2': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:3.3': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:4.1': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'nist:ai:measure:4.2': {
+    plugins: ['overreliance', 'excessive-agency', 'harmful:misinformation-disinformation'],
+    strategies: [],
+  },
+  'nist:ai:measure:4.3': {
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+};
+
+export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'mitre:atlas:reconnaissance': {
+    plugins: ['competitors', 'policy', 'rbac', 'prompt-extraction'],
+    strategies: ['multilingual'],
+  },
+  'mitre:atlas:resource-development': {
+    plugins: ['harmful:cybercrime', 'harmful:illegal-drugs', 'harmful:indiscriminate-weapons'],
+    strategies: [],
+  },
+  'mitre:atlas:initial-access': {
+    plugins: ['harmful:cybercrime', 'sql-injection', 'shell-injection', 'ssrf', 'debug-access'],
+    strategies: ['jailbreak', 'prompt-injection', 'base64', 'leetspeak', 'rot13'],
+  },
+  'mitre:atlas:ml-attack-staging': {
+    plugins: [
+      'overreliance',
+      'excessive-agency',
+      'hallucination',
+      'ascii-smuggling',
+      'indirect-prompt-injection',
+    ],
+    strategies: ['jailbreak', 'jailbreak:tree'],
+  },
+  'mitre:atlas:exfiltration': {
+    plugins: [
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:session',
+      'pii:direct',
+      'pii:social',
+      'indirect-prompt-injection',
+      'prompt-extraction',
+      'ascii-smuggling',
+    ],
+    strategies: [],
+  },
+  'mitre:atlas:impact': {
+    plugins: ['harmful', 'overreliance', 'excessive-agency', 'hijacking', 'imitation', 'politics'],
+    strategies: ['crescendo'],
+  },
+};
+// Aliased plugins are like collections, except they are hidden from the standard plugin list.
+export const ALIASED_PLUGINS = [
+  'owasp:llm',
+  'owasp:api',
+  'nist:ai',
+  'nist:ai:measure',
+  'mitre:atlas',
+  ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
+  ...Object.keys(OWASP_API_TOP_10_MAPPING),
+  ...Object.keys(NIST_AI_RMF_MAPPING),
+  ...Object.keys(MITRE_ATLAS_MAPPING),
+] as const;
+
+export const ALIASED_PLUGIN_MAPPINGS: Record<
+  string,
+  Record<string, { plugins: string[]; strategies: string[] }>
+> = {
+  'nist:ai:measure': NIST_AI_RMF_MAPPING,
+  'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
+  'owasp:api': OWASP_API_TOP_10_MAPPING,
+  'mitre:atlas': MITRE_ATLAS_MAPPING,
+};
+
+export const FRAMEWORK_NAMES: Record<string, string> = {
+  'nist:ai:measure': 'NIST AI RMF',
+  'owasp:llm': 'OWASP LLM Top 10',
+  'owasp:api': 'OWASP API Top 10',
 };

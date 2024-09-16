@@ -515,6 +515,9 @@
                               },
                               "disableConversationVar": {
                                 "type": "boolean"
+                              },
+                              "runSerially": {
+                                "type": "boolean"
                               }
                             }
                           }
@@ -836,7 +839,7 @@
             "promptSuffix": {
               "type": "string"
             },
-            "envFile": {
+            "envPath": {
               "type": "string"
             }
           },

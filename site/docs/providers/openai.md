@@ -73,7 +73,7 @@ Supported parameters include:
 | `organization`          | Your OpenAI organization key.                                                                                                                                   |
 | `passthrough`           | Additional parameters to pass through to the API.                                                                                                               |
 | `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                   |
-| `response_format`       | Response format restrictions.                                                                                                                                   |
+| `response_format`       | Specifies the desired output format, including `json_object` and `json_schema`                                                                                  |
 | `seed`                  | Seed used for deterministic output.                                                                                                                             |
 | `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                     |
 | `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic. |
@@ -465,8 +465,9 @@ These OpenAI-related environment variables are supported:
 
 | Variable                       | Description                                                                                                      |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0.                                                                      |
-| `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024.                                                                    |
+| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0. Not supported by o1-models.                                          |
+| `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024. Not supported by o1-models.                                        |
+| `OPENAI_MAX_COMPLETION_TOKENS` | Max_completion_tokens model parameter, defaults to 1024. Used by o1-models.                                      |
 | `OPENAI_API_HOST`              | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                |
 | `OPENAI_BASE_URL`              | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.          |
 | `OPENAI_API_KEY`               | OpenAI API key.                                                                                                  |
@@ -514,7 +515,7 @@ providers:
   // highlight-start
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ
     config:
-      model: gpt-4-1106-preview
+      model: gpt-4o
       instructions: "You always speak like a pirate"
       temperature: 0.2
       toolChoice:
@@ -550,7 +551,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
       id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
       config:
         /** @type {InstanceType<import('promptfoo')["providers"]["OpenAiAssistantProvider"]>["config"]} */ ({
-          model: 'gpt-4-1106-preview',
+          model: 'gpt-4o',
           instructions: 'You can add two numbers together using the `addNumbers` tool',
           tools: [
             {

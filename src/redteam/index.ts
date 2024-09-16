@@ -7,7 +7,6 @@ import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type { TestCaseWithPlugin } from '../types';
-import type { SynthesizeOptions } from '../types/redteam';
 import { maybeLoadFromExternalFile } from '../util';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
@@ -17,6 +16,7 @@ import { Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
 import { loadRedteamProvider } from './providers/shared';
 import { Strategies, validateStrategies } from './strategies';
+import type { SynthesizeOptions } from './types';
 
 /**
  * Determines the status of test generation based on requested and generated counts.

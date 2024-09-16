@@ -6,6 +6,8 @@ sidebar_position: 10
 
 This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) series of models.
 
+> **Note:** Anthropic models can also be accessed through Amazon Bedrock. For information on using Anthropic models via Bedrock, please refer to our [AWS Bedrock documentation](/docs/providers/aws-bedrock).
+
 ## Setup
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
@@ -86,7 +88,7 @@ Example configuration with options and prompts:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-opus-20240229
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
     config:
       temperature: 0.0
       max_tokens: 512
@@ -100,7 +102,7 @@ The Anthropic provider supports tool use (or function calling). Here's an exampl
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-opus-20240229
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
     config:
       tools:
         - name: get_weather
@@ -180,9 +182,9 @@ The easiest way to do this for _all_ your test cases is to add the [`defaultTest
 defaultTest:
   options:
     provider:
-      id: anthropic:messages:claude-3-opus-20240229
+      id: anthropic:messages:claude-3-5-sonnet-20240620
       config:
-        # Provider config options
+        # optional provider config options
 ```
 
 However, you can also do this for individual assertions:
@@ -193,9 +195,9 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: anthropic:messages:claude-3-opus-20240229
+      id: anthropic:messages:claude-3-5-sonnet-20240620
       config:
-        # Provider config options
+        # optional provider config options
 ```
 
 Or individual tests:
@@ -207,9 +209,9 @@ tests:
       # ...
     options:
       provider:
-        id: anthropic:messages:claude-3-opus-20240229
+        id: anthropic:messages:claude-3-5-sonnet-20240620
         config:
-          # Provider config options
+          # optional provider config options
     assert:
       - type: llm-rubric
         value: Do not mention that you are an AI or chat assistant

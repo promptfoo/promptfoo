@@ -3,6 +3,7 @@ import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
+import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,7 +14,7 @@ import type {
 } from '../../../types';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
-import { isBasicRefusal } from '../../util';
+import { isBasicRefusal, shouldGenerateRemote } from '../../util';
 import { loadRedteamProvider } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
@@ -80,21 +81,37 @@ class CrescendoProvider implements ApiProvider {
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      this.redTeamProvider = await loadRedteamProvider({
-        provider: this.config.redteamProvider,
-        preferSmallModel: true,
-        jsonOnly: true,
-      });
+      if (shouldGenerateRemote()) {
+        this.redTeamProvider = new PromptfooChatCompletionProvider({
+          task: 'crescendo',
+          jsonOnly: true,
+          preferSmallModel: true,
+        });
+      } else {
+        this.redTeamProvider = await loadRedteamProvider({
+          provider: this.config.redteamProvider,
+          preferSmallModel: true,
+          jsonOnly: true,
+        });
+      }
     }
     return this.redTeamProvider;
   }
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      this.scoringProvider = await loadRedteamProvider({
-        provider: this.config.redteamProvider,
-        preferSmallModel: true,
-      });
+      if (shouldGenerateRemote()) {
+        this.scoringProvider = new PromptfooChatCompletionProvider({
+          task: 'crescendo',
+          jsonOnly: false,
+          preferSmallModel: true,
+        });
+      } else {
+        this.scoringProvider = await loadRedteamProvider({
+          provider: this.config.redteamProvider,
+          preferSmallModel: true,
+        });
+      }
     }
     return this.scoringProvider;
   }
@@ -268,7 +285,13 @@ class CrescendoProvider implements ApiProvider {
     logger.debug(`Sending to red teaming chat:`);
     this.logChatHistory(this.redTeamingChatConversationId);
     const redTeamingChat = await this.getRedTeamProvider();
-    const response = await redTeamingChat.callApi(JSON.stringify(redTeamingHistory));
+    const response = await redTeamingChat.callApi(JSON.stringify(redTeamingHistory), {
+      prompt: {
+        raw: JSON.stringify(redTeamingHistory),
+        label: 'history',
+      },
+      vars: {},
+    });
     invariant(typeof response.output === 'string', 'Expected output to be a string');
 
     const parsedOutput = extractFirstJsonObject<{
@@ -391,7 +414,13 @@ class CrescendoProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await scoringProvider.callApi(refusalBody);
+    const refusalResponse = await scoringProvider.callApi(refusalBody, {
+      prompt: {
+        raw: refusalBody,
+        label: 'refusal',
+      },
+      vars: {},
+    });
     invariant(typeof refusalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Refusal score response: ${refusalResponse.output}`);
 
@@ -427,7 +456,13 @@ class CrescendoProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await scoringProvider.callApi(evalBody);
+    const evalResponse = await scoringProvider.callApi(evalBody, {
+      prompt: {
+        raw: evalBody,
+        label: 'eval',
+      },
+      vars: {},
+    });
     invariant(typeof evalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Eval score response: ${evalResponse.output}`);
 

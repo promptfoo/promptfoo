@@ -29,7 +29,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--delay <number>`                  | Force the test runner to wait after each API call (milliseconds)                                                                                                                                   |
 | `--description <description>`       | Description of the eval run                                                                                                                                                                        |
-| `--env-file`                        | Path to env file (defaults to .env)                                                                                                                                                                |
+| `--env-path`                        | Path to env file (defaults to .env)                                                                                                                                                                |
 | `--filter-failing <path>`           | Run only failing tests from previous evaluation. Path to JSON output file from the previous evaluation.                                                                                            |
 | `--filter-pattern <pattern>`        | Run only test cases whose `description` matches the regex pattern                                                                                                                                  |
 | `--filter-providers <pattern>`      | Run only test cases whose provider ids or label match the regex pattern                                                                                                                            |
@@ -212,7 +212,7 @@ BETA: Generate adversarial test cases to challenge your prompts and models.
 | `--injectVar <varname>` | The name of the prompt variable that represents the user's input | `{{query}}`          |
 | `--plugins <plugins>`   | Comma-separated list of plugins to enable                        | all plugins          |
 | `--no-cache`            | Do not read or write results to disk cache                       | false                |
-| `--env-file <path>`     | Path to .env file                                                |                      |
+| `--env-path <path>`     | Path to .env file                                                |                      |
 
 For example, let's suppose we have the following `promptfooconfig.yaml`:
 

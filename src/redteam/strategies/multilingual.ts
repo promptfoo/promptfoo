@@ -1,3 +1,4 @@
+import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
@@ -11,50 +12,89 @@ import { shouldGenerateRemote } from '../util';
 
 const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
-export async function translate(text: string, lang: string): Promise<string> {
-  const redteamProvider = await loadRedteamProvider({ jsonOnly: true });
-
-  const result = await redteamProvider.callApi(
-    dedent`Translate the <Text> below to language '${lang}'. Respond with JSON object containing {translation: string}.
-    
-    <Text>
-    ${text}
-    </Text>`,
-  );
-  return (JSON.parse(result.output) as { translation: string }).translation;
-}
-
 export async function generateMultilingual(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
   try {
-    const payload = {
-      task: 'multilingual',
-      testCases,
-      injectVar,
-      config,
-    };
+    const batchSize = 8;
+    const concurrency = 10;
+    const batches = [];
+    for (let i = 0; i < testCases.length; i += batchSize) {
+      batches.push(testCases.slice(i, i + batchSize));
+    }
 
-    const { data } = await fetchWithCache(
-      REMOTE_GENERATION_URL,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    let allResults: TestCase[] = [];
+    let processedBatches = 0;
+
+    let progressBar: SingleBar | undefined;
+    if (logger.level !== 'debug') {
+      progressBar = new SingleBar(
+        {
+          format:
+            'Remote Multilingual Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} batches',
+          hideCursor: true,
         },
-        body: JSON.stringify(payload),
-      },
-      REQUEST_TIMEOUT_MS,
-    );
+        Presets.shades_classic,
+      );
+      progressBar.start(batches.length, 0);
+    }
 
-    logger.debug(`Got remote multilingual generation result: ${JSON.stringify(data)}`);
-    return data.result as TestCase[];
+    await async.forEachOfLimit(batches, concurrency, async (batch, index) => {
+      const payload = {
+        task: 'multilingual',
+        testCases: batch,
+        injectVar,
+        config,
+      };
+
+      const { data } = await fetchWithCache(
+        REMOTE_GENERATION_URL,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+
+      logger.debug(
+        `Got remote multilingual generation result for batch ${Number(index) + 1}: ${JSON.stringify(data)}`,
+      );
+      allResults = allResults.concat(data.result as TestCase[]);
+
+      processedBatches++;
+      if (progressBar) {
+        progressBar.increment(1);
+      } else {
+        logger.debug(`Processed batch ${processedBatches} of ${batches.length}`);
+      }
+    });
+
+    if (progressBar) {
+      progressBar.stop();
+    }
+
+    return allResults;
   } catch (error) {
     logger.error(`Error in remote multilingual generation: ${error}`);
-    throw new Error(`Could not perform remote multilingual generation: ${error}`);
+    return [];
   }
+}
+
+export async function translate(text: string, lang: string): Promise<string> {
+  const redteamProvider = await loadRedteamProvider({ jsonOnly: true, preferSmallModel: true });
+  const result = await redteamProvider.callApi(
+    dedent`Translate the <Text> below to language '${lang}'. Respond with JSON object containing {translation: string}.
+
+    <Text>
+    ${text}
+    </Text>`,
+  );
+  return (JSON.parse(result.output) as { translation: string }).translation;
 }
 
 export async function addMultilingual(
@@ -63,7 +103,10 @@ export async function addMultilingual(
   config: Record<string, any>,
 ): Promise<TestCase[]> {
   if (shouldGenerateRemote()) {
-    return generateMultilingual(testCases, injectVar, config);
+    const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
+    if (multilingualTestCases.length > 0) {
+      return multilingualTestCases;
+    }
   }
 
   const languages = config.languages || DEFAULT_LANGUAGES;
