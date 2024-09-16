@@ -1,4 +1,4 @@
-import { promises as fs } from 'fs';
+import fs from 'fs';
 import { PythonShell } from 'python-shell';
 import { runPythonCode } from '../../src/python/wrapper';
 
@@ -6,11 +6,9 @@ jest.mock('../../src/esm');
 jest.mock('../../src/logger');
 jest.mock('python-shell');
 jest.mock('fs', () => ({
-  promises: {
-    writeFile: jest.fn(),
-    readFile: jest.fn(),
-    unlink: jest.fn(),
-  },
+  writeFileSync: jest.fn(),
+  readFileSync: jest.fn(),
+  unlinkSync: jest.fn(),
 }));
 
 describe('wrapper', () => {
@@ -26,9 +24,9 @@ describe('wrapper', () => {
     it('should execute Python code from a string and read the output file', async () => {
       const mockOutput = JSON.stringify({ type: 'final_result', data: 'execution result' });
 
-      jest.spyOn(fs, 'writeFile').mockResolvedValue();
-      jest.spyOn(fs, 'readFile').mockResolvedValue(mockOutput);
-      jest.spyOn(fs, 'unlink').mockResolvedValue();
+      jest.spyOn(fs, 'writeFileSync').mockReturnValue();
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(mockOutput);
+      jest.spyOn(fs, 'unlinkSync').mockReturnValue();
 
       const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockResolvedValue([]);
@@ -48,23 +46,23 @@ describe('wrapper', () => {
           ]),
         }),
       );
-      expect(fs.writeFile).toHaveBeenCalledWith(expect.stringContaining('.py'), code);
-      expect(fs.readFile).toHaveBeenCalledWith(
+      expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('.py'), code);
+      expect(fs.readFileSync).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo-python-output-json'),
         'utf-8',
       );
     });
 
     it('should clean up the temporary files after execution', async () => {
-      jest.spyOn(fs, 'writeFile').mockResolvedValue();
+      jest.spyOn(fs, 'writeFileSync').mockReturnValue();
       jest
-        .spyOn(fs, 'readFile')
-        .mockResolvedValue('{"type": "final_result", "data": "cleanup test"}');
-      jest.spyOn(fs, 'unlink').mockResolvedValue();
+        .spyOn(fs, 'readFileSync')
+        .mockReturnValue('{"type": "final_result", "data": "cleanup test"}');
+      jest.spyOn(fs, 'unlinkSync').mockReturnValue();
 
       await runPythonCode('print("cleanup test")', 'main', []);
 
-      expect(fs.unlink).toHaveBeenCalledTimes(3); // Once for the temporary Python file, once for input JSON, once for output JSON
+      expect(fs.unlinkSync).toHaveBeenCalledTimes(3); // Once for the temporary Python file, once for input JSON, once for output JSON
     });
   });
 });

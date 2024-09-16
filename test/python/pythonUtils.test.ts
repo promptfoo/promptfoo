@@ -1,4 +1,4 @@
-import { promises as fs } from 'fs';
+import fs from 'fs';
 import { PythonShell } from 'python-shell';
 import logger from '../../src/logger';
 import {
@@ -10,11 +10,9 @@ import {
 } from '../../src/python/pythonUtils';
 
 jest.mock('fs', () => ({
-  promises: {
-    writeFile: jest.fn(),
-    readFile: jest.fn(),
-    unlink: jest.fn().mockImplementation(() => Promise.resolve()),
-  },
+  writeFileSync: jest.fn(),
+  readFileSync: jest.fn(),
+  unlinkSync: jest.fn(),
 }));
 
 jest.mock('python-shell', () => ({
@@ -131,9 +129,9 @@ describe('pythonUtils', () => {
     it('should correctly run a Python script with provided arguments and read the output file', async () => {
       const mockOutput = JSON.stringify({ type: 'final_result', data: 'test result' });
 
-      jest.mocked(fs.writeFile).mockResolvedValue();
-      jest.mocked(fs.readFile).mockResolvedValue(mockOutput);
-      jest.mocked(fs.unlink).mockResolvedValue();
+      jest.mocked(fs.writeFileSync).mockReturnValue();
+      jest.mocked(fs.readFileSync).mockReturnValue(mockOutput);
+      jest.mocked(fs.unlinkSync).mockReturnValue();
       jest.mocked(PythonShell.run).mockResolvedValue([]);
 
       const result = await runPython('testScript.py', 'testMethod', ['arg1', { key: 'value' }]);
@@ -150,16 +148,16 @@ describe('pythonUtils', () => {
           ]),
         }),
       );
-      expect(fs.writeFile).toHaveBeenCalledWith(
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo-python-input-json'),
         expect.any(String),
         'utf-8',
       );
-      expect(fs.readFile).toHaveBeenCalledWith(
+      expect(fs.readFileSync).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo-python-output-json'),
         'utf-8',
       );
-      expect(fs.unlink).toHaveBeenCalledTimes(2);
+      expect(fs.unlinkSync).toHaveBeenCalledTimes(2);
     });
 
     it('should throw an error if the Python script execution fails', async () => {
@@ -173,9 +171,9 @@ describe('pythonUtils', () => {
     it('should handle Python script returning incorrect result type', async () => {
       const mockOutput = JSON.stringify({ type: 'unexpected_result', data: 'test result' });
 
-      jest.mocked(fs.writeFile).mockResolvedValue();
-      jest.mocked(fs.readFile).mockResolvedValue(mockOutput);
-      jest.mocked(fs.unlink).mockResolvedValue();
+      jest.mocked(fs.writeFileSync).mockReturnValue();
+      jest.mocked(fs.readFileSync).mockReturnValue(mockOutput);
+      jest.mocked(fs.unlinkSync).mockReturnValue();
       jest.mocked(PythonShell.run).mockResolvedValue([]);
 
       await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
@@ -184,9 +182,9 @@ describe('pythonUtils', () => {
     });
 
     it('should handle invalid JSON in the output file', async () => {
-      jest.mocked(fs.writeFile).mockResolvedValue();
-      jest.mocked(fs.readFile).mockResolvedValue('Invalid JSON');
-      jest.mocked(fs.unlink).mockResolvedValue();
+      jest.mocked(fs.writeFileSync).mockReturnValue();
+      jest.mocked(fs.readFileSync).mockReturnValue('Invalid JSON');
+      jest.mocked(fs.unlinkSync).mockReturnValue();
       jest.mocked(PythonShell.run).mockResolvedValue([]);
 
       await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(

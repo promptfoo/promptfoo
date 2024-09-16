@@ -1,5 +1,5 @@
 import { exec } from 'child_process';
-import { promises as fs } from 'fs';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import type { Options as PythonShellOptions } from 'python-shell';
@@ -117,10 +117,10 @@ export async function runPython(
   };
 
   try {
-    await fs.writeFile(tempJsonPath, safeJsonStringify(args), 'utf-8');
+    await fs.writeFileSync(tempJsonPath, safeJsonStringify(args), 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
     await PythonShell.run('wrapper.py', pythonOptions);
-    const output = await fs.readFile(outputPath, 'utf-8');
+    const output = await fs.readFileSync(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
     let result: { type: 'final_result'; data: any } | undefined;
     try {
@@ -151,9 +151,13 @@ export async function runPython(
     );
   } finally {
     await Promise.all(
-      [tempJsonPath, outputPath].map((file) =>
-        fs.unlink(file).catch((error) => logger.error(`Error removing ${file}: ${error}`)),
-      ),
+      [tempJsonPath, outputPath].map((file) => {
+        try {
+          fs.unlinkSync(file);
+        } catch (error) {
+          logger.error(`Error removing ${file}: ${error}`);
+        }
+      }),
     );
   }
 }
