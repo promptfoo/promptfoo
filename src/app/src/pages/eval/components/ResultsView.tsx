@@ -32,7 +32,7 @@ import Snackbar from '@mui/material/Snackbar';
 import Stack, { StackProps } from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import { styled } from '@mui/system';
+import { styled } from '@mui/material/styles';
 import type { VisibilityState } from '@tanstack/table-core';
 import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
