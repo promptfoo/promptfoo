@@ -1,7 +1,7 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import logger from './logger';
-import type { Assertion, AssertionType, CsvRow, TestCase } from './types';
-import { BaseAssertionTypesSchema, BaseAssertionTypes } from './types';
+import type { Assertion, AssertionType, CsvRow, TestCase, BaseAssertionTypes } from './types';
+import { BaseAssertionTypesSchema } from './types';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
@@ -54,7 +54,13 @@ export function assertionFromString(expected: string): Assertion {
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
-    const [_, notPrefix, type, thresholdStr, value] = regexMatch as [string, string, BaseAssertionTypes, string, string];
+    const [_, notPrefix, type, thresholdStr, value] = regexMatch as [
+      string,
+      string,
+      BaseAssertionTypes,
+      string,
+      string,
+    ];
     const fullType: AssertionType = notPrefix ? `not-${type}` : type;
     const threshold = Number.parseFloat(thresholdStr);
 
@@ -108,6 +114,8 @@ export function assertionFromString(expected: string): Assertion {
   };
 }
 
+const uniqueErrorMessages = new Set<string>();
+
 export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
@@ -116,7 +124,8 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   let description: string | undefined;
   let metric: string | undefined;
   let threshold: number | undefined;
-  const reservedKeys = [
+
+  const specialKeys = [
     'expected',
     'prefix',
     'suffix',
@@ -124,13 +133,18 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     'providerOutput',
     'metric',
     'threshold',
-  ];
+  ].map((k) => `_${k}`);
+
   for (const [key, value] of Object.entries(row)) {
-    const prefixes = ['_'];
-    if (reservedKeys.includes(key.slice(1)) && prefixes.some(prefix => key.startsWith(prefix))) {
-      logger.warn(
-        `Key ${key} has only one underscore. Did you mean to use two underscores (${key.replace('_', '__')}) for a reserved key?`,
-      );
+    // Check for single underscore usage with reserved keys
+    if (
+      !key.startsWith('__') &&
+      specialKeys.some((k) => key.startsWith(k)) &&
+      !uniqueErrorMessages.has(key)
+    ) {
+      const error = `You used a single underscore for the key "${key}". Did you mean to use "${key.replace('_', '__')}" instead?`;
+      uniqueErrorMessages.add(key);
+      logger.warn(error);
     }
     if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
