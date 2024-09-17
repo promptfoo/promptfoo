@@ -113,7 +113,7 @@ export async function getGoogleClient() {
     try {
       const importedModule = await import('google-auth-library');
       GoogleAuth = importedModule.GoogleAuth;
-    } catch (err) {
+    } catch {
       throw new Error(
         'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
       );
@@ -131,7 +131,7 @@ export async function hasGoogleDefaultCredentials() {
   try {
     await getGoogleClient();
     return true;
-  } catch (err) {
+  } catch {
     return false;
   }
 }

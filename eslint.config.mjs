@@ -42,6 +42,7 @@ export default [
       unicorn: eslintPluginUnicorn,
     },
     rules: {
+      '@typescript-eslint/no-unsafe-function-type': 0,
       '@typescript-eslint/ban-ts-comment': 0,
       '@typescript-eslint/ban-types': 0,
       '@typescript-eslint/consistent-type-imports': 'error',
@@ -72,11 +73,12 @@ export default [
     },
   },
   {
-    files: ['examples/**'],
+    files: ['examples/**', 'site/**'],
     rules: {
       '@typescript-eslint/no-namespace': 0,
       '@typescript-eslint/no-var-requires': 0,
       '@typescript-eslint/no-unused-vars': 0,
+      '@typescript-eslint/no-require-imports': 0,
     },
   },
 ];

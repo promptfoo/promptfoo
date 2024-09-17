@@ -115,7 +115,7 @@ function EvalOutputCell({
       JSON.parse(text);
       // If no errors are thrown, the texts are valid JSON
       diffResult = diffJson(firstOutputText, text);
-    } catch (error) {
+    } catch {
       // If an error is thrown, the texts are not valid JSON
       if (firstOutputText.includes('. ') && text.includes('. ')) {
         // If the texts contain a period, they are considered as prose
@@ -202,7 +202,7 @@ function EvalOutputCell({
   } else if (prettifyJson) {
     try {
       node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
-    } catch (error) {
+    } catch {
       // Ignore because it's probably not JSON.
     }
   }

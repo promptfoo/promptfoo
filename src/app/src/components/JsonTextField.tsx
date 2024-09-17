@@ -19,7 +19,7 @@ const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, ...props }) => 
       if (onChange) {
         onChange(parsed);
       }
-    } catch (e) {
+    } catch {
       setValue(newValue);
       setError(true);
     }

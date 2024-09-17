@@ -169,7 +169,7 @@ export function startServer(
     try {
       updateResult(id, config, table);
       res.json({ message: 'Eval updated successfully' });
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: 'Failed to update eval table' });
     }
   });
@@ -191,7 +191,7 @@ export function startServer(
     try {
       await deleteEval(id);
       res.json({ message: 'Eval deleted successfully' });
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: 'Failed to delete eval' });
     }
   });

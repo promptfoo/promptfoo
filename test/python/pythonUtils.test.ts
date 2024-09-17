@@ -35,7 +35,7 @@ describe('pythonUtils', () => {
         const result = await validatePythonPath('python', false);
         expect(typeof result).toBe('string');
         expect(result.length).toBeGreaterThan(0);
-      } catch (error) {
+      } catch {
         console.warn('"python" not found, skipping test');
         return;
       }
@@ -46,7 +46,7 @@ describe('pythonUtils', () => {
         const result = await validatePythonPath('python3', false);
         expect(typeof result).toBe('string');
         expect(result.length).toBeGreaterThan(0);
-      } catch (error) {
+      } catch {
         console.warn('"python3" not found, skipping test');
         return;
       }
@@ -58,7 +58,7 @@ describe('pythonUtils', () => {
         expect(state.cachedPythonPath).toBe(firstResult);
         const secondResult = await validatePythonPath('python', false);
         expect(secondResult).toBe(firstResult);
-      } catch (error) {
+      } catch {
         console.warn('"python" not found, skipping test');
         return;
       }
@@ -66,7 +66,7 @@ describe('pythonUtils', () => {
 
     it('should fall back to alternative paths for non-existent programs when not explicit', async () => {
       jest.mocked(getEnvString).mockReturnValue('');
-
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       jest.spyOn(require('child_process'), 'exec').mockImplementation((cmd, callback) => {
         if (typeof callback === 'function') {
           callback(null, '/usr/bin/python3', '');
@@ -89,7 +89,7 @@ describe('pythonUtils', () => {
 
     it('should throw an error for non-existent programs when explicit', async () => {
       jest.mocked(getEnvString).mockReturnValue('');
-
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       jest.spyOn(require('child_process'), 'exec').mockImplementation((cmd, callback) => {
         if (typeof callback === 'function') {
           callback(new Error('Command failed'), '', '');

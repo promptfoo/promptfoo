@@ -314,7 +314,7 @@ export async function writeResultsToDatabase(
   try {
     const now = new Date();
     fs.utimesSync(filePath, now, now);
-  } catch (err) {
+  } catch {
     fs.closeSync(fs.openSync(filePath, 'w'));
   }
 

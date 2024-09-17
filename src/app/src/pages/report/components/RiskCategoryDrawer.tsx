@@ -27,7 +27,9 @@ function getPromptDisplayString(prompt: string): string {
         return lastPrompt.content || '-';
       }
     }
-  } catch (e) {}
+  } catch {
+    // Ignore error
+  }
   return prompt;
 }
 
