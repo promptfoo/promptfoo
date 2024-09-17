@@ -1385,6 +1385,11 @@ ${
         value: rubric,
       },
       ...grade,
+      metadata: {
+        // Pass through all test metadata for redteam
+        ...test.metadata,
+        ...grade.metadata,
+      },
     };
   }
 
