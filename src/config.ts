@@ -172,6 +172,24 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     ret.redteam.strategies = ret.strategies;
     delete ret.strategies;
   }
+  if (!ret.prompts) {
+    logger.debug(`Setting default prompt because there is no \`prompts\` field`);
+    const hasAnyPrompt =
+      // Allow any string
+      typeof ret.tests === 'string' ||
+      // Check the array for `prompt` vars
+      (Array.isArray(ret.tests) &&
+        ret.tests.some(
+          (test) => typeof test === 'object' && Object.keys(test.vars || {}).includes('prompt'),
+        ));
+
+    if (!hasAnyPrompt) {
+      logger.warn(
+        `Warning: Expected top-level "prompts" property in config or a test variable named "prompt"`,
+      );
+    }
+    ret.prompts = ['{{prompt}}'];
+  }
   return ret;
 }
 
