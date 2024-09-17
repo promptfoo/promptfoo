@@ -87,7 +87,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
             const nonCompliantPlugins = getNonCompliantPlugins(framework);
             const isExpanded = expandedFrameworks[framework];
             return (
-              <Grid item xs={12} sm={6} md={4} key={framework}>
+              <Grid item xs={12} sm={6} md={3} key={framework}>
                 <Card className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}>
                   <CardContent>
                     <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>

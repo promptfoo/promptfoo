@@ -212,11 +212,11 @@ export const OWASP_API_TOP_10_MAPPING: Record<
 
 export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
   'nist:ai:measure:1.1': {
-    plugins: ['harmful:misinformation-disinformation', 'overreliance', 'excessive-agency'],
+    plugins: ['harmful:misinformation-disinformation', 'excessive-agency'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:1.2': {
-    plugins: ['harmful:misinformation-disinformation', 'overreliance', 'excessive-agency'],
+    plugins: ['harmful:misinformation-disinformation', 'excessive-agency'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:2.1': {
@@ -228,15 +228,15 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
     strategies: [],
   },
   'nist:ai:measure:2.3': {
-    plugins: ['overreliance', 'excessive-agency'],
+    plugins: ['excessive-agency'],
     strategies: [],
   },
   'nist:ai:measure:2.4': {
-    plugins: ['overreliance', 'excessive-agency', 'harmful:misinformation-disinformation'],
+    plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:2.5': {
-    plugins: ['overreliance', 'excessive-agency'],
+    plugins: ['excessive-agency'],
     strategies: [],
   },
   'nist:ai:measure:2.6': {
@@ -256,7 +256,7 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
     strategies: [],
   },
   'nist:ai:measure:2.9': {
-    plugins: ['overreliance', 'excessive-agency'],
+    plugins: ['excessive-agency'],
     strategies: [],
   },
   'nist:ai:measure:2.10': {
@@ -272,31 +272,31 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
     strategies: [],
   },
   'nist:ai:measure:2.13': {
-    plugins: ['overreliance', 'excessive-agency'],
+    plugins: ['excessive-agency'],
     strategies: [],
   },
   'nist:ai:measure:3.1': {
-    plugins: ['overreliance', 'excessive-agency', 'harmful:misinformation-disinformation'],
+    plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:3.2': {
-    plugins: ['overreliance', 'excessive-agency'],
+    plugins: ['excessive-agency'],
     strategies: [],
   },
   'nist:ai:measure:3.3': {
-    plugins: ['overreliance', 'excessive-agency'],
+    plugins: ['excessive-agency'],
     strategies: [],
   },
   'nist:ai:measure:4.1': {
-    plugins: ['overreliance', 'excessive-agency'],
+    plugins: ['excessive-agency'],
     strategies: [],
   },
   'nist:ai:measure:4.2': {
-    plugins: ['overreliance', 'excessive-agency', 'harmful:misinformation-disinformation'],
+    plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
     strategies: [],
   },
   'nist:ai:measure:4.3': {
-    plugins: ['overreliance', 'excessive-agency'],
+    plugins: ['excessive-agency'],
     strategies: [],
   },
 };
@@ -315,13 +315,7 @@ export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies
     strategies: ['jailbreak', 'prompt-injection', 'base64', 'leetspeak', 'rot13'],
   },
   'mitre:atlas:ml-attack-staging': {
-    plugins: [
-      'overreliance',
-      'excessive-agency',
-      'hallucination',
-      'ascii-smuggling',
-      'indirect-prompt-injection',
-    ],
+    plugins: ['excessive-agency', 'hallucination', 'ascii-smuggling', 'indirect-prompt-injection'],
     strategies: ['jailbreak', 'jailbreak:tree'],
   },
   'mitre:atlas:exfiltration': {
@@ -338,7 +332,7 @@ export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies
     strategies: [],
   },
   'mitre:atlas:impact': {
-    plugins: ['harmful', 'overreliance', 'excessive-agency', 'hijacking', 'imitation', 'politics'],
+    plugins: ['harmful', 'excessive-agency', 'hijacking', 'imitation'],
     strategies: ['crescendo'],
   },
 };
