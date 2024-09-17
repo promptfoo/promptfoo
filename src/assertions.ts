@@ -229,7 +229,7 @@ export async function isSql(
   try {
     sqlParser.astify(outputString, opt);
     pass = !inverse;
-  } catch (err) {
+  } catch {
     pass = inverse;
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
@@ -395,7 +395,7 @@ export async function runAssertion({
     try {
       parsedJson = JSON.parse(outputString);
       pass = !inverse;
-    } catch (err) {
+    } catch {
       pass = inverse;
     }
 
@@ -1156,7 +1156,7 @@ ${
         if (parsedPrompt && parsedPrompt.length > 0) {
           prompt = parsedPrompt[parsedPrompt.length - 1].content;
         }
-      } catch (err) {
+      } catch {
         // Ignore error
       }
     }

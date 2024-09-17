@@ -271,7 +271,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
         error: `API call error: ${data.error}`,
       };
     }
-    if (!data.choices[0] && !data.choices[0].message.content) {
+    if (!data.choices || !data.choices[0] || !data.choices[0].message.content) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
       };

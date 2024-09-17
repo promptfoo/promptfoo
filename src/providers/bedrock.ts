@@ -574,7 +574,7 @@ export abstract class AwsBedrockGenericProvider {
           handler = new NodeHttpHandler({
             httpsAgent: new ProxyAgent() as unknown as Agent,
           });
-        } catch (err) {
+        } catch {
           throw new Error(
             `The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.`,
           );
@@ -587,7 +587,7 @@ export abstract class AwsBedrockGenericProvider {
           ...(handler ? { requestHandler: handler } : {}),
         });
         this.bedrock = bedrock;
-      } catch (err) {
+      } catch {
         throw new Error(
           'The @aws-sdk/client-bedrock-runtime package is required as a peer dependency. Please install it in your project or globally.',
         );

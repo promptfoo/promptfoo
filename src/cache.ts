@@ -56,7 +56,7 @@ export async function fetchWithCache(
         cached: false,
         data: format === 'json' ? JSON.parse(respText) : respText,
       };
-    } catch (error) {
+    } catch {
       throw new Error(`Error parsing response as JSON: ${respText}`);
     }
   }

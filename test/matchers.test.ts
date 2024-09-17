@@ -505,7 +505,7 @@ describe('matchesClosedQa', () => {
       try {
         JSON.parse(prompt);
         isJson = true;
-      } catch (err) {
+      } catch {
         isJson = false;
       }
       return Promise.resolve({

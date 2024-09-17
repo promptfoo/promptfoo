@@ -51,6 +51,7 @@ describe('AwsBedrockGenericProvider', () => {
 
   beforeEach(() => {
     jest.resetModules();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     BedrockRuntime = require('@aws-sdk/client-bedrock-runtime').BedrockRuntime;
     jest.clearAllMocks();
   });
@@ -316,7 +317,7 @@ describe('llama', () => {
           prompt: dedent`<s>[INST] <<SYS>>
         You are a helpful assistant.
         <</SYS>>
-  
+
         What is the capital of France? [/INST]`,
           temperature: 0.01,
           top_p: 1,
