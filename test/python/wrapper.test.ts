@@ -1,6 +1,5 @@
 import fs from 'fs';
-import { PythonShell } from 'python-shell';
-import { state, validatePythonPath } from '../../src/python/pythonUtils';
+import { runPython, state, validatePythonPath } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 
 jest.mock('../../src/esm');
@@ -16,6 +15,7 @@ jest.mock('../../src/python/pythonUtils', () => {
   return {
     ...originalModule,
     validatePythonPath: jest.fn(),
+    runPython: jest.fn(originalModule.runPython),
     state: {
       cachedPythonPath: '/usr/bin/python3',
     },
@@ -38,38 +38,6 @@ describe('wrapper', () => {
   });
 
   describe('runPythonCode', () => {
-    it('should execute Python code from a string and read the output file', async () => {
-      const mockOutput = JSON.stringify({ type: 'final_result', data: 'execution result' });
-
-      jest.spyOn(fs, 'writeFileSync').mockReturnValue();
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(mockOutput);
-      jest.spyOn(fs, 'unlinkSync').mockReturnValue();
-
-      const mockPythonShellRun = jest.mocked(PythonShell.run);
-      mockPythonShellRun.mockResolvedValue([]);
-
-      const code = 'print("Hello, world!")';
-      const result = await runPythonCode(code, 'main', []);
-
-      expect(result).toBe('execution result');
-      expect(mockPythonShellRun).toHaveBeenCalledWith(
-        'wrapper.py',
-        expect.objectContaining({
-          args: expect.arrayContaining([
-            expect.stringContaining('.py'),
-            'main',
-            expect.stringContaining('promptfoo-python-input-json'),
-            expect.stringContaining('promptfoo-python-output-json'),
-          ]),
-        }),
-      );
-      expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('.py'), code);
-      expect(fs.readFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('promptfoo-python-output-json'),
-        'utf-8',
-      );
-    });
-
     it('should clean up the temporary files after execution', async () => {
       jest.spyOn(fs, 'writeFileSync').mockReturnValue();
       jest
@@ -80,6 +48,22 @@ describe('wrapper', () => {
       await runPythonCode('print("cleanup test")', 'main', []);
 
       expect(fs.unlinkSync).toHaveBeenCalledTimes(3); // Once for the temporary Python file, once for input JSON, once for output JSON
+    });
+    it('should execute Python code from a string and read the output file', async () => {
+      const mockOutput = { type: 'final_result', data: 'execution result' };
+
+      jest.spyOn(fs, 'writeFileSync').mockReturnValue();
+      jest.spyOn(fs, 'unlinkSync').mockReturnValue();
+
+      const mockRunPython = jest.mocked(runPython);
+      mockRunPython.mockResolvedValue(mockOutput.data);
+
+      const code = 'print("Hello, world!")';
+      const result = await runPythonCode(code, 'main', []);
+
+      expect(result).toBe('execution result');
+      expect(mockRunPython).toHaveBeenCalledWith(expect.stringContaining('.py'), 'main', []);
+      expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('.py'), code);
     });
   });
 });
