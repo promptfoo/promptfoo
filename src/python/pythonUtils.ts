@@ -28,7 +28,7 @@ export async function tryPath(path: string): Promise<string | null> {
       return path;
     }
     return null;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
