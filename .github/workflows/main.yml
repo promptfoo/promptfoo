@@ -199,5 +199,5 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Vitest
-        run: npm run test:webui
+      - name: Run App Tests
+        run: npm run test:app

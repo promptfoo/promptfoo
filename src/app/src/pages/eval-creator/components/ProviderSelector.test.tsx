@@ -9,7 +9,7 @@ const mockProviders = [
 
 const mockOnChange = vi.fn();
 
-describe.skip('ProviderSelector', () => {
+describe('ProviderSelector', () => {
   beforeEach(() => {
     render(<ProviderSelector providers={mockProviders} onChange={mockOnChange} />);
   });

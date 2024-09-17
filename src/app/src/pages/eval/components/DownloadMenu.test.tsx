@@ -27,7 +27,7 @@ Object.defineProperty(global.navigator, 'msSaveOrOpenBlob', {
   writable: true,
 });
 
-describe.skip('DownloadMenu', () => {
+describe('DownloadMenu', () => {
   const mockTable = {
     head: {
       vars: ['var1', 'var2'],

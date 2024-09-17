@@ -3,7 +3,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import InfoModal from './InfoModal';
 
-describe.skip('InfoModal', () => {
+describe('InfoModal', () => {
   const mockOnClose = vi.fn();
 
   it('does not render when closed', () => {

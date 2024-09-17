@@ -59,7 +59,6 @@ export default [
       '@typescript-eslint/no-use-before-define': 'error',
       '@typescript-eslint/no-var-requires': 0,
       curly: 'error',
-      'jest/no-disabled-tests': 0,
       'no-case-declarations': 0,
       'no-control-regex': 0,
       'no-empty': 0,

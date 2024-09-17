@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ResultsView from './ResultsView';
@@ -58,10 +59,14 @@ vi.mock('@app/state/evalConfig', () => ({
 }));
 
 const renderWithToastProvider = (ui: React.ReactNode) => {
-  return render(<ToastProvider>{ui}</ToastProvider>);
+  return render(
+    <MemoryRouter>
+      <ToastProvider>{ui}</ToastProvider>
+    </MemoryRouter>,
+  );
 };
 
-describe.skip('ResultsView', () => {
+describe('ResultsView', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
