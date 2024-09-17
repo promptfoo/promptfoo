@@ -31,7 +31,7 @@ const mockedFetchResponse = (
 };
 
 const mockedSetTimeout = (reqTimeout: number) =>
-  jest.spyOn(global, 'setTimeout').mockImplementation((cb: Function, ms?: number) => {
+  jest.spyOn(global, 'setTimeout').mockImplementation((cb: () => void, ms?: number) => {
     if (ms !== reqTimeout) {
       cb();
     }

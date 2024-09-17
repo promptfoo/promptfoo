@@ -435,7 +435,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
      * The potential of the object type here is given by the agent action conditional
      * for openai as a value choice
      */
-    const providerChoices: (string | Object)[] = (
+    const providerChoices: (string | object)[] = (
       await checkbox({
         message:
           'Which model providers would you like to use? (press space to select, enter to complete selection)',
