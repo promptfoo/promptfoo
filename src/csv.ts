@@ -1,7 +1,7 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import logger from './logger';
 import type { Assertion, AssertionType, CsvRow, TestCase } from './types';
-import { BaseAssertionTypesSchema } from './types';
+import { BaseAssertionTypesSchema, BaseAssertionTypes } from './types';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
@@ -54,8 +54,8 @@ export function assertionFromString(expected: string): Assertion {
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
-    const [_, notPrefix, type, thresholdStr, value] = regexMatch;
-    const fullType = notPrefix ? `not-${type}` : type;
+    const [_, notPrefix, type, thresholdStr, value] = regexMatch as [string, string, BaseAssertionTypes, string, string];
+    const fullType: AssertionType = notPrefix ? `not-${type}` : type;
     const threshold = Number.parseFloat(thresholdStr);
 
     if (
