@@ -175,6 +175,8 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   if (!ret.prompts) {
     logger.debug(`Setting default prompt because there is no \`prompts\` field`);
     const hasAnyPrompt =
+      // Allow no tests
+      !ret.tests ||
       // Allow any string
       typeof ret.tests === 'string' ||
       // Check the array for `prompt` vars

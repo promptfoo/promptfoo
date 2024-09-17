@@ -34,6 +34,7 @@ const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
 
 description: "My first red team"
 
+{% if prompts.length > 0 -%}
 prompts:
   {% for prompt in prompts -%}
   - {{ prompt | dump }}
@@ -43,9 +44,10 @@ prompts:
   # - file:///path/to/prompt.json
   # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
   {% endif %}
+{% endif -%}
 
-providers:
-  # Providers are red team targets. To talk directly to your application, use a custom provider.
+targets:
+  # Red team targets. To talk directly to your application, use a custom provider.
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
   {% for provider in providers -%}
   {% if provider is string -%}
@@ -59,6 +61,39 @@ providers:
   {% endif -%}
   {% endfor %}
 
+{% if plugins.length > 0 -%}
+# Each plugin generates {{numTests}} adversarial inputs.
+# To control the number of tests for each plugin, use:
+# - id: plugin-name
+#   numTests: 10
+plugins:
+  {% for plugin in plugins -%}
+  {% if plugin is string -%}
+  - {{plugin}}  # {{descriptions[plugin]}}
+  {% else -%}
+  - id: {{plugin.id}}  # {{descriptions[plugin.id]}}
+    {% if plugin.numTests is defined -%}
+    numTests: {{plugin.numTests}}
+    {% endif -%}
+    {%- if plugin.config is defined -%}
+    config:
+      {%- for k, v in plugin.config %}
+      {{k}}: {{v | dump}}
+      {%- endfor -%}
+    {%- endif %}
+  {% endif -%}
+  {%- endfor %}
+{% endif -%}
+
+{% if strategies.length > 0 -%}
+# Attack methods for applying adversarial inputs
+strategies:
+  {% for strategy in strategies -%}
+  - {{strategy}} # {{descriptions[strategy]}}
+  {% endfor %}
+{% endif -%}
+
+# Other redteam settings
 redteam:
   {% if purpose is defined -%}
   purpose: {{ purpose | dump }}
@@ -66,38 +101,6 @@ redteam:
   # Default number of inputs to generate for each plugin.
   # The total number of tests will be (numTests * plugins.length * (1 + strategies.length))
   numTests: {{numTests}}
-
-  {% if plugins.length > 0 -%}
-  # Each plugin generates {{numTests}} adversarial inputs.
-  # To control the number of tests for each plugin, use:
-  # - id: plugin-name
-  #   numTests: 10
-  plugins:
-    {% for plugin in plugins -%}
-    {% if plugin is string -%}
-    - {{plugin}}  # {{descriptions[plugin]}}
-    {% else -%}
-    - id: {{plugin.id}}  # {{descriptions[plugin.id]}}
-      {% if plugin.numTests is defined -%}
-      numTests: {{plugin.numTests}}
-      {% endif -%}
-      {%- if plugin.config is defined -%}
-      config:
-        {%- for k, v in plugin.config %}
-        {{k}}: {{v | dump}}
-        {%- endfor -%}
-      {%- endif %}
-    {% endif -%}
-    {%- endfor %}
-  {% endif -%}
-
-  {% if strategies.length > 0 -%}
-  # Attack methods for applying adversarial inputs
-  strategies:
-    {% for strategy in strategies -%}
-    - {{strategy}} # {{descriptions[strategy]}}
-    {% endfor %}
-  {% endif -%}
 `;
 
 const CUSTOM_PROVIDER_TEMPLATE = `# Custom provider for red teaming
@@ -132,11 +135,11 @@ function recordOnboardingStep(step: string, properties: Record<string, EventValu
 
 async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string> {
   const NOTE =
-    'NOTE: your prompt must include one or more injectable variables like {{query}} or {{name}} as a placeholder for user input (REMOVE THIS LINE)';
+    'NOTE: your prompt must include one or more injectable variables like {{prompt}} or {{name}} as a placeholder for user input (REMOVE THIS LINE)';
 
   let prompt = dedent`You are a helpful and concise assistant.
 
-  User query: {{query}}
+  User query: {{prompt}}
 
   ${NOTE}`;
   prompt = await editor({
@@ -151,7 +154,7 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
       chalk.red(
         `Your prompt must include ${numVariablesRequired} ${
           numVariablesRequired === 1 ? 'variable' : 'variables'
-        } like "{{query}}" as a placeholder for user input.`,
+        } like "{{prompt}}" as a placeholder for user input.`,
       ),
     );
     prompt = await editor({
@@ -181,8 +184,8 @@ export async function redteamInit(directory: string | undefined) {
     message: 'What would you like to do?',
     choices: [
       { name: 'Not sure yet', value: 'not_sure' },
-      { name: 'Red team a prompt, model, or chatbot', value: 'prompt_model_chatbot' },
       { name: 'Red team an HTTP endpoint', value: 'http_endpoint' },
+      { name: 'Red team a model + prompt', value: 'prompt_model_chatbot' },
       { name: 'Red team a RAG', value: 'rag' },
       { name: 'Red team an Agent', value: 'agent' },
     ],
@@ -195,10 +198,13 @@ export async function redteamInit(directory: string | undefined) {
   let purpose: string | undefined;
 
   const useCustomProvider =
-    redTeamChoice === 'rag' || redTeamChoice === 'agent' || redTeamChoice === 'http_endpoint';
+    redTeamChoice === 'rag' ||
+    redTeamChoice === 'agent' ||
+    redTeamChoice === 'http_endpoint' ||
+    redTeamChoice === 'not_sure';
   let deferGeneration = useCustomProvider;
   const defaultPrompt =
-    'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}';
+    'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}';
   const defaultPurpose = 'Travel agent specializing in budget trips to Europe';
   if (useCustomProvider) {
     purpose =
@@ -206,7 +212,6 @@ export async function redteamInit(directory: string | undefined) {
         message: dedent`What is the purpose of your application? This is used to tailor the attacks. Be as specific as possible.
         (e.g. "${defaultPurpose}")\n`,
       })) || defaultPurpose;
-    prompts.push(`{{query}}`);
 
     recordOnboardingStep('choose purpose', { value: purpose });
   } else if (redTeamChoice === 'prompt_model_chatbot') {
@@ -230,13 +235,13 @@ export async function redteamInit(directory: string | undefined) {
     prompts.push(prompt);
   } else {
     prompts.push(
-      'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}',
+      'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}',
     );
   }
 
   let providers: (string | ProviderOptions)[];
   if (useCustomProvider) {
-    if (redTeamChoice === 'http_endpoint') {
+    if (redTeamChoice === 'http_endpoint' || redTeamChoice === 'not_sure') {
       providers = [
         {
           id: 'https://example.com/generate',
@@ -547,10 +552,11 @@ export async function redteamInit(directory: string | undefined) {
   if (deferGeneration) {
     logger.info(
       '\n' +
-        chalk.blue(
-          'To generate test cases after editing your configuration, use the command: ' +
-            chalk.bold('promptfoo redteam generate'),
-        ),
+        chalk.green(dedent`
+          To generate test cases after editing your configuration, use the command:
+
+              ${chalk.bold('promptfoo redteam generate')}
+        `),
     );
     return;
   } else {
