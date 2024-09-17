@@ -5,7 +5,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import * as React from 'react';
+import React, { useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { callApi } from '@app/api';
 import { useToast } from '@app/app/contexts/ToastContext';
@@ -291,6 +291,9 @@ function ResultsTable({
   ]);
 
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
+  const parseQueryParams = (queryString: string) => {
+    return Object.fromEntries(new URLSearchParams(queryString));
+  };
 
   React.useEffect(() => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
@@ -615,6 +618,58 @@ function ResultsTable({
     },
   });
 
+  useEffect(() => {
+    const params = parseQueryParams(window.location.search);
+    const rowId = params['row-id'];
+
+    if (rowId) {
+      const rowIndex = Number(rowId.split('-').pop()); // Extract the row index from the rowId
+
+      // Calculate the page number where the row is located
+      const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
+
+      // Make sure the pageIndex doesn't exceed the total number of pages
+      const maxPageIndex = reactTable.getPageCount() - 1;
+      const safeRowPageIndex = Math.min(rowPageIndex, maxPageIndex);
+
+      // If the current page isn't the correct page, set the pagination
+      if (pagination.pageIndex !== safeRowPageIndex) {
+        setPagination((prev) => ({ ...prev, pageIndex: safeRowPageIndex }));
+      }
+
+      // Wait for the correct page to load and scroll to the correct row
+      const scrollToRow = () => {
+        const globalRowIndex = rowIndex % pagination.pageSize; // Calculate the local row index on the page
+        const rowElement = document.querySelector(`#row-${globalRowIndex}`);
+
+        if (rowElement) {
+          rowElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          rowElement.classList.add('highlight');
+          setTimeout(() => {
+            rowElement.classList.remove('highlight');
+          }, 2000);
+        }
+      };
+
+      // Observe DOM changes and trigger scrolling once the page is ready
+      const observer = new MutationObserver(() => {
+        const rowElement = document.querySelector(`#row-${rowIndex % pagination.pageSize}`);
+        if (rowElement) {
+          scrollToRow();
+          observer.disconnect(); // Disconnect the observer once scrolling is done
+        }
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+
+      // Cleanup the observer when the component unmounts
+      return () => observer.disconnect();
+    }
+  }, [pagination.pageIndex, pagination.pageSize, reactTable]);
+
   return (
     <div>
       <table
@@ -650,8 +705,9 @@ function ResultsTable({
         <tbody>
           {reactTable.getRowModel().rows.map((row, rowIndex) => {
             let colBorderDrawn = false;
+
             return (
-              <tr key={row.id}>
+              <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
                 {row.getVisibleCells().map((cell) => {
                   const isMetadataCol =
                     cell.column.id.startsWith('Variable') || cell.column.id === 'description';
@@ -666,9 +722,7 @@ function ResultsTable({
                       style={{
                         width: cell.column.getSize(),
                       }}
-                      className={`${isMetadataCol ? 'variable' : ''} ${
-                        shouldDrawRowBorder ? 'first-prompt-row' : ''
-                      } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
+                      className={`${isMetadataCol ? 'variable' : ''} ${shouldDrawRowBorder ? 'first-prompt-row' : ''} ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
@@ -683,7 +737,7 @@ function ResultsTable({
         <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             onClick={() => {
-              setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));
+              setPagination((prev) => ({ ...prev, pageIndex: Math.max(prev.pageIndex - 1, 0) }));
               window.scrollTo(0, 0);
             }}
             disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -699,8 +753,8 @@ function ResultsTable({
               value={reactTable.getState().pagination.pageIndex + 1}
               onChange={(e) => {
                 const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                setPagination((old) => ({
-                  ...old,
+                setPagination((prev) => ({
+                  ...prev,
                   pageIndex: Math.min(Math.max(page, 0), reactTable.getPageCount() - 1),
                 }));
               }}
@@ -713,9 +767,9 @@ function ResultsTable({
           </Typography>
           <Button
             onClick={() => {
-              setPagination((old) => ({
-                ...old,
-                pageIndex: Math.min(old.pageIndex + 1, reactTable.getPageCount() - 1),
+              setPagination((prev) => ({
+                ...prev,
+                pageIndex: Math.min(prev.pageIndex + 1, reactTable.getPageCount() - 1),
               }));
               window.scrollTo(0, 0);
             }}

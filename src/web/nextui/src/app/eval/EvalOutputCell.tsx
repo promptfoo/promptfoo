@@ -226,6 +226,13 @@ function EvalOutputCell({
     }
   }, [onRating, output.score, output.gradingResult?.comment]);
 
+  const [linked] = React.useState(false);
+  const handleRowShareLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('row-id', String(rowIndex));
+    navigator.clipboard.writeText(url.toString());
+  }, [rowIndex]);
+
   const [copied, setCopied] = React.useState(false);
   const handleCopy = React.useCallback(() => {
     navigator.clipboard.writeText(output.text);
@@ -338,6 +345,15 @@ function EvalOutputCell({
           >
             <Tooltip title="Toggle test highlight">
               <span>🌟</span>
+            </Tooltip>
+          </span>
+          <span
+            className="action"
+            onClick={handleRowShareLink}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <Tooltip title="Share output">
+              <span>{linked ? '✅' : '🔗'}</span>
             </Tooltip>
           </span>
         </>
