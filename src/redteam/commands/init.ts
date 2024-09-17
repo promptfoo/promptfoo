@@ -61,38 +61,6 @@ targets:
   {% endif -%}
   {% endfor %}
 
-{% if plugins.length > 0 -%}
-# Each plugin generates {{numTests}} adversarial inputs.
-# To control the number of tests for each plugin, use:
-# - id: plugin-name
-#   numTests: 10
-plugins:
-  {% for plugin in plugins -%}
-  {% if plugin is string -%}
-  - {{plugin}}  # {{descriptions[plugin]}}
-  {% else -%}
-  - id: {{plugin.id}}  # {{descriptions[plugin.id]}}
-    {% if plugin.numTests is defined -%}
-    numTests: {{plugin.numTests}}
-    {% endif -%}
-    {%- if plugin.config is defined -%}
-    config:
-      {%- for k, v in plugin.config %}
-      {{k}}: {{v | dump}}
-      {%- endfor -%}
-    {%- endif %}
-  {% endif -%}
-  {%- endfor %}
-{% endif -%}
-
-{% if strategies.length > 0 -%}
-# Attack methods for applying adversarial inputs
-strategies:
-  {% for strategy in strategies -%}
-  - {{strategy}} # {{descriptions[strategy]}}
-  {% endfor %}
-{% endif -%}
-
 # Other redteam settings
 redteam:
   {% if purpose is defined -%}
@@ -101,6 +69,38 @@ redteam:
   # Default number of inputs to generate for each plugin.
   # The total number of tests will be (numTests * plugins.length * (1 + strategies.length))
   numTests: {{numTests}}
+
+  {% if plugins.length > 0 -%}
+  # Each plugin generates {{numTests}} adversarial inputs.
+  # To control the number of tests for each plugin, use:
+  # - id: plugin-name
+  #   numTests: 10
+  plugins:
+    {% for plugin in plugins -%}
+    {% if plugin is string -%}
+    - {{plugin}}  # {{descriptions[plugin]}}
+    {% else -%}
+    - id: {{plugin.id}}  # {{descriptions[plugin.id]}}
+      {% if plugin.numTests is defined -%}
+      numTests: {{plugin.numTests}}
+      {% endif -%}
+      {%- if plugin.config is defined -%}
+      config:
+        {%- for k, v in plugin.config %}
+        {{k}}: {{v | dump}}
+        {%- endfor -%}
+      {%- endif %}
+    {% endif -%}
+    {%- endfor %}
+  {% endif -%}
+
+  {% if strategies.length > 0 -%}
+  # Attack methods for applying adversarial inputs
+  strategies:
+    {% for strategy in strategies -%}
+    - {{strategy}} # {{descriptions[strategy]}}
+    {% endfor %}
+  {% endif -%}
 `;
 
 const CUSTOM_PROVIDER_TEMPLATE = `# Custom provider for red teaming
@@ -544,7 +544,9 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   console.clear();
-  logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
+  logger.info(
+    chalk.green(`\nCreated red teaming configuration file at ${chalk.bold(configPath)}\n`),
+  );
 
   telemetry.record('command_used', { name: 'redteam init' });
   await recordOnboardingStep('finish');
