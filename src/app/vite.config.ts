@@ -2,6 +2,7 @@
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 const API_PORT = process.env.API_PORT || '15500';
 
@@ -27,7 +28,7 @@ export default defineConfig({
   server: {
     port: 3000,
   },
-  plugins: [react()],
+  plugins: [react(), nodePolyfills()],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
