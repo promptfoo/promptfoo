@@ -40,14 +40,7 @@ jest.mock('../src/util', () => {
 });
 
 jest.mock('../src/esm', () => ({
-  importModule: jest.fn().mockResolvedValue(
-    class CustomApiProvider {
-      options: any;
-      constructor(options: any) {
-        this.options = options;
-      }
-    },
-  ),
+  importModule: jest.fn(),
 }));
 
 jest.mock('../src/testCases', () => {
@@ -665,7 +658,7 @@ describe('resolveConfigs', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         prompts: ['prompt1'],
-        providers: ['provider1'],
+        providers: ['openai:foobar'],
       }),
     );
 
@@ -818,10 +811,9 @@ describe('readConfig', () => {
       providers: ['openai:gpt-4o'],
       prompts: ['Hello, world!'],
     };
+
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.js' } as any);
-    jest.mock('../src/esm', () => ({
-      importModule: jest.fn().mockResolvedValue(mockConfig),
-    }));
+    jest.mocked(importModule).mockResolvedValue(mockConfig);
 
     const result = await readConfig('config.js');
 
