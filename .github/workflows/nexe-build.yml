@@ -57,16 +57,13 @@ jobs:
       - name: Build executable
         run: npx nexe --build -r drizzle/ -r package.json -r "dist/**/*" -i dist/src/main.js -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}
 
-      - name: Upload Release Asset
+      - name: Release
+        uses: softprops/action-gh-release@v2
         if: github.event_name == 'release'
-        uses: actions/upload-release-asset@v1
+        with:
+          files: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
-          asset_name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}
-          asset_content_type: application/octet-stream
 
       - name: Upload Artifact
         if: github.event_name != 'release'
