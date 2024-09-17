@@ -63,14 +63,14 @@ Edit the config to set up the prompt(s) and the LLM(s) you want to test:
 prompts:
   - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
 
-providers:
+targets:
   - openai:gpt-4o-mini
   - anthropic:messages:claude-3.5-sonnet-20240620
 ```
 
 ### Talking to your app
 
-Promptfoo can hook directly into your existing LLM app (Python, Javascript, etc), RAG or agent workflows, or send requests to your API. See [custom providers](/docs/red-team/configuration/#custom-providers) for details on setting up:
+Promptfoo can hook directly into your existing LLM app to attack targets via Python, Javascript, RAG or agent workflows, HTTP API, and more. See [custom providers](/docs/red-team/configuration/#custom-providers) for details on setting up:
 
 - [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
 - [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
