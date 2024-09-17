@@ -1,6 +1,6 @@
 import fs from 'fs';
 import { PythonShell } from 'python-shell';
-import { state } from '../../src/python/pythonUtils';
+import { state, validatePythonPath } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 
 jest.mock('../../src/esm');
@@ -29,7 +29,12 @@ describe('wrapper', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    state.cachedPythonPath = '/usr/bin/python3';
+    jest
+      .mocked(validatePythonPath)
+      .mockImplementation((pythonPath: string, isExplicit: boolean): Promise<string> => {
+        state.cachedPythonPath = pythonPath;
+        return Promise.resolve(pythonPath);
+      });
   });
 
   describe('runPythonCode', () => {
