@@ -1,4 +1,5 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
+import logger from './logger';
 import type { Assertion, AssertionType, CsvRow, TestCase } from './types';
 import { BaseAssertionTypesSchema } from './types';
 
@@ -115,7 +116,22 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   let description: string | undefined;
   let metric: string | undefined;
   let threshold: number | undefined;
+  const reservedKeys = [
+    'expected',
+    'prefix',
+    'suffix',
+    'description',
+    'providerOutput',
+    'metric',
+    'threshold',
+  ];
   for (const [key, value] of Object.entries(row)) {
+    const prefixes = ['_'];
+    if (reservedKeys.includes(key.slice(1)) && prefixes.some(prefix => key.startsWith(prefix))) {
+      logger.warn(
+        `Key ${key} has only one underscore. Did you mean to use two underscores (${key.replace('_', '__')}) for a reserved key?`,
+      );
+    }
     if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
         asserts.push(assertionFromString(value));
