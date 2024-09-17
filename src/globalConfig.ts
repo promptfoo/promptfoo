@@ -70,7 +70,7 @@ export function maybeRecordFirstRun(): boolean {
       return true;
     }
     return false;
-  } catch (err) {
+  } catch {
     return false;
   }
 }
