@@ -12,7 +12,6 @@ const assertionRegex = new RegExp(
 );
 
 export function assertionFromString(expected: string): Assertion {
-  logger.warn(`begin expected: ${expected}`);
   // Legacy options
   if (
     expected.startsWith('javascript:') ||
@@ -53,7 +52,7 @@ export function assertionFromString(expected: string): Assertion {
   }
 
   const regexMatch = expected.match(assertionRegex);
-  logger.warn(`expected: ${expected}`);
+
   if (regexMatch) {
     const [_, notPrefix, type, thresholdStr, value] = regexMatch as [
       string,
