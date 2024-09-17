@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { USE_SUPABASE } from '@app/constants';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { Button, CircularProgress } from '@mui/material';
@@ -64,12 +63,9 @@ const RunTestSuiteButton: React.FC = () => {
         if (progressData.status === 'complete') {
           clearInterval(intervalId);
           setIsRunning(false);
-          if (USE_SUPABASE) {
-            navigate(`/eval/remote:${encodeURIComponent(job.id)}`);
-          } else {
-            // TODO(ian): This just redirects to the eval page, which shows the most recent eval.  Redirect to this specific eval to avoid race.
-            navigate('/eval');
-          }
+
+          // TODO(ian): This just redirects to the eval page, which shows the most recent eval.  Redirect to this specific eval to avoid race.
+          navigate('/eval');
         } else if (progressData.status === 'failed') {
           clearInterval(intervalId);
           setIsRunning(false);

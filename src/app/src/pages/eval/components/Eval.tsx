@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@app/constants';
+import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import useApiConfig from '@app/stores/apiConfig';
@@ -63,12 +63,7 @@ export default function Eval({
   );
 
   const handleRecentEvalSelection = async (id: string) => {
-    if (USE_SUPABASE) {
-      setLoaded(false);
-      navigate(`/eval/remote:${encodeURIComponent(id)}`);
-    } else {
-      navigate(`/eval/?evalId=${encodeURIComponent(id)}`);
-    }
+    navigate(`/eval/?evalId=${encodeURIComponent(id)}`);
   };
 
   const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
@@ -135,8 +130,6 @@ export default function Eval({
       return () => {
         socket.disconnect();
       };
-    } else if (USE_SUPABASE) {
-      console.log('Eval init: Using Supabase');
     } else {
       console.log('Eval init: Fetching eval via recent');
       // Fetch from server

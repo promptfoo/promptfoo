@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
-import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@app/constants';
+import { IS_RUNNING_LOCALLY } from '@app/constants';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
 import { Stack, IconButton, Tooltip } from '@mui/material';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
-import LoggedInAs from './LoggedInAs';
 import Logo from './Logo';
 import './Navigation.css';
 
@@ -46,7 +45,6 @@ export default function Navigation({
         </>
       )}
       <div className="right-aligned">
-        {USE_SUPABASE ? <LoggedInAs /> : null}
         <IconButton onClick={handleModalToggle} sx={{ color: '#f0f0f0' }}>
           <InfoIcon />
         </IconButton>
