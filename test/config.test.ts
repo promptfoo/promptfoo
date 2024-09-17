@@ -870,4 +870,24 @@ describe('readConfig', () => {
       },
     });
   });
+
+  it('should set default prompt when no prompts are provided', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      tests: [
+        { vars: { someVar: 'value', prompt: 'abc' } },
+        { vars: { anotherVar: 'anotherValue', prompt: 'yo mama' } },
+      ],
+    };
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+
+    const result = await readConfig('config.json');
+
+    expect(result).toEqual({
+      ...mockConfig,
+      prompts: ['{{prompt}}'],
+    });
+  });
 });
