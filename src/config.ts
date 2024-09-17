@@ -19,6 +19,8 @@ import type {
   CommandLineOptions,
   Prompt,
   ProviderOptions,
+  RedteamPluginObject,
+  RedteamStrategyObject,
   Scenario,
   TestCase,
   TestSuite,
@@ -138,14 +140,39 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 }
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
+  let ret: UnifiedConfig & {
+    targets?: UnifiedConfig['providers'];
+    plugins?: RedteamPluginObject[];
+    strategies?: RedteamStrategyObject[];
+  };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
-    return dereferenceConfig(rawConfig || {});
+    ret = await dereferenceConfig(rawConfig || {});
   } else if (isJavascriptFile(configPath)) {
-    return (await importModule(configPath)) as UnifiedConfig;
+    ret = (await importModule(configPath)) as UnifiedConfig;
+  } else {
+    throw new Error(`Unsupported configuration file format: ${ext}`);
   }
-  throw new Error(`Unsupported configuration file format: ${ext}`);
+
+  if (ret.targets) {
+    logger.debug(`Rewriting config.targets to config.providers`);
+    ret.providers = ret.targets;
+    delete ret.targets;
+  }
+  if (ret.plugins) {
+    logger.debug(`Rewriting config.plugins to config.redteam.plugins`);
+    ret.redteam = ret.redteam || {};
+    ret.redteam.plugins = ret.plugins;
+    delete ret.plugins;
+  }
+  if (ret.strategies) {
+    logger.debug(`Rewriting config.strategies to config.redteam.strategies`);
+    ret.redteam = ret.redteam || {};
+    ret.redteam.strategies = ret.strategies;
+    delete ret.strategies;
+  }
+  return ret;
 }
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
