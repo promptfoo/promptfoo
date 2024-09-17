@@ -44,7 +44,7 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
         completion: resp.tokenUsage?.completion || 0,
       },
     };
-  } catch (err) {
+  } catch {
     return {
       error: `Output is not valid JSON: ${resp.output}`,
       tokensUsed: {

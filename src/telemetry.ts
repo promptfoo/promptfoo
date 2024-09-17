@@ -103,7 +103,9 @@ export class Telemetry {
         if (response.ok) {
           this.events = [];
         }
-      } catch (err) {}
+      } catch {
+        // ignore
+      }
     }
   }
 

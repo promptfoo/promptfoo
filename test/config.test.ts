@@ -1,8 +1,10 @@
 import * as fs from 'fs';
 import { globSync } from 'glob';
+import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from '../src/cliState';
-import { dereferenceConfig, readConfigs, resolveConfigs } from '../src/config';
+import { dereferenceConfig, readConfig, readConfigs, resolveConfigs } from '../src/config';
+import { importModule } from '../src/esm';
 import { readPrompts } from '../src/prompts';
 import { readTests } from '../src/testCases';
 import type { Prompt, UnifiedConfig } from '../src/types';
@@ -38,14 +40,7 @@ jest.mock('../src/util', () => {
 });
 
 jest.mock('../src/esm', () => ({
-  importModule: jest.fn().mockResolvedValue(
-    class CustomApiProvider {
-      options: any;
-      constructor(options: any) {
-        this.options = options;
-      }
-    },
-  ),
+  importModule: jest.fn(),
 }));
 
 jest.mock('../src/testCases', () => {
@@ -663,7 +658,7 @@ describe('resolveConfigs', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         prompts: ['prompt1'],
-        providers: ['provider1'],
+        providers: ['openai:foobar'],
       }),
     );
 
@@ -771,6 +766,108 @@ describe('resolveConfigs', () => {
       extensions: [],
       nunjucksFilters: {},
       providerPromptMap: {},
+    });
+  });
+});
+
+describe('readConfig', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should read JSON config file', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+
+    const result = await readConfig('config.json');
+
+    expect(result).toEqual(mockConfig);
+    expect(fs.readFileSync).toHaveBeenCalledWith('config.json', 'utf-8');
+  });
+
+  it('should read YAML config file', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);
+
+    const result = await readConfig('config.yaml');
+
+    expect(result).toEqual(mockConfig);
+    expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
+  });
+
+  it('should read JavaScript config file', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
+
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.js' } as any);
+    jest.mocked(importModule).mockResolvedValue(mockConfig);
+
+    const result = await readConfig('config.js');
+
+    expect(result).toEqual(mockConfig);
+    expect(importModule).toHaveBeenCalledWith('config.js');
+  });
+
+  it('should throw error for unsupported file format', async () => {
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.txt' } as any);
+
+    await expect(readConfig('config.txt')).rejects.toThrow(
+      'Unsupported configuration file format: .txt',
+    );
+  });
+
+  it('should rewrite targets to providers', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      targets: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+
+    const result = await readConfig('config.json');
+
+    expect(result).toEqual({
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    });
+  });
+
+  it('should rewrite plugins and strategies to redteam', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      plugins: ['plugin1'],
+      strategies: ['strategy1'],
+    };
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+
+    const result = await readConfig('config.json');
+
+    expect(result).toEqual({
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      redteam: {
+        plugins: ['plugin1'],
+        strategies: ['strategy1'],
+      },
     });
   });
 });

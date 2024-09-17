@@ -9,14 +9,20 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Set environment variables for the build
-ENV NEXT_PUBLIC_HOSTED=1 \
-    NEXT_TELEMETRY_DISABLED=1
+ENV VITE_IS_HOSTED=1 \
+VITE_TELEMETRY_DISABLED=1
 
 COPY . .
 
-RUN npm install --install-links --include=peer && \
-    mkdir -p src/web/nextui/out && \
-    npm run build
+RUN npm install --install-links --include=peer
+
+
+# Run npm install for the react app
+WORKDIR /app/src/app
+RUN npm install
+
+WORKDIR /app
+RUN npm run build
 
 FROM base AS server
 

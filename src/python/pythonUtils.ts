@@ -39,7 +39,7 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
         ),
       ]);
       return (result as { stdout: string }).stdout.trim();
-    } catch (error) {
+    } catch {
       return null;
     }
   }
