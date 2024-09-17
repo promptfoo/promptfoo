@@ -35,6 +35,7 @@ import type {
 } from './types';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
+import { maybeLoadFromExternalFile } from './util';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
@@ -369,7 +370,11 @@ export function renderLlmRubricPrompt(
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
 ) {
-  const rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
+  let rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
+  
+  // Load from external file if the rubricPrompt starts with 'file://'
+  rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
+  
   invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
   return nunjucks.renderString(rubricPrompt, {
     output: JSON.stringify(llmOutput).slice(1, -1),
@@ -399,8 +404,6 @@ export async function matchesLlmRubric(
     });
   }
 
-  const rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
-  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
   const prompt = renderLlmRubricPrompt(rubric, llmOutput, grading, vars);
 
   const defaultProviders = await getDefaultProviders();
