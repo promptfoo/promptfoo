@@ -55,37 +55,52 @@ This guide describes how to get started with Promptfoo's gen AI red teaming tool
 
 The `init` command creates some placeholders, including a `promptfooconfig.yaml` file. We'll use this config file to do most of our setup.
 
-## Set the prompt & models to test
+## Attacking an API endpoint
 
-Edit the config to set up the prompt(s) and the LLM(s) you want to test:
+Edit the config to set up the target endpoint. For example:
+
+```yaml
+targets:
+  - id: 'https://example.com/generate'
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        myPrompt: '{{prompt}}'
+      responseParser: 'json.output'
+
+purpose: 'Budget travel agent'
+```
+
+Setting the `purpose` is optional, but it will significantly improve the quality of the generated test cases (try to be specific).
+
+For more information on configuring an HTTP target, see [HTTP requests](/docs/providers/http/).
+
+### Alternative: Test specific prompts and models
+
+If you don't have a live endpoint, you can edit the config to set the specific prompt(s) and the LLM(s) to test:
 
 ```yaml
 prompts:
   - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
+  # Paths to prompts also work:
+  # - file://path/to/prompt.txt
 
-providers:
+targets:
   - openai:gpt-4o-mini
   - anthropic:messages:claude-3.5-sonnet-20240620
 ```
 
-### Talking to your app
+For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/parameters/#prompts).
 
-Promptfoo can hook directly into your existing LLM app (Python, Javascript, etc), RAG or agent workflows, or send requests to your API. See [custom providers](/docs/red-team/configuration/#custom-providers) for details on setting up:
+### Alternative: Talking directly to your app
+
+Promptfoo can hook directly into your existing LLM app to attack targets via Python, Javascript, RAG or agent workflows, HTTP API, and more. See [custom providers](/docs/red-team/configuration/#custom-providerstargets) for details on setting up:
 
 - [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
 - [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
 - [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
-
-### Prompting
-
-Your prompt may be [dynamic](/docs/configuration/parameters/#prompt-functions), or maybe it's constructed entirely on the application side and you just want to [pass through](/docs/red-team/configuration/#passthrough-prompts) the adversarial input. Also note that files are accepted:
-
-```yaml
-prompts:
-  - file://path/to/prompt.json
-```
-
-Learn more about [prompt formats](/docs/configuration/parameters/#prompts).
 
 ## Generate adversarial test cases
 
@@ -110,10 +125,6 @@ The `init` step will do this for you automatically, but in case you'd like to ma
 </Tabs>
 
 This will generate several hundred adversarial inputs across many categories of potential harm and save them in `redteam.yaml`.
-
-## Changing the provider (optional)
-
-By default we use OpenAI's `gpt-4o` model to generate the adversarial inputs, but we support hundreds of other models. Learn more about [setting the provider](/docs/red-team/configuration/#providers).
 
 ## Run the eval
 
