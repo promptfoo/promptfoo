@@ -99,15 +99,13 @@ export async function runPython(
     os.tmpdir(),
     `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
-  const pythonPath = options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON') || 'python';
+  const customPath = options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON');
+  const pythonPath = customPath || 'python';
 
-  await validatePythonPath(
-    pythonPath,
-    typeof (options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON')) === 'string',
-  );
+  await validatePythonPath(pythonPath, typeof customPath === 'string');
 
   const pythonOptions: PythonShellOptions = {
-    mode: 'text',
+    mode: 'binary',
     pythonPath,
     scriptPath: __dirname,
     args: [absPath, method, tempJsonPath, outputPath],
