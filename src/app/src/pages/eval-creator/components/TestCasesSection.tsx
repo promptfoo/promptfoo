@@ -1,6 +1,5 @@
 import React from 'react';
 import { useStore } from '@app/stores/evalConfig';
-import { testCaseFromCsvRow } from '@app/utils/csv';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';
@@ -16,6 +15,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { testCaseFromCsvRow } from '@promptfoo/csv';
 import type { CsvRow, TestCase } from '@promptfoo/types';
 import TestCaseDialog from './TestCaseDialog';
 
