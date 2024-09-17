@@ -58,7 +58,7 @@ export function startServer(
 ) {
   const app = express();
 
-  const staticDir = path.join(getDirectory(), 'web', 'nextui');
+  const staticDir = path.join(getDirectory(), 'app');
 
   app.use(cors());
   app.use(compression());
@@ -87,6 +87,10 @@ export function startServer(
 
   io.on('connection', async (socket) => {
     socket.emit('init', await getLatestEval(filterDescription));
+  });
+
+  app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK' });
   });
 
   app.get('/api/results', (req, res) => {
@@ -165,7 +169,7 @@ export function startServer(
     try {
       updateResult(id, config, table);
       res.json({ message: 'Eval updated successfully' });
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: 'Failed to update eval table' });
     }
   });
@@ -187,7 +191,7 @@ export function startServer(
     try {
       await deleteEval(id);
       res.json({ message: 'Eval deleted successfully' });
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: 'Failed to delete eval' });
     }
   });
@@ -242,6 +246,11 @@ export function startServer(
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
   app.use(express.static(staticDir));
+
+  // Handle client routing, return all requests to the app
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(staticDir, 'index.html'));
+  });
 
   httpServer
     .listen(port, () => {

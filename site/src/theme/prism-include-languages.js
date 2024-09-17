@@ -14,10 +14,8 @@ export default function prismIncludeLanguages(PrismObject) {
   globalThis.Prism = PrismObject;
   additionalLanguages.forEach((lang) => {
     if (lang === 'php') {
-      // eslint-disable-next-line global-require
       require('prismjs/components/prism-markup-templating.js');
     }
-    // eslint-disable-next-line global-require
     require(`prismjs/components/prism-${lang}`);
   });
   // delete globalThis.Prism;

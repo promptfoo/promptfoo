@@ -402,6 +402,7 @@ class Evaluator {
               cached: 0,
             },
             namedScores: {},
+            namedScoresCount: {},
             cost: 0,
           },
         };
@@ -653,6 +654,38 @@ class Evaluator {
       metrics.score += row.score;
       for (const [key, value] of Object.entries(row.namedScores)) {
         metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+        metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
+      }
+
+      if (testSuite.redteam) {
+        for (const gradingResult of row.gradingResult?.componentResults || []) {
+          const pluginId = gradingResult.metadata?.pluginId;
+          const strategyId = gradingResult.metadata?.strategyId;
+          if (pluginId) {
+            metrics.redteam = metrics.redteam || {
+              pluginScores: {},
+              pluginScoresCount: {},
+              strategyScores: {},
+              strategyScoresCount: {},
+            };
+            metrics.redteam.pluginScores[pluginId] =
+              (metrics.redteam.pluginScores[pluginId] || 0) + gradingResult.score;
+            metrics.redteam.pluginScoresCount[pluginId] =
+              (metrics.redteam.pluginScoresCount[pluginId] || 0) + 1;
+          }
+          if (strategyId) {
+            metrics.redteam = metrics.redteam || {
+              pluginScores: {},
+              pluginScoresCount: {},
+              strategyScores: {},
+              strategyScoresCount: {},
+            };
+            metrics.redteam.strategyScores[strategyId] =
+              (metrics.redteam.strategyScores[strategyId] || 0) + gradingResult.score;
+            metrics.redteam.strategyScoresCount[strategyId] =
+              (metrics.redteam.strategyScoresCount[strategyId] || 0) + 1;
+          }
+        }
       }
 
       if (testSuite.derivedMetrics) {

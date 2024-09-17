@@ -4,7 +4,7 @@ export function isValidJson(str: string): boolean {
   try {
     JSON.parse(str);
     return true;
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -46,7 +46,7 @@ export function extractJsonObjects(str: string): object[] {
       // an opening bracket after the last closing bracket
       openBracket = str.indexOf('{', closeBracket + 1);
       closeBracket = str.indexOf('}', openBracket);
-    } catch (err) {
+    } catch {
       // Not a valid object, move on to the next closing bracket
       closeBracket = str.indexOf('}', closeBracket + 1);
       let closeBracketAttempts = 0;

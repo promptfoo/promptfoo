@@ -310,7 +310,7 @@ class CrescendoProvider implements ApiProvider {
 
     logger.debug(dedent`
       Received from red teaming chat:
-      
+
       generatedQuestion: ${parsedOutput.generatedQuestion}
       rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
       lastResponseSummary: ${parsedOutput.lastResponseSummary}
@@ -359,7 +359,7 @@ class CrescendoProvider implements ApiProvider {
         }
         this.memory.addMessage(this.targetConversationId, message);
       }
-    } catch (e) {
+    } catch {
       // Otherwise, just send the rendered prompt as a string
       this.memory.addMessage(this.targetConversationId, {
         role: 'user',

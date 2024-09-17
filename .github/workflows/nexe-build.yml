@@ -1,5 +1,8 @@
 name: nexe build
-run-name: promptfoo nexe build by @${{ github.actor }}
+run-name: |
+  ${{ github.event_name == 'release' && 'Release ' || 'Manual ' }}
+  Nexe build for ${{ github.ref_name }}:
+  Promptfoo CLI executables by @${{ github.actor }}
 
 on:
   release:
@@ -9,6 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,6 +20,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - run: npm ci
+      - run: npm run build
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -24,6 +29,7 @@ jobs:
   nexe-build:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     strategy:
       matrix:
         os: [linux, macos, win]
@@ -39,11 +45,20 @@ jobs:
           name: dist
           path: dist/
       - run: npm ci
+      - name: Cache nexe build artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.nexe
+          key: ${{ runner.os }}-${{ matrix.arch }}-nexe-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-nexe-
       - name: Install nexe globally
         run: npm install -g nexe
       - name: Build executable
-        run: npx nexe --build -r drizzle/ -r package.json -r dist/ src/main.js -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+        run: npx nexe --build -r drizzle/ -r package.json -r "dist/**/*" -i dist/src/main.js -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+
       - name: Upload Release Asset
+        if: github.event_name == 'release'
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -52,3 +67,10 @@ jobs:
           asset_path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
           asset_name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}
           asset_content_type: application/octet-stream
+
+      - name: Upload Artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+          path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}

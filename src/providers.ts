@@ -17,6 +17,7 @@ import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
+import { GolangProvider } from './providers/golangCompletion';
 import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
 import {
@@ -391,6 +392,9 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('ai21:')) {
     const modelName = providerPath.split(':')[1];
     ret = new AI21ChatCompletionProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('golang:')) {
+    const scriptPath = providerPath.split(':').slice(1).join(':');
+    ret = new GolangProvider(scriptPath, providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
