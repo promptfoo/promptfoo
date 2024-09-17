@@ -1,17 +1,37 @@
-import { exec } from 'child_process';
-import { promises as fs } from 'fs';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
-import util from 'util';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
-
-const execAsync = util.promisify(exec);
+import { execAsync } from './execAsync';
 
 export const state: { cachedPythonPath: string | null } = { cachedPythonPath: null };
+
+/**
+ * Attempts to validate a Python executable path.
+ * @param path - The path to the Python executable to test.
+ * @returns The validated path if successful, or null if invalid.
+ */
+export async function tryPath(path: string): Promise<string | null> {
+  try {
+    const result = await Promise.race([
+      execAsync(`${path} --version`),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Command timed out')), 250),
+      ),
+    ]);
+    const versionOutput = (result as { stdout: string }).stdout.trim();
+    if (versionOutput.startsWith('Python')) {
+      return path;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Validates and caches the Python executable path.
@@ -26,44 +46,30 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
     return state.cachedPythonPath;
   }
 
-  const isWindows = process.platform === 'win32';
-  const command = isWindows ? 'where' : 'which';
-  const alternativePath = isWindows ? 'py -3' : 'python3';
-
-  async function tryPath(path: string): Promise<string | null> {
-    try {
-      const result = await Promise.race([
-        execAsync(`${command} ${path}`),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Command timed out')), 250),
-        ),
-      ]);
-      return (result as { stdout: string }).stdout.trim();
-    } catch {
-      return null;
-    }
-  }
   const primaryPath = await tryPath(pythonPath);
   if (primaryPath) {
     state.cachedPythonPath = primaryPath;
     return primaryPath;
   }
+
   if (isExplicit) {
     throw new Error(
-      `Python not found. Tried "${pythonPath}" ` +
-        `Please ensure Python is installed and set the PROMPTFOO_PYTHON environment variable ` +
-        `to your Python executable path (e.g., '${isWindows ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
+      `Python 3 not found. Tried "${pythonPath}" ` +
+        `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
+        `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
     );
   }
+  const alternativePath = process.platform === 'win32' ? 'py -3' : 'python3';
   const secondaryPath = await tryPath(alternativePath);
   if (secondaryPath) {
     state.cachedPythonPath = secondaryPath;
     return secondaryPath;
   }
+
   throw new Error(
-    `Python not found. Tried "${pythonPath}" and "${alternativePath}". ` +
+    `Python 3 not found. Tried "${pythonPath}" and "${alternativePath}". ` +
       `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
-      `to your Python 3 executable path (e.g., '${isWindows ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
+      `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
   );
 }
 
@@ -108,10 +114,10 @@ export async function runPython(
   };
 
   try {
-    await fs.writeFile(tempJsonPath, safeJsonStringify(args), 'utf-8');
+    await fs.writeFileSync(tempJsonPath, safeJsonStringify(args), 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
     await PythonShell.run('wrapper.py', pythonOptions);
-    const output = await fs.readFile(outputPath, 'utf-8');
+    const output = await fs.readFileSync(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
     let result: { type: 'final_result'; data: any } | undefined;
     try {
@@ -142,9 +148,13 @@ export async function runPython(
     );
   } finally {
     await Promise.all(
-      [tempJsonPath, outputPath].map((file) =>
-        fs.unlink(file).catch((error) => logger.error(`Error removing ${file}: ${error}`)),
-      ),
+      [tempJsonPath, outputPath].map((file) => {
+        try {
+          fs.unlinkSync(file);
+        } catch (error) {
+          logger.error(`Error removing ${file}: ${error}`);
+        }
+      }),
     );
   }
 }
