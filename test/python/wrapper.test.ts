@@ -39,15 +39,29 @@ describe('wrapper', () => {
 
   describe('runPythonCode', () => {
     it('should clean up the temporary files after execution', async () => {
-      jest.spyOn(fs, 'writeFileSync').mockReturnValue();
-      jest
-        .spyOn(fs, 'readFileSync')
-        .mockReturnValue('{"type": "final_result", "data": "cleanup test"}');
-      jest.spyOn(fs, 'unlinkSync').mockReturnValue();
+      const mockWriteFileSync = jest.fn();
+      const mockUnlinkSync = jest.fn();
+      const mockRunPython = jest.fn().mockResolvedValue('cleanup test');
+
+      jest.spyOn(fs, 'writeFileSync').mockImplementation(mockWriteFileSync);
+      jest.spyOn(fs, 'unlinkSync').mockImplementation(mockUnlinkSync);
+      jest.mocked(runPython).mockImplementation(mockRunPython);
 
       await runPythonCode('print("cleanup test")', 'main', []);
 
-      expect(fs.unlinkSync).toHaveBeenCalledTimes(3); // Once for the temporary Python file, once for input JSON, once for output JSON
+      expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('temp-python-code-'),
+        'print("cleanup test")',
+      );
+      expect(mockRunPython).toHaveBeenCalledTimes(1);
+      expect(mockRunPython).toHaveBeenCalledWith(
+        expect.stringContaining('temp-python-code-'),
+        'main',
+        [],
+      );
+      expect(mockUnlinkSync).toHaveBeenCalledTimes(1);
+      expect(mockUnlinkSync).toHaveBeenCalledWith(expect.stringContaining('temp-python-code-'));
     });
     it('should execute Python code from a string and read the output file', async () => {
       const mockOutput = { type: 'final_result', data: 'execution result' };
