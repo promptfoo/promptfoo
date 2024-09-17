@@ -114,7 +114,6 @@
     "jest": "^29.7.0",
     "jest-watch-typeahead": "^2.2.2",
     "madge": "^8.0.0",
-    "nexe": "^4.0.0-rc.6",
     "nock": "^13.5.5",
     "nodemon": "^3.1.4",
     "prettier": "^3.3.3",
