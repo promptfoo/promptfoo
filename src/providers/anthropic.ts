@@ -240,7 +240,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
             output: outputFromMessage(parsedCachedResponse),
             tokenUsage: {},
           };
-        } catch (err) {
+        } catch {
           // Could be an old cache item, which was just the text content from TextBlock.
           return {
             output: cachedResponse,

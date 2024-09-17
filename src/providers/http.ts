@@ -51,7 +51,7 @@ export function processBody(
       const renderedValue = nunjucks.renderString(value, vars || {});
       try {
         processedBody[key] = JSON.parse(renderedValue);
-      } catch (error) {
+      } catch {
         processedBody[key] = renderedValue;
       }
     } else {

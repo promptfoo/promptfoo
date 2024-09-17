@@ -22,7 +22,7 @@ export function stripAuthFromUrl(urlString: string): string {
     url.username = '';
     url.password = '';
     return url.toString();
-  } catch (error) {
+  } catch {
     logger.warn('Failed to parse URL, returning original');
     return urlString;
   }
