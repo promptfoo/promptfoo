@@ -1,13 +1,19 @@
 import Cal, { getCalApi } from '@calcom/embed-react';
 import React, { useEffect } from 'react';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 import styles from './contact.module.css';
 
-function ContactForm() {
+function Calendar() {
   useEffect(() => {
     (async function () {
       const cal = await getCalApi({});
@@ -63,8 +69,72 @@ export default function Contact(): JSX.Element {
             📅 Or book a time below
           </Typography>
         </Box>
+
+        <Box mb={4}>
+          <Typography variant="h4" gutterBottom>
+            Contact Form
+          </Typography>
+          <form action="https://submit-form.com/ghriv7voL" className={styles.contactForm}>
+            <TextField
+              fullWidth
+              id="name"
+              name="name"
+              label="Your Name"
+              variant="outlined"
+              required
+              margin="normal"
+            />
+            <TextField
+              fullWidth
+              id="email"
+              name="email"
+              label="Work Email"
+              type="email"
+              variant="outlined"
+              required
+              margin="normal"
+            />
+            <TextField
+              fullWidth
+              id="company"
+              name="company"
+              label="Company Name"
+              variant="outlined"
+              required
+              margin="normal"
+            />
+            <FormControl fullWidth margin="normal" variant="outlined" required>
+              <InputLabel id="interested-in-label">Interested In</InputLabel>
+              <Select
+                labelId="interested-in-label"
+                id="interested-in"
+                name="interested-in"
+                label="Interested In"
+              >
+                <MenuItem value="Security/red teaming">Security/red teaming</MenuItem>
+                <MenuItem value="Evaluations">Evaluations</MenuItem>
+                <MenuItem value="Other">Other</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              fullWidth
+              id="meeting-about"
+              name="meeting-about"
+              label="What is this meeting about?"
+              multiline
+              rows={4}
+              variant="outlined"
+              required
+              margin="normal"
+            />
+            <Button type="submit" variant="contained" color="primary" sx={{ mt: 2 }}>
+              Send
+            </Button>
+          </form>
+        </Box>
+
         <Box mb={8}>
-          <ContactForm />
+          <Calendar />
         </Box>
       </Container>
     </Layout>
