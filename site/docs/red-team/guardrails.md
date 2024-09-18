@@ -1,5 +1,5 @@
 ---
-sidebar_label: Prompt/PII Guard API
+sidebar_label: Guardrails API
 sidebar_position: 99
 ---
 
