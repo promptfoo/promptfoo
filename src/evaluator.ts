@@ -663,27 +663,33 @@ class Evaluator {
           const strategyId = gradingResult.metadata?.strategyId;
           if (pluginId) {
             metrics.redteam = metrics.redteam || {
-              pluginScores: {},
-              pluginScoresCount: {},
-              strategyScores: {},
-              strategyScoresCount: {},
+              pluginPassCount: {},
+              pluginFailCount: {},
+              strategyPassCount: {},
+              strategyFailCount: {},
             };
-            metrics.redteam.pluginScores[pluginId] =
-              (metrics.redteam.pluginScores[pluginId] || 0) + gradingResult.score;
-            metrics.redteam.pluginScoresCount[pluginId] =
-              (metrics.redteam.pluginScoresCount[pluginId] || 0) + 1;
+            if (gradingResult.pass) {
+              metrics.redteam.pluginPassCount[pluginId] =
+                (metrics.redteam.pluginPassCount[pluginId] || 0) + 1;
+            } else {
+              metrics.redteam.pluginFailCount[pluginId] =
+                (metrics.redteam.pluginFailCount[pluginId] || 0) + 1;
+            }
           }
           if (strategyId) {
             metrics.redteam = metrics.redteam || {
-              pluginScores: {},
-              pluginScoresCount: {},
-              strategyScores: {},
-              strategyScoresCount: {},
+              pluginPassCount: {},
+              pluginFailCount: {},
+              strategyPassCount: {},
+              strategyFailCount: {},
             };
-            metrics.redteam.strategyScores[strategyId] =
-              (metrics.redteam.strategyScores[strategyId] || 0) + gradingResult.score;
-            metrics.redteam.strategyScoresCount[strategyId] =
-              (metrics.redteam.strategyScoresCount[strategyId] || 0) + 1;
+            if (gradingResult.pass) {
+              metrics.redteam.strategyPassCount[strategyId] =
+                (metrics.redteam.strategyPassCount[strategyId] || 0) + 1;
+            } else {
+              metrics.redteam.strategyFailCount[strategyId] =
+                (metrics.redteam.strategyFailCount[strategyId] || 0) + 1;
+            }
           }
         }
       }
