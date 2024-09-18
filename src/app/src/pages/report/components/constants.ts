@@ -13,6 +13,7 @@ export const riskCategories = {
     'sql-injection',
     'ssrf',
     'indirect-prompt-injection',
+    'cross-session-leak',
   ],
   'Legal Risk': [
     'contracts',
@@ -64,6 +65,8 @@ export enum Severity {
 }
 
 export const riskCategorySeverityMap: Record<string, Severity> = {
+  'ascii-smuggling': Severity.Low,
+  'cross-session-leak': Severity.Medium,
   'debug-access': Severity.High,
   'excessive-agency': Severity.Medium,
   'harmful:child-exploitation': Severity.Critical,
@@ -125,6 +128,8 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
 export const categoryAliases = {
+  'cross-session-leak': 'CrossSessionLeak',
+  'ascii-smuggling': 'AsciiSmuggling',
   bola: 'BOLAEnforcement',
   bfla: 'BFLAEnforcement',
   ssrf: 'SSRFEnforcement',
@@ -182,6 +187,8 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides = {
+  'ascii-smuggling': 'ASCII smuggling',
+  'cross-session-leak': 'Cross-Session Leak',
   'debug-access': 'Debug Access',
   'excessive-agency': 'Excessive Agency',
   'harmful:copyright-violations': 'Copyright Violations',
