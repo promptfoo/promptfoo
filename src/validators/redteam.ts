@@ -88,7 +88,7 @@ export const RedteamGenerateOptionsSchema = z
       .optional()
       .describe('Additional strategies to include'),
     /**
-     * @deprecated This property is deprecated and no longer used.
+     * @deprecated No longer in use. Remove in 1.0.0.
      */
     provider: z.string().optional().describe('Provider to use to generate redteam tests'),
     purpose: z.string().optional().describe('Purpose of the redteam generation'),
@@ -102,8 +102,8 @@ export const RedteamGenerateOptionsSchema = z
       .describe('Delay in milliseconds between plugin API calls'),
   })
   .transform((data) => {
-    // Remove the deprecated 'provider' property from the data object
-    const { provider, ...rest } = data;
+    // Removes the deprecated 'provider' property from the data object
+    const { provider: _, ...rest } = data;
     return rest;
   });
 

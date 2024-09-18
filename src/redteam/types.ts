@@ -1,4 +1,3 @@
-import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
