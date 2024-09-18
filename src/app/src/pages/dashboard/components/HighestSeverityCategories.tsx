@@ -1,4 +1,9 @@
 import React from 'react';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  Severity,
+} from '@app/pages/report/components/constants';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
@@ -8,7 +13,6 @@ import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import type { StandaloneEval } from '@promptfoo/util';
-import { categoryAliases, displayNameOverrides, Severity } from '../report/constants';
 import { processCategoryData } from './utils';
 
 interface HighestSeverityCategoriesProps {

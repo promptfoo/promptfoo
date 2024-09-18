@@ -4,7 +4,7 @@ import {
   categoryAliases,
   riskCategorySeverityMap,
   Severity,
-} from '../report/constants';
+} from '@app/pages/report/components/constants';
 
 export function calculateTrend(current: number, previous: number, increaseIsBad: boolean) {
   const difference = current - previous;

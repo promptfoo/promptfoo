@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { Severity } from '../report/constants';
+import { Severity } from '../report/components/constants';
 
 export interface AttackSuccessRateDataPoint {
   date: string;

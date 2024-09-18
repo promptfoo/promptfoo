@@ -1,7 +1,7 @@
 import React from 'react';
+import { Severity } from '@app/pages/report/components/constants';
 import { Paper, Typography } from '@mui/material';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Severity } from '../report/constants';
 
 interface IssuesBySeverityProps {
   severityCounts: Record<Severity, number>;
