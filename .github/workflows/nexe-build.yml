@@ -13,6 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,10 +53,17 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.arch }}-nexe-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.arch }}-nexe-
+          save-always: true
       - name: Install nexe globally
         run: npm install -g nexe
       - name: Build executable
         run: npx nexe --build -r drizzle/ -r package.json -r "dist/**/*" -i dist/src/main.js -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+          path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
 
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -64,10 +72,3 @@ jobs:
           files: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Artifact
-        if: github.event_name != 'release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}
-          path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}

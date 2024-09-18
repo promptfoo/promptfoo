@@ -15,6 +15,8 @@ The plugin generates pairs of prompts simulating two separate user interactions:
 
 It then evaluates if the AI system inappropriately reveals information from one session to another.
 
+![Cross-Session Leak](/img/docs/cross-session-leak.png)
+
 ## Configuration
 
 Include the Cross-Session Leak plugin in your LLM red teaming setup:

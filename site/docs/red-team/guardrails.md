@@ -1,11 +1,11 @@
 ---
-sidebar_label: Prompt/PII Guard API
+sidebar_label: Guardrails API
 sidebar_position: 99
 ---
 
-# LLM Prompt Guard API
+# Guardrails API
 
-The Prompt Guard API helps detect potential security risks in user inputs to language models and identify personally identifiable information (PII).
+The Guardrails API helps detect potential security risks in user inputs to language models and identify personally identifiable information (PII).
 
 ## Base URL
 
