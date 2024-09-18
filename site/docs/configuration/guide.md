@@ -631,6 +631,62 @@ If no function name is specified for Python files, it defaults to `get_transform
 transform: file://transform.py:custom_python_transform
 ```
 
+## Transforming input variables
+
+In addition to transforming outputs, you can also transform input variables before they are used in prompts. This is done using the `transform_vars` option in the defaultTest.
+The transform_vars function should return an object with the transformed variable names and values. Here's an example:
+
+```yaml
+defaultTest:
+  options:
+    transform_vars: |
+      return {
+        uppercase_topic: vars.topic.toUpperCase(),
+        topic_length: vars.topic.length
+      };
+```
+
+In this example, we're creating two new variables: uppercase_topic (an uppercase version of the original topic) and topic_length (the length of the topic string). These new variables can be used in your prompts or assertions.
+
+### Transforms from separate files
+
+You can also use external files for `transform_vars`, similar to output transforms:
+
+```yaml
+efaultTest:
+  options:
+    transform_vars: file://transform_vars.js:customTransformVars
+```
+
+```js
+module.exports = {
+  customTransformVars: (vars, context) => {
+    return {
+      uppercase_topic: vars.topic.toUpperCase(),
+      topic_length: vars.topic.length,
+    };
+  },
+};
+```
+
+For Python:
+
+```yaml
+defaultTest:
+  options:
+    transform_vars: file://transform_vars.py
+```
+
+```python
+def get_transform_vars(vars, context):
+    return {
+        'uppercase_topic': vars['topic'].upper(),
+        'topic_length': len(vars['topic'])
+    }
+```
+
+The transform_vars function receives the original vars object and a context object, allowing you to access and modify variables before they are used in prompts.
+
 ## Config structure and organization
 
 For detailed information on the config structure, see [Configuration Reference](/docs/configuration/reference).
