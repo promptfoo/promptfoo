@@ -38,7 +38,7 @@ function PricingTable() {
     {
       name: 'Enterprise',
       price: 'Custom',
-      description: 'For teams that need advanced features and support',
+      description: 'For teams that need advanced features and cloud-based support',
       features: [
         'All Community features',
         'Team sharing & collaboration',
@@ -46,12 +46,26 @@ function PricingTable() {
         'Centralized security/compliance dashboard',
         'Customized red teaming plugins',
         'SSO and Access Control',
-        'On-premises or private cloud deployment',
+        'Cloud deployment',
         'Priority support & SLA guarantees',
       ],
       cta: 'Schedule Demo',
       ctaLink: 'https://cal.com/team/promptfoo/intro2',
       highlighted: true,
+    },
+    {
+      name: 'On-Premise',
+      price: 'Custom',
+      description: 'For organizations requiring full control over their infrastructure',
+      features: [
+        'All Enterprise features',
+        'Deployment on your own infrastructure',
+        'Complete data isolation',
+        'Dedicated support team',
+      ],
+      cta: 'Contact Sales',
+      ctaLink: '/contact',
+      highlighted: false,
     },
   ];
 

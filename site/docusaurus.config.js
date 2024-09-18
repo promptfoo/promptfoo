@@ -129,11 +129,6 @@ const config = {
             position: 'left',
           },
           {
-            href: '/blog/',
-            label: 'Blog',
-            position: 'left',
-          },
-          {
             href: 'https://github.com/promptfoo/promptfoo',
             label: 'GitHub',
             position: 'right',
