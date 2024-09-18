@@ -233,6 +233,10 @@ const config = {
                 label: 'Discord',
                 href: 'https://discord.gg/gHPS9jjfbs',
               },
+              {
+                label: 'LinkedIn',
+                href: 'https://www.linkedin.com/company/promptfoo/',
+              },
             ],
           },
         ],
