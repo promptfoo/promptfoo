@@ -1,4 +1,4 @@
-This license applies to all files in this directory, src/web/nextui/src/app/dashboard/.
+This license applies to all files in this directory, src/app/src/pages/dashboard/.
 
 The Promptfoo Enterprise license (the "Enterprise License") Copyright (c) 2024 Promptfoo, Inc.
 
