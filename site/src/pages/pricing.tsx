@@ -106,6 +106,45 @@ function PricingTable() {
   );
 }
 
+function EnterpriseFeatures() {
+  const features = [
+    {
+      title: 'Reports & Continuous Monitoring',
+      description:
+        'Understand your LLM security status across all projects with real-time alerts and automated evaluations.',
+      image: '/img/continuous-monitoring@2x.png',
+    },
+    {
+      title: 'Issue Tracking & Guided Remediation',
+      description: 'Track remediation progress and get suggested steps for each issue.',
+      image: '/img/riskreport-2@2x.png',
+    },
+    {
+      title: 'Comprehensive Scanning & Compliance',
+      description:
+        'Additional plugins, help with creating custom plugins, and support for common standards frameworks.',
+      image: '/img/report-with-compliance@2x.png',
+    },
+  ];
+
+  return (
+    <section className={styles.enterpriseFeaturesSection}>
+      <h2>Enterprise Features</h2>
+      {features.map((feature, index) => (
+        <div key={index} className={clsx(styles.featureRow, index % 2 === 1 && styles.reverse)}>
+          <div className={styles.featureContent}>
+            <h3>{feature.title}</h3>
+            <p>{feature.description}</p>
+          </div>
+          <div className={styles.featureImageWrapper}>
+            <img src={feature.image} alt={feature.title} className={styles.featureImage} />
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function FAQSection() {
   const faqs = [
     {
@@ -152,6 +191,7 @@ export default function Pricing(): JSX.Element {
       <main className={styles.pricingPage}>
         <PricingHeader />
         <PricingTable />
+        <EnterpriseFeatures />
         <FAQSection />
       </main>
     </Layout>
