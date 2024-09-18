@@ -12,7 +12,6 @@ import {
 } from '../util';
 
 async function handlePrompt(id: string) {
-  telemetry.maybeShowNotice();
   telemetry.record('command_used', {
     name: 'show prompt',
   });
@@ -60,7 +59,6 @@ async function handlePrompt(id: string) {
 }
 
 async function handleEval(id: string) {
-  telemetry.maybeShowNotice();
   telemetry.record('command_used', {
     name: 'show eval',
   });
@@ -92,7 +90,6 @@ async function handleEval(id: string) {
 }
 
 async function handleDataset(id: string) {
-  telemetry.maybeShowNotice();
   telemetry.record('command_used', {
     name: 'show dataset',
   });
@@ -144,10 +141,9 @@ export async function showCommand(program: Command) {
   const showCommand = program
     .command('show <id>')
     .description('Show details of a specific resource')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (id: string, cmdObj: { envPath?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'show',
       });

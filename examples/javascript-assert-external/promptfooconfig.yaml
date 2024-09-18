@@ -2,7 +2,7 @@ prompts:
   - 'Tell me about {{topic}} in three words'
 
 providers:
-  - openai:gpt-4-1106-preview
+  - openai:gpt-4o
 
 defaultTest:
   assert:

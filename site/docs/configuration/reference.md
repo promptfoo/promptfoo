@@ -83,6 +83,18 @@ To implement these hooks, create a JavaScript or Python file with a function tha
 All extensions receive all event types (beforeAll, afterAll, beforeEach, afterEach). It's up to the extension function to decide which events to handle based on the `hookName` parameter.
 :::
 
+Example configuration:
+
+```yaml
+extensions:
+  - file://path/to/your/extension.js:extensionHook
+  - file://path/to/your/extension.py:extension_hook
+```
+
+:::important
+When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells promptfoo which function to call in the extension file.
+:::
+
 Example extension file (Python):
 
 ```python
@@ -126,18 +138,6 @@ async function extensionHook(hookName, context) {
 
 module.exports = extensionHook;
 ```
-
-Example configuration:
-
-```yaml
-extensions:
-  - file:./path/to/your/extension.js:extensionHook
-  - file:./path/to/your/extension.py:extension_hook
-```
-
-:::important
-When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells promptfoo which function to call in the extension file.
-:::
 
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 
@@ -215,7 +215,7 @@ interface TestSuiteConfig {
   // Optional description of what you're trying to test
   description?: string;
 
-  // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
+  // One or more LLM APIs to use, for example: openai:gpt-4o-mini, openai:gpt-4o, localai:chat:vicuna
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompts

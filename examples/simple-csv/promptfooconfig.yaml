@@ -2,5 +2,5 @@ description: A translator built with LLM
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-3.5-turbo
-tests: tests.csv
+  - openai:gpt-4o-mini
+tests: file://tests.csv

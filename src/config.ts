@@ -13,11 +13,14 @@ import { importModule } from './esm';
 import logger from './logger';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import { loadApiProviders } from './providers';
+import telemetry from './telemetry';
 import { readTest, readTests } from './testCases';
 import type {
   CommandLineOptions,
   Prompt,
   ProviderOptions,
+  RedteamPluginObject,
+  RedteamStrategyObject,
   Scenario,
   TestCase,
   TestSuite,
@@ -137,14 +140,59 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 }
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
+  let ret: UnifiedConfig & {
+    targets?: UnifiedConfig['providers'];
+    plugins?: RedteamPluginObject[];
+    strategies?: RedteamStrategyObject[];
+  };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
-    return dereferenceConfig(rawConfig || {});
+    ret = await dereferenceConfig(rawConfig || {});
   } else if (isJavascriptFile(configPath)) {
-    return (await importModule(configPath)) as UnifiedConfig;
+    ret = (await importModule(configPath)) as UnifiedConfig;
+  } else {
+    throw new Error(`Unsupported configuration file format: ${ext}`);
   }
-  throw new Error(`Unsupported configuration file format: ${ext}`);
+
+  if (ret.targets) {
+    logger.debug(`Rewriting config.targets to config.providers`);
+    ret.providers = ret.targets;
+    delete ret.targets;
+  }
+  if (ret.plugins) {
+    logger.debug(`Rewriting config.plugins to config.redteam.plugins`);
+    ret.redteam = ret.redteam || {};
+    ret.redteam.plugins = ret.plugins;
+    delete ret.plugins;
+  }
+  if (ret.strategies) {
+    logger.debug(`Rewriting config.strategies to config.redteam.strategies`);
+    ret.redteam = ret.redteam || {};
+    ret.redteam.strategies = ret.strategies;
+    delete ret.strategies;
+  }
+  if (!ret.prompts) {
+    logger.debug(`Setting default prompt because there is no \`prompts\` field`);
+    const hasAnyPrompt =
+      // Allow no tests
+      !ret.tests ||
+      // Allow any string
+      typeof ret.tests === 'string' ||
+      // Check the array for `prompt` vars
+      (Array.isArray(ret.tests) &&
+        ret.tests.some(
+          (test) => typeof test === 'object' && Object.keys(test.vars || {}).includes('prompt'),
+        ));
+
+    if (!hasAnyPrompt) {
+      logger.warn(
+        `Warning: Expected top-level "prompts" property in config or a test variable named "prompt"`,
+      );
+    }
+    ret.prompts = ['{{prompt}}'];
+  }
+  return ret;
 }
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
@@ -245,65 +293,17 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
-  const configsAreStringOrArray = configs.every(
-    (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
-  );
-
-  let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
-
-  const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
-    if (typeof relativePath === 'string') {
-      if (relativePath.startsWith('file://')) {
-        relativePath =
-          'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+  const seenPrompts = new Map<string, Prompt>();
+  for (const [idx, config] of configs.entries()) {
+    const parsedPrompts = await readPrompts(config.prompts, path.dirname(configPaths[idx]));
+    for (const prompt of parsedPrompts) {
+      const key = typeof prompt === 'string' ? prompt : prompt.raw;
+      if (!seenPrompts.has(key)) {
+        seenPrompts.set(key, prompt as Prompt);
       }
-      return relativePath;
-    } else if (typeof relativePath === 'object' && relativePath.id) {
-      if (relativePath.id.startsWith('file://')) {
-        relativePath.id =
-          'file://' +
-          path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
-      }
-      return relativePath;
-    } else {
-      throw new Error(`Invalid prompt object: ${JSON.stringify(relativePath)}`);
     }
-  };
-
-  const seenPrompts = new Set<string | Prompt>();
-  const addSeenPrompt = (prompt: string | Prompt) => {
-    if (typeof prompt === 'string') {
-      seenPrompts.add(prompt);
-    } else if (typeof prompt === 'object' && prompt.id) {
-      seenPrompts.add(prompt);
-    } else {
-      throw new Error('Invalid prompt object');
-    }
-  };
-  configs.forEach((config, idx) => {
-    if (typeof config.prompts === 'string') {
-      invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
-      addSeenPrompt(absolutePrompt);
-    } else if (Array.isArray(config.prompts)) {
-      invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
-      config.prompts.forEach((prompt) => {
-        invariant(
-          typeof prompt === 'string' ||
-            (typeof prompt === 'object' && typeof prompt.raw === 'string'),
-          'Invalid prompt',
-        );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
-      });
-    } else {
-      // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
-      invariant(typeof prompts === 'object', 'Cannot mix configs with map and array-type prompts');
-      prompts = { ...prompts, ...config.prompts };
-    }
-  });
-  if (Array.isArray(prompts)) {
-    prompts.push(...Array.from(seenPrompts));
   }
+  const prompts: UnifiedConfig['prompts'] = Array.from(seenPrompts.values());
 
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
@@ -358,6 +358,9 @@ export async function resolveConfigs(
 
   // Standalone assertion mode
   if (cmdObj.assertions) {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'standalone assertions mode',
+    });
     if (!cmdObj.modelOutputs) {
       logger.error('You must provide --model-outputs when using --assertions');
       process.exit(1);

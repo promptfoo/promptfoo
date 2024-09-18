@@ -67,7 +67,7 @@ We particularly welcome contributions in the following areas:
    This will run the express server on port 15500 and the web UI on port 3000.
    Both the API and UI will be automatically reloaded when you make changes.
 
-   Note: The developement experience is a little bit different than how it runs in production. In development, the web UI is served using a NextJS server. In all other environments, the front end is built and served as a static site via the Express server.
+   Note: The developement experience is a little bit different than how it runs in production. In development, the web UI is served using a Vite server. In all other environments, the front end is built and served as a static site via the Express server.
 
 If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or join our [Discord community](https://discord.gg/gHPS9jjfbs) for guidance.
 
@@ -196,7 +196,7 @@ Please refer to our [Custom API Provider Docs](/docs/providers/custom-api/) for 
 
 ## Contributing to the Web UI
 
-The web UI is written as a [Next.js](https://nextjs.org/) app. It is exported as a static site and hosted by a local express server when bundled.
+The web UI is written as a React app. It is exported as a static site and hosted by a local express server when bundled.
 
 To run the web UI in dev mode:
 
@@ -204,7 +204,7 @@ To run the web UI in dev mode:
 npm run dev
 ```
 
-This will host the web UI at http://localhost:3000. This allows you to hack on the Next.js app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
+This will host the web UI at http://localhost:3000. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
 
 ```sh
 npm run dev:web

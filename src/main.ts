@@ -12,15 +12,16 @@ import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
-import { generateRedteamCommand } from './commands/redteam/generate';
-import { initCommand as redteamInitCommand } from './commands/redteam/init';
-import { pluginsCommand as redteamPluginsCommand } from './commands/redteam/plugins';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { versionCommand } from './commands/version';
 import { viewCommand } from './commands/view';
 import { maybeReadConfig } from './config';
-import { type EvaluateOptions, type UnifiedConfig } from './types';
+import { runDbMigrations } from './migrate';
+import { generateRedteamCommand } from './redteam/commands/generate';
+import { initCommand as redteamInitCommand } from './redteam/commands/init';
+import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
+import { type UnifiedConfig } from './types';
 import { checkForUpdates } from './updates';
 
 export async function loadDefaultConfig(): Promise<{
@@ -48,22 +49,16 @@ export async function loadDefaultConfig(): Promise<{
 
 async function main() {
   await checkForUpdates();
-
-  const program = new Command();
+  await runDbMigrations();
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
-  const evaluateOptions: EvaluateOptions = {};
-  if (defaultConfig.evaluateOptions) {
-    evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
-    evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
-    evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
-  }
+  const program = new Command();
 
   cacheCommand(program);
   configCommand(program);
   deleteCommand(program);
-  evalCommand(program, defaultConfig, defaultConfigPath, evaluateOptions);
+  evalCommand(program, defaultConfig, defaultConfigPath);
   exportCommand(program);
   feedbackCommand(program);
   importCommand(program);

@@ -839,7 +839,7 @@
             "promptSuffix": {
               "type": "string"
             },
-            "envFile": {
+            "envPath": {
               "type": "string"
             }
           },

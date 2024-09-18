@@ -229,7 +229,7 @@ export async function isSql(
   try {
     sqlParser.astify(outputString, opt);
     pass = !inverse;
-  } catch (err) {
+  } catch {
     pass = inverse;
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
@@ -395,7 +395,7 @@ export async function runAssertion({
     try {
       parsedJson = JSON.parse(outputString);
       pass = !inverse;
-    } catch (err) {
+    } catch {
       pass = inverse;
     }
 
@@ -785,6 +785,18 @@ export async function runAssertion({
         return ret;
       }
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
+
+      /**
+       * Removes trailing newline from the rendered value.
+       * This is necessary for handling multi-line string literals in YAML
+       * that are defined on a single line in the YAML file.
+       *
+       * @example
+       * value: |
+       *   output === 'true'
+       */
+      renderedValue = renderedValue.trimEnd();
+
       let result: boolean | number | GradingResult;
       if (typeof valueFromScript === 'undefined') {
         const functionBody = renderedValue.includes('\n')
@@ -1144,7 +1156,7 @@ ${
         if (parsedPrompt && parsedPrompt.length > 0) {
           prompt = parsedPrompt[parsedPrompt.length - 1].content;
         }
-      } catch (err) {
+      } catch {
         // Ignore error
       }
     }
@@ -1276,7 +1288,7 @@ ${
     if (!assertion.threshold) {
       throw new Error('Latency assertion must have a threshold in milliseconds');
     }
-    if (!latencyMs) {
+    if (latencyMs === undefined) {
       throw new Error(
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
       );
@@ -1373,6 +1385,11 @@ ${
         value: rubric,
       },
       ...grade,
+      metadata: {
+        // Pass through all test metadata for redteam
+        ...test.metadata,
+        ...grade.metadata,
+      },
     };
   }
 

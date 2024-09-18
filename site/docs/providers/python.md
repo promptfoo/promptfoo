@@ -43,8 +43,10 @@ def call_api(prompt, options, context):
     # The prompt is the final prompt string after the variables have been processed.
     # Custom logic to process the prompt goes here.
     # For instance, you might call an external API or run some computations.
+    # TODO: Replace with actual LLM API implementation.
+    def call_llm(prompt):
+        return f"Stub response for prompt: {prompt}"
     output = call_llm(prompt)
-
 
     # The result should be a dictionary with at least an 'output' field.
     result = {

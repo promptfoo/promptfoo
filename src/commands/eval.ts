@@ -5,8 +5,9 @@ import dedent from 'dedent';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
+import cliState from '../cliState';
 import { resolveConfigs } from '../config';
-import { getEnvFloat, getEnvInt } from '../envars';
+import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { loadApiProvider } from '../providers';
@@ -39,7 +40,7 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
 ) {
-  setupEnv(cmdObj.envFile);
+  setupEnv(cmdObj.envPath);
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
@@ -153,6 +154,15 @@ export async function doEval(
 
     await migrateResultsFromFileSystemToDatabase();
 
+    if (getEnvBool('PROMPTFOO_LIGHTWEIGHT_RESULTS')) {
+      config = {};
+      summary.results = [];
+      summary.table.head.vars = [];
+      for (const row of summary.table.body) {
+        row.vars = [];
+      }
+    }
+
     let evalId: string | null = null;
     if (cmdObj.write) {
       evalId = await writeResultsToDatabase(summary, config);
@@ -168,8 +178,6 @@ export async function doEval(
       }
       logger.info(chalk.yellow(`Writing output to ${outputPath}`));
     }
-
-    telemetry.maybeShowNotice();
 
     printBorder();
     if (cmdObj.write) {
@@ -195,7 +203,7 @@ export async function doEval(
     const passRate = (summary.stats.successes / totalTests) * 100;
     logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
     logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
-    logger.debug(`Pass Rate: ${passRate.toFixed(2)}%`);
+    logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     logger.info(
       `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
     );
@@ -300,8 +308,14 @@ export function evalCommand(
   program: Command,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
-  evaluateOptions: EvaluateOptions,
 ) {
+  const evaluateOptions: EvaluateOptions = {};
+  if (defaultConfig.evaluateOptions) {
+    evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
+    evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
+    evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
+  }
+
   program
     .command('eval')
     .description('Evaluate prompts')
@@ -385,7 +399,7 @@ export function evalCommand(
     )
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('-w, --watch', 'Watch for changes in config and re-run')
-    .option('--env-file <path>', 'Path to .env file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')
     .option(
       '--filter-pattern <pattern>',
@@ -412,6 +426,7 @@ export function evalCommand(
       'Run providers interactively, one at a time',
       defaultConfig?.evaluateOptions?.interactiveProviders,
     )
+    .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
     .action((opts) => {
       if (opts.interactiveProviders) {
         logger.warn(
@@ -423,6 +438,10 @@ export function evalCommand(
         `),
         );
         process.exit(2);
+      }
+
+      if (opts.remote) {
+        cliState.remote = true;
       }
 
       for (const maybeFilePath of opts.output ?? []) {

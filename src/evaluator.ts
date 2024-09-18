@@ -402,6 +402,7 @@ class Evaluator {
               cached: 0,
             },
             namedScores: {},
+            namedScoresCount: {},
             cost: 0,
           },
         };
@@ -423,6 +424,9 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
+      telemetry.recordAndSendOnce('feature_used', {
+        feature: 'scenarios',
+      });
       for (const scenario of testSuite.scenarios) {
         for (const data of scenario.config) {
           // Merge defaultTest with scenario config
@@ -650,6 +654,44 @@ class Evaluator {
       metrics.score += row.score;
       for (const [key, value] of Object.entries(row.namedScores)) {
         metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+        metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
+      }
+
+      if (testSuite.redteam) {
+        for (const gradingResult of row.gradingResult?.componentResults || []) {
+          const pluginId = gradingResult.metadata?.pluginId;
+          const strategyId = gradingResult.metadata?.strategyId;
+          if (pluginId) {
+            metrics.redteam = metrics.redteam || {
+              pluginPassCount: {},
+              pluginFailCount: {},
+              strategyPassCount: {},
+              strategyFailCount: {},
+            };
+            if (gradingResult.pass) {
+              metrics.redteam.pluginPassCount[pluginId] =
+                (metrics.redteam.pluginPassCount[pluginId] || 0) + 1;
+            } else {
+              metrics.redteam.pluginFailCount[pluginId] =
+                (metrics.redteam.pluginFailCount[pluginId] || 0) + 1;
+            }
+          }
+          if (strategyId) {
+            metrics.redteam = metrics.redteam || {
+              pluginPassCount: {},
+              pluginFailCount: {},
+              strategyPassCount: {},
+              strategyFailCount: {},
+            };
+            if (gradingResult.pass) {
+              metrics.redteam.strategyPassCount[strategyId] =
+                (metrics.redteam.strategyPassCount[strategyId] || 0) + 1;
+            } else {
+              metrics.redteam.strategyFailCount[strategyId] =
+                (metrics.redteam.strategyFailCount[strategyId] || 0) + 1;
+            }
+          }
+        }
       }
 
       if (testSuite.derivedMetrics) {
