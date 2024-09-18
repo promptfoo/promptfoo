@@ -90,7 +90,7 @@ export const RedteamGenerateOptionsSchema = z
     /**
      * @deprecated This property is deprecated and no longer used.
      */
-    provider: z.string().optional().describe('Provider to use'),
+    provider: z.string().optional().describe('Provider to use to generate redteam tests'),
     purpose: z.string().optional().describe('Purpose of the redteam generation'),
     strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
     write: z.boolean().describe('Whether to write the output'),
