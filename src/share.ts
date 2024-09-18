@@ -1,7 +1,10 @@
+import type { Response } from 'node-fetch';
 import { URL } from 'url';
 import { getAuthor } from './accounts';
+import { getCloudConfig, isCloudEnabled } from './commands/cloud';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { fetchWithProxy } from './fetch';
+import { readGlobalConfig } from './globalConfig';
 import logger from './logger';
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
 
@@ -44,28 +47,56 @@ export async function createShareableUrl(
     },
   };
 
-  const apiBaseUrl =
+  let response: Response;
+  let apiBaseUrl =
     typeof config.sharing === 'object' ? config.sharing.apiBaseUrl : SHARE_API_BASE_URL;
 
   try {
-    const response = await fetchWithProxy(`${apiBaseUrl}/api/eval`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(sharedResults),
-    });
+    if (isCloudEnabled()) {
+      const cloudConfig = getCloudConfig();
+      if (cloudConfig?.apiHost) {
+        apiBaseUrl = cloudConfig.apiHost;
+      }
+
+      response = await fetchWithProxy(`${apiBaseUrl}/api/evals`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${cloudConfig?.apiKey}`,
+        },
+        body: JSON.stringify(sharedResults),
+      });
+    } else {
+      response = await fetchWithProxy(`${apiBaseUrl}/api/results`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(sharedResults),
+      });
+    }
 
     const responseJson = (await response.json()) as { id?: string; error?: string };
     if (responseJson.error) {
       throw new Error(`Failed to create shareable URL: ${responseJson.error}`);
     }
-    const appBaseUrl =
-      typeof config.sharing === 'object' ? config.sharing.appBaseUrl : SHARE_VIEW_BASE_URL;
-    const fullUrl =
-      SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
-        ? `${appBaseUrl}/eval/${responseJson.id}`
-        : `${appBaseUrl}/eval/?evalId=${responseJson.id}`;
+
+    let appBaseUrl = SHARE_VIEW_BASE_URL;
+    let fullUrl = SHARE_VIEW_BASE_URL;
+    if (isCloudEnabled()) {
+      const cloudConfig = getCloudConfig();
+      if (cloudConfig?.appUrl) {
+        appBaseUrl = cloudConfig.appUrl;
+        fullUrl = `${appBaseUrl}/results/${responseJson.id}`;
+      }
+    } else {
+      const appBaseUrl =
+        typeof config.sharing === 'object' ? config.sharing.appBaseUrl : SHARE_VIEW_BASE_URL;
+      fullUrl =
+        SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
+          ? `${appBaseUrl}/eval/${responseJson.id}`
+          : `${appBaseUrl}/eval/?evalId=${responseJson.id}`;
+    }
 
     return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
   } catch (error) {

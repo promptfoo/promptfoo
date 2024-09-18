@@ -9,9 +9,22 @@ import telemetry from '../telemetry';
 
 const API_HOST = process.env.API_HOST || 'https://api.promptfoo.dev';
 
+const DEFAULT_CLOUD_CONFIG: GlobalConfig['cloud'] = {
+  apiHost: 'https://api.promptfoo.dev',
+  appUrl: 'https://app.promptfoo.dev',
+};
+
 function updateCloudConfig(partialConfig: Partial<GlobalConfig['cloud']>) {
   const cloudConfig = readGlobalConfig().cloud;
   writeGlobalConfigPartial({ cloud: { ...cloudConfig, ...partialConfig } });
+}
+
+export function getCloudConfig(): GlobalConfig['cloud'] {
+  return readGlobalConfig().cloud || DEFAULT_CLOUD_CONFIG;
+}
+
+export function isCloudEnabled(): boolean {
+  return !!getCloudConfig()?.apiKey;
 }
 
 const rl = readline.createInterface({
@@ -40,9 +53,12 @@ async function validateApiToken(token: string, apiHost: string): Promise<void> {
   }
 
   logger.info('You are logged in successfully.');
-  const { user, organization } = await response.json();
+  const { user, organization, app } = await response.json();
+  await updateCloudConfig({ apiKey: token, appUrl: app.baseUrl });
+
   logger.info(`User: ${user.email}`);
   logger.info(`Organization: ${organization.name}`);
+  logger.info(`Login at ${app.baseUrl}`);
 }
 
 export function cloudCommand(program: Command) {
@@ -82,13 +98,10 @@ export function cloudCommand(program: Command) {
 
         // Prompt for token
         const token = await promptForToken();
-
-        updateCloudConfig({ apiKey: token });
+        await validateApiToken(token, apiHost);
 
         // Store token in global config
         writeGlobalConfigPartial({ account: { email } });
-
-        await validateApiToken(token, apiHost);
 
         telemetry.record('command_used', {
           name: 'auth login',
@@ -111,7 +124,6 @@ export function cloudCommand(program: Command) {
         const cloudConfig = readGlobalConfig().cloud;
         const apiHost = cloudConfig?.apiHost || API_HOST;
         await validateApiToken(apiToken, apiHost);
-        updateCloudConfig({ apiKey: apiToken });
         logger.info('API token validated and set successfully');
         process.exit(0);
       } catch (error) {

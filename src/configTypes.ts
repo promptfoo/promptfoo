@@ -5,6 +5,7 @@ export interface GlobalConfig {
     email?: string;
   };
   cloud?: {
+    appUrl?: string;
     apiHost?: string;
     apiKey?: string;
   };

@@ -8,6 +8,7 @@ import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import type { ResultsFile } from '../types';
 import { getLatestEval, readResult, setupEnv } from '../util';
+import { getCloudConfig, isCloudEnabled } from './cloud';
 
 async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
   const url = await createShareableUrl(results.results, results.config, showAuth);
@@ -61,19 +62,30 @@ export function shareCommand(program: Command) {
 
           const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
           const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
-
-          reader.question(
-            `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
-            async function (answer: string) {
-              if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y' && answer !== '') {
+          if (isCloudEnabled()) {
+            logger.info(
+              `Creating a private shareable URL of your eval on ${getCloudConfig()?.apiHost} (cloud enabled)`,
+            );
+            await createPublicUrl(results, cmdObj.showAuth);
+            process.exit(0);
+          } else {
+            reader.question(
+              `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
+              async function (answer: string) {
+                if (
+                  answer.toLowerCase() !== 'yes' &&
+                  answer.toLowerCase() !== 'y' &&
+                  answer !== ''
+                ) {
+                  reader.close();
+                  process.exit(1);
+                }
                 reader.close();
-                process.exit(1);
-              }
-              reader.close();
 
-              await createPublicUrl(results, cmdObj.showAuth);
-            },
-          );
+                await createPublicUrl(results, cmdObj.showAuth);
+              },
+            );
+          }
         }
       },
     );
