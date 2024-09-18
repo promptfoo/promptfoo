@@ -126,7 +126,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
         {failures.length > 0 ? (
           <>
             <Typography variant="h6" className="failed-tests-header">
-              Failed Tests
+              Flagged Tests
             </Typography>
             <List>
               {failures.slice(0, 5).map((failure, index) => (
