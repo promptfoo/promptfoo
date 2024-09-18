@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Severity } from '@app/pages/report/components/constants';
 import {
   AreaChart,
   Area,
@@ -9,7 +10,6 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { Severity } from '../report/components/constants';
 
 export interface AttackSuccessRateDataPoint {
   date: string;

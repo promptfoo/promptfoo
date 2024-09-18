@@ -7,6 +7,7 @@ import {
   categoryAliasesReverse,
   riskCategories,
 } from '@app/pages/report/components/constants';
+import { callApi } from '@app/utils/api';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -79,7 +80,7 @@ export default function Dashboard() {
       queryParams.append('endDate', endDate);
     }
 
-    const response = await fetch(`/api/progress?${queryParams}`);
+    const response = await callApi(`/progress?${queryParams}`);
     const data = await response.json();
     if (data && data.data) {
       const newEvals = data.data.filter((eval_: StandaloneEval) => eval_.isRedteam);
