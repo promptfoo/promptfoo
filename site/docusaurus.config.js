@@ -129,11 +129,6 @@ const config = {
             position: 'left',
           },
           {
-            href: '/blog/',
-            label: 'Blog',
-            position: 'left',
-          },
-          {
             href: 'https://github.com/promptfoo/promptfoo',
             label: 'GitHub',
             position: 'right',
@@ -237,6 +232,10 @@ const config = {
               {
                 label: 'Discord',
                 href: 'https://discord.gg/gHPS9jjfbs',
+              },
+              {
+                label: 'LinkedIn',
+                href: 'https://www.linkedin.com/company/promptfoo/',
               },
             ],
           },
