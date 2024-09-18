@@ -72,7 +72,7 @@ const HighestSeverityCategories: React.FC<HighestSeverityCategoriesProps> = ({ e
               <Box sx={{ width: '100%' }}>
                 <ListItemText
                   primary={displayName}
-                  secondary={`${failPercentage.toFixed(1)}% failing (${data.currentFailCount}/${data.currentTotalCount} runs) - ${data.severity}`}
+                  secondary={`${failPercentage.toFixed(1)}% failing (${data.currentFailCount}/${data.currentTotalCount} probes) - ${data.severity}`}
                 />
                 <LinearProgress
                   variant="determinate"

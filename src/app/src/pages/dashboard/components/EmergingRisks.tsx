@@ -99,12 +99,12 @@ const EmergingRisks: React.FC<EmergingRisksProps> = ({ evals }) => {
                 >
                   <Typography variant="body2">
                     Recent: {((data.currentFailCount / data.currentTotalCount) * 100).toFixed(1)}%
-                    passed runs
+                    passed probes
                   </Typography>
                   <Typography variant="body2">
                     Historical:{' '}
                     {((data.historicalFailCount / data.historicalTotalCount) * 100).toFixed(1)}%
-                    passed runs
+                    passed probes
                   </Typography>
                   {trend.value === Infinity ? (
                     <Typography variant="body2" color="error">

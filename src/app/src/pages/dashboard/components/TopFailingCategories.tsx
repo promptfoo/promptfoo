@@ -36,7 +36,7 @@ const TopFailingCategories: React.FC<TopFailingCategoriesProps> = ({ evals }) =>
               <Box sx={{ width: '100%' }}>
                 <ListItemText
                   primary={displayName}
-                  secondary={`${((data.currentFailCount / data.currentTotalCount) * 100).toFixed(1)}% failing (${data.currentFailCount}/${data.currentTotalCount} runs)`}
+                  secondary={`${((data.currentFailCount / data.currentTotalCount) * 100).toFixed(1)}% failing (${data.currentFailCount}/${data.currentTotalCount} probes)`}
                 />
                 <LinearProgress
                   variant="determinate"

@@ -49,9 +49,13 @@ export function processCategoryData(evals: StandaloneEval[]): Record<string, Cat
 
   Object.entries(riskCategories).forEach(([category, subCategories]) => {
     subCategories.forEach((subCategory) => {
-      const scoreName = categoryAliases[subCategory as keyof typeof categoryAliases];
+      const pluginId = subCategory;
       const relevantEvals = evals.filter(
-        (eval_) => eval_.metrics?.namedScores && scoreName in eval_.metrics.namedScores,
+        (eval_) =>
+          eval_.pluginPassCount &&
+          eval_.pluginFailCount &&
+          (eval_.pluginPassCount[pluginId] !== undefined ||
+            eval_.pluginFailCount[pluginId] !== undefined),
       );
       // Split evals into historical and current
       const halfIndex = Math.floor(relevantEvals.length / 2);
@@ -60,19 +64,25 @@ export function processCategoryData(evals: StandaloneEval[]): Record<string, Cat
 
       // Calculate counts for current data
       const currentPassCount = currentEvals.reduce(
-        (sum, eval_) => sum + ((eval_.metrics?.namedScores[scoreName] || 0) > 0 ? 1 : 0),
+        (sum, eval_) => sum + (eval_.pluginPassCount?.[pluginId] || 0),
         0,
       );
-      const currentTotalCount = currentEvals.length;
-      const currentFailCount = currentTotalCount - currentPassCount;
+      const currentFailCount = currentEvals.reduce(
+        (sum, eval_) => sum + (eval_.pluginFailCount?.[pluginId] || 0),
+        0,
+      );
+      const currentTotalCount = currentPassCount + currentFailCount;
 
       // Calculate counts for historical data
       const historicalPassCount = historicalEvals.reduce(
-        (sum, eval_) => sum + ((eval_.metrics?.namedScores[scoreName] || 0) > 0 ? 1 : 0),
+        (sum, eval_) => sum + (eval_.pluginPassCount?.[pluginId] || 0),
         0,
       );
-      const historicalTotalCount = historicalEvals.length;
-      const historicalFailCount = historicalTotalCount - historicalPassCount;
+      const historicalFailCount = historicalEvals.reduce(
+        (sum, eval_) => sum + (eval_.pluginFailCount?.[pluginId] || 0),
+        0,
+      );
+      const historicalTotalCount = historicalPassCount + historicalFailCount;
 
       const severity = riskCategorySeverityMap[subCategory] || Severity.Low;
 

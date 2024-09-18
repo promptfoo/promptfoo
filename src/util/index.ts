@@ -976,6 +976,9 @@ export type StandaloneEval = CompletedPrompt & {
   promptId: string | null;
   isRedteam: boolean;
   createdAt: number;
+
+  pluginFailCount: Record<string, number>;
+  pluginPassCount: Record<string, number>;
 };
 
 const standaloneEvalCache = new NodeCache({ stdTTL: 60 * 60 * 2 }); // Cache for 2 hours
@@ -1027,15 +1030,35 @@ export function getStandaloneEvals({
       results: { table },
       isRedteam,
     } = result;
-    return table.head.prompts.map((col) => ({
-      evalId,
-      description,
-      promptId,
-      datasetId,
-      createdAt,
-      isRedteam: isRedteam as boolean,
-      ...col,
-    }));
+    return table.head.prompts.map((col, index) => {
+      // Compute some stats
+      const pluginCounts = table.body.reduce(
+        (acc, row) => {
+          const pluginId = row.test.metadata?.pluginId;
+          if (pluginId) {
+            const isPass = row.outputs[index].pass;
+            acc.pluginPassCount[pluginId] = (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
+            acc.pluginFailCount[pluginId] = (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
+          }
+          return acc;
+        },
+        { pluginPassCount: {}, pluginFailCount: {} } as {
+          pluginPassCount: Record<string, number>;
+          pluginFailCount: Record<string, number>;
+        },
+      );
+
+      return {
+        evalId,
+        description,
+        promptId,
+        datasetId,
+        createdAt,
+        isRedteam: isRedteam as boolean,
+        ...pluginCounts,
+        ...col,
+      };
+    });
   });
 
   standaloneEvalCache.set(cacheKey, standaloneEvals);

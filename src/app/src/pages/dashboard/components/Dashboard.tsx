@@ -6,6 +6,7 @@ import {
   categoryAliases,
   categoryAliasesReverse,
   riskCategories,
+  riskCategorySeverityMap,
 } from '@app/pages/report/components/constants';
 import { callApi } from '@app/utils/api';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -120,28 +121,12 @@ export default function Dashboard() {
           total: 0,
         };
 
-        // Comment out the real logic
-        /*
-        Object.entries(eval_.metrics?.namedScores || {}).forEach(([category, score]) => {
-          if (score <= 0) {
-            const severity =
-              riskCategorySeverityMap[getPluginIdFromMetricName(category)] || Severity.Low;
-            dataPoint[severity]++;
-            dataPoint.total++;
-          }
+        console.log(eval_.metrics);
+        Object.entries(eval_.pluginFailCount || {}).forEach(([pluginId, count]) => {
+          const severity = riskCategorySeverityMap[pluginId] || Severity.Low;
+          dataPoint[severity] += count;
+          dataPoint.total += count;
         });
-        */
-
-        // Use mock severities
-        dataPoint[Severity.Critical] = Math.floor(Math.random() * 5);
-        dataPoint[Severity.High] = Math.floor(Math.random() * 10);
-        dataPoint[Severity.Medium] = Math.floor(Math.random() * 15);
-        dataPoint[Severity.Low] = Math.floor(Math.random() * 20);
-        dataPoint.total =
-          dataPoint[Severity.Critical] +
-          dataPoint[Severity.High] +
-          dataPoint[Severity.Medium] +
-          dataPoint[Severity.Low];
 
         return dataPoint;
       });
@@ -213,6 +198,7 @@ export default function Dashboard() {
   }, [evals]);
 
   const calculateSeveritySummary = () => {
+    /*
     // Mock severity counts
     const severityCounts = {
       [Severity.Critical]: 5,
@@ -224,8 +210,7 @@ export default function Dashboard() {
     const totalIssues = Object.values(severityCounts).reduce((a, b) => a + b, 0);
 
     return { severityCounts, totalIssues };
-
-    /* 
+    */
     const severityCounts = {
       [Severity.Critical]: 0,
       [Severity.High]: 0,
@@ -236,12 +221,12 @@ export default function Dashboard() {
     evals.forEach((eval_) => {
       Object.entries(riskCategories).forEach(([category, subCategories]) => {
         subCategories.forEach((subCategory) => {
-          const scoreName = categoryAliases[subCategory as keyof typeof categoryAliases];
-          if (eval_.metrics?.namedScores && scoreName in eval_.metrics.namedScores) {
-            const score = eval_.metrics.namedScores[scoreName];
-            if (score <= 0) {
+          const pluginId = subCategory;
+          if (eval_.pluginPassCount && eval_.pluginFailCount) {
+            const failCount = eval_.pluginFailCount[pluginId] || 0;
+            if (failCount > 0) {
               const severity = riskCategorySeverityMap[subCategory] || Severity.Low;
-              severityCounts[severity]++;
+              severityCounts[severity] += failCount;
             }
           }
         });
@@ -254,7 +239,6 @@ export default function Dashboard() {
       Severity.Low;
 
     return { severityCounts, totalIssues, highestSeverity };
-    */
   };
 
   const { severityCounts, totalIssues } = calculateSeveritySummary();
