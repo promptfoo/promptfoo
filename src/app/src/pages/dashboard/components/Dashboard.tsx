@@ -121,7 +121,6 @@ export default function Dashboard() {
           total: 0,
         };
 
-        console.log(eval_.metrics);
         Object.entries(eval_.pluginFailCount || {}).forEach(([pluginId, count]) => {
           const severity = riskCategorySeverityMap[pluginId] || Severity.Low;
           dataPoint[severity] += count;
@@ -218,20 +217,24 @@ export default function Dashboard() {
       [Severity.Low]: 0,
     };
 
-    evals.forEach((eval_) => {
-      Object.entries(riskCategories).forEach(([category, subCategories]) => {
-        subCategories.forEach((subCategory) => {
-          const pluginId = subCategory;
-          if (eval_.pluginPassCount && eval_.pluginFailCount) {
-            const failCount = eval_.pluginFailCount[pluginId] || 0;
-            if (failCount > 0) {
-              const severity = riskCategorySeverityMap[subCategory] || Severity.Low;
-              severityCounts[severity] += failCount;
-            }
+    //evals.forEach((eval_) => {
+    // Just show the first eval for now
+    const eval_ = evals[0];
+    Object.entries(riskCategories).forEach(([category, subCategories]) => {
+      subCategories.forEach((subCategory) => {
+        const pluginId = subCategory;
+        if (eval_.pluginPassCount && eval_.pluginFailCount) {
+          const failCount = eval_.pluginFailCount[pluginId] || 0;
+          if (failCount > 0) {
+            const severity = riskCategorySeverityMap[subCategory] || Severity.Low;
+            //severityCounts[severity] += failCount;
+            // Count the number of failing _plugins_, not the number of failing tests.
+            severityCounts[severity] += 1;
           }
-        });
+        }
       });
     });
+    //});
 
     const totalIssues = Object.values(severityCounts).reduce((a, b) => a + b, 0);
     const highestSeverity =
