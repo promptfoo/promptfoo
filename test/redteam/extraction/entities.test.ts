@@ -1,5 +1,4 @@
 import { fetchWithCache } from '../../../src/cache';
-import logger from '../../../src/logger';
 import { extractEntities } from '../../../src/redteam/extraction/entities';
 import type { ApiProvider } from '../../../src/types';
 
@@ -39,15 +38,13 @@ describe('Entities Extractor', () => {
     process.env = originalEnv;
   });
 
-  it('should use remote generation when enabled', async () => {
-    process.env.OPENAI_API_KEY = undefined;
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
+  it('should use remote generation', async () => {
     jest.mocked(fetchWithCache).mockResolvedValue({
       data: { task: 'entities', result: ['Apple', 'Google'] },
       cached: false,
     });
 
-    const result = await extractEntities(provider, ['prompt1', 'prompt2']);
+    const result = await extractEntities(['prompt1', 'prompt2']);
 
     expect(result).toEqual(['Apple', 'Google']);
     expect(fetchWithCache).toHaveBeenCalledWith(
@@ -61,36 +58,10 @@ describe('Entities Extractor', () => {
     );
   });
 
-  it('should fall back to local extraction when remote generation fails', async () => {
-    process.env.OPENAI_API_KEY = undefined;
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
-    jest.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
-
-    const result = await extractEntities(provider, ['prompt1', 'prompt2']);
-
-    expect(result).toEqual(['Apple', 'Google']);
-    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt1'));
-    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt2'));
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Error using remote generation'),
-    );
-  });
-
-  it('should use local extraction when remote generation is disabled', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
-
-    const result = await extractEntities(provider, ['prompt']);
-
-    expect(result).toEqual(['Apple', 'Google']);
-    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt'));
-    expect(fetchWithCache).not.toHaveBeenCalled();
-  });
-
   it('should log debug message when no entities are found', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
     jest.mocked(provider.callApi).mockResolvedValue({ output: 'No entities found' });
 
-    const result = await extractEntities(provider, ['prompt']);
+    const result = await extractEntities(['prompt']);
 
     expect(result).toEqual([]);
   });

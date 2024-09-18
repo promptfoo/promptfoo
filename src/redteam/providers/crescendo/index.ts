@@ -10,12 +10,10 @@ import type {
   CallApiOptionsParams,
   Prompt,
   NunjucksFilterMap,
-  RedteamFileConfig,
 } from '../../../types';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
-import { isBasicRefusal, shouldGenerateRemote } from '../../util';
-import { loadRedteamProvider } from '../shared';
+import { isBasicRefusal } from '../../util';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_ROUNDS = 10;
@@ -25,7 +23,6 @@ interface CrescendoConfig {
   injectVar: string;
   maxRounds?: number;
   maxBacktracks?: number;
-  redteamProvider: RedteamFileConfig['provider'];
 }
 
 interface ConversationMessage {
@@ -81,37 +78,22 @@ class CrescendoProvider implements ApiProvider {
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      if (shouldGenerateRemote()) {
-        this.redTeamProvider = new PromptfooChatCompletionProvider({
-          task: 'crescendo',
-          jsonOnly: true,
-          preferSmallModel: true,
-        });
-      } else {
-        this.redTeamProvider = await loadRedteamProvider({
-          provider: this.config.redteamProvider,
-          preferSmallModel: true,
-          jsonOnly: true,
-        });
-      }
+      this.redTeamProvider = new PromptfooChatCompletionProvider({
+        task: 'crescendo',
+        jsonOnly: true,
+        preferSmallModel: true,
+      });
     }
     return this.redTeamProvider;
   }
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      if (shouldGenerateRemote()) {
-        this.scoringProvider = new PromptfooChatCompletionProvider({
-          task: 'crescendo',
-          jsonOnly: false,
-          preferSmallModel: true,
-        });
-      } else {
-        this.scoringProvider = await loadRedteamProvider({
-          provider: this.config.redteamProvider,
-          preferSmallModel: true,
-        });
-      }
+      this.scoringProvider = new PromptfooChatCompletionProvider({
+        task: 'crescendo',
+        jsonOnly: false,
+        preferSmallModel: true,
+      });
     }
     return this.scoringProvider;
   }

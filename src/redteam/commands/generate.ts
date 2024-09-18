@@ -8,7 +8,6 @@ import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { synthesize } from '..';
 import { disableCache } from '../../cache';
-import cliState from '../../cliState';
 import { resolveConfigs } from '../../config';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
@@ -25,7 +24,6 @@ import {
 } from '../constants';
 import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
 import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
-import { shouldGenerateRemote } from '../util';
 
 export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
   setupEnv(options.envFile);
@@ -110,7 +108,6 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
     maxConcurrency: options.maxConcurrency,
     numTests: redteamConfig?.numTests ?? options.numTests,
     plugins,
-    provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
@@ -273,17 +270,7 @@ export function generateRedteamCommand(
     .option('--delay <number>', 'Delay in milliseconds between plugin API calls', (val) =>
       Number.parseInt(val, 10),
     )
-    .option('--remote', 'Force remote inference wherever possible', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
-      if (opts.remote) {
-        cliState.remote = true;
-      }
-      if (shouldGenerateRemote()) {
-        logger.debug('Remote generation enabled');
-      } else {
-        logger.debug('Remote generation disabled');
-      }
-
       try {
         let overrides: Partial<RedteamFileConfig> = {};
         if (opts.plugins && opts.plugins.length > 0) {

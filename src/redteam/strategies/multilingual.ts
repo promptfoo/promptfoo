@@ -1,16 +1,12 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
 import { REMOTE_GENERATION_URL } from '../constants';
 import { loadRedteamProvider } from '../providers/shared';
-import { shouldGenerateRemote } from '../util';
-
-const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
 export async function generateMultilingual(
   testCases: TestCase[],
@@ -102,63 +98,6 @@ export async function addMultilingual(
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
-  if (shouldGenerateRemote()) {
-    const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
-    if (multilingualTestCases.length > 0) {
-      return multilingualTestCases;
-    }
-  }
-
-  const languages = config.languages || DEFAULT_LANGUAGES;
-  invariant(
-    Array.isArray(languages),
-    'multilingual strategy: `languages` must be an array of strings',
-  );
-
-  const translatedTestCases: TestCase[] = [];
-  const totalOperations = testCases.length * languages.length;
-
-  let progressBar: SingleBar | undefined;
-  if (logger.level !== 'debug') {
-    progressBar = new SingleBar(
-      {
-        format: 'Generating Multilingual {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
-        hideCursor: true,
-      },
-      Presets.shades_classic,
-    );
-    progressBar.start(totalOperations, 0);
-  }
-
-  for (const testCase of testCases) {
-    const originalText = String(testCase.vars![injectVar]);
-
-    for (const lang of languages) {
-      const translatedText = await translate(originalText, lang);
-
-      translatedTestCases.push({
-        ...testCase,
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: `${assertion.metric}/Multilingual-${lang.toUpperCase()}`,
-        })),
-        vars: {
-          ...testCase.vars,
-          [injectVar]: translatedText,
-        },
-      });
-
-      if (progressBar) {
-        progressBar.increment(1);
-      } else {
-        logger.debug(`Translated to ${lang}: ${translatedTestCases.length} of ${totalOperations}`);
-      }
-    }
-  }
-
-  if (progressBar) {
-    progressBar.stop();
-  }
-
-  return translatedTestCases;
+  const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
+  return multilingualTestCases;
 }

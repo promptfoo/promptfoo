@@ -129,7 +129,6 @@ export async function synthesize({
   maxConcurrency = 1,
   plugins,
   prompts,
-  provider,
   purpose: purposeOverride,
   strategies,
   delay,
@@ -147,7 +146,7 @@ export async function synthesize({
   }
   validateStrategies(strategies);
 
-  const redteamProvider = await loadRedteamProvider({ provider });
+  const redteamProvider = await loadRedteamProvider();
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
@@ -256,12 +255,12 @@ export async function synthesize({
   plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
 
   progressBar?.increment(1, { task: 'Extracting system purpose' });
-  const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
+  const purpose = purposeOverride || (await extractSystemPurpose(prompts));
 
   progressBar?.increment(1, { task: 'Extracting entities' });
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
-    : await extractEntities(redteamProvider, prompts);
+    : await extractEntities(prompts);
 
   logger.debug(`System purpose: ${purpose}`);
 

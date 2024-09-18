@@ -135,17 +135,11 @@ describe('synthesize', () => {
   // API provider tests
   describe('API provider', () => {
     it('should use the provided API provider if given', async () => {
-      const customProvider = {
-        callApi: jest.fn(),
-        generate: jest.fn(),
-        id: () => 'custom-provider',
-      };
       await synthesize({
         language: 'en',
         numTests: 1,
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
-        provider: customProvider,
         strategies: [],
       });
 

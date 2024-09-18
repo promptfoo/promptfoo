@@ -19,7 +19,6 @@ import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { REMOTE_GENERATION_URL } from './redteam/constants';
-import { shouldGenerateRemote } from './redteam/util';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -222,7 +221,7 @@ export async function matchesSimilarity(
   inverse: boolean = false,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (cliState.config?.redteam && shouldGenerateRemote()) {
+  if (cliState.config?.redteam) {
     return doRemoteGrading({
       task: 'similar',
       expected,
@@ -395,7 +394,7 @@ export async function matchesLlmRubric(
     );
   }
 
-  if (cliState.config?.redteam && shouldGenerateRemote()) {
+  if (cliState.config?.redteam) {
     return doRemoteGrading({
       task: 'llm-rubric',
       rubric,

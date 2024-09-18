@@ -2,13 +2,13 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   Prompt,
   NunjucksFilterMap,
-  RedteamFileConfig,
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -239,8 +239,8 @@ async function runRedteamConversation({
   };
 }
 
-class RedteamIterativeProvider implements ApiProvider {
-  private readonly redteamProvider: RedteamFileConfig['provider'];
+class RedteamIterativeImageProvider implements ApiProvider {
+  private readonly redteamProvider: ApiProvider;
   private readonly injectVar: string;
 
   constructor(readonly config: Record<string, string | object>) {
@@ -249,7 +249,11 @@ class RedteamIterativeProvider implements ApiProvider {
     this.injectVar = config.injectVar;
 
     // Redteam provider can be set from the config.
-    this.redteamProvider = config.redteamProvider;
+    this.redteamProvider = new PromptfooChatCompletionProvider({
+      task: 'iterative',
+      jsonOnly: true,
+      preferSmallModel: false,
+    });
   }
 
   id() {
@@ -275,4 +279,4 @@ class RedteamIterativeProvider implements ApiProvider {
   }
 }
 
-export default RedteamIterativeProvider;
+export default RedteamIterativeImageProvider;

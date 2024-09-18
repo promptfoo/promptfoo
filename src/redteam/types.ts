@@ -1,4 +1,3 @@
-
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
 export type PluginConfig = RedteamObjectConfig;

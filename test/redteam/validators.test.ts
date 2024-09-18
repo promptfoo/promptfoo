@@ -434,9 +434,6 @@ describe('redteamConfigSchema', () => {
     };
     const result = RedteamConfigSchema.safeParse(input);
     expect(result.success).toBe(true);
-    expect(result.data?.provider).toHaveProperty('id');
-    expect(result.data?.provider).toHaveProperty('callApi');
-    expect(result.data?.provider).toHaveProperty('label', 'Custom Provider');
     expect(result.data?.plugins).toEqual([{ id: 'overreliance', numTests: undefined }]);
     expect(result.data?.strategies).toEqual([{ id: 'jailbreak' }]);
   });

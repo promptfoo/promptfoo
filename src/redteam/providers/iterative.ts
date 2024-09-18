@@ -8,11 +8,9 @@ import {
   type CallApiOptionsParams,
   type Prompt,
   type NunjucksFilterMap,
-  type RedteamFileConfig,
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { shouldGenerateRemote } from '../util';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { loadRedteamProvider } from './shared';
 
@@ -178,7 +176,7 @@ async function runRedteamConversation({
 }
 
 class RedteamIterativeProvider implements ApiProvider {
-  private readonly redteamProvider: RedteamFileConfig['provider'];
+  private readonly redteamProvider: ApiProvider;
   private readonly injectVar: string;
 
   constructor(readonly config: Record<string, string | object>) {
@@ -188,15 +186,11 @@ class RedteamIterativeProvider implements ApiProvider {
 
     // Redteam provider can be set from the config.
 
-    if (shouldGenerateRemote()) {
-      this.redteamProvider = new PromptfooChatCompletionProvider({
-        task: 'iterative',
-        jsonOnly: true,
-        preferSmallModel: false,
-      });
-    } else {
-      this.redteamProvider = config.redteamProvider;
-    }
+    this.redteamProvider = new PromptfooChatCompletionProvider({
+      task: 'iterative',
+      jsonOnly: true,
+      preferSmallModel: false,
+    });
   }
 
   id() {

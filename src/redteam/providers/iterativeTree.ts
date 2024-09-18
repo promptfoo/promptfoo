@@ -27,10 +27,8 @@ import type {
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { shouldGenerateRemote } from '../util';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
-import { loadRedteamProvider } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -548,20 +546,11 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
-    let redteamProvider: ApiProvider;
-
-    if (shouldGenerateRemote()) {
-      redteamProvider = new PromptfooChatCompletionProvider({
-        task: 'iterative:tree',
-        jsonOnly: true,
-        preferSmallModel: false,
-      });
-    } else {
-      redteamProvider = await loadRedteamProvider({
-        provider: this.config.redteamProvider,
-        jsonOnly: true,
-      });
-    }
+    const redteamProvider = new PromptfooChatCompletionProvider({
+      task: 'iterative:tree',
+      jsonOnly: true,
+      preferSmallModel: false,
+    });
 
     return runRedteamConversation({
       prompt: context.prompt,

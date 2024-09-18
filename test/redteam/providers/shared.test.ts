@@ -1,4 +1,3 @@
-import cliState from '../../../src/cliState';
 import { loadApiProviders } from '../../../src/providers';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
 import {
@@ -55,17 +54,10 @@ describe('loadRedteamProvider', () => {
     expect(result).toBe(mockApiProvider);
   });
 
-  it('should load provider from string', async () => {
-    jest.mocked(loadApiProviders).mockResolvedValue([mockLoadedProvider]);
-    const result = await loadRedteamProvider({ provider: 'test-provider' });
-    expect(result).toBe(mockLoadedProvider);
-    expect(loadApiProviders).toHaveBeenCalledWith(['test-provider']);
-  });
-
   it('should load provider from ProviderOptions', async () => {
     const providerOptions = { id: 'test-provider', apiKey: 'test-key' };
     jest.mocked(loadApiProviders).mockResolvedValue([mockLoadedProvider]);
-    const result = await loadRedteamProvider({ provider: providerOptions });
+    const result = await loadRedteamProvider({ provider: mockLoadedProvider });
     expect(result).toBe(mockLoadedProvider);
     expect(loadApiProviders).toHaveBeenCalledWith([providerOptions]);
   });
@@ -104,12 +96,5 @@ describe('loadRedteamProvider', () => {
         response_format: { type: 'json_object' },
       },
     });
-  });
-
-  it('should use provider from cliState if available', async () => {
-    const mockStateProvider = { id: jest.fn(), callApi: jest.fn() };
-    cliState.config!.redteam!.provider = mockStateProvider;
-    const result = await loadRedteamProvider();
-    expect(result).toBe(mockStateProvider);
   });
 });
