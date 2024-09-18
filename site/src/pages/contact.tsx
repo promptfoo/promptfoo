@@ -38,6 +38,28 @@ function Calendar() {
   );
 }
 
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`contact-tabpanel-${index}`}
+      aria-labelledby={`contact-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+    </div>
+  );
+}
+
 export default function Contact(): JSX.Element {
   const [tabValue, setTabValue] = useState(0);
 
@@ -149,27 +171,5 @@ export default function Contact(): JSX.Element {
         </TabPanel>
       </Container>
     </Layout>
-  );
-}
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`contact-tabpanel-${index}`}
-      aria-labelledby={`contact-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
-    </div>
   );
 }
