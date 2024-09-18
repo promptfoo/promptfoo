@@ -54,12 +54,12 @@
 }
 
 .pricingCard h2 {
-  font-size: 1.5rem;
+  font-size: 2.5rem;
   margin-bottom: 1rem;
 }
 
 .price {
-  font-size: 2.5rem;
+  font-size: 1.5rem;
   font-weight: bold;
   margin-bottom: 1rem;
 }
@@ -92,13 +92,64 @@
   margin-top: auto;
 }
 
+.enterpriseFeaturesSection {
+  padding: 4rem 2rem;
+}
+
+.enterpriseFeaturesSection h2 {
+  text-align: center;
+  margin-bottom: 5rem;
+}
+
+.featureRow {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4rem;
+}
+
+.featureRow.reverse {
+  flex-direction: row-reverse;
+}
+
+.featureContent {
+  flex: 1;
+  padding: 0 2rem;
+}
+
+.featureImageWrapper {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.featureImage {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 768px) {
+  .featureRow,
+  .featureRow.reverse {
+    flex-direction: column;
+  }
+
+  .featureContent {
+    padding: 0;
+    margin-bottom: 1rem;
+  }
+}
+
 .faqSection {
   margin-top: 4rem;
+  margin-bottom: 8rem;
 }
 
 .faqSection h2 {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 5rem;
 }
 
 .faqGrid {
