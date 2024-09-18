@@ -1,7 +1,7 @@
 import glob from 'glob';
 import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
-import type { ApiProvider, TestSuite, Prompt } from '../src/types';
+import type { ApiProvider, Prompt, TestSuite } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
@@ -509,6 +509,32 @@ describe('evaluator', () => {
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe('Transformed: Original output');
+  });
+
+  it('evaluate with vars transform', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ var1 }} {{ var2 }}')],
+      tests: [
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+        },
+      ],
+      defaultTest: {
+        options: {
+          transform_vars: '{ ...vars, var1: "transformed var1" }',
+        },
+      },
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].prompt.raw).toBe('Test prompt transformed var1 value2');
+    expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
+    expect(summary.results[0].response?.output).toBe('Test output');
   });
 
   it('evaluate with provider transform and test transform', async () => {
