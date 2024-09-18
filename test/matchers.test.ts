@@ -359,7 +359,7 @@ describe('matchesLlmRubric', () => {
     });
   });
 
-  it('should use default prompt when external file is not found', async () => {
+  it('should throw an error when the external file is not found', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(false);
 
     const rubric = 'Test rubric';
