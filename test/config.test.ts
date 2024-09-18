@@ -56,6 +56,8 @@ jest.mock('../src/prompts', () => ({
   readPrompts: jest.fn(),
 }));
 
+jest.mock('../src/logger');
+
 describe('readConfigs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
