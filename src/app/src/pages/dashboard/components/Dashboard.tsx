@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import {
   Severity,
   categoryAliases,
-  categoryAliasesReverse,
   riskCategories,
   riskCategorySeverityMap,
 } from '@app/pages/report/components/constants';
@@ -31,11 +30,6 @@ import IssuesBySeverity from './IssuesBySeverity';
 import RecentEvals from './RecentEvals';
 import Sidebar from './Sidebar';
 import TopFailingCategories from './TopFailingCategories';
-
-function getPluginIdFromMetricName(metricName: string): string {
-  const metricBaseName = metricName.split('/')[0];
-  return categoryAliasesReverse[metricBaseName as keyof typeof categoryAliases];
-}
 
 interface AttackSuccessRateDataPoint {
   date: string;

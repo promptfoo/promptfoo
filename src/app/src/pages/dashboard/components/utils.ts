@@ -1,7 +1,6 @@
 import type { StandaloneEval } from '@/../../../util';
 import {
   riskCategories,
-  categoryAliases,
   riskCategorySeverityMap,
   Severity,
 } from '@app/pages/report/components/constants';
