@@ -7,6 +7,7 @@ import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import NodeCache from 'node-cache';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
@@ -970,9 +971,17 @@ export function setupEnv(envPath: string | undefined) {
 
 export type StandaloneEval = CompletedPrompt & {
   evalId: string;
+  description: string | null;
   datasetId: string | null;
   promptId: string | null;
+  isRedteam: boolean;
+  createdAt: number;
+
+  pluginFailCount: Record<string, number>;
+  pluginPassCount: Record<string, number>;
 };
+
+const standaloneEvalCache = new NodeCache({ stdTTL: 60 * 60 * 2 }); // Cache for 2 hours
 
 export function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
@@ -981,6 +990,13 @@ export function getStandaloneEvals({
   limit?: number;
   tag?: { key: string; value: string };
 } = {}): StandaloneEval[] {
+  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}`;
+  const cachedResult = standaloneEvalCache.get<StandaloneEval[]>(cacheKey);
+
+  if (cachedResult) {
+    return cachedResult;
+  }
+
   const db = getDb();
   const results = db
     .select({
@@ -992,6 +1008,7 @@ export function getStandaloneEvals({
       datasetId: evalsToDatasets.datasetId,
       tagName: tags.name,
       tagValue: tags.value,
+      isRedteam: sql`json_extract(evals.config, '$.redteam') IS NOT NULL`.as('isRedteam'),
     })
     .from(evals)
     .leftJoin(evalsToPrompts, eq(evals.id, evalsToPrompts.evalId))
@@ -1003,22 +1020,49 @@ export function getStandaloneEvals({
     .limit(limit)
     .all();
 
-  return results.flatMap((result) => {
+  const standaloneEvals = results.flatMap((result) => {
     const {
+      description,
       createdAt,
       evalId,
       promptId,
       datasetId,
       results: { table },
+      isRedteam,
     } = result;
-    return table.head.prompts.map((col) => ({
-      evalId,
-      promptId,
-      datasetId,
-      createdAt,
-      ...col,
-    }));
+    return table.head.prompts.map((col, index) => {
+      // Compute some stats
+      const pluginCounts = table.body.reduce(
+        (acc, row) => {
+          const pluginId = row.test.metadata?.pluginId;
+          if (pluginId) {
+            const isPass = row.outputs[index].pass;
+            acc.pluginPassCount[pluginId] = (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
+            acc.pluginFailCount[pluginId] = (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
+          }
+          return acc;
+        },
+        { pluginPassCount: {}, pluginFailCount: {} } as {
+          pluginPassCount: Record<string, number>;
+          pluginFailCount: Record<string, number>;
+        },
+      );
+
+      return {
+        evalId,
+        description,
+        promptId,
+        datasetId,
+        createdAt,
+        isRedteam: isRedteam as boolean,
+        ...pluginCounts,
+        ...col,
+      };
+    });
   });
+
+  standaloneEvalCache.set(cacheKey, standaloneEvals);
+  return standaloneEvals;
 }
 
 export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
