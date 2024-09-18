@@ -1,5 +1,5 @@
 import Cal, { getCalApi } from '@calcom/embed-react';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
@@ -8,6 +8,8 @@ import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
@@ -37,6 +39,12 @@ function Calendar() {
 }
 
 export default function Contact(): JSX.Element {
+  const [tabValue, setTabValue] = useState(0);
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
+
   return (
     <Layout title="Contact Us" description="Schedule a meeting with the promptfoo team">
       <Container maxWidth="md">
@@ -45,6 +53,7 @@ export default function Contact(): JSX.Element {
             Chat with us
           </Typography>
         </Box>
+
         <Box my={4}>
           <Typography variant="body1" gutterBottom>
             <strong>Ways to get in touch:</strong>
@@ -70,10 +79,16 @@ export default function Contact(): JSX.Element {
           </Typography>
         </Box>
 
-        <Box mb={4}>
-          <Typography variant="h4" gutterBottom>
-            Contact Form
-          </Typography>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+          <Tabs value={tabValue} onChange={handleTabChange} aria-label="contact tabs">
+            <Tab label={<strong>Schedule a Meeting</strong>} />
+            <Tab label={<strong>Contact Form</strong>} />
+          </Tabs>
+        </Box>
+        <TabPanel value={tabValue} index={0}>
+          <Calendar />
+        </TabPanel>
+        <TabPanel value={tabValue} index={1}>
           <form action="https://submit-form.com/ghriv7voL" className={styles.contactForm}>
             <TextField
               fullWidth
@@ -120,7 +135,7 @@ export default function Contact(): JSX.Element {
               fullWidth
               id="meeting-about"
               name="meeting-about"
-              label="What is this meeting about?"
+              label="I'm interested in..."
               multiline
               rows={4}
               variant="outlined"
@@ -131,12 +146,30 @@ export default function Contact(): JSX.Element {
               Send
             </Button>
           </form>
-        </Box>
-
-        <Box mb={8}>
-          <Calendar />
-        </Box>
+        </TabPanel>
       </Container>
     </Layout>
+  );
+}
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`contact-tabpanel-${index}`}
+      aria-labelledby={`contact-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+    </div>
   );
 }
