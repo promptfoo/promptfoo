@@ -159,10 +159,10 @@ export const CompletedPromptSchema = PromptSchema.extend({
       namedScoresCount: z.record(z.string(), z.number()),
       redteam: z
         .object({
-          pluginScores: z.record(z.string(), z.number()),
-          pluginScoresCount: z.record(z.string(), z.number()),
-          strategyScores: z.record(z.string(), z.number()),
-          strategyScoresCount: z.record(z.string(), z.number()),
+          pluginPassCount: z.record(z.string(), z.number()),
+          pluginFailCount: z.record(z.string(), z.number()),
+          strategyPassCount: z.record(z.string(), z.number()),
+          strategyFailCount: z.record(z.string(), z.number()),
         })
         .optional(),
       cost: z.number(),

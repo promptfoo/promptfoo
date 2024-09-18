@@ -1,28 +1,24 @@
+description: 'Golang example'
+
 prompts:
-  - 'Write a very concise funny tweet about {{topic}}'
+  - 'Write an introductory sentence for a classroom lesson on {{topic}}'
 
 providers:
   - id: golang:provider.go # defaults to CallApi function
     config:
       someOption: foobar
 
-#  - id: golang:provider.go:SomeOtherFunction
-#    label: named function
-#
-#  - id: golang:provider.go:AsyncProvider
-#    label: async provider
-
 tests:
   - vars:
-      topic: bananas
+      topic: quantum mechanics
     assert:
       - type: contains
-        value: banana
+        value: physics
   - vars:
-      topic: fruits
+      topic: the animal kingdom
     assert:
       - type: llm-rubric
-        value: includes at least one emoji
+        value: mentions at least 1 animal
   - vars:
       topic: turtles
     assert:
