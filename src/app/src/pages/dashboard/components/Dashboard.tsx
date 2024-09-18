@@ -255,7 +255,7 @@ export default function Dashboard() {
       }}
     >
       {/* Sidebar */}
-      <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+      {/*<Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />*/}
 
       {/* Main content */}
       <Box
