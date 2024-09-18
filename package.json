@@ -74,7 +74,7 @@
     "node-sql-parser": "^5.2.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.651.1",
+    "@aws-sdk/client-bedrock-runtime": "^3.654.0",
     "@azure/identity": "^4.4.1",
     "@eslint/js": "^9.10.0",
     "@libsql/client": "^0.12.0",
@@ -115,7 +115,7 @@
     "jest-watch-typeahead": "^2.2.2",
     "madge": "^8.0.0",
     "nock": "^13.5.5",
-    "nodemon": "^3.1.4",
+    "nodemon": "^3.1.5",
     "prettier": "^3.3.3",
     "shx": "^0.3.4",
     "ts-node": "^10.9.2",
@@ -162,7 +162,7 @@
     "mathjs": "^13.1.1",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
-    "openai": "^4.61.1",
+    "openai": "^4.62.1",
     "opener": "^1.5.2",
     "proxy-agent": "^6.4.0",
     "python-shell": "^5.0.0",
