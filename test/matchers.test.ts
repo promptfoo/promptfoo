@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { getAndCheckProvider, getGradingProvider, matchesClassification } from '../src/matchers';
 import {
   matchesSimilarity,
@@ -22,11 +23,97 @@ import type {
 } from '../src/types';
 import { TestGrader } from './utils';
 
+jest.mock('../src/database', () => ({
+  getDb: jest.fn().mockImplementation(() => {
+    throw new TypeError('The "original" argument must be of type function. Received undefined');
+  }),
+}));
 jest.mock('../src/esm');
 jest.mock('../src/logger');
 jest.mock('../src/cliState');
+jest.mock('proxy-agent', () => ({
+  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+}));
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
+jest.mock('better-sqlite3');
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  readFileSync: jest.fn(),
+  existsSync: jest.fn(),
+}));
 
 const Grader = new TestGrader();
+
+describe('matchesLlmRubric with external file', () => {
+  const mockFilePath = '/path/to/external/rubric.txt';
+  const mockFileContent = 'This is an external rubric prompt';
+
+  beforeEach(() => {
+    // Reset mocks before each test
+    jest.clearAllMocks();
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+  });
+
+  it('should load rubric prompt from external file when specified', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockFilePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(fs.existsSync).toHaveBeenCalledWith(mockFilePath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf8');
+    expect(grading.provider.callApi).toHaveBeenCalledWith(expect.stringContaining(mockFileContent));
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+      },
+    });
+  });
+
+  it('should use default prompt when external file is not found', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(false);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockFilePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(rubric, llmOutput, grading)).rejects.toThrow(
+      'File does not exist',
+    );
+
+    expect(fs.existsSync).toHaveBeenCalledWith(mockFilePath);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(grading.provider.callApi).not.toHaveBeenCalled();
+  });
+});
 
 describe('matchesSimilarity', () => {
   beforeEach(() => {
