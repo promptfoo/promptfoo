@@ -4,4 +4,8 @@ export interface GlobalConfig {
   account?: {
     email?: string;
   };
+  cloud?: {
+    apiHost?: string;
+    apiKey?: string;
+  };
 }
