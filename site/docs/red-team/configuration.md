@@ -414,66 +414,6 @@ redteam:
   language: 'German'
 ```
 
-## Providers
-
-The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_.
-
-Note that this is separate from the "target" model(s), which are set in the top-level [`providers` configuration](/docs/configuration/guide/).
-
-A common use case is to use an alternative platform like [Azure](/docs/providers/azure/), [Bedrock](/docs/providers/aws-bedrock), or [HuggingFace](/docs/providers/huggingface/).
-
-You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementations](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
-
-:::warning
-Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4o.
-:::
-
-### How attacks are generated
-
-By default, Promptfoo uses your local OpenAI key to perform attack generation. If you do not have a key, it will use our API to generate initial inputs, but the actual attacks are still performed locally.
-
-You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
-
-### Changing the model
-
-To use the `openai:chat:gpt-4o-mini` model, you can override the provider on the command line:
-
-```sh
-npx promptfoo@latest redteam generate --provider openai:chat:gpt-4o-mini
-```
-
-Or in the config:
-
-```yaml
-redteam:
-  provider:
-    id: openai:chat:gpt-4o-mini
-    # Optional config
-    config:
-      temperature: 0.5
-```
-
-A local model via [ollama](/docs/providers/ollama/) would look similar:
-
-```yaml
-redteam:
-  provider: ollama:chat:llama3.1
-```
-
-:::warning
-Some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
-:::
-
-### Remote Generation
-
-By default, promptfoo uses a remote service for generating adversarial certain inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
-
-:::warning
-Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.
-:::
-
-If you need to use a custom provider for generation, you can still benefit from our remote service by leaving `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` set to `false` (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
-
 ### Custom Providers/Targets
 
 Promptfoo is very flexible and allows you to configure almost any code or API, with dozens of [providers](/docs/providers) supported out of the box.
