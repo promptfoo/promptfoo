@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import { getAndCheckProvider, getGradingProvider, matchesClassification } from '../src/matchers';
 import {
   matchesSimilarity,
@@ -231,7 +232,7 @@ describe('matchesSimilarity', () => {
 });
 
 describe('matchesLlmRubric', () => {
-  const mockFilePath = '/path/to/external/rubric.txt';
+  const mockFilePath = path.join('path', 'to', 'external', 'rubric.txt');
   const mockFileContent = 'This is an external rubric prompt';
 
   beforeEach(() => {
@@ -343,8 +344,13 @@ describe('matchesLlmRubric', () => {
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading);
 
-    expect(fs.existsSync).toHaveBeenCalledWith(mockFilePath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf8');
+    expect(fs.existsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
+    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
+      'utf8',
+    );
     expect(grading.provider.callApi).toHaveBeenCalledWith(expect.stringContaining(mockFileContent));
     expect(result).toEqual({
       pass: true,
@@ -379,7 +385,9 @@ describe('matchesLlmRubric', () => {
       'File does not exist',
     );
 
-    expect(fs.existsSync).toHaveBeenCalledWith(mockFilePath);
+    expect(fs.existsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
+    );
     expect(fs.readFileSync).not.toHaveBeenCalled();
     expect(grading.provider.callApi).not.toHaveBeenCalled();
   });
