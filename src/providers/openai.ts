@@ -522,7 +522,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
         : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
-      ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
+      ...(this.config.response_format
+        ? {
+            response_format: maybeLoadFromExternalFile(
+              renderVarsInObject(this.config.response_format, context?.vars),
+            ),
+          }
+        : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(this.config.stop ? { stop: this.config.stop } : {}),
       ...(this.config.passthrough || {}),
