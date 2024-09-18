@@ -1,6 +1,5 @@
 import { fetchWithCache } from '../../../src/cache';
 import { extractEntities } from '../../../src/redteam/extraction/entities';
-import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/logger', () => ({
   error: jest.fn(),
@@ -21,16 +20,11 @@ jest.mock('../../../src/envars', () => {
 });
 
 describe('Entities Extractor', () => {
-  let provider: ApiProvider;
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     originalEnv = process.env;
     process.env = { ...originalEnv };
-    provider = {
-      callApi: jest.fn().mockResolvedValue({ output: 'Entity: Apple\nEntity: Google' }),
-      id: jest.fn().mockReturnValue('test-provider'),
-    };
     jest.clearAllMocks();
   });
 
@@ -39,7 +33,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should use remote generation', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
       data: { task: 'entities', result: ['Apple', 'Google'] },
       cached: false,
     });
@@ -59,7 +53,10 @@ describe('Entities Extractor', () => {
   });
 
   it('should log debug message when no entities are found', async () => {
-    jest.mocked(provider.callApi).mockResolvedValue({ output: 'No entities found' });
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: { task: 'entities', result: [] },
+      cached: false,
+    });
 
     const result = await extractEntities(['prompt']);
 

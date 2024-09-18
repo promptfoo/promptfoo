@@ -94,8 +94,8 @@ describe('synthesize', () => {
         strategies: [],
       });
 
-      expect(extractEntities).toHaveBeenCalledWith(expect.any(Object), ['Test prompt']);
-      expect(extractSystemPurpose).toHaveBeenCalledWith(expect.any(Object), ['Test prompt']);
+      expect(extractEntities).toHaveBeenCalledWith(['Test prompt']);
+      expect(extractSystemPurpose).toHaveBeenCalledWith(['Test prompt']);
     });
 
     it('should handle empty prompts array', async () => {
@@ -119,16 +119,8 @@ describe('synthesize', () => {
         strategies: [],
       });
 
-      expect(extractSystemPurpose).toHaveBeenCalledWith(expect.any(Object), [
-        'Prompt 1',
-        'Prompt 2',
-        'Prompt 3',
-      ]);
-      expect(extractEntities).toHaveBeenCalledWith(expect.any(Object), [
-        'Prompt 1',
-        'Prompt 2',
-        'Prompt 3',
-      ]);
+      expect(extractSystemPurpose).toHaveBeenCalledWith(['Prompt 1', 'Prompt 2', 'Prompt 3']);
+      expect(extractEntities).toHaveBeenCalledWith(['Prompt 1', 'Prompt 2', 'Prompt 3']);
     });
   });
 

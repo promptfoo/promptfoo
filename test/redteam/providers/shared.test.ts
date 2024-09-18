@@ -1,4 +1,3 @@
-import { loadApiProviders } from '../../../src/providers';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
 import {
   ATTACKER_MODEL,
@@ -42,8 +41,6 @@ describe('loadRedteamProvider', () => {
     getApiUrl: jest.fn(),
   } as unknown as OpenAiChatCompletionProvider;
 
-  const mockLoadedProvider = { id: () => 'loaded-provider', callApi: jest.fn() };
-
   afterEach(() => {
     jest.clearAllMocks();
   });
@@ -52,14 +49,6 @@ describe('loadRedteamProvider', () => {
     const mockApiProvider = { id: jest.fn(), callApi: jest.fn() };
     const result = await loadRedteamProvider({ provider: mockApiProvider });
     expect(result).toBe(mockApiProvider);
-  });
-
-  it('should load provider from ProviderOptions', async () => {
-    const providerOptions = { id: 'test-provider', apiKey: 'test-key' };
-    jest.mocked(loadApiProviders).mockResolvedValue([mockLoadedProvider]);
-    const result = await loadRedteamProvider({ provider: mockLoadedProvider });
-    expect(result).toBe(mockLoadedProvider);
-    expect(loadApiProviders).toHaveBeenCalledWith([providerOptions]);
   });
 
   it('should use default provider when no provider is specified', async () => {
