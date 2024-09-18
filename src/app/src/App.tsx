@@ -6,7 +6,8 @@ import {
   RouterProvider,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
-import DashboardPage from './pages/dashboard/page';
+// NOTE(mldangelo): Dashboard feature is currently under development
+// import DashboardPage from './pages/dashboard/page';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
 import EvalPage from './pages/eval/page';
@@ -28,7 +29,7 @@ const router = createBrowserRouter(
       <Route path="/progress" element={<ProgressPage />} />
       <Route path="/datasets" element={<DatasetsPage />} />
       <Route path="/report" element={<ReportPage />} />
-      <Route path="/dashboard" element={<DashboardPage />} />
+      {/* <Route path="/dashboard" element={<DashboardPage />} /> */}
     </Route>,
   ]),
 );
