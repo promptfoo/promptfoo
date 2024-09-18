@@ -27,7 +27,6 @@ type CommonOptions = {
   language?: string;
   numTests?: number;
   plugins?: RedteamPluginObject[];
-  provider?: string | ProviderOptions | ApiProvider;
   purpose?: string;
   strategies?: RedteamStrategy[];
   delay?: number;

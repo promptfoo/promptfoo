@@ -61,42 +61,51 @@ export const RedteamStrategySchema = z.union([
 /**
  * Schema for `promptfoo redteam generate` command options
  */
-export const RedteamGenerateOptionsSchema = z.object({
-  cache: z.boolean().describe('Whether to use caching'),
-  config: z.string().optional().describe('Path to the configuration file'),
-  defaultConfig: z.record(z.unknown()).describe('Default configuration object'),
-  defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
-  envFile: z.string().optional().describe('Path to the environment file'),
-  injectVar: z.string().optional().describe('Variable to inject'),
-  language: z.string().optional().describe('Language of tests to generate'),
-  maxConcurrency: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Maximum number of concurrent API calls'),
-  numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
-  output: z.string().optional().describe('Output file path'),
-  plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
-  addPlugins: z
-    .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
-    .optional()
-    .describe('Additional plugins to include'),
-  addStrategies: z
-    .array(z.enum(REDTEAM_ADDITIONAL_STRATEGIES as readonly string[] as [string, ...string[]]))
-    .optional()
-    .describe('Additional strategies to include'),
-  provider: z.string().optional().describe('Provider to use'),
-  purpose: z.string().optional().describe('Purpose of the redteam generation'),
-  strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
-  write: z.boolean().describe('Whether to write the output'),
-  delay: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Delay in milliseconds between plugin API calls'),
-});
+export const RedteamGenerateOptionsSchema = z
+  .object({
+    cache: z.boolean().describe('Whether to use caching'),
+    config: z.string().optional().describe('Path to the configuration file'),
+    defaultConfig: z.record(z.unknown()).describe('Default configuration object'),
+    defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
+    envFile: z.string().optional().describe('Path to the environment file'),
+    injectVar: z.string().optional().describe('Variable to inject'),
+    language: z.string().optional().describe('Language of tests to generate'),
+    maxConcurrency: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum number of concurrent API calls'),
+    numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
+    output: z.string().optional().describe('Output file path'),
+    plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
+    addPlugins: z
+      .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
+      .optional()
+      .describe('Additional plugins to include'),
+    addStrategies: z
+      .array(z.enum(REDTEAM_ADDITIONAL_STRATEGIES as readonly string[] as [string, ...string[]]))
+      .optional()
+      .describe('Additional strategies to include'),
+    /**
+     * @deprecated This property is deprecated and no longer used.
+     */
+    provider: z.string().optional().describe('Provider to use'),
+    purpose: z.string().optional().describe('Purpose of the redteam generation'),
+    strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
+    write: z.boolean().describe('Whether to write the output'),
+    delay: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Delay in milliseconds between plugin API calls'),
+  })
+  .transform((data) => {
+    // Remove the deprecated 'provider' property from the data object
+    const { provider, ...rest } = data;
+    return rest;
+  });
 
 /**
  * Schema for `redteam` section of promptfooconfig.yaml
