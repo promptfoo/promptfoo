@@ -18,12 +18,11 @@ wss.on('connection', (ws) => {
         const response = {
           output: `Processed: ${data.prompt} at ${new Date().toISOString()}`,
           model: data.model || 'default',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
 
         ws.send(JSON.stringify(response));
       }, 1000);
-
     } catch (error) {
       console.error('Error processing message:', error);
       ws.send(JSON.stringify({ error: 'Invalid JSON' }));
