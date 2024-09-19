@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
-import SecurityIcon from '@mui/icons-material/Security';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeBlock from '@theme/CodeBlock';
 import styles from './styles.module.css';
@@ -10,8 +9,8 @@ export default function HomepageInfo(): JSX.Element {
   const [activeTab, setActiveTab] = useState('security');
 
   const tabs = [
-    { id: 'evaluations', label: 'Evaluations', icon: <AssessmentIcon /> },
-    { id: 'security', label: 'Security', icon: <SecurityIcon /> },
+    { id: 'evaluations', label: 'Quality evaluations' },
+    { id: 'security', label: 'Pre-deployment security scans' },
   ];
 
   const config = [
@@ -80,7 +79,7 @@ targets:
               className={`${styles.walkthroughTab} ${activeTab === tab.id ? styles.walkthroughTabActive : ''}`}
               onClick={() => setActiveTab(tab.id)}
             >
-              {tab.icon} {tab.label}
+              {tab.label}
             </button>
           ))}
         </div>
