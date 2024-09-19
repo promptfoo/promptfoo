@@ -168,7 +168,7 @@ const AboutPage = () => {
           </Typography>
           <Typography variant="body1" paragraph align="center">
             Promptfoo is proud to be supported by a vibrant community of over 100 open source
-            contributors. Their dedication and expertise help drive our innovation and growth.
+            contributors.
           </Typography>
           <Box display="flex" justifyContent="center" mt={4}>
             <a href="https://github.com/promptfoo/promptfoo/graphs/contributors">
@@ -188,8 +188,7 @@ const AboutPage = () => {
             Ready to Secure Your AI Applications?
           </Typography>
           <Typography variant="body1" paragraph>
-            Join the ranks of leading enterprises who trust Promptfoo to fortify their AI
-            infrastructure.
+            Join leading enterprises who trust Promptfoo to fortify their AI applications.
           </Typography>
           <Link className="button button--primary button--lg" to="/contact/">
             Get in Touch
