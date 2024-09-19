@@ -27,7 +27,6 @@ export default function Careers(): JSX.Element {
         <p>We are currently hiring for:</p>
         <ul>
           <li>Engineering</li>
-          <li>Developer Relations</li>
           <li>Founding Sales</li>
         </ul>
         <p>
