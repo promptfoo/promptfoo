@@ -116,7 +116,7 @@ export function configCommand(program: Command) {
         }
         // Send login request
         const apiHost = cloudConfig.getApiHost();
-        const loginResponse = await fetchWithProxy(`${apiHost}/users/login`, {
+        const loginResponse = await fetchWithProxy(`${apiHost}/users/login?fromCLI=true`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
