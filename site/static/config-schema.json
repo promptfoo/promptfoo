@@ -418,6 +418,9 @@
                               "transform": {
                                 "type": "string"
                               },
+                              "transform_vars": {
+                                "type": "string"
+                              },
                               "storeOutputAs": {
                                 "type": "string"
                               }

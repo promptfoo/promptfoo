@@ -487,7 +487,6 @@ class Evaluator {
             true,
             TransformInputType.VARS,
           );
-          logger.warn(`transformed vars: ${JSON.stringify(transformedVars)}`);
           invariant(
             typeof transformedVars === 'object',
             'Transform function did not return a valid object',
