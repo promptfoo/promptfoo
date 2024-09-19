@@ -84,7 +84,7 @@
   }
 }
 
-.walkthroughTabs {
+.exampleTabs {
   display: flex;
   justify-content: center;
   border-bottom: 1px solid #e0e0e0;
@@ -92,7 +92,7 @@
   margin-bottom: 1rem;
 }
 
-.walkthroughTab {
+.exampleTab {
   padding: 1rem 1rem;
   border: none;
   background: none;
@@ -104,17 +104,17 @@
   gap: 0.5rem;
 }
 
-.walkthroughTabActive {
+.exampleTabActive {
   border-bottom: 2px solid #1890ff;
   color: #1890ff;
 }
 
 /* Add this for dark mode support */
-[data-theme='dark'] .walkthroughTabs {
+[data-theme='dark'] .exampleTabs {
   border-bottom-color: #444;
 }
 
-[data-theme='dark'] .walkthroughTabActive {
+[data-theme='dark'] .exampleTabActive {
   border-bottom-color: #1890ff;
   color: #1890ff;
 }

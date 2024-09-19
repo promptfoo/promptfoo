@@ -72,11 +72,11 @@ targets:
     <div className={styles.infoContainer}>
       <section className={styles.section}>
         <h2>Easy abstractions for complex LLM testing</h2>
-        <div className={styles.walkthroughTabs}>
+        <div className={styles.exampleTabs}>
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              className={`${styles.walkthroughTab} ${activeTab === tab.id ? styles.walkthroughTabActive : ''}`}
+              className={`${styles.exampleTab} ${activeTab === tab.id ? styles.exampleTabActive : ''}`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
