@@ -2,49 +2,19 @@ import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { ApiProvider, PluginConfig, TestCase } from '../../types';
+import type { PluginConfig, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS, REMOTE_GENERATION_URL } from '../constants';
-import { AsciiSmugglingPlugin } from './asciiSmuggling';
-import { type PluginBase } from './base';
-import { BflaPlugin } from './bfla';
-import { BolaPlugin } from './bola';
-import { CompetitorPlugin } from './competitors';
-import { ContractPlugin } from './contracts';
-import { CrossSessionLeakPlugin } from './crossSessionLeak';
-import { DebugAccessPlugin } from './debugAccess';
-import { ExcessiveAgencyPlugin } from './excessiveAgency';
-import { HallucinationPlugin } from './hallucination';
-import { HijackingPlugin } from './hijacking';
-import { ImitationPlugin } from './imitation';
-import { IndirectPromptInjectionPlugin } from './indirectPromptInjection';
-import { OverreliancePlugin } from './overreliance';
-import { PolicyPlugin } from './policy';
-import { PoliticsPlugin } from './politics';
-import { PromptExtractionPlugin } from './promptExtraction';
-import { RbacPlugin } from './rbac';
-import { ShellInjectionPlugin } from './shellInjection';
-import { SqlInjectionPlugin } from './sqlInjection';
-import { SsrfPlugin } from './ssrf';
 
 export interface PluginFactory {
   key: string;
   validate?: (config: PluginConfig) => void;
   action: (
-    provider: ApiProvider,
     purpose: string,
     injectVar: string,
     n: number,
-    delayMs: number,
     config?: PluginConfig,
   ) => Promise<TestCase[]>;
 }
-
-type PluginClass<T extends PluginConfig> = new (
-  provider: ApiProvider,
-  purpose: string,
-  injectVar: string,
-  config: T,
-) => PluginBase;
 
 async function fetchRemoteTestCases(
   key: string,
@@ -83,70 +53,63 @@ async function fetchRemoteTestCases(
 }
 
 function createPluginFactory<T extends PluginConfig>(
-  PluginClass: PluginClass<T>,
   key: string,
   validate?: (config: T) => void,
 ): PluginFactory {
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async (provider, purpose, injectVar, n, delayMs, config) => {
+    action: async (purpose, injectVar, n, config) => {
       return fetchRemoteTestCases(key, purpose, injectVar, n, config);
     },
   };
 }
 
 const pluginFactories: PluginFactory[] = [
-  createPluginFactory(AsciiSmugglingPlugin, 'ascii-smuggling'),
-  createPluginFactory(CompetitorPlugin, 'competitors'),
-  createPluginFactory(ContractPlugin, 'contracts'),
-  createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
-  createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
-  createPluginFactory(HallucinationPlugin, 'hallucination'),
-  createPluginFactory(HijackingPlugin, 'hijacking'),
-  createPluginFactory(ImitationPlugin, 'imitation'),
-  createPluginFactory(OverreliancePlugin, 'overreliance'),
-  createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
-  createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
-  createPluginFactory(DebugAccessPlugin, 'debug-access'),
-  createPluginFactory(RbacPlugin, 'rbac'),
-  createPluginFactory(PoliticsPlugin, 'politics'),
-  createPluginFactory(BolaPlugin, 'bola'),
-  createPluginFactory(BflaPlugin, 'bfla'),
-  createPluginFactory(SsrfPlugin, 'ssrf'),
-  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config) =>
+  createPluginFactory('ascii-smuggling'),
+  createPluginFactory('bfla'),
+  createPluginFactory('bola'),
+  createPluginFactory('competitors'),
+  createPluginFactory('contracts'),
+  createPluginFactory('cross-session-leak'),
+  createPluginFactory('debug-access'),
+  createPluginFactory('excessive-agency'),
+  createPluginFactory('hallucination'),
+  createPluginFactory('hijacking'),
+  createPluginFactory('imitation'),
+  createPluginFactory('overreliance'),
+  createPluginFactory('politics'),
+  createPluginFactory('rbac'),
+  createPluginFactory('shell-injection'),
+  createPluginFactory('sql-injection'),
+  createPluginFactory('ssrf'),
+  createPluginFactory<{ policy: string }>('policy', (config) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
   ),
-  createPluginFactory<{ systemPrompt: string }>(
-    PromptExtractionPlugin,
-    'prompt-extraction',
-    (config) =>
-      invariant(
-        config.systemPrompt,
-        'Prompt extraction plugin requires `config.systemPrompt` to be set',
-      ),
+  createPluginFactory<{ systemPrompt: string }>('prompt-extraction', (config) =>
+    invariant(
+      config.systemPrompt,
+      'Prompt extraction plugin requires `config.systemPrompt` to be set',
+    ),
   ),
-  createPluginFactory<{ indirectInjectionVar: string }>(
-    IndirectPromptInjectionPlugin,
-    'indirect-prompt-injection',
-    (config) =>
-      invariant(
-        config.indirectInjectionVar,
-        'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
-      ),
+  createPluginFactory<{ indirectInjectionVar: string }>('indirect-prompt-injection', (config) =>
+    invariant(
+      config.indirectInjectionVar,
+      'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
+    ),
   ),
 ];
 
 const harmPlugins: PluginFactory[] = Object.keys(HARM_PLUGINS).map((category) => ({
   key: category,
-  action: async (provider, purpose, injectVar, n, delayMs) => {
+  action: async (purpose, injectVar, n) => {
     return fetchRemoteTestCases(category, purpose, injectVar, n);
   },
 }));
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category) => ({
   key: category,
-  action: async (provider, purpose, injectVar, n) => {
+  action: async (purpose, injectVar, n) => {
     return fetchRemoteTestCases(category, purpose, injectVar, n);
   },
 }));
