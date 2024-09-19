@@ -3,12 +3,12 @@ import type { Command } from 'commander';
 import readline from 'readline';
 import { URL } from 'url';
 import { getEnvString } from '../envars';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import type { ResultsFile } from '../types';
 import { getLatestEval, readResult, setupEnv } from '../util';
-import { getCloudConfig, isCloudEnabled } from './cloud';
 
 async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
   const url = await createShareableUrl(results.results, results.config, showAuth);
@@ -62,9 +62,9 @@ export function shareCommand(program: Command) {
 
           const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
           const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
-          if (isCloudEnabled()) {
+          if (cloudConfig.isEnabled()) {
             logger.info(
-              `Creating a private shareable URL of your eval on ${getCloudConfig()?.apiHost} (cloud enabled)`,
+              `Creating a private shareable URL of your eval on ${cloudConfig.getApiHost()} (cloud enabled)`,
             );
             await createPublicUrl(results, cmdObj.showAuth);
             process.exit(0);

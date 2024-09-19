@@ -5,8 +5,8 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import type { GlobalConfig } from './configTypes';
-import { getConfigDirectoryPath } from './util/config';
+import type { GlobalConfig } from '../configTypes';
+import { getConfigDirectoryPath } from '../util/config';
 
 let globalConfigCache: GlobalConfig | null = null;
 

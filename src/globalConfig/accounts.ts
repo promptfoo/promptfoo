@@ -1,5 +1,5 @@
-import type { GlobalConfig } from './configTypes';
-import { getEnvString } from './envars';
+import type { GlobalConfig } from '../configTypes';
+import { getEnvString } from '../envars';
 import { readGlobalConfig, writeGlobalConfig } from './globalConfig';
 
 export function getUserEmail(): string | null {

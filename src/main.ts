@@ -3,7 +3,6 @@ import { Command } from 'commander';
 import path from 'path';
 import { checkNodeVersion } from './checkNodeVersion';
 import { cacheCommand } from './commands/cache';
-import { cloudCommand } from './commands/cloud';
 import { configCommand } from './commands/config';
 import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
@@ -69,7 +68,6 @@ async function main() {
   showCommand(program);
   versionCommand(program);
   viewCommand(program);
-  cloudCommand(program);
 
   const generateCommand = program.command('generate').description('Generate synthetic data');
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);

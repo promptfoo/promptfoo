@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import packageJson from '../package.json';
 import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
-import { maybeRecordFirstRun } from './globalConfig';
+import { maybeRecordFirstRun } from './globalConfig/globalConfig';
 import logger from './logger';
 
 export type EventValue = string | number | boolean | string[];

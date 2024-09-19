@@ -1,5 +1,5 @@
-import { getUserEmail, setUserEmail, getAuthor } from '../src/accounts';
-import { writeGlobalConfig, readGlobalConfig } from '../src/globalConfig';
+import { getUserEmail, setUserEmail, getAuthor } from '../src/globalConfig/accounts';
+import { writeGlobalConfig, readGlobalConfig } from '../src/globalConfig/globalConfig';
 
 jest.mock('../src/globalConfig', () => ({
   writeGlobalConfig: jest.fn(),
