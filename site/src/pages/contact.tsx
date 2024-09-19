@@ -107,68 +107,70 @@ export default function Contact(): JSX.Element {
             <Tab label={<strong>Contact Form</strong>} />
           </Tabs>
         </Box>
-        <TabPanel value={tabValue} index={0}>
-          <Calendar />
-        </TabPanel>
-        <TabPanel value={tabValue} index={1}>
-          <form action="https://submit-form.com/ghriv7voL" className={styles.contactForm}>
-            <TextField
-              fullWidth
-              id="name"
-              name="name"
-              label="Your Name"
-              variant="outlined"
-              required
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              id="email"
-              name="email"
-              label="Work Email"
-              type="email"
-              variant="outlined"
-              required
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              id="company"
-              name="company"
-              label="Company Name"
-              variant="outlined"
-              required
-              margin="normal"
-            />
-            <FormControl fullWidth margin="normal" variant="outlined" required>
-              <InputLabel id="interested-in-label">Interested In</InputLabel>
-              <Select
-                labelId="interested-in-label"
-                id="interested-in"
-                name="interested-in"
-                label="Interested In"
-              >
-                <MenuItem value="Security/red teaming">Security/red teaming</MenuItem>
-                <MenuItem value="Evaluations">Evaluations</MenuItem>
-                <MenuItem value="Other">Other</MenuItem>
-              </Select>
-            </FormControl>
-            <TextField
-              fullWidth
-              id="meeting-about"
-              name="meeting-about"
-              label="I'm interested in..."
-              multiline
-              rows={4}
-              variant="outlined"
-              required
-              margin="normal"
-            />
-            <Button type="submit" variant="contained" color="primary" sx={{ mt: 2 }}>
-              Send
-            </Button>
-          </form>
-        </TabPanel>
+        <Box mb={8}>
+          <TabPanel value={tabValue} index={0}>
+            <Calendar />
+          </TabPanel>
+          <TabPanel value={tabValue} index={1}>
+            <form action="https://submit-form.com/ghriv7voL" className={styles.contactForm}>
+              <TextField
+                fullWidth
+                id="name"
+                name="name"
+                label="Your Name"
+                variant="outlined"
+                required
+                margin="normal"
+              />
+              <TextField
+                fullWidth
+                id="email"
+                name="email"
+                label="Work Email"
+                type="email"
+                variant="outlined"
+                required
+                margin="normal"
+              />
+              <TextField
+                fullWidth
+                id="company"
+                name="company"
+                label="Company Name"
+                variant="outlined"
+                required
+                margin="normal"
+              />
+              <FormControl fullWidth margin="normal" variant="outlined" required>
+                <InputLabel id="interested-in-label">Interested In</InputLabel>
+                <Select
+                  labelId="interested-in-label"
+                  id="interested-in"
+                  name="interested-in"
+                  label="Interested In"
+                >
+                  <MenuItem value="Security/red teaming">Security/red teaming</MenuItem>
+                  <MenuItem value="Evaluations">Evaluations</MenuItem>
+                  <MenuItem value="Other">Other</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                fullWidth
+                id="meeting-about"
+                name="meeting-about"
+                label="I'm interested in..."
+                multiline
+                rows={4}
+                variant="outlined"
+                required
+                margin="normal"
+              />
+              <Button type="submit" variant="contained" color="primary" sx={{ mt: 2 }}>
+                Send
+              </Button>
+            </form>
+          </TabPanel>
+        </Box>
       </Container>
     </Layout>
   );

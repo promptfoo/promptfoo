@@ -63,6 +63,12 @@
   align-items: flex-start;
 }
 
+.walkthroughHeading {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
 .walkthroughDescription {
   width: 30%;
 }
