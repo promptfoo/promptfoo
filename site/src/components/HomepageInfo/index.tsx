@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeBlock from '@theme/CodeBlock';
@@ -96,14 +95,12 @@ targets:
             <div className={styles.featureTitle}>
               <AssessmentIcon /> Detailed, actionable results
             </div>
-            <Link to={activeConfig.image}>
-              <img
-                loading="lazy"
-                src={activeConfig.image}
-                className={styles.resultImage}
-                alt={`${activeTab === 'evaluations' ? 'Evaluation' : 'Security'} Results`}
-              />
-            </Link>
+            <img
+              loading="lazy"
+              src={activeConfig.image}
+              className={styles.resultImage}
+              alt={`${activeTab === 'evaluations' ? 'Evaluation' : 'Security'} Results`}
+            />
           </div>
         </div>
       </section>
