@@ -7,11 +7,11 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../globalConfig';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
-const API_HOST = process.env.API_HOST || 'https://api.promptfoo.dev';
+const API_HOST = process.env.API_HOST || 'https://api.promptfoo.app';
 
 const DEFAULT_CLOUD_CONFIG: GlobalConfig['cloud'] = {
-  apiHost: 'https://api.promptfoo.dev',
-  appUrl: 'https://app.promptfoo.dev',
+  apiHost: 'https://api.promptfoo.app',
+  appUrl: 'https://www.promptfoo.app',
 };
 
 function updateCloudConfig(partialConfig: Partial<GlobalConfig['cloud']>) {
@@ -42,7 +42,7 @@ async function promptForToken(): Promise<string> {
 }
 
 async function validateApiToken(token: string, apiHost: string): Promise<void> {
-  const response = await fetchWithProxy(`${apiHost}/api/users/me`, {
+  const response = await fetchWithProxy(`${apiHost}/users/me`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -54,11 +54,11 @@ async function validateApiToken(token: string, apiHost: string): Promise<void> {
 
   logger.info('You are logged in successfully.');
   const { user, organization, app } = await response.json();
-  await updateCloudConfig({ apiKey: token, appUrl: app.baseUrl });
+  await updateCloudConfig({ apiKey: token, appUrl: app.url });
 
   logger.info(`User: ${user.email}`);
   logger.info(`Organization: ${organization.name}`);
-  logger.info(`Login at ${app.baseUrl}`);
+  logger.info(`Login at ${app.url}`);
 }
 
 export function cloudCommand(program: Command) {
@@ -72,7 +72,7 @@ export function cloudCommand(program: Command) {
       try {
         // Send login request
         const apiHost = readGlobalConfig().cloud?.apiHost || API_HOST;
-        const loginResponse = await fetchWithProxy(`${apiHost}/api/users/login`, {
+        const loginResponse = await fetchWithProxy(`${apiHost}/users/login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
