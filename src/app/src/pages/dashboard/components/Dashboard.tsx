@@ -28,7 +28,6 @@ import EmergingRisks from './EmergingRisks';
 import HighestSeverityCategories from './HighestSeverityCategories';
 import IssuesBySeverity from './IssuesBySeverity';
 import RecentEvals from './RecentEvals';
-import Sidebar from './Sidebar';
 import TopFailingCategories from './TopFailingCategories';
 
 interface AttackSuccessRateDataPoint {
@@ -45,7 +44,7 @@ export default function Dashboard() {
   const [originalEvals, setOriginalEvals] = useState<StandaloneEval[]>([]);
   const [selectedApplication, setSelectedApplication] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  //const [sidebarOpen, setSidebarOpen] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [attackSuccessRateData, setAttackSuccessRateData] = useState<AttackSuccessRateDataPoint[]>(
@@ -255,7 +254,7 @@ export default function Dashboard() {
       }}
     >
       {/* Sidebar */}
-      <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+      {/*<Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />*/}
 
       {/* Main content */}
       <Box
@@ -263,7 +262,7 @@ export default function Dashboard() {
         sx={{
           flexGrow: 1,
           transition: 'margin-left 0.3s ease-in-out',
-          ...(sidebarOpen && { marginLeft: '180px' }),
+          // ...(sidebarOpen && { marginLeft: '180px' }),
         }}
       >
         <Container maxWidth={false} disableGutters sx={{ mt: 2, mb: 4, px: 4 }}>
