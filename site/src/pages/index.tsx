@@ -185,11 +185,11 @@ function HomepageWalkthrough() {
 }
 
 export default function Home(): JSX.Element {
-  const [getStartedUrl, setGetStartedUrl] = React.useState('/docs/intro');
+  const [getStartedUrl, setGetStartedUrl] = React.useState('/docs/intro/');
 
   React.useEffect(() => {
     if (window.location.hash === '#redteam') {
-      setGetStartedUrl('/docs/red-team');
+      setGetStartedUrl('/docs/red-team/quickstart/');
     }
   }, []);
 
@@ -217,7 +217,7 @@ export default function Home(): JSX.Element {
           <div className="container">
             <h2>Detect & fix critical failures</h2>
             <div>
-              <Link to="/llm-vulnerability-scanner">
+              <Link to="/llm-vulnerability-scanner/">
                 <img
                   loading="lazy"
                   src="/img/riskreport-2.png"
