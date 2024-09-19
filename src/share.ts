@@ -4,7 +4,6 @@ import { getAuthor } from './accounts';
 import { getCloudConfig, isCloudEnabled } from './commands/cloud';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { fetchWithProxy } from './fetch';
-import { readGlobalConfig } from './globalConfig';
 import logger from './logger';
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
 
