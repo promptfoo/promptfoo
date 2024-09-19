@@ -158,7 +158,7 @@ export default function Contact(): JSX.Element {
                 fullWidth
                 id="meeting-about"
                 name="meeting-about"
-                label="I'm interested in..."
+                label="I want to discuss..."
                 multiline
                 rows={4}
                 variant="outlined"
