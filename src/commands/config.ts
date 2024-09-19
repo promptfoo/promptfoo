@@ -98,7 +98,6 @@ export function configCommand(program: Command) {
     .description('Set the cloud API token')
     .action(async (apiToken: string) => {
       cloudConfig.setApiKey(apiToken);
-      invariant(cloudConfig.getApiKey() === apiToken, 'Cloud API token not set.');
       logger.info('Cloud API token set.');
       telemetry.record('command_used', {
         name: 'config set cloud_api_token',

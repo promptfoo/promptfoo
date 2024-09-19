@@ -8,29 +8,20 @@ import * as path from 'path';
 import type { GlobalConfig } from '../configTypes';
 import { getConfigDirectoryPath } from '../util/config';
 
-let globalConfigCache: GlobalConfig | null = null;
-
-export function resetGlobalConfig(): void {
-  globalConfigCache = null;
-}
-
 export function readGlobalConfig(): GlobalConfig {
-  if (!globalConfigCache) {
-    const configDir = getConfigDirectoryPath();
-    const configFilePath = path.join(configDir, 'promptfoo.yaml');
-
-    if (fs.existsSync(configFilePath)) {
-      globalConfigCache = yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig;
-    } else {
-      if (!fs.existsSync(configDir)) {
-        fs.mkdirSync(configDir, { recursive: true });
-      }
-      globalConfigCache = { hasRun: false };
-      fs.writeFileSync(configFilePath, yaml.dump(globalConfigCache));
+  const configDir = getConfigDirectoryPath();
+  const configFilePath = path.join(configDir, 'promptfoo.yaml');
+  let globalConfig: GlobalConfig = { hasRun: false };
+  if (fs.existsSync(configFilePath)) {
+    globalConfig = yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig;
+  } else {
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
     }
+    fs.writeFileSync(configFilePath, yaml.dump(globalConfig));
   }
 
-  return globalConfigCache;
+  return globalConfig;
 }
 
 export function writeGlobalConfig(config: GlobalConfig): void {

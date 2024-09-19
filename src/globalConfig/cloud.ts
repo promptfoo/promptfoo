@@ -12,7 +12,7 @@ export class CloudConfig {
   };
 
   constructor() {
-    const savedConfig = readGlobalConfig().cloud || {};
+    const savedConfig = readGlobalConfig()?.cloud || {};
     this.config = {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost || API_HOST,
@@ -57,7 +57,7 @@ export class CloudConfig {
   }
 
   private reload(): void {
-    const savedConfig = readGlobalConfig().cloud || {};
+    const savedConfig = readGlobalConfig()?.cloud || {};
     this.config = {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost || API_HOST,
@@ -81,9 +81,10 @@ export class CloudConfig {
     this.setApiKey(token);
     this.setAppUrl(app.url);
 
+    logger.info('Logged in as:');
     logger.info(`User: ${user.email}`);
     logger.info(`Organization: ${organization.name}`);
-    logger.info(`Login at ${app.url}`);
+    logger.info(`Access the app at ${app.url}`);
   }
 }
 
