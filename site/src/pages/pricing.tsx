@@ -56,15 +56,15 @@ function PricingTable() {
     {
       name: 'On-Premise',
       price: 'Custom',
-      description: 'For organizations requiring full control over their infrastructure',
+      description: 'For organizations that require full control over their infrastructure',
       features: [
         'All Enterprise features',
         'Deployment on your own infrastructure',
         'Complete data isolation',
         'Dedicated support team',
       ],
-      cta: 'Contact Sales',
-      ctaLink: '/contact',
+      cta: 'Contact Us',
+      ctaLink: '/contact/',
       highlighted: false,
     },
   ];
