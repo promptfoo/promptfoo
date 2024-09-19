@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
-import { Typography, Grid, Box, Button, Container, Avatar, Divider } from '@mui/material';
+import { Typography, Grid, Box, Container, Avatar, Divider } from '@mui/material';
 import Layout from '@theme/Layout';
 
 const AboutPage = () => {
