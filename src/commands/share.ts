@@ -63,9 +63,7 @@ export function shareCommand(program: Command) {
           const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
           const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
           if (cloudConfig.isEnabled()) {
-            logger.info(
-              `Creating a private shareable URL of your eval on ${cloudConfig.getApiHost()} (cloud enabled)`,
-            );
+            logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
             await createPublicUrl(results, cmdObj.showAuth);
             process.exit(0);
           } else {
