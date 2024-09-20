@@ -726,17 +726,19 @@ describe('readConfig', () => {
     };
     jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
     jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
-      throw new Error('File does not exist')
+      throw new Error('File does not exist');
     });
     jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
-      throw new Error('File does not exist')
+      throw new Error('File does not exist');
     });
-    
 
     const result = await readConfig('configs');
 
     expect(result).toEqual(mockConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.normalize('configs/promptfooconfig.json'), 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.normalize('configs/promptfooconfig.json'),
+      'utf-8',
+    );
   });
 
   it('should read YAML config file', async () => {
@@ -763,7 +765,10 @@ describe('readConfig', () => {
     const result = await readConfig('configs');
 
     expect(result).toEqual(mockConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.normalize('configs/promptfooconfig.yaml'), 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.normalize('configs/promptfooconfig.yaml'),
+      'utf-8',
+    );
   });
 
   it('should attempt to find a yml config file given a directory path', async () => {
@@ -774,13 +779,16 @@ describe('readConfig', () => {
     };
     jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
     jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
-      throw new Error('File does not exist')
+      throw new Error('File does not exist');
     });
 
     const result = await readConfig('configs');
 
     expect(result).toEqual(mockConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.normalize('configs/promptfooconfig.yml'), 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.normalize('configs/promptfooconfig.yml'),
+      'utf-8',
+    );
   });
 
   it('should read JavaScript config file', async () => {
@@ -808,15 +816,14 @@ describe('readConfig', () => {
     jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
     jest.mocked(importModule).mockResolvedValue(mockConfig);
     jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
-      throw new Error('File does not exist')
+      throw new Error('File does not exist');
     });
     jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
-      throw new Error('File does not exist')
+      throw new Error('File does not exist');
     });
     jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
-      throw new Error('File does not exist')
+      throw new Error('File does not exist');
     });
-    
 
     const result = await readConfig('configs');
 
