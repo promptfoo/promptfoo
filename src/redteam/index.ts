@@ -281,17 +281,10 @@ export async function synthesize({
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
-      const pluginTests = await action(
-        redteamProvider,
-        purpose,
-        injectVar,
-        plugin.numTests,
-        delay || 0,
-        {
-          language,
-          ...resolvePluginConfig(plugin.config),
-        },
-      );
+      const pluginTests = await action(purpose, injectVar, plugin.numTests, {
+        language,
+        ...resolvePluginConfig(plugin.config),
+      });
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,
