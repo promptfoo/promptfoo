@@ -244,6 +244,11 @@ export interface EvaluateSummary {
   stats: EvaluateStats;
 }
 
+export interface ResultSuggestion {
+  type: 'replace-prompt';
+  value: string;
+}
+
 export interface GradingResult {
   // Whether the test passed or failed
   pass: boolean;
@@ -268,6 +273,9 @@ export interface GradingResult {
 
   // User comment
   comment?: string;
+
+  // Actions for the user to take
+  suggestions?: ResultSuggestion[];
 
   // Additional info
   metadata?: {

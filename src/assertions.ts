@@ -1372,7 +1372,7 @@ ${
     const grader = getGraderById(baseType);
     invariant(grader, `Unknown promptfoo grader: ${baseType}`);
     invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
-    const { grade, rubric } = await grader.getResult(
+    const { grade, rubric, suggestions } = await grader.getResult(
       prompt,
       outputString,
       test,
@@ -1385,6 +1385,7 @@ ${
         value: rubric,
       },
       ...grade,
+      suggestions,
       metadata: {
         // Pass through all test metadata for redteam
         ...test.metadata,
