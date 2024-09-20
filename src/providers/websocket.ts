@@ -84,14 +84,14 @@ export class WebSocketProvider implements ApiProvider {
           }
           resolve({ output: this.responseParser(data) });
         } catch (err) {
-          resolve({ error: `Failed to process response: ${String(err)}` });
+          resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
         }
         ws.close();
       };
 
       ws.onerror = (err) => {
         clearTimeout(timeout);
-        resolve({ error: `WebSocket error: ${String(err)}` });
+        resolve({ error: `WebSocket error: ${JSON.stringify(err)}` });
       };
 
       ws.onopen = () => {
