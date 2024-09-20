@@ -28,6 +28,7 @@ jest.mock('fs', () => ({
   readdirSync: jest.fn(),
   existsSync: jest.fn(),
   mkdirSync: jest.fn(),
+  accessSync: jest.fn(),
 }));
 
 jest.mock('../src/util', () => {
@@ -710,12 +711,32 @@ describe('readConfig', () => {
       prompts: ['Hello, world!'],
     };
     jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
-    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
 
     const result = await readConfig('config.json');
 
     expect(result).toEqual(mockConfig);
     expect(fs.readFileSync).toHaveBeenCalledWith('config.json', 'utf-8');
+  });
+
+  it('should attempt to find a json config file given a directory path', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
+      throw new Error('File does not exist')
+    });
+    jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
+      throw new Error('File does not exist')
+    });
+    
+
+    const result = await readConfig('configs');
+
+    expect(result).toEqual(mockConfig);
+    expect(fs.readFileSync).toHaveBeenCalledWith('configs/promptfooconfig.json', 'utf-8');
   });
 
   it('should read YAML config file', async () => {
@@ -725,12 +746,41 @@ describe('readConfig', () => {
       prompts: ['Hello, world!'],
     };
     jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
-    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);
-
     const result = await readConfig('config.yaml');
 
     expect(result).toEqual(mockConfig);
     expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
+  });
+
+  it('should attempt to find a yaml config file given a directory path', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+
+    const result = await readConfig('configs/');
+
+    expect(result).toEqual(mockConfig);
+    expect(fs.readFileSync).toHaveBeenCalledWith('configs/promptfooconfig.yaml', 'utf-8');
+  });
+
+  it('should attempt to find a yml config file given a directory path', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
+      throw new Error('File does not exist')
+    });
+
+    const result = await readConfig('configs/');
+
+    expect(result).toEqual(mockConfig);
+    expect(fs.readFileSync).toHaveBeenCalledWith('configs/promptfooconfig.yml', 'utf-8');
   });
 
   it('should read JavaScript config file', async () => {

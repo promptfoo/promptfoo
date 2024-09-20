@@ -139,13 +139,44 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   return config;
 }
 
+function parseDirectoryPath(configPath: string): string {
+  return path.extname(configPath) === '' ? configPath : path.dirname(configPath);
+}
+
+function isDirectory(configPath: string): boolean {
+  return path.extname(configPath) === '';
+}
+
+function getConfigFile(configPath: string): string {
+  const possibleExtensions = ['.yaml', '.yml', '.json'];
+  const unfound = [];
+
+  for (const extension of possibleExtensions) {
+    const fileName = `promptfooconfig${extension}`;
+    const filePath = path.join(configPath, fileName);
+    try {
+      fs.accessSync(filePath);
+      return filePath
+    } catch {
+      unfound.push(filePath);
+    }
+  }
+
+  throw new Error(`No config file found. Attempted file names: ${unfound.join(', ')}`);
+}
+
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   let ret: UnifiedConfig & {
     targets?: UnifiedConfig['providers'];
     plugins?: RedteamPluginObject[];
     strategies?: RedteamStrategyObject[];
   };
-  const ext = path.parse(configPath).ext;
+  // Convert directory to a file path
+  if (isDirectory(configPath)) {
+    configPath = getConfigFile(configPath)
+  }
+  const ext = path.extname(configPath);
+
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
     ret = await dereferenceConfig(rawConfig || {});
@@ -223,6 +254,8 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
+  const directoryPaths = configPaths.map(parseDirectoryPath);
+
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<string>();
   configs.forEach((config) => {
@@ -248,7 +281,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const tests: UnifiedConfig['tests'] = [];
   for (const config of configs) {
     if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
+      const newTests = await readTests(config.tests, directoryPaths[0]);
       tests.push(...newTests);
     } else if (Array.isArray(config.tests)) {
       tests.push(...config.tests);
@@ -331,7 +364,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
+      const absolutePrompt = makeAbsolute(directoryPaths[idx], config.prompts);
       addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
@@ -341,7 +374,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
             (typeof prompt === 'object' && typeof prompt.raw === 'string'),
           'Invalid prompt',
         );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(directoryPaths[idx], prompt as string | Prompt));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -439,8 +472,7 @@ export async function resolveConfigs(
   }
 
   // Use base path in cases where path was supplied in the config file
-  const basePath = configPaths ? path.dirname(configPaths[0]) : '';
-
+  const basePath = configPaths ? parseDirectoryPath(configPaths[0]) : '';
   cliState.basePath = basePath;
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
