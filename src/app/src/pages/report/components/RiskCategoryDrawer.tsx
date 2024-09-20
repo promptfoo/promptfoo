@@ -33,16 +33,22 @@ function getPromptDisplayString(prompt: string): string {
   return prompt;
 }
 
-function getOutputDisplayString(output: string | object): string {
+function getOutputDisplay(output: string | object) {
   if (typeof output === 'string') {
     return output;
   }
   if (Array.isArray(output)) {
     const items = output.filter((item) => item.type === 'function');
     if (items.length > 0) {
-      return items
-        .map((item) => `${item.function?.name}: (${item.function?.arguments})`)
-        .join('\n');
+      return (
+        <>
+          {items.map((item) => (
+            <div key={item.id}>
+              <strong>Used tool {item.function?.name}</strong>: ({item.function?.arguments})
+            </div>
+          ))}
+        </>
+      );
     }
   }
   return JSON.stringify(output);
@@ -136,7 +142,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
                       {getPromptDisplayString(failure.prompt)}
                     </Typography>
                     <Typography variant="body2" className="output">
-                      {getOutputDisplayString(failure.output)}
+                      {getOutputDisplay(failure.output)}
                     </Typography>
                   </Box>
                 </ListItem>

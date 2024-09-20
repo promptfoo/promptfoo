@@ -178,9 +178,6 @@ const AboutPage = () => {
               />
             </a>
           </Box>
-          <Typography variant="body2" align="center" mt={2} color="text.secondary">
-            Click on the image to view all contributors
-          </Typography>
         </Box>
 
         <Box textAlign="center" mb={8}>
