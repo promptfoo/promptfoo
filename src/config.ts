@@ -148,7 +148,7 @@ function isDirectory(configPath: string): boolean {
 }
 
 function getConfigFile(configPath: string): string {
-  const possibleExtensions = ['.yaml', '.yml', '.json'];
+  const possibleExtensions = ['.yaml', '.yml', '.json', '.js'];
   const unfound = [];
 
   for (const extension of possibleExtensions) {
@@ -156,7 +156,7 @@ function getConfigFile(configPath: string): string {
     const filePath = path.join(configPath, fileName);
     try {
       fs.accessSync(filePath);
-      return filePath
+      return filePath;
     } catch {
       unfound.push(filePath);
     }
@@ -173,7 +173,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   // Convert directory to a file path
   if (isDirectory(configPath)) {
-    configPath = getConfigFile(configPath)
+    configPath = getConfigFile(configPath);
   }
   const ext = path.extname(configPath);
 
@@ -336,14 +336,14 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     if (typeof relativePath === 'string') {
       if (relativePath.startsWith('file://')) {
         relativePath =
-          'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+          'file://' + path.resolve(configPath, relativePath.slice('file://'.length));
       }
       return relativePath;
     } else if (typeof relativePath === 'object' && relativePath.id) {
       if (relativePath.id.startsWith('file://')) {
         relativePath.id =
           'file://' +
-          path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
+          path.resolve(configPath, relativePath.id.slice('file://'.length));
       }
       return relativePath;
     } else {
