@@ -736,7 +736,7 @@ describe('readConfig', () => {
     const result = await readConfig('configs');
 
     expect(result).toEqual(mockConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith('configs/promptfooconfig.json', 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.normalize('configs/promptfooconfig.json'), 'utf-8');
   });
 
   it('should read YAML config file', async () => {
@@ -760,10 +760,10 @@ describe('readConfig', () => {
     };
     jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
 
-    const result = await readConfig('configs/');
+    const result = await readConfig('configs');
 
     expect(result).toEqual(mockConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith('configs/promptfooconfig.yaml', 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.normalize('configs/promptfooconfig.yaml'), 'utf-8');
   });
 
   it('should attempt to find a yml config file given a directory path', async () => {
@@ -777,10 +777,10 @@ describe('readConfig', () => {
       throw new Error('File does not exist')
     });
 
-    const result = await readConfig('configs/');
+    const result = await readConfig('configs');
 
     expect(result).toEqual(mockConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith('configs/promptfooconfig.yml', 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.normalize('configs/promptfooconfig.yml'), 'utf-8');
   });
 
   it('should read JavaScript config file', async () => {
@@ -818,10 +818,10 @@ describe('readConfig', () => {
     });
     
 
-    const result = await readConfig('configs/');
+    const result = await readConfig('configs');
 
     expect(result).toEqual(mockConfig);
-    expect(importModule).toHaveBeenCalledWith('configs/promptfooconfig.js');
+    expect(importModule).toHaveBeenCalledWith(path.normalize('configs/promptfooconfig.js'));
   });
 
   it('should throw error for unsupported file format', async () => {
