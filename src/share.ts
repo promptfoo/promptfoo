@@ -32,7 +32,7 @@ export async function createShareableUrl(
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
   showAuth: boolean = false,
-): Promise<string> {
+): Promise<string | null> {
   const sharedResults: SharedResults = {
     data: {
       version: 3,
@@ -46,24 +46,30 @@ export async function createShareableUrl(
 
   const apiBaseUrl =
     typeof config.sharing === 'object' ? config.sharing.apiBaseUrl : SHARE_API_BASE_URL;
-  const response = await fetchWithProxy(`${apiBaseUrl}/api/eval`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(sharedResults),
-  });
 
-  const responseJson = (await response.json()) as { id?: string; error?: string };
-  if (responseJson.error) {
-    throw new Error(`Failed to create shareable URL: ${responseJson.error}`);
+  try {
+    const response = await fetchWithProxy(`${apiBaseUrl}/api/eval`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(sharedResults),
+    });
+
+    const responseJson = (await response.json()) as { id?: string; error?: string };
+    if (responseJson.error) {
+      throw new Error(`Failed to create shareable URL: ${responseJson.error}`);
+    }
+    const appBaseUrl =
+      typeof config.sharing === 'object' ? config.sharing.appBaseUrl : SHARE_VIEW_BASE_URL;
+    const fullUrl =
+      SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
+        ? `${appBaseUrl}/eval/${responseJson.id}`
+        : `${appBaseUrl}/eval/?evalId=${responseJson.id}`;
+
+    return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
+  } catch (error) {
+    logger.error(`Network error while creating shareable URL: ${error}`);
+    return null;
   }
-  const appBaseUrl =
-    typeof config.sharing === 'object' ? config.sharing.appBaseUrl : SHARE_VIEW_BASE_URL;
-  const fullUrl =
-    SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
-      ? `${appBaseUrl}/eval/${responseJson.id}`
-      : `${appBaseUrl}/eval/?evalId=${responseJson.id}`;
-
-  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }
