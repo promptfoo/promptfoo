@@ -11,6 +11,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import type { EvaluateTable } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
+import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { useStore } from './store';
 import './Eval.css';
@@ -179,25 +180,7 @@ export default function Eval({
   }
 
   if (loaded && !table) {
-    return (
-      <div className="empty-state">
-        <div className="empty-state-content">
-          <div className="empty-state-icon">📊</div>
-          <h2 className="empty-state-title">Welcome to Promptfoo</h2>
-          <p className="empty-state-message">
-            {import.meta.env.VITE_PUBLIC_HOSTED ? (
-              <>
-                <p>
-                  To get started, login on your CLI: <code>promptfoo auth login</code>
-                </p>
-              </>
-            ) : (
-              'Run your first evaluation and results will appear here!'
-            )}
-          </p>
-        </div>
-      </div>
-    );
+    return <EmptyState />;
   }
 
   if (!loaded || !table) {
