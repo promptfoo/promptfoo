@@ -93,12 +93,12 @@ export async function processPrompt(
     `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
   );
 
+  // Handling when the prompt is a raw function (e.g. javascript function)
+  if (prompt.function) {
+    return [prompt as Prompt];
+  }
+  
   if (!maybeFilePath(prompt.raw)) {
-    // Handling when the prompt is a javascript function
-    if (prompt.function) {
-      return [prompt as Prompt];
-    }
-
     return processString(prompt);
   }
 
