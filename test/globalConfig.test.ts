@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import {
   readGlobalConfig,
-  resetGlobalConfig,
   maybeRecordFirstRun,
+  writeGlobalConfig,
 } from '../src/globalConfig/globalConfig';
 
 jest.mock('fs', () => ({
@@ -28,7 +28,7 @@ jest.mock('../src/database');
 describe('readCliConfig', () => {
   afterEach(() => {
     jest.clearAllMocks();
-    resetGlobalConfig();
+    writeGlobalConfig({});
   });
 
   it('reads from existing config', () => {
@@ -49,16 +49,16 @@ describe('readCliConfig', () => {
 
     const result = readGlobalConfig();
 
-    expect(fs.existsSync).toHaveBeenCalledTimes(2);
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync).toHaveBeenCalledTimes(3);
+    expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ hasRun: false });
   });
 });
 
 describe('maybeRecordFirstRun', () => {
   afterEach(() => {
-    resetGlobalConfig();
     jest.clearAllMocks();
+    writeGlobalConfig({});
   });
 
   it('returns true if it is the first run', () => {
@@ -67,7 +67,7 @@ describe('maybeRecordFirstRun', () => {
 
     const result = maybeRecordFirstRun();
 
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+    expect(fs.writeFileSync).toHaveBeenCalledTimes(3);
     expect(result).toBe(true);
   });
 
