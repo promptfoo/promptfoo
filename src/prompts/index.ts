@@ -96,7 +96,7 @@ export async function processPrompt(
   if (!maybeFilePath(prompt.raw)) {
     // Handling when the prompt is a javascript function
     if (prompt.function) {
-      return [prompt as Prompt]
+      return [prompt as Prompt];
     }
 
     return processString(prompt);
