@@ -178,6 +178,28 @@ export default function Eval({
     return <div className="notice">404 Eval not found</div>;
   }
 
+  if (loaded && !table) {
+    return (
+      <div className="empty-state">
+        <div className="empty-state-content">
+          <div className="empty-state-icon">📊</div>
+          <h2 className="empty-state-title">Welcome to Promptfoo</h2>
+          <p className="empty-state-message">
+            {import.meta.env.VITE_PUBLIC_HOSTED ? (
+              <>
+                <p>
+                  To get started, login on your CLI: <code>promptfoo auth login</code>
+                </p>
+              </>
+            ) : (
+              'Run your first evaluation and results will appear here!'
+            )}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!loaded || !table) {
     return (
       <div className="notice">
