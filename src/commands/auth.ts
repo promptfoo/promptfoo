@@ -53,7 +53,6 @@ export function authCommand(program: Command) {
           },
           body: JSON.stringify({ email, organizationId: cmdObj.orgId }),
         });
-        console.log({ loginResponse });
 
         if (!loginResponse.ok) {
           throw new Error('Failed to send login request: ' + loginResponse.statusText);

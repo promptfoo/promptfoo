@@ -1,10 +1,6 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
-import {
-  readGlobalConfig,
-  maybeRecordFirstRun,
-  writeGlobalConfig,
-} from '../src/globalConfig/globalConfig';
+import { readGlobalConfig, writeGlobalConfig } from '../src/globalConfig/globalConfig';
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -32,7 +28,7 @@ describe('readCliConfig', () => {
   });
 
   it('reads from existing config', () => {
-    const config = { hasRun: false };
+    const config = { account: { email: 'test@example.com' } };
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
 
@@ -51,34 +47,6 @@ describe('readCliConfig', () => {
 
     expect(fs.existsSync).toHaveBeenCalledTimes(3);
     expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({ hasRun: false });
-  });
-});
-
-describe('maybeRecordFirstRun', () => {
-  afterEach(() => {
-    jest.clearAllMocks();
-    writeGlobalConfig({});
-  });
-
-  it('returns true if it is the first run', () => {
-    jest.mocked(fs.existsSync).mockReturnValue(false);
-    jest.mocked(fs.writeFileSync).mockImplementation();
-
-    const result = maybeRecordFirstRun();
-
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(3);
-    expect(result).toBe(true);
-  });
-
-  it('returns false if it is not the first run', () => {
-    const config = { hasRun: true };
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
-
-    const result = maybeRecordFirstRun();
-
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result).toBe(false);
+    expect(result).toEqual({});
   });
 });

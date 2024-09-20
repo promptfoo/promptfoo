@@ -11,7 +11,7 @@ import { getConfigDirectoryPath } from '../util/config';
 export function readGlobalConfig(): GlobalConfig {
   const configDir = getConfigDirectoryPath();
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
-  let globalConfig: GlobalConfig = { hasRun: false };
+  let globalConfig: GlobalConfig = {};
   if (fs.existsSync(configFilePath)) {
     globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
   } else {
@@ -49,19 +49,4 @@ export function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): 
   }
 
   writeGlobalConfig(updatedConfig);
-}
-
-export function maybeRecordFirstRun(): boolean {
-  // Return true if first run
-  try {
-    const config = readGlobalConfig();
-    if (!config.hasRun) {
-      config.hasRun = true;
-      writeGlobalConfig(config);
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
 }

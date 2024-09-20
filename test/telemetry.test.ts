@@ -5,9 +5,6 @@ import { Telemetry } from '../src/telemetry';
 jest.mock('../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
-jest.mock('../src/globalConfig/globalConfig', () => ({
-  maybeRecordFirstRun: jest.fn(),
-}));
 
 jest.mock('../package.json', () => ({
   version: '1.0.0',
