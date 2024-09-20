@@ -142,13 +142,15 @@ To reference an external file, use the `file://` prefix:
 assert:
   - type: javascript
     value: file://relative/path/to/script.js
+    config:
+      foo: bar
 ```
 
-The Javascript file must export an assertion function. Here's an example:
+The Javascript file must export an assertion function. The context object passed into the assertion contains the optional configuration, some Here's an example:
 
 ```js
 module.exports = (output, context) => {
-  return output.length > 10;
+  return output.length > 10 && context.config.foo === 'bar';
 };
 ```
 

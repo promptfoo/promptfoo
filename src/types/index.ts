@@ -369,6 +369,9 @@ export const AssertionSchema = z.object({
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
 
+  // An external object that is passed to the assertion for custom javascript asserts
+  config: z.any().optional(),
+
   // The threshold value, only applicable for similarity (cosine distance)
   threshold: z.number().optional(),
 
