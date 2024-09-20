@@ -13,7 +13,7 @@ export function readGlobalConfig(): GlobalConfig {
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
   let globalConfig: GlobalConfig = { hasRun: false };
   if (fs.existsSync(configFilePath)) {
-    globalConfig = yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig;
+    globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
   } else {
     if (!fs.existsSync(configDir)) {
       fs.mkdirSync(configDir, { recursive: true });
