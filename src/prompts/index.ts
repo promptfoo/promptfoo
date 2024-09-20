@@ -97,7 +97,7 @@ export async function processPrompt(
   if (prompt.function) {
     return [prompt as Prompt];
   }
-  
+
   if (!maybeFilePath(prompt.raw)) {
     return processString(prompt);
   }
