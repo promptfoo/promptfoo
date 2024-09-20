@@ -335,15 +335,13 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
     if (typeof relativePath === 'string') {
       if (relativePath.startsWith('file://')) {
-        relativePath =
-          'file://' + path.resolve(configPath, relativePath.slice('file://'.length));
+        relativePath = 'file://' + path.resolve(configPath, relativePath.slice('file://'.length));
       }
       return relativePath;
     } else if (typeof relativePath === 'object' && relativePath.id) {
       if (relativePath.id.startsWith('file://')) {
         relativePath.id =
-          'file://' +
-          path.resolve(configPath, relativePath.id.slice('file://'.length));
+          'file://' + path.resolve(configPath, relativePath.id.slice('file://'.length));
       }
       return relativePath;
     } else {
