@@ -79,6 +79,7 @@ export class CloudConfig {
     logger.info('You are logged in successfully.');
     const { user, organization, app } = await response.json();
     this.setApiKey(token);
+    this.setApiHost(apiHost);
     this.setAppUrl(app.url);
 
     logger.info('Logged in as:');
