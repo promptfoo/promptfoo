@@ -799,6 +799,31 @@ describe('readConfig', () => {
     expect(importModule).toHaveBeenCalledWith('config.js');
   });
 
+  it('should attempt to find a js config file given a directory path', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    jest.mocked(importModule).mockResolvedValue(mockConfig);
+    jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
+      throw new Error('File does not exist')
+    });
+    jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
+      throw new Error('File does not exist')
+    });
+    jest.spyOn(fs, 'accessSync').mockImplementationOnce(() => {
+      throw new Error('File does not exist')
+    });
+    
+
+    const result = await readConfig('configs/');
+
+    expect(result).toEqual(mockConfig);
+    expect(importModule).toHaveBeenCalledWith('configs/promptfooconfig.js');
+  });
+
   it('should throw error for unsupported file format', async () => {
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.txt' } as any);
 
