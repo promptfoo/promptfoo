@@ -375,9 +375,20 @@ export async function loadApiProvider(
     } else {
       ret = new LocalAiChatProvider(modelType, providerOptions);
     }
-  } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
+  } else if (
+    providerPath.startsWith('http:') ||
+    providerPath.startsWith('https:') ||
+    providerPath === 'http' ||
+    providerPath === 'https'
+  ) {
     ret = new HttpProvider(providerPath, providerOptions);
-  } else if (providerPath.startsWith('ws:') || providerPath.startsWith('wss:')) {
+  } else if (
+    providerPath.startsWith('ws:') ||
+    providerPath.startsWith('wss:') ||
+    providerPath === 'websocket' ||
+    providerPath === 'ws' ||
+    providerPath === 'wss'
+  ) {
     ret = new WebSocketProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
     ret = new RedteamIterativeProvider(providerOptions.config);
