@@ -13,9 +13,9 @@ import { getNunjucksEngine } from '../util/templates';
 const nunjucks = getNunjucksEngine();
 
 interface WebSocketProviderConfig {
-  url: string;
   messageTemplate: string;
-  responseParser: string | Function;
+  url?: string;
+  responseParser?: string | Function;
   timeoutMs?: number;
 }
 
@@ -35,8 +35,8 @@ export class WebSocketProvider implements ApiProvider {
   responseParser: (data: any) => ProviderResponse;
 
   constructor(url: string, options: ProviderOptions) {
-    this.url = url;
     this.config = options.config as WebSocketProviderConfig;
+    this.url = this.config.url || url;
     this.responseParser = createResponseParser(this.config.responseParser);
     invariant(
       this.config.messageTemplate,

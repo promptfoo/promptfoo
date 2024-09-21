@@ -113,6 +113,22 @@ Extracts the message content from this response:
 }
 ```
 
+## Query parameters
+
+Query parameters can be specified in the provider config using the `queryParams` field. These will be appended to the URL as GET parameters.
+
+```yaml
+providers:
+  - id: 'https://example.com/search'
+    config:
+      // highlight-start
+      method: 'GET'
+      queryParams:
+        q: '{{prompt}}'
+        foo: 'bar'
+      // highlight-end
+```
+
 ## Using as a library
 
 If you are using promptfoo as a [node library](/docs/usage/node-package/), you can provide the equivalent provider config:
@@ -135,3 +151,20 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
   }],
 }
 ```
+
+## Reference
+
+Supported config options:
+
+| Option         | Type                     | Description                                                                                                                                   |
+| -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| url            | string                   | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                       |
+| method         | string                   | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                                                   |
+| headers        | Record\<string, string\> | Key-value pairs of HTTP headers to include in the request.                                                                                    |
+| body           | Record\<string, any\>    | The request body. For POST requests, this will be sent as JSON.                                                                               |
+| queryParams    | Record\<string, string\> | Key-value pairs of query parameters to append to the URL.                                                                                     |
+| responseParser | string \| Function       | A function or string representation of a function to parse the response. If not provided, the entire response will be returned as the output. |
+
+Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
+
+In addition to a full URL, the provider `id` field accepts `http` or `https` as values.

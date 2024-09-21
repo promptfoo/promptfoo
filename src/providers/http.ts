@@ -14,10 +14,12 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 const nunjucks = getNunjucksEngine();
 
 interface HttpProviderConfig {
-  method: string;
-  headers: Record<string, string>;
-  body: Record<string, any>;
-  responseParser: string | Function;
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: Record<string, any>;
+  queryParams?: Record<string, string>;
+  responseParser?: string | Function;
 }
 
 function createResponseParser(parser: any): (data: any) => ProviderResponse {
@@ -68,11 +70,11 @@ export class HttpProvider implements ApiProvider {
   responseParser: (data: any) => ProviderResponse;
 
   constructor(url: string, options: ProviderOptions) {
-    this.url = url;
     this.config = options.config;
+    this.url = this.config.url || url;
     this.responseParser = createResponseParser(this.config.responseParser);
     invariant(
-      this.config.body,
+      this.config.body || this.config.method === 'GET',
       `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
         this.config,
       )}`,
@@ -93,13 +95,23 @@ export class HttpProvider implements ApiProvider {
       prompt,
     };
     const renderedConfig: Partial<HttpProviderConfig> = {
+      url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
       headers: Object.fromEntries(
-        Object.entries(this.config.headers || { 'content-type': 'application/json' }).map(
-          ([key, value]) => [key, nunjucks.renderString(value, vars)],
-        ),
+        Object.entries(
+          this.config.headers ||
+            (this.config.method === 'GET' ? {} : { 'content-type': 'application/json' }),
+        ).map(([key, value]) => [key, nunjucks.renderString(value, vars)]),
       ),
-      body: processBody(this.config.body, vars),
+      body: processBody(this.config.body || {}, vars),
+      queryParams: this.config.queryParams
+        ? Object.fromEntries(
+            Object.entries(this.config.queryParams).map(([key, value]) => [
+              key,
+              nunjucks.renderString(value, vars),
+            ]),
+          )
+        : undefined,
       responseParser: this.config.responseParser,
     };
 
@@ -108,17 +120,22 @@ export class HttpProvider implements ApiProvider {
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
-    logger.debug(
-      `Calling HTTP provider: ${this.url} with config: ${safeJsonStringify(renderedConfig)}`,
-    );
+    // Construct URL with query parameters for GET requests
+    let url = this.url;
+    if (renderedConfig.queryParams) {
+      const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
+      url = `${url}?${queryString}`;
+    }
+
+    logger.debug(`Calling HTTP provider: ${url} with config: ${safeJsonStringify(renderedConfig)}`);
     let response;
     try {
       response = await fetchWithCache(
-        this.url,
+        url,
         {
           method: renderedConfig.method,
           headers: renderedConfig.headers,
-          body: JSON.stringify(renderedConfig.body),
+          ...(method !== 'GET' && { body: JSON.stringify(renderedConfig.body) }),
         },
         REQUEST_TIMEOUT_MS,
         'json',

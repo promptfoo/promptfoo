@@ -57,12 +57,13 @@ describe('HttpProvider', () => {
     });
   });
 
-  it('should use custom method and headers', async () => {
+  it('should use custom method/headers/queryParams', async () => {
     provider = new HttpProvider(mockUrl, {
       config: {
-        method: 'GET',
+        method: 'PATCH',
         headers: { Authorization: 'Bearer token' },
         body: { key: '{{ prompt }}' },
+        queryParams: { foo: 'bar' },
         responseParser: (data: any) => data,
       },
     });
@@ -71,9 +72,9 @@ describe('HttpProvider', () => {
 
     await provider.callApi('test prompt');
     expect(fetchWithCache).toHaveBeenCalledWith(
-      mockUrl,
+      `${mockUrl}?foo=bar`,
       expect.objectContaining({
-        method: 'GET',
+        method: 'PATCH',
         headers: { Authorization: 'Bearer token' },
         body: JSON.stringify({ key: 'test prompt' }),
       }),
@@ -171,6 +172,31 @@ describe('HttpProvider', () => {
     });
     expect(provider.id()).toBe(mockUrl);
     expect(provider.toString()).toBe(`[HTTP Provider ${mockUrl}]`);
+  });
+
+  it('should handle GET requests with query parameters', async () => {
+    provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        queryParams: {
+          q: '{{ prompt }}',
+          foo: 'bar',
+        },
+        responseParser: (data: any) => data,
+      },
+    });
+    const mockResponse = { data: 'response data', cached: false };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      `${mockUrl}?q=test+prompt&foo=bar`,
+      expect.objectContaining({
+        method: 'GET',
+      }),
+      expect.any(Number),
+      'json',
+    );
   });
 
   describe('processBody', () => {
