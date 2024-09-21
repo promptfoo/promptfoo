@@ -74,7 +74,7 @@ export class HttpProvider implements ApiProvider {
     this.url = this.config.url || url;
     this.responseParser = createResponseParser(this.config.responseParser);
     invariant(
-      this.config.body,
+      this.config.body || this.config.method === 'GET',
       `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
         this.config,
       )}`,
@@ -98,9 +98,10 @@ export class HttpProvider implements ApiProvider {
       url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
       headers: Object.fromEntries(
-        Object.entries(this.config.headers || { 'content-type': 'application/json' }).map(
-          ([key, value]) => [key, nunjucks.renderString(value, vars)],
-        ),
+        Object.entries(
+          this.config.headers ||
+            (this.config.method === 'GET' ? {} : { 'content-type': 'application/json' }),
+        ).map(([key, value]) => [key, nunjucks.renderString(value, vars)]),
       ),
       body: processBody(this.config.body || {}, vars),
       queryParams: this.config.queryParams
