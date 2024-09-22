@@ -188,3 +188,11 @@ Each step in the `steps` array should have the following structure:
 Steps are executed sequentially, enabling complex web interactions.
 
 All string values in `args` support Nunjucks templating, allowing use of variables like `{{prompt}}`.
+
+## Troubleshooting
+
+### Iframes
+
+If you are using a selector to interact with the page and it keeps timing out, it could be because the element is inside an iframe.
+
+If this is the case, try loading the iframe contents directly using the `navigate` action.
