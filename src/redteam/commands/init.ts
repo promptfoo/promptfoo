@@ -4,7 +4,7 @@ import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
-import rawlist from '@inquirer/rawlist';
+import select from '@inquirer/select';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import type { Command } from 'commander';
@@ -298,7 +298,7 @@ export async function redteamInit(directory: string | undefined) {
     console.clear();
     logger.info(chalk.bold('OpenAI API Configuration\n'));
 
-    const apiKeyChoice = await rawlist({
+    const apiKeyChoice = await select({
       message: `OpenAI API key is required, but I don't see an OPENAI_API_KEY environment variable. How to proceed?`,
       choices: [
         { name: 'Enter API key now', value: 'enter' },
