@@ -155,7 +155,8 @@ export async function doEval(
     await migrateResultsFromFileSystemToDatabase();
 
     if (getEnvBool('PROMPTFOO_LIGHTWEIGHT_RESULTS')) {
-      config = {};
+      const outputPath = config.outputPath;
+      config = { outputPath };
       summary.results = [];
       summary.table.head.vars = [];
       for (const row of summary.table.body) {
