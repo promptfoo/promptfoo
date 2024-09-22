@@ -26,13 +26,27 @@ const TELEMETRY_TIMEOUT_MS = 1000;
 
 export class Telemetry {
   private events: TelemetryEvent[] = [];
+  private telemetryDisabledRecorded = false;
 
   get disabled() {
     return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
   }
 
+  private recordTelemetryDisabled() {
+    if (!this.telemetryDisabledRecorded) {
+      this.events.push({
+        event: 'feature_used',
+        packageVersion: packageJson.version,
+        properties: { feature: 'telemetry disabled' },
+      });
+      this.telemetryDisabledRecorded = true;
+    }
+  }
+
   record(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {
-    if (!this.disabled) {
+    if (this.disabled) {
+      this.recordTelemetryDisabled();
+    } else {
       this.events.push({
         event: eventName,
         packageVersion: packageJson.version,
@@ -45,17 +59,17 @@ export class Telemetry {
 
   recordOnce(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {
     if (this.disabled) {
-      return;
-    }
-
-    const eventKey = JSON.stringify({ eventName, properties });
-    if (!this.recordedEvents.has(eventKey)) {
-      this.events.push({
-        event: eventName,
-        packageVersion: packageJson.version,
-        properties,
-      });
-      this.recordedEvents.add(eventKey);
+      this.recordTelemetryDisabled();
+    } else {
+      const eventKey = JSON.stringify({ eventName, properties });
+      if (!this.recordedEvents.has(eventKey)) {
+        this.events.push({
+          event: eventName,
+          packageVersion: packageJson.version,
+          properties,
+        });
+        this.recordedEvents.add(eventKey);
+      }
     }
   }
 
@@ -71,7 +85,11 @@ export class Telemetry {
     eventName: TelemetryEventTypes,
     properties: Record<string, EventValue>,
   ): Promise<void> {
-    this.recordOnce(eventName, properties);
+    if (this.disabled) {
+      this.recordTelemetryDisabled();
+    } else {
+      this.recordOnce(eventName, properties);
+    }
     await this.send();
   }
 
@@ -86,7 +104,12 @@ export class Telemetry {
   }
 
   async send(): Promise<void> {
-    if (!this.disabled && this.events.length > 0) {
+    if (this.events.length > 0) {
+      if (getEnvBool('PROMPTFOO_TELEMETRY_DEBUG')) {
+        logger.debug(
+          `Sending ${this.events.length} telemetry events to ${TELEMETRY_ENDPOINT}: ${JSON.stringify(this.events)}`,
+        );
+      }
       try {
         const response = await fetchWithTimeout(
           TELEMETRY_ENDPOINT,
@@ -113,26 +136,24 @@ export class Telemetry {
    * This is a separate endpoint to save consent used only for redteam data synthesis for "harmful" plugins.
    */
   async saveConsent(email: string): Promise<void> {
-    if (!this.disabled) {
-      try {
-        const response = await fetchWithTimeout(
-          CONSENT_ENDPOINT,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email }),
+    try {
+      const response = await fetchWithTimeout(
+        CONSENT_ENDPOINT,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
-          TELEMETRY_TIMEOUT_MS,
-        );
+          body: JSON.stringify({ email }),
+        },
+        TELEMETRY_TIMEOUT_MS,
+      );
 
-        if (!response.ok) {
-          throw new Error(`Failed to save consent: ${response.statusText}`);
-        }
-      } catch (err) {
-        logger.error(`Error saving consent: ${(err as Error).message}`);
+      if (!response.ok) {
+        throw new Error(`Failed to save consent: ${response.statusText}`);
       }
+    } catch (err) {
+      logger.error(`Error saving consent: ${(err as Error).message}`);
     }
   }
 }
