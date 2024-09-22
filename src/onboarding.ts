@@ -437,10 +437,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
      */
     const providerChoices: (string | object)[] = (
       await checkbox({
-        message:
-          'Which model providers would you like to use? (press space to select, enter to complete selection)',
+        message: 'Which model providers would you like to use?',
         choices,
-        required: true,
         loop: false,
         pageSize: process.stdout.rows - 6,
       })
