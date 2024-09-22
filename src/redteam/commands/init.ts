@@ -5,7 +5,6 @@ import { ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
-import select from '@inquirer/select';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
