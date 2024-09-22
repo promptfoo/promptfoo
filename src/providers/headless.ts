@@ -1,4 +1,4 @@
-import { chromium, Browser, Page, ElementHandle } from 'playwright';
+import { chromium, type Page, type ElementHandle } from 'playwright';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
