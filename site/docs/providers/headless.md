@@ -144,12 +144,12 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 
 Supported config options:
 
-| Option         | Type               | Description                                                                                                                                                  |
-| -------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| headless       | boolean            | Whether to run the browser in headless mode. Defaults to `true`.                                                                                             |
-| responseParser | string \| Function | A function or string representation of a function to parse the response. Receives an object with {extracted, finalHtml} and should return a ProviderResponse |
-| steps          | HeadlessAction[]   | An array of actions to perform in the headless browser                                                                                                       |
-| timeoutMs      | number             | The maximum time in milliseconds to wait for the headless browser operations to complete                                                                     |
+| Option         | Type               | Description                                                                                                                                                                  |
+| -------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| headless       | boolean            | Whether to run the browser in headless mode. Defaults to `true`.                                                                                                             |
+| responseParser | string \| Function | A function or string representation of a function to parse the response. Receives an object with `extracted` and `finalHtml` parameters and should return a ProviderResponse |
+| steps          | HeadlessAction[]   | An array of actions to perform in the headless browser                                                                                                                       |
+| timeoutMs      | number             | The maximum time in milliseconds to wait for the headless browser operations to complete                                                                                     |
 
 Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
