@@ -4,8 +4,9 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: headless
+  - id: browser
     config:
+      headless: true
       steps:
         # Load the page
         - action: navigate
