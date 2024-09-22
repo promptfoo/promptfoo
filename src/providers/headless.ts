@@ -80,10 +80,12 @@ export class HeadlessProvider implements ApiProvider {
       return { error: `Headless execution error: ${error}` };
     }
 
-    const finalHtml = await page.content();
     await browser.close();
 
-    return this.responseParser({ results, finalHtml });
+    logger.debug(`Headless results: ${safeJsonStringify(results)}`);
+    const ret = this.responseParser(results);
+    logger.debug(`Headless response parser output: ${ret}`);
+    return { output: ret };
   }
 
   private async executeAction(
@@ -99,28 +101,49 @@ export class HeadlessProvider implements ApiProvider {
 
     switch (actionType) {
       case 'navigate':
+        invariant(renderedArgs.url, `Expected headless action to have a url when using 'navigate'`);
         logger.debug(`Navigating to ${renderedArgs.url}`);
         await page.goto(renderedArgs.url);
         break;
       case 'click':
+        invariant(
+          renderedArgs.selector,
+          `Expected headless action to have a selector when using 'click'`,
+        );
         logger.debug(`Waiting for and clicking on ${renderedArgs.selector}`);
         await this.waitForSelector(page, renderedArgs.selector);
         await page.click(renderedArgs.selector);
         break;
       case 'type':
+        invariant(renderedArgs.text, `Expected headless action to have a text when using 'type'`);
+        invariant(
+          renderedArgs.selector,
+          `Expected headless action to have a selector when using 'type'`,
+        );
         logger.debug(`Waiting for and typing into ${renderedArgs.selector}: ${renderedArgs.text}`);
         await this.waitForSelector(page, renderedArgs.selector);
         //await page.type(renderedArgs.selector, renderedArgs.text);
         await page.fill(renderedArgs.selector, renderedArgs.text);
         break;
       case 'screenshot':
-        logger.debug(`Taking screenshot of ${renderedArgs.selector}`);
-        const screenshotBuffer = await page.screenshot({ fullPage: renderedArgs.fullPage });
-        if (name) {
-          results[name] = screenshotBuffer.toString('base64');
-        }
+        invariant(
+          renderedArgs.path,
+          `Expected headless action to have a path when using 'screenshot'`,
+        );
+        logger.debug(
+          `Taking screenshot of ${renderedArgs.selector} and saving to ${renderedArgs.path}`,
+        );
+        await page.screenshot({
+          fullPage: renderedArgs.fullPage,
+          path: renderedArgs.path,
+        });
         break;
       case 'extract':
+        invariant(
+          renderedArgs.selector,
+          `Expected headless action to have a selector when using 'extract'`,
+        );
+        invariant(name, `Expected headless action to have a name when using 'extract'`);
         logger.debug(`Waiting for and extracting content from ${renderedArgs.selector}`);
         await this.waitForSelector(page, renderedArgs.selector);
         const extractedContent = await page.$eval(
@@ -138,6 +161,15 @@ export class HeadlessProvider implements ApiProvider {
         logger.debug(`Waiting for ${renderedArgs.ms}ms`);
         await page.waitForTimeout(renderedArgs.ms);
         break;
+      case 'waitForNewChildren':
+        logger.debug(`Waiting for new element in ${renderedArgs.parentSelector}`);
+        await this.waitForNewChildren(
+          page,
+          renderedArgs.parentSelector,
+          renderedArgs.delay,
+          renderedArgs.timeout,
+        );
+        break;
       default:
         throw new Error(`Unknown action type: ${actionType}`);
     }
@@ -146,10 +178,33 @@ export class HeadlessProvider implements ApiProvider {
   private async waitForSelector(page: Page, selector: string): Promise<ElementHandle | null> {
     try {
       return await page.waitForSelector(selector, { timeout: this.defaultTimeout });
-    } catch (error) {
+    } catch {
       logger.warn(`Timeout waiting for selector: ${selector}`);
       return null;
     }
+  }
+
+  private async waitForNewChildren(
+    page: Page,
+    parentSelector: string,
+    delay: number = 1000,
+    timeout: number = this.defaultTimeout,
+  ): Promise<void> {
+    await page.waitForTimeout(delay);
+
+    const initialChildCount = await page.$$eval(
+      `${parentSelector} > *`,
+      (elements) => elements.length,
+    );
+
+    await page.waitForFunction(
+      ({ parentSelector, initialChildCount }) => {
+        const currentCount = document.querySelectorAll(`${parentSelector} > *`).length;
+        return currentCount > initialChildCount;
+      },
+      { parentSelector, initialChildCount },
+      { timeout, polling: 'raf' },
+    );
   }
 
   private renderArgs(args: Record<string, any>, vars: Record<string, any>): Record<string, any> {
