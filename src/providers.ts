@@ -15,6 +15,7 @@ import {
 } from './providers/azureopenai';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
+import { BrowserProvider } from './providers/browser';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
 import { GolangProvider } from './providers/golangCompletion';
@@ -390,6 +391,8 @@ export async function loadApiProvider(
     providerPath === 'wss'
   ) {
     ret = new WebSocketProvider(providerPath, providerOptions);
+  } else if (providerPath === 'browser') {
+    ret = new BrowserProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
     ret = new RedteamIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
