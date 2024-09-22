@@ -165,6 +165,7 @@
     "nunjucks": "^3.2.4",
     "openai": "^4.62.1",
     "opener": "^1.5.2",
+    "playwright": "^1.47.2",
     "proxy-agent": "^6.4.0",
     "python-shell": "^5.0.0",
     "replicate": "^0.33.0",
