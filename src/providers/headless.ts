@@ -22,22 +22,29 @@ interface HeadlessProviderConfig {
   steps: HeadlessAction[];
   responseParser?: string | Function;
   timeoutMs?: number;
+  headless?: boolean;
 }
 
-function createResponseParser(parser: any): (data: any) => ProviderResponse {
+function createResponseParser(
+  parser: any,
+): (extracted: Record<string, any>, finalHtml: string) => ProviderResponse {
   if (typeof parser === 'function') {
     return parser;
   }
   if (typeof parser === 'string') {
-    return new Function('data', `return ${parser}`) as (data: any) => ProviderResponse;
+    return new Function('extracted', 'finalHtml', `return ${parser}`) as (
+      extracted: Record<string, any>,
+      finalHtml: string,
+    ) => ProviderResponse;
   }
-  return (data) => ({ output: data });
+  return ({ extracted, finalHtml }) => ({ output: finalHtml });
 }
 
 export class HeadlessProvider implements ApiProvider {
   config: HeadlessProviderConfig;
-  responseParser: (data: any) => ProviderResponse;
+  responseParser: (extracted: Record<string, any>, finalHtml: string) => ProviderResponse;
   private defaultTimeout: number;
+  private headless: boolean;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as HeadlessProviderConfig;
@@ -49,6 +56,7 @@ export class HeadlessProvider implements ApiProvider {
       )}`,
     );
     this.defaultTimeout = this.config.timeoutMs || 30000; // Default 30 seconds timeout
+    this.headless = this.config.headless ?? true;
   }
 
   id(): string {
@@ -66,24 +74,25 @@ export class HeadlessProvider implements ApiProvider {
     };
 
     const browser = await chromium.launch({
-      headless: false,
+      headless: this.headless,
     });
     const page = await browser.newPage();
-    const results: Record<string, any> = {};
+    const extracted: Record<string, any> = {};
 
     try {
       for (const step of this.config.steps) {
-        await this.executeAction(page, step, vars, results);
+        await this.executeAction(page, step, vars, extracted);
       }
     } catch (error) {
       await browser.close();
       return { error: `Headless execution error: ${error}` };
     }
 
+    const finalHtml = await page.content();
     await browser.close();
 
-    logger.debug(`Headless results: ${safeJsonStringify(results)}`);
-    const ret = this.responseParser(results);
+    logger.debug(`Headless results: ${safeJsonStringify(extracted)}`);
+    const ret = this.responseParser(extracted, finalHtml);
     logger.debug(`Headless response parser output: ${ret}`);
     return { output: ret };
   }
@@ -92,7 +101,7 @@ export class HeadlessProvider implements ApiProvider {
     page: Page,
     action: HeadlessAction,
     vars: Record<string, any>,
-    results: Record<string, any>,
+    extracted: Record<string, any>,
   ): Promise<void> {
     const { action: actionType, args = {}, name } = action;
     const renderedArgs = this.renderArgs(args, vars);
@@ -152,7 +161,7 @@ export class HeadlessProvider implements ApiProvider {
         );
         logger.debug(`Extracted content from ${renderedArgs.selector}: ${extractedContent}`);
         if (name) {
-          results[name] = extractedContent;
+          extracted[name] = extractedContent;
         } else {
           throw new Error('Expected headless action to have a name when using `extract`');
         }
