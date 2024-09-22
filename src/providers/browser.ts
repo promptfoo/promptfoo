@@ -12,14 +12,14 @@ import { getNunjucksEngine } from '../util/templates';
 
 const nunjucks = getNunjucksEngine();
 
-interface HeadlessAction {
+interface BrowserAction {
   action: string;
   args?: Record<string, any>;
   name?: string;
 }
 
-interface HeadlessProviderConfig {
-  steps: HeadlessAction[];
+interface BrowserProviderConfig {
+  steps: BrowserAction[];
   responseParser?: string | Function;
   timeoutMs?: number;
   headless?: boolean;
@@ -40,14 +40,14 @@ function createResponseParser(
   return ({ extracted, finalHtml }) => ({ output: finalHtml });
 }
 
-export class HeadlessProvider implements ApiProvider {
-  config: HeadlessProviderConfig;
+export class BrowserProvider implements ApiProvider {
+  config: BrowserProviderConfig;
   responseParser: (extracted: Record<string, any>, finalHtml: string) => ProviderResponse;
   private defaultTimeout: number;
   private headless: boolean;
 
-  constructor(url: string, options: ProviderOptions) {
-    this.config = options.config as HeadlessProviderConfig;
+  constructor(_: string, options: ProviderOptions) {
+    this.config = options.config as BrowserProviderConfig;
     this.responseParser = createResponseParser(this.config.responseParser);
     invariant(
       Array.isArray(this.config.steps),
@@ -60,11 +60,11 @@ export class HeadlessProvider implements ApiProvider {
   }
 
   id(): string {
-    return 'headless-provider';
+    return 'browser-provider';
   }
 
   toString(): string {
-    return '[Headless Provider]';
+    return '[Browser Provider]';
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -91,15 +91,15 @@ export class HeadlessProvider implements ApiProvider {
     const finalHtml = await page.content();
     await browser.close();
 
-    logger.debug(`Headless results: ${safeJsonStringify(extracted)}`);
+    logger.debug(`Browser results: ${safeJsonStringify(extracted)}`);
     const ret = this.responseParser(extracted, finalHtml);
-    logger.debug(`Headless response parser output: ${ret}`);
+    logger.debug(`Browser response parser output: ${ret}`);
     return { output: ret };
   }
 
   private async executeAction(
     page: Page,
-    action: HeadlessAction,
+    action: BrowserAction,
     vars: Record<string, any>,
     extracted: Record<string, any>,
   ): Promise<void> {

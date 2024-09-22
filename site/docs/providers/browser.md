@@ -3,9 +3,9 @@ sidebar_position: 54
 sidebar_label: Web Browser
 ---
 
-# Headless Browser Provider
+# Browser Provider
 
-The Headless Browser Provider allows you to automate web browser interactions for testing and scraping purposes.
+The Browser Provider allows you to automate web browser interactions for testing and scraping purposes.
 
 This provider uses Playwright to control a headless Chrome browser, enabling you to navigate web pages, interact with elements, and extract data.
 
@@ -19,11 +19,11 @@ npm install playwright @playwright/browser-chromium
 
 ## Configuration
 
-To use the Headless Browser Provider, set the provider `id` to `headless` and provide a configuration object with a series of steps to execute.
+To use the Headless Browser Provider, set the provider `id` to `browser` and provide a configuration object with a series of steps to execute.
 
 ```yaml
 providers:
-  - id: headless
+  - id: browser
     config:
       steps:
         - action: navigate
@@ -101,7 +101,7 @@ You can use Nunjucks templating in your configuration, including the `{{prompt}}
 
 ```yaml
 providers:
-  - id: headless
+  - id: browser
     config:
       steps:
         - action: navigate
@@ -126,7 +126,7 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 {
   // ...
   providers: [{
-    id: 'headless',
+    id: 'browser',
     config: {
       steps: [
         { action: 'navigate', args: { url: 'https://example.com' } },
@@ -148,12 +148,12 @@ Supported config options:
 | -------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | headless       | boolean            | Whether to run the browser in headless mode. Defaults to `true`.                                                                                                             |
 | responseParser | string \| Function | A function or string representation of a function to parse the response. Receives an object with `extracted` and `finalHtml` parameters and should return a ProviderResponse |
-| steps          | HeadlessAction[]   | An array of actions to perform in the headless browser                                                                                                                       |
-| timeoutMs      | number             | The maximum time in milliseconds to wait for the headless browser operations to complete                                                                                     |
+| steps          | BrowserAction[]    | An array of actions to perform in the browser                                                                                                                                |
+| timeoutMs      | number             | The maximum time in milliseconds to wait for the browser operations to complete                                                                                              |
 
 Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
-### Supported Headless Actions
+### Supported Browser Actions
 
 The `steps` array in the configuration can include the following actions:
 
@@ -196,3 +196,20 @@ All string values in `args` support Nunjucks templating, allowing use of variabl
 If you are using a selector to interact with the page and it keeps timing out, it could be because the element is inside an iframe.
 
 If this is the case, try loading the iframe contents directly using the `navigate` action.
+
+### Viewing the browser
+
+If you want to view the browser as it runs, you can set the `headless` option to `false` in the config.
+
+```yaml
+providers:
+  - id: browser
+    config:
+      headless: false
+```
+
+### Debugging
+
+If you are having trouble getting your tests to run, set `headless` to `false` and the browser will open. You can then see what is happening in the browser console.
+
+Additionally, setting the `LOG_LEVEL=debug` environment variable will print debug information to the console during your evaluation.
