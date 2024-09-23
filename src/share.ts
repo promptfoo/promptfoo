@@ -1,7 +1,9 @@
+import type { Response } from 'node-fetch';
 import { URL } from 'url';
-import { getAuthor } from './accounts';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { fetchWithProxy } from './fetch';
+import { getAuthor } from './globalConfig/accounts';
+import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
 
@@ -44,32 +46,49 @@ export async function createShareableUrl(
     },
   };
 
-  const apiBaseUrl =
+  let response: Response;
+  let apiBaseUrl =
     typeof config.sharing === 'object' ? config.sharing.apiBaseUrl : SHARE_API_BASE_URL;
+  // check if we're using the cloud
+  if (cloudConfig.isEnabled()) {
+    apiBaseUrl = cloudConfig.getApiHost();
 
-  try {
-    const response = await fetchWithProxy(`${apiBaseUrl}/api/eval`, {
+    response = await fetchWithProxy(`${apiBaseUrl}/results`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cloudConfig.getApiKey()}`,
+      },
+      body: JSON.stringify(sharedResults),
+    });
+  } else {
+    response = await fetchWithProxy(`${apiBaseUrl}/api/eval`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(sharedResults),
     });
+  }
 
-    const responseJson = (await response.json()) as { id?: string; error?: string };
-    if (responseJson.error) {
-      throw new Error(`Failed to create shareable URL: ${responseJson.error}`);
-    }
+  const responseJson = (await response.json()) as { id?: string; error?: string };
+  if (responseJson.error) {
+    throw new Error(`Failed to create shareable URL: ${responseJson.error}`);
+  }
+
+  let appBaseUrl = SHARE_VIEW_BASE_URL;
+  let fullUrl = SHARE_VIEW_BASE_URL;
+  if (cloudConfig.isEnabled()) {
+    appBaseUrl = cloudConfig.getAppUrl();
+    fullUrl = `${appBaseUrl}/results/${responseJson.id}`;
+  } else {
     const appBaseUrl =
       typeof config.sharing === 'object' ? config.sharing.appBaseUrl : SHARE_VIEW_BASE_URL;
-    const fullUrl =
+    fullUrl =
       SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
         ? `${appBaseUrl}/eval/${responseJson.id}`
         : `${appBaseUrl}/eval/?evalId=${responseJson.id}`;
-
-    return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
-  } catch (error) {
-    logger.error(`Network error while creating shareable URL: ${error}`);
-    return null;
   }
+
+  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }

@@ -1,8 +1,6 @@
-import chalk from 'chalk';
 import packageJson from '../package.json';
 import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
-import { maybeRecordFirstRun } from './globalConfig';
 import logger from './logger';
 
 export type EventValue = string | number | boolean | string[];
@@ -91,16 +89,6 @@ export class Telemetry {
       this.recordOnce(eventName, properties);
     }
     await this.send();
-  }
-
-  maybeShowNotice(): void {
-    if (!this.disabled && maybeRecordFirstRun()) {
-      logger.info(
-        chalk.gray(
-          'Anonymous telemetry is enabled. For more info, see https://www.promptfoo.dev/docs/configuration/telemetry',
-        ),
-      );
-    }
   }
 
   async send(): Promise<void> {

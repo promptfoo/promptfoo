@@ -5,32 +5,23 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import type { GlobalConfig } from './configTypes';
-import { getConfigDirectoryPath } from './util/config';
-
-let globalConfigCache: GlobalConfig | null = null;
-
-export function resetGlobalConfig(): void {
-  globalConfigCache = null;
-}
+import type { GlobalConfig } from '../configTypes';
+import { getConfigDirectoryPath } from '../util/config';
 
 export function readGlobalConfig(): GlobalConfig {
-  if (!globalConfigCache) {
-    const configDir = getConfigDirectoryPath();
-    const configFilePath = path.join(configDir, 'promptfoo.yaml');
-
-    if (fs.existsSync(configFilePath)) {
-      globalConfigCache = yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig;
-    } else {
-      if (!fs.existsSync(configDir)) {
-        fs.mkdirSync(configDir, { recursive: true });
-      }
-      globalConfigCache = { hasRun: false };
-      fs.writeFileSync(configFilePath, yaml.dump(globalConfigCache));
+  const configDir = getConfigDirectoryPath();
+  const configFilePath = path.join(configDir, 'promptfoo.yaml');
+  let globalConfig: GlobalConfig = {};
+  if (fs.existsSync(configFilePath)) {
+    globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
+  } else {
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
     }
+    fs.writeFileSync(configFilePath, yaml.dump(globalConfig));
   }
 
-  return globalConfigCache;
+  return globalConfig;
 }
 
 export function writeGlobalConfig(config: GlobalConfig): void {
@@ -58,19 +49,4 @@ export function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): 
   }
 
   writeGlobalConfig(updatedConfig);
-}
-
-export function maybeRecordFirstRun(): boolean {
-  // Return true if first run
-  try {
-    const config = readGlobalConfig();
-    if (!config.hasRun) {
-      config.hasRun = true;
-      writeGlobalConfig(config);
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
 }
