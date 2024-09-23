@@ -60,7 +60,7 @@ export function authCommand(program: Command) {
 
         logger.info(
           chalk.green(
-            `A login link has been sent to ${email}. Click the link to login and then click "Copy API Token" from your profile drop down.`,
+            `A login link has been sent to ${email}. Click the link to login and then copy your authentication token.`,
           ),
         );
 
