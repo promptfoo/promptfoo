@@ -29,7 +29,8 @@
     "node": ">=18.0.0"
   },
   "bin": {
-    "promptfoo": "dist/src/main.js"
+    "promptfoo": "dist/src/main.js",
+    "pf": "dist/src/main.js"
   },
   "scripts": {
     "bin": "dist/src/main.js",
