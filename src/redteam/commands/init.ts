@@ -493,20 +493,10 @@ export async function redteamInit(directory: string | undefined) {
       );
 
       const existingEmail = getUserEmail();
-
-      let email: string;
-      if (existingEmail) {
-        const confirmExistingEmail = await confirm({
-          message: `Do you agree?`,
-          default: true,
-        });
-        if (!confirmExistingEmail) {
-          process.exit(1);
-        }
-        email = existingEmail;
-      } else {
+      let email = existingEmail;
+      if (!existingEmail) {
         email = await input({
-          message: 'Please enter your email address to confirm your agreement:',
+          message: 'Please enter a valid email address to confirm your agreement:',
           validate: (value) => {
             return value.includes('@') || 'Please enter a valid email address';
           },
@@ -514,11 +504,13 @@ export async function redteamInit(directory: string | undefined) {
         setUserEmail(email);
       }
 
-      try {
-        await telemetry.saveConsent(email);
-        writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
-      } catch (err) {
-        logger.error(`Error saving consent: ${(err as Error).message}`);
+      if (email) {
+        try {
+          await telemetry.saveConsent(email);
+          writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
+        } catch (err) {
+          logger.error(`Error saving consent: ${(err as Error).message}`);
+        }
       }
     }
   }
