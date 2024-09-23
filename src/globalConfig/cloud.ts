@@ -51,6 +51,10 @@ export class CloudConfig {
     return this.config.appUrl;
   }
 
+  delete(): void {
+    writeGlobalConfigPartial({ cloud: {} });
+  }
+
   private saveConfig(): void {
     writeGlobalConfigPartial({ cloud: this.config });
     this.reload();

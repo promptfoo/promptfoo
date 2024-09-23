@@ -88,4 +88,13 @@ export function authCommand(program: Command) {
         process.exit(1);
       }
     });
+
+  authCommand
+    .command('logout')
+    .description('Logout')
+    .action(async () => {
+      await cloudConfig.delete();
+      logger.info(chalk.green('Successfully logged out'));
+      process.exit(0);
+    });
 }
