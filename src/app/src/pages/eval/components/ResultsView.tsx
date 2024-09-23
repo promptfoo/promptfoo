@@ -1,8 +1,6 @@
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import useShareConfig, { useShareAppBaseUrl } from '@app/stores/shareConfig';
 import { callApi } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -123,8 +121,6 @@ export default function ResultsView({
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const { apiShareBaseUrl } = useShareConfig();
-  const appShareBaseUrl = useShareAppBaseUrl();
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
