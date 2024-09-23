@@ -155,7 +155,9 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
                         {getOutputDisplay(failure.output)}
                       </Typography>
                     </Box>
-                    {failure.gradingResult && (
+                    {failure.gradingResult?.componentResults?.some(
+                      (result) => (result.suggestions?.length || 0) > 0,
+                    ) && (
                       <IconButton
                         onClick={() => {
                           setCurrentGradingResult(failure.gradingResult);
