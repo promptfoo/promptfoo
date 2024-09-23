@@ -438,7 +438,7 @@ export default function ResultsView({
           />
         ))}
       </ResponsiveStack>
-      <ResponsiveStack direction="row" spacing={1} alignItems="center">
+      <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
         <Box>
           <FormControl sx={{ minWidth: 200, maxWidth: 350 }} size="small">
             <InputLabel id="visible-columns-label">Columns</InputLabel>

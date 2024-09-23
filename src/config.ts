@@ -380,6 +380,13 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
     env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
     evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
+    outputPath: configs.flatMap((config) =>
+      typeof config.outputPath === 'string'
+        ? [config.outputPath]
+        : Array.isArray(config.outputPath)
+          ? config.outputPath
+          : [],
+    ),
     commandLineOptions: configs.reduce(
       (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
