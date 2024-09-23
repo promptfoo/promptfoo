@@ -62,7 +62,7 @@ export async function createShareableUrl(
       body: JSON.stringify(sharedResults),
     });
   } else {
-    response = await fetchWithProxy(`${apiBaseUrl}/api/results`, {
+    response = await fetchWithProxy(`${apiBaseUrl}/api/eval`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
