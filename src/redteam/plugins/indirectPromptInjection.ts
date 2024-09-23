@@ -1,4 +1,6 @@
 import dedent from 'dedent';
+import invariant from 'tiny-invariant';
+import type { AssertionValue, ResultSuggestion } from '../../types';
 import { RedteamModelGrader } from './base';
 
 export class IndirectPromptInjectionGrader extends RedteamModelGrader {
