@@ -150,7 +150,16 @@ export default function SuggestionsDialog({
                   >
                     <Typography variant="body2">View suggested prompt</Typography>
                   </AccordionSummary>
-                  <AccordionDetails sx={{ px: 1, py: 0, position: 'relative' }}>
+                  <AccordionDetails
+                    sx={{
+                      px: 1,
+                      py: 0,
+                      position: 'relative',
+                      '&:hover .copy-icon': {
+                        display: 'block',
+                      },
+                    }}
+                  >
                     <Box
                       component="pre"
                       sx={{
@@ -158,7 +167,7 @@ export default function SuggestionsDialog({
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                         p: 0,
-                        pr: 6, // Make space for the copy button
+                        pr: 6,
                         fontSize: '0.875rem',
                       }}
                     >
@@ -166,11 +175,13 @@ export default function SuggestionsDialog({
                     </Box>
                     <IconButton
                       onClick={() => handleCopy(suggestion.value, index)}
+                      className="copy-icon"
                       sx={{
                         position: 'absolute',
                         top: 8,
                         right: 8,
                         backgroundColor: theme.palette.background.paper,
+                        display: 'none', // Initially hide the button
                         '&:hover': {
                           backgroundColor: theme.palette.action.hover,
                         },
