@@ -70,7 +70,10 @@ const App: React.FC = () => {
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
 
   const failuresByPlugin = React.useMemo(() => {
-    const failures: Record<string, { prompt: string; output: string }[]> = {};
+    const failures: Record<
+      string,
+      { prompt: string; output: string; gradingResult?: GradingResult }[]
+    > = {};
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
@@ -83,8 +86,10 @@ const App: React.FC = () => {
         }
         failures[pluginId].push({
           // FIXME(ian): Use injectVar (and contextVar), not hardcoded query
-          prompt: result.vars.query?.toString() || result.prompt.raw,
+          prompt:
+            result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
           output: result.response?.output,
+          gradingResult: result.gradingResult,
         });
       }
     });

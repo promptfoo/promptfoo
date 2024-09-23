@@ -11,6 +11,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { Gauge } from '@mui/x-charts/Gauge';
+import { type GradingResult } from '@promptfoo/types';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import { categoryAliases, displayNameOverrides, subCategoryDescriptions } from './constants';
 import { useReportStore } from './store';
@@ -24,7 +25,10 @@ const RiskCard: React.FC<{
   numTestsFailed: number;
   testTypes: { name: string; categoryPassed: boolean; numPassed: number; numFailed: number }[];
   evalId: string;
-  failuresByPlugin: Record<string, { prompt: string; output: string }[]>;
+  failuresByPlugin: Record<
+    string,
+    { prompt: string; output: string; gradingResult?: GradingResult }[]
+  >;
 }> = ({
   title,
   subtitle,
