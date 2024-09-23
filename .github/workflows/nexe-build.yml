@@ -68,8 +68,9 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         with:
           files: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+          tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
