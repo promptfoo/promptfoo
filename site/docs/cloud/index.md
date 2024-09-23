@@ -1,16 +1,16 @@
 ---
-sidebar_label: Using Promptfoo Cloud
+sidebar_label: Promptfoo Cloud
 ---
 
-# Using Promptfoo Cloud
+# Promptfoo Cloud
 
 Promptfoo's Cloud offering is a hosted version of Promptfoo that lets you securely and privately share evals with your team.
 
-This is a paid offering, to learn more or request access contact us at sales@promptfoo.dev
+Once you create an organization, you will be able to invite other team members. Team members can configure their `promptfoo` clients to share evals with your organization.
 
-The Promptfoo team will create you an organization and account. Once you have access you will be able to invite other team members.
+To learn more or request access contact us at [sales@promptfoo.dev](mailto:sales@promptfoo.dev).
 
-## Using Promptfoo Cloud
+## Getting Started
 
 Once you have access, you can log in to Promptfoo Cloud and start sharing your evals.
 
@@ -21,11 +21,11 @@ Once you have access, you can log in to Promptfoo Cloud and start sharing your e
 2.  **Log in to Promptfoo Cloud**
 
     ```bash
-    promptfoo cloud login
+    promptfoo auth login
     ```
 
     :::tip
-    If you're hosting an on-premise Promptfoo Cloud instance, you need to pass the `--host <host api url>` flag to the login command. You'll know this is the case if you don't access Promptfoo at https://www.promptfoo.app
+    If you're hosting an on-premise Promptfoo Cloud instance, you need to pass the `--host <host api url>` flag to the login command. By default, the cloud host is https://www.promptfoo.app.
     :::
 
 3.  **Share your evals**

@@ -1,4 +1,3 @@
-import chalk from 'chalk';
 import packageJson from '../package.json';
 import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
