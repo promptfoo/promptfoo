@@ -245,7 +245,8 @@ export interface EvaluateSummary {
 }
 
 export interface ResultSuggestion {
-  type: 'replace-prompt';
+  type: string;
+  action: 'replace-prompt';
   value: string;
 }
 

@@ -145,7 +145,8 @@ export class IndirectPromptInjectionGrader extends RedteamModelGrader {
     `;
 
     return {
-      type: 'replace-prompt',
+      action: 'replace-prompt',
+      type: 'datamark',
       value: `${systemPrompt} Datamarked text: ${prompt.replace(userInput, datamarkedPrompt)}`,
     };
   }
@@ -163,7 +164,8 @@ export class IndirectPromptInjectionGrader extends RedteamModelGrader {
     const fullPrompt = `${systemPrompt}\n\nEncoded text:\n${prompt.replace(userInput, encodedPrompt)}`;
 
     return {
-      type: 'replace-prompt',
+      action: 'replace-prompt',
+      type: 'encoding',
       value: fullPrompt,
     };
   }
