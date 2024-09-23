@@ -4,8 +4,7 @@ import yaml from 'js-yaml';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
 import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
-import { extractEntities } from '../../src/redteam/extraction/entities';
-import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
+import { extractEntities, extractSystemPurpose } from '../../src/redteam/extraction';
 import { synthesize, resolvePluginConfig } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
 import { Strategies } from '../../src/redteam/strategies';
@@ -14,8 +13,7 @@ import { validateStrategies } from '../../src/redteam/strategies';
 jest.mock('cli-progress');
 jest.mock('../../src/logger');
 jest.mock('../../src/providers');
-jest.mock('../../src/redteam/extraction/entities');
-jest.mock('../../src/redteam/extraction/purpose');
+jest.mock('../../src/redteam/extraction');
 jest.mock('../../src/util/templates', () => {
   const originalModule = jest.requireActual('../../src/util/templates');
   return {
