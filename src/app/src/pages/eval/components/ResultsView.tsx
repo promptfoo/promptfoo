@@ -140,33 +140,22 @@ export default function ResultsView({
 
   const handleShareButtonClick = async () => {
     setShareLoading(true);
-    let shareUrl = '';
-    try {
-      if (IS_RUNNING_LOCALLY) {
-        const response = await fetch(`${apiShareBaseUrl}/api/eval`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            data: {
-              version: 2,
-              createdAt: new Date().toISOString(),
-              results: {
-                table,
-              },
-              config,
-            },
-          }),
-        });
-        const { id } = await response.json();
-        shareUrl = `${appShareBaseUrl}/eval/${id}`;
-      } else {
-        shareUrl = `${window.location.host}/eval/?evalId=${currentEvalId}`;
-      }
 
-      setShareUrl(shareUrl);
-      setShareModalOpen(true);
+    try {
+      const response = await callApi('/results/share', {
+        method: 'POST',
+        body: JSON.stringify({ id: currentEvalId }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      const { url } = await response.json();
+      if (response.ok) {
+        setShareUrl(url);
+        setShareModalOpen(true);
+      } else {
+        alert('Sorry, something went wrong.');
+      }
     } catch {
       alert('Sorry, something went wrong.');
     } finally {

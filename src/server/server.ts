@@ -11,6 +11,7 @@ import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
+import { createPublicUrl } from '../commands/share';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type {
@@ -231,6 +232,19 @@ export function startServer(
 
   app.get('/api/datasets', async (req, res) => {
     res.json({ data: await getTestCases() });
+  });
+
+  app.post('/api/results/share', async (req, res) => {
+    const { id } = req.body;
+    console.log({ body: req.body });
+
+    const result = await readResult(id);
+    if (!result) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+    const url = await createPublicUrl(result.result, true);
+    res.json({ url });
   });
 
   app.post('/api/dataset/generate', async (req, res) => {

@@ -9,9 +9,10 @@ import telemetry from '../telemetry';
 import type { ResultsFile } from '../types';
 import { getLatestEval, readResult, setupEnv } from '../util';
 
-async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
+export async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
   const url = await createShareableUrl(results.results, results.config, showAuth);
   logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+  return url;
 }
 
 export function shareCommand(program: Command) {
