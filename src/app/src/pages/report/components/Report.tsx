@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import type { EvaluateResult, ResultsFile, SharedResults } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -13,6 +12,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Modal from '@mui/material/Modal';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import type { EvaluateResult, ResultsFile, SharedResults, GradingResult } from '@promptfoo/types';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';

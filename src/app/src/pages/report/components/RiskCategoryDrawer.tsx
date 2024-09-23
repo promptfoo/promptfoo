@@ -7,7 +7,7 @@ import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import Typography from '@mui/material/Typography';
-import type { GradingResult, ResultSuggestion } from '@promptfoo/types';
+import type { GradingResult } from '@promptfoo/types';
 import SuggestionsDialog from './SuggestionsDialog';
 import { categoryAliases, displayNameOverrides } from './constants';
 import './RiskCategoryDrawer.css';
