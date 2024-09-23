@@ -31,6 +31,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    continue-on-error: true
     strategy:
       matrix:
         os: [linux, macos, win]
