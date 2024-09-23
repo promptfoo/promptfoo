@@ -24,6 +24,10 @@ Once you have access, you can log in to Promptfoo Cloud and start sharing your e
     promptfoo cloud login
     ```
 
+    :::tip
+    If you're hosting an on-premise Promptfoo Cloud instance, you need to pass the `--host <host api url>` flag to the login command. You'll know this is the case if you don't access Promptfoo at https://www.promptfoo.app
+    :::
+
 3.  **Share your evals**
 
         ```bash
