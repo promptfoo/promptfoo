@@ -4,7 +4,7 @@ prompts:
   - '{{question}}'
 
 providers:
-  - python:retrieve.py
+  - file://retrieve.py
 
 tests:
   - vars:

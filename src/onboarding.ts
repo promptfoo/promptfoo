@@ -399,7 +399,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: 'Local Python script',
-        value: ['python:provider.py'],
+        value: ['file://provider.py'],
       },
       {
         name: 'Local Javascript script',
@@ -465,7 +465,10 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       }
 
       if (
-        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
+        providerChoices.some(
+          (choice) =>
+            typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
+        )
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.js'), JAVASCRIPT_PROVIDER);
         logger.info('⌛ Wrote provider.js');
@@ -477,7 +480,12 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         logger.info('⌛ Wrote provider.sh');
       }
       if (
-        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
+        providerChoices.some(
+          (choice) =>
+            typeof choice === 'string' &&
+            (choice.startsWith('python:') ||
+              (choice.startsWith('file://') && choice.endsWith('.py'))),
+        )
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.py'), PYTHON_PROVIDER);
         logger.info('⌛ Wrote provider.py');
