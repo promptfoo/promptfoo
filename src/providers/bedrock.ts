@@ -3,7 +3,7 @@ import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import dedent from 'dedent';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvFloat, getEnvInt } from '../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -173,14 +173,13 @@ interface BedrockMistralGenerationOptions extends BedrockOptions {
 }
 
 interface BedrockAI21GenerationOptions extends BedrockOptions {
-  n: any;
-  stop: any;
-  presence_penalty: any;
-  frequency_penalty: any;
+  frequency_penalty?: number;
+  max_tokens?: number;
+  presence_penalty?: number;
+  response_format?: { type: 'json_object' | 'text' };
+  stop?: string[];
   temperature?: number;
   top_p?: number;
-  max_tokens?: number;
-  response_format?: { type: 'json_object' | 'text' };
 }
 
 interface IBedrockModel {
@@ -310,7 +309,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
         0.01,
       );
-      addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1);
       addConfigParam(
         params,
         'max_gen_len',
@@ -335,7 +334,7 @@ export const BEDROCK_MODEL = {
         params,
         'max_tokens',
         config?.max_tokens,
-        process.env.AWS_BEDROCK_MAX_TOKENS,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
       addConfigParam(
@@ -345,19 +344,19 @@ export const BEDROCK_MODEL = {
         getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
         0,
       );
-      addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1.0);
-      addConfigParam(params, 'stop', config?.stop, process.env.AWS_BEDROCK_STOP);
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
+      addConfigParam(params, 'stop', config?.stop, getEnvString('AWS_BEDROCK_STOP'));
       addConfigParam(
         params,
         'frequency_penalty',
         config?.frequency_penalty,
-        process.env.AWS_BEDROCK_FREQUENCY_PENALTY,
+        getEnvFloat('AWS_BEDROCK_FREQUENCY_PENALTY'),
       );
       addConfigParam(
         params,
         'presence_penalty',
         config?.presence_penalty,
-        process.env.AWS_BEDROCK_PRESENCE_PENALTY,
+        getEnvFloat('AWS_BEDROCK_PRESENCE_PENALTY'),
       );
       return params;
     },
@@ -378,7 +377,7 @@ export const BEDROCK_MODEL = {
         params,
         'max_tokens_to_sample',
         config?.max_tokens_to_sample,
-        process.env.AWS_BEDROCK_MAX_TOKENS,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
       addConfigParam(
@@ -400,7 +399,7 @@ export const BEDROCK_MODEL = {
         params,
         'max_tokens',
         config?.max_tokens,
-        process.env.AWS_BEDROCK_MAX_TOKENS,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
       addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
@@ -433,7 +432,7 @@ export const BEDROCK_MODEL = {
         textGenerationConfig,
         'maxTokenCount',
         config?.textGenerationConfig?.maxTokenCount,
-        process.env.AWS_BEDROCK_MAX_TOKENS,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
       addConfigParam(
@@ -447,7 +446,7 @@ export const BEDROCK_MODEL = {
         textGenerationConfig,
         'topP',
         config?.textGenerationConfig?.topP,
-        process.env.AWS_BEDROCK_TOP_P,
+        getEnvFloat('AWS_BEDROCK_TOP_P'),
         1,
       );
       addConfigParam(
@@ -466,10 +465,22 @@ export const BEDROCK_MODEL = {
   COHERE_COMMAND: {
     params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
       const params: any = { prompt };
-      addConfigParam(params, 'temperature', config?.temperature, process.env.COHERE_TEMPERATURE, 0);
-      addConfigParam(params, 'p', config?.p, process.env.COHERE_P, 1);
-      addConfigParam(params, 'k', config?.k, process.env.COHERE_K, 0);
-      addConfigParam(params, 'max_tokens', config?.max_tokens, process.env.COHERE_MAX_TOKENS, 1024);
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('COHERE_TEMPERATURE'),
+        0,
+      );
+      addConfigParam(params, 'p', config?.p, getEnvFloat('COHERE_P'), 1);
+      addConfigParam(params, 'k', config?.k, getEnvInt('COHERE_K'), 0);
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        getEnvInt('COHERE_MAX_TOKENS'),
+        1024,
+      );
       addConfigParam(params, 'return_likelihoods', config?.return_likelihoods, undefined, 'NONE');
       addConfigParam(params, 'stream', config?.stream, undefined, false);
       addConfigParam(params, 'num_generations', config?.num_generations, undefined, 1);
@@ -521,18 +532,18 @@ export const BEDROCK_MODEL = {
         params,
         'max_tokens',
         config?.max_tokens,
-        process.env.MISTRAL_MAX_TOKENS,
+        getEnvInt('MISTRAL_MAX_TOKENS'),
         1024,
       );
       addConfigParam(
         params,
         'temperature',
         config?.temperature,
-        process.env.MISTRAL_TEMPERATURE,
+        getEnvFloat('MISTRAL_TEMPERATURE'),
         0,
       );
-      addConfigParam(params, 'top_p', config?.top_p, process.env.MISTRAL_TOP_P, 1);
-      addConfigParam(params, 'top_k', config?.top_k, process.env.MISTRAL_TOP_K, 0);
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
+      addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'), 0);
       return params;
     },
     output: (responseJson: any) => responseJson?.outputs[0]?.text,
@@ -659,7 +670,7 @@ export abstract class AwsBedrockGenericProvider {
     return (
       this.config?.region ||
       this.env?.AWS_BEDROCK_REGION ||
-      process.env.AWS_BEDROCK_REGION ||
+      getEnvString('AWS_BEDROCK_REGION') ||
       'us-west-2'
     );
   }
@@ -671,7 +682,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   async callApi(prompt: string): Promise<ProviderResponse> {
     let stop: string[];
     try {
-      stop = process.env.AWS_BEDROCK_STOP ? JSON.parse(process.env.AWS_BEDROCK_STOP) : [];
+      stop = getEnvString('AWS_BEDROCK_STOP') ? JSON.parse(getEnvString('AWS_BEDROCK_STOP')!) : [];
     } catch (err) {
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }

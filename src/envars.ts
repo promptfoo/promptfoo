@@ -52,9 +52,26 @@ export type EnvVars = {
   // 3rd party
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
+  AI21_API_BASE_URL?: string;
   ANTHROPIC_TEMPERATURE?: number;
+  ANTHROPIC_API_KEY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
   AWS_BEDROCK_TEMPERATURE?: number;
+  AI21_API_KEY?: string;
+  AWS_BEDROCK_REGION?: string;
+  AWS_BEDROCK_STOP?: string;
+  AWS_BEDROCK_TOP_P?: string;
+  AWS_BEDROCK_MAX_TOKENS?: string;
+  AWS_BEDROCK_FREQUENCY_PENALTY?: string;
+  AWS_BEDROCK_PRESENCE_PENALTY?: string;
+  MISTRAL_MAX_TOKENS?: string;
+  MISTRAL_TEMPERATURE?: string;
+  MISTRAL_TOP_P?: string;
+  MISTRAL_TOP_K?: string;
+  COHERE_TEMPERATURE?: string;
+  COHERE_P?: string;
+  COHERE_K?: string;
+  COHERE_MAX_TOKENS?: string;
   COHERE_CLIENT_NAME?: string;
   GROQ_API_KEY?: string;
   HELICONE_API_KEY?: string;
