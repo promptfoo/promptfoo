@@ -473,7 +473,7 @@ class Evaluator {
     // Prepare vars
     const varNames: Set<string> = new Set();
     const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
-    const inputTransform = testSuite?.defaultTest?.options?.transform_vars;
+    const inputTransform = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};

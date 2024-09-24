@@ -522,7 +522,7 @@ describe('evaluator', () => {
       ],
       defaultTest: {
         options: {
-          transform_vars: '{ ...vars, var1: "transformed var1" }',
+          transformVars: '{ ...vars, var1: "transformed var1" }',
         },
       },
     };

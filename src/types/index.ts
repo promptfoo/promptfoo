@@ -102,7 +102,7 @@ export const OutputConfigSchema = z.object({
    */
   postprocess: z.string().optional(),
   transform: z.string().optional(),
-  transform_vars: z.string().optional(),
+  transformVars: z.string().optional(),
 
   // The name of the variable to store the output of this test case
   storeOutputAs: z.string().optional(),
