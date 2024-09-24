@@ -7,7 +7,7 @@ import path from 'path';
 import { getEnvBool, getEnvString, getEnvInt } from './envars';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
-import { getConfigDirectoryPath } from './util/config';
+import { getConfigDirectoryPath } from './util/config/manage';
 
 let cacheInstance: Cache | undefined;
 
