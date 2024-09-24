@@ -124,8 +124,13 @@ export async function loadApiProvider(
     // Load script module
     const scriptPath = providerPath.split(':')[1];
     ret = new ScriptCompletionProvider(scriptPath, providerOptions);
-  } else if (providerPath.startsWith('python:')) {
-    const scriptPath = providerPath.split(':').slice(1).join(':');
+  } else if (
+    providerPath.startsWith('python:') ||
+    (providerPath.startsWith('file://') && providerPath.endsWith('.py'))
+  ) {
+    const scriptPath = providerPath.startsWith('file://')
+      ? providerPath.slice('file://'.length)
+      : providerPath.split(':').slice(1).join(':');
     ret = new PythonProvider(scriptPath, providerOptions);
   } else if (providerPath.startsWith('openai:')) {
     // Load OpenAI module
