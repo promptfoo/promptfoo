@@ -1,4 +1,5 @@
-import { reportProviderAPIKeyWarnings } from '../src/onboarding';
+import fs from 'fs';
+import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
 
 describe('reportProviderAPIKeyWarnings', () => {
   const openaiID = 'openai:gpt-4o';
@@ -42,7 +43,6 @@ describe('reportProviderAPIKeyWarnings', () => {
       ]),
     );
   });
-
   it('should be able to accept an object input so long as it has a valid id field', () => {
     expect(reportProviderAPIKeyWarnings([{ id: openaiID }, anthropicID])).toEqual(
       expect.arrayContaining([
@@ -59,6 +59,28 @@ describe('reportProviderAPIKeyWarnings', () => {
       expect.arrayContaining([
         expect.stringContaining('ANTHROPIC_API_KEY environment variable is not set'),
       ]),
+    );
+  });
+});
+
+describe('createDummyFiles', () => {
+  it('should create Python provider file for file:// prefix syntax', async () => {
+    const mockWriteFileSync = jest.spyOn(fs, 'writeFileSync');
+    await createDummyFiles('file://provider.py');
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('provider.py'),
+      expect.stringContaining(
+        'def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> ProviderResponse:',
+      ),
+    );
+  });
+
+  it('should create JavaScript provider file for file:// prefix syntax', async () => {
+    const mockWriteFileSync = jest.spyOn(fs, 'writeFileSync');
+    await createDummyFiles('file://provider.js');
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('provider.js'),
+      expect.stringContaining('async function callApi(prompt, options, context) {'),
     );
   });
 });
