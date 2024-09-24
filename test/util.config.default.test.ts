@@ -1,5 +1,5 @@
 import path from 'path';
-import { loadDefaultConfig } from '../src/main';
+import { loadDefaultConfig } from '../src/util/config/default';
 import { maybeReadConfig } from '../src/util/config/load';
 
 jest.mock('../src/util/config/load', () => ({
