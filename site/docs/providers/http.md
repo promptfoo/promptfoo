@@ -80,6 +80,18 @@ providers:
       responseParser: 'json.text'
 ```
 
+This path is relative to the directory containing the Promptfoo config file.
+
+Then create a file at `path/to/request.txt`:
+
+```
+POST /api/generate HTTP/1.1
+Host: example.com
+Content-Type: application/json
+
+{"prompt": "Tell me a joke"}
+```
+
 ### Nested objects
 
 Nested objects are supported and should be passed to the `dump` function.
