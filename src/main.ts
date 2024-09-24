@@ -86,8 +86,8 @@ async function main() {
     await loadDefaultConfig(['redteam', 'promptfooconfig']);
 
   redteamInitCommand(redteamBaseCommand);
-  generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   evalCommand(redteamBaseCommand, redteamConfig, redteamConfigPath);
+  generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamPluginsCommand(redteamBaseCommand);
 
   if (!process.argv.slice(2).length) {
