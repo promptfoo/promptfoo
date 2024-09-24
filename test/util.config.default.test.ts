@@ -56,4 +56,18 @@ describe('loadDefaultConfig', () => {
       });
     });
   });
+
+  it('should use provided directory when specified', async () => {
+    const mockConfig = { prompts: ['Some prompt'], providers: [], tests: [] };
+    jest.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
+
+    const customDir = '/custom/directory';
+    const result = await loadDefaultConfig(['redteam', 'promptfooconfig'], customDir);
+
+    expect(result).toEqual({
+      defaultConfig: mockConfig,
+      defaultConfigPath: path.join(customDir, 'redteam.yaml'),
+    });
+    expect(maybeReadConfig).toHaveBeenCalledWith(path.join(customDir, 'redteam.yaml'));
+  });
 });
