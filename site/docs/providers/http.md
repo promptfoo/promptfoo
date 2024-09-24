@@ -77,7 +77,7 @@ providers:
   - id: https
     config:
       request: file://path/to/request.txt
-      responseParser: 'json.choices[0].text'
+      responseParser: 'json.text'
 ```
 
 ### Nested objects
@@ -151,6 +151,26 @@ Extracts the message content from this response:
     }
   ]
 }
+```
+
+## Parsing a text response
+
+If your API responds with a text response, you can use the `responseParser` property to set a Javascript snippet that manipulates the provided `text` object.
+
+For example, this `responseParser` configuration:
+
+```yaml
+providers:
+  - id: 'https://example.com/api'
+    config:
+      # ...
+      responseParser: 'text.slice(11)'
+```
+
+Extracts the message content "hello world" from this response:
+
+```
+Assistant: hello world
 ```
 
 ## Query parameters

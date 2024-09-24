@@ -25,14 +25,17 @@ interface HttpProviderConfig {
   request?: string;
 }
 
-function createResponseParser(parser: any): (data: any) => ProviderResponse {
+function createResponseParser(parser: any): (data: any, text: string) => ProviderResponse {
   if (typeof parser === 'function') {
     return parser;
   }
   if (typeof parser === 'string') {
-    return new Function('json', `return ${parser}`) as (data: any) => ProviderResponse;
+    return new Function('json', 'text', `return ${parser}`) as (
+      data: any,
+      text: string,
+    ) => ProviderResponse;
   }
-  return (data) => ({ output: data });
+  return (data, text) => ({ output: data || text });
 }
 
 export function processBody(
@@ -91,7 +94,7 @@ function parseRawRequest(input: string) {
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  responseParser: (data: any) => ProviderResponse;
+  responseParser: (data: any, text: string) => ProviderResponse;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config;
@@ -172,16 +175,21 @@ export class HttpProvider implements ApiProvider {
           ...(method !== 'GET' && { body: JSON.stringify(renderedConfig.body) }),
         },
         REQUEST_TIMEOUT_MS,
-        'json',
+        'text',
       );
     } catch (err) {
       return {
         error: `HTTP call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tHTTP response: ${JSON.stringify(response.data)}`);
+    logger.debug(`\tHTTP response: ${response.data}`);
 
-    return { output: this.responseParser(response.data) };
+    return {
+      output: this.responseParser(
+        response.data,
+        typeof response.data === 'string' ? response.data : JSON.stringify(response.data),
+      ),
+    };
   }
 
   private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
@@ -206,15 +214,20 @@ export class HttpProvider implements ApiProvider {
           ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
         },
         REQUEST_TIMEOUT_MS,
-        'json',
+        'text',
       );
     } catch (err) {
       return {
         error: `HTTP call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tHTTP response: ${JSON.stringify(response.data)}`);
+    logger.debug(`\tHTTP response: ${response.data}`);
 
-    return { output: this.responseParser(response.data) };
+    return {
+      output: this.responseParser(
+        response.data,
+        typeof response.data === 'string' ? response.data : JSON.stringify(response.data),
+      ),
+    };
   }
 }

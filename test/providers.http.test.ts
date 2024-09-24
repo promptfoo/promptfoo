@@ -41,7 +41,7 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: 'test prompt' }),
       }),
       expect.any(Number),
-      'json',
+      'text',
     );
   });
 
@@ -85,13 +85,14 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: 'test prompt' }),
       }),
       expect.any(Number),
-      'json',
+      'text',
     );
   });
 
   const testCases = [
     { parser: (data: any) => data.custom, expected: 'parsed' },
     { parser: 'json.result', expected: 'parsed' },
+    { parser: 'text', expected: JSON.stringify({ result: 'parsed', custom: 'parsed' }) },
   ];
 
   testCases.forEach(({ parser, expected }) => {
@@ -131,7 +132,7 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: 'test prompt' }),
       },
       expect.any(Number),
-      'json',
+      'text',
     );
   });
 
@@ -155,7 +156,7 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: { key: 'value' } }),
       }),
       expect.any(Number),
-      'json',
+      'text',
     );
   });
 
@@ -201,7 +202,7 @@ describe('HttpProvider', () => {
         method: 'GET',
       }),
       expect.any(Number),
-      'json',
+      'text',
     );
   });
 
@@ -214,7 +215,7 @@ describe('HttpProvider', () => {
       `;
       const provider = new HttpProvider('http', {
         config: {
-          rawRequest,
+          request: rawRequest,
           responseParser: (data: any) => data,
         },
       });
@@ -234,7 +235,7 @@ describe('HttpProvider', () => {
           }),
         }),
         expect.any(Number),
-        'json',
+        'text',
       );
       expect(result.output).toEqual({ result: 'success' });
     });
@@ -249,7 +250,7 @@ describe('HttpProvider', () => {
       `;
       const provider = new HttpProvider('https', {
         config: {
-          rawRequest,
+          request: rawRequest,
           responseParser: (data: any) => data,
         },
       });
@@ -270,7 +271,7 @@ describe('HttpProvider', () => {
           body: '{"data": "test data"}',
         }),
         expect.any(Number),
-        'json',
+        'text',
       );
       expect(result.output).toEqual({ result: 'received' });
     });
@@ -285,7 +286,7 @@ describe('HttpProvider', () => {
 
       const provider = new HttpProvider('https', {
         config: {
-          rawRequest: filePath,
+          request: filePath,
           responseParser: (data: any) => data,
         },
       });
@@ -305,7 +306,7 @@ describe('HttpProvider', () => {
           }),
         }),
         expect.any(Number),
-        'json',
+        'text',
       );
       expect(result.output).toEqual({ result: 'success' });
     });
@@ -313,7 +314,7 @@ describe('HttpProvider', () => {
     it('should throw an error for invalid raw requests', async () => {
       const provider = new HttpProvider('http', {
         config: {
-          rawRequest: 'yo mama',
+          request: 'yo mama',
         },
       });
       await expect(provider.callApi('test prompt')).rejects.toThrow(
