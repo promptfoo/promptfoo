@@ -618,6 +618,14 @@ describe('runAssertion', () => {
     value: 'output.length * 10',
   };
 
+  const javascriptBooleanAssertionWithConfig: Assertion = {
+    type: 'javascript',
+    value: 'output.length <= context.config.maximumOutputSize',
+    config: {
+      maximumOutputSize: 20,
+    },
+  };
+
   const javascriptStringAssertionWithNumberAndThreshold: Assertion = {
     type: 'javascript',
     value: 'output.length * 10',
@@ -1582,6 +1590,40 @@ describe('runAssertion', () => {
       pass: true,
       score: output.length * 10,
       reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when javascript returns an output string that is smaller than the maximum size threshold', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1.0,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when javascript returns an output string that is larger than the maximum size threshold', async () => {
+    const output = 'Expected output with some extra characters';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Custom function returned false'),
     });
   });
 

@@ -158,7 +158,7 @@ This is an example of an assertion that uses data from a configuration defined i
 
 ```js
 module.exports = (output, context) => {
-  return output.length > context.config.maximumOutputSize;
+  return output.length <= context.config.maximumOutputSize;
 };
 ```
 
