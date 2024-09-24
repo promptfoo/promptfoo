@@ -172,6 +172,17 @@ interface BedrockMistralGenerationOptions extends BedrockOptions {
   top_k?: number;
 }
 
+interface BedrockAI21GenerationOptions extends BedrockOptions {
+  n: any;
+  stop: any;
+  presence_penalty: any;
+  frequency_penalty: any;
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+  response_format?: { type: 'json_object' | 'text' };
+}
+
 interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
   output: (responseJson: any) => any;
@@ -314,6 +325,49 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
 };
 
 export const BEDROCK_MODEL = {
+  AI21: {
+    params: (config: BedrockAI21GenerationOptions, prompt: string) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+      const params: any = {
+        messages,
+      };
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        process.env.AWS_BEDROCK_MAX_TOKENS,
+        1024,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+        0,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1.0);
+      addConfigParam(params, 'stop', config?.stop, process.env.AWS_BEDROCK_STOP);
+      addConfigParam(
+        params,
+        'frequency_penalty',
+        config?.frequency_penalty,
+        process.env.AWS_BEDROCK_FREQUENCY_PENALTY,
+      );
+      addConfigParam(
+        params,
+        'presence_penalty',
+        config?.presence_penalty,
+        process.env.AWS_BEDROCK_PRESENCE_PENALTY,
+      );
+      return params;
+    },
+    output: (responseJson: any) => {
+      if (responseJson.error) {
+        throw new Error(`AI21 API error: ${responseJson.error}`);
+      }
+      return responseJson.choices[0].message.content;
+    },
+  },
   CLAUDE_COMPLETION: {
     params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
       const params: any = {
@@ -331,7 +385,7 @@ export const BEDROCK_MODEL = {
         params,
         'temperature',
         config?.temperature,
-        process.env.AWS_BEDROCK_TEMPERATURE,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
         0,
       );
       return params;
@@ -386,7 +440,7 @@ export const BEDROCK_MODEL = {
         textGenerationConfig,
         'temperature',
         config?.textGenerationConfig?.temperature,
-        process.env.AWS_BEDROCK_TEMPERATURE,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
         0,
       );
       addConfigParam(
@@ -509,6 +563,8 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
+  'ai21.jamba-1-5-large-v1:0': BEDROCK_MODEL.AI21,
+  'ai21.jamba-1-5-mini-v1:0': BEDROCK_MODEL.AI21,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -516,6 +572,9 @@ function getHandlerForModel(modelName: string) {
   const ret = AWS_BEDROCK_MODELS[modelName];
   if (ret) {
     return ret;
+  }
+  if (modelName.startsWith('ai21.')) {
+    return BEDROCK_MODEL.AI21;
   }
   if (modelName.startsWith('anthropic.claude')) {
     return BEDROCK_MODEL.CLAUDE_MESSAGES;
@@ -670,9 +729,9 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       return {
         output: model.output(output),
         tokenUsage: {
-          total: output.prompt_token_count + output.generation_token_count,
-          prompt: output.prompt_token_count,
-          completion: output.generation_token_count,
+          total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
+          prompt: output.prompt_tokens ?? output.prompt_token_count,
+          completion: output.completion_tokens ?? output.generation_token_count,
         },
       };
     } catch (err) {
