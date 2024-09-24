@@ -158,47 +158,13 @@ You can use Bedrock models to grade outputs. By default, model-graded tests use 
 
 Note that because of how model-graded evals are implemented, **the LLM grading models must support chat-formatted prompts** (except for embedding or classification models).
 
-Here's an example of using a Bedrock model for grading:
-
-```yaml
-providers:
-  - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
-    config:
-      temperature: 0
-  - id: bedrock:anthropic.claude-instant-v1
-    config:
-      temperature: 1
-
-prompts:
-  - prompt.txt
-
-tests:
-  - vars:
-      topic: AI
-  - vars:
-      topic: Machine Learning
-
-rubric: |
-  Grade the tweet on a scale of 1-10 based on the following criteria:
-  - Relevance to the topic
-  - Engagement potential
-  - Clarity and conciseness
-  Provide a single number as output with no explanation.
-
-assertion:
-  - type: llm-rubric
-    value:
-      provider: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
-      rubric: $rubric
-```
-
 To set this for all your test cases, add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
 ```yaml title=promptfooconfig.yaml
 defaultTest:
   options:
     provider:
-      id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+      id: provider:chat:modelname
       config:
         temperature: 0
         # Other provider config options
@@ -213,7 +179,7 @@ assert:
     value: Do not mention that you are an AI or chat assistant
     provider:
       text:
-        id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+        id: provider:chat:modelname
         config:
           region: us-east-1
           temperature: 0
@@ -229,7 +195,7 @@ tests:
       # ...
     options:
       provider:
-        id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+        id: provider:chat:modelname
         config:
           temperature: 0
           # Other provider config options
@@ -240,11 +206,16 @@ tests:
 
 ## Embeddings
 
-To use Bedrock for embeddings, use the `bedrock-embedding:` prefix followed by the model name. For example:
+To override the embeddings provider for all assertions that require embeddings (such as similarity), use `defaultTest`:
 
 ```yaml
-providers:
-  - bedrock-embedding:amazon.titan-embed-text-v1
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: bedrock:embeddings:amazon.titan-embed-text-v2:0
+        config:
+          region: us-east-1
 ```
 
 ## Environment Variables
