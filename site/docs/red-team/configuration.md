@@ -524,7 +524,7 @@ For example, let's create a Python provider. Your config would look like this:
 
 ```yaml
 targets:
-  - id: 'python:send_redteam.py'
+  - id: 'file://send_redteam.py'
     label: 'Test script 1' # Optional display label
 ```
 
@@ -622,7 +622,7 @@ In this case, be sure to specify a `purpose`, because the redteam generator can 
 purpose: 'Act as a travel agent with a focus on European holidays'
 
 targets:
-  - python:send_redteam.py
+  - file://send_redteam.py
 
 redteam:
   numTests: 10

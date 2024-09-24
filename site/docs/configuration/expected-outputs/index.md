@@ -284,7 +284,7 @@ All assertion types can be used in `__expected`. The column supports exactly one
 
 - `is-json` and `contains-json` are supported directly, and do not require any value
 - `fn` indicates `javascript` type. For example: `fn:output.includes('foo')`
-- `python` indicates `python` type. For example: `python:file://custom_assertion.py`
+- `file://` indicates an external file relative to your config. For example: `file://custom_assertion.py` or `file://customAssertion.js`
 - `similar` takes a threshold value. For example: `similar(0.8):hello world`
 - `grade` indicates `llm-rubric`. For example: `grade: does not mention being an AI`
 - By default, `__expected` will use type `equals`
