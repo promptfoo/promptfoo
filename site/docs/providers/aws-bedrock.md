@@ -4,21 +4,21 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
 ## Setup
 
-1. Install the AWS SDK for JavaScript v3:
+1. Ensure you have access to the desired models under the [Providers](https://console.aws.amazon.com/bedrock/home) page in Amazon Bedrock.
+
+2. Make sure you have valid AWS credentials configured. You can do this by setting the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables, or by using the AWS CLI to configure your credentials.
+
+3. Install the AWS SDK for JavaScript v3:
 
    ```sh
    npm install @aws-sdk/client-bedrock-runtime
    ```
 
-2. Make sure you have valid AWS credentials configured. You can do this by setting the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables, or by using the AWS CLI to configure your credentials.
-
-3. Enable the models you want to use in the AWS Bedrock console.
-
 4. Edit your configuration file to point to the AWS Bedrock provider. Here's an example:
 
    ```yaml
    providers:
-     - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+     - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -27,7 +27,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+     - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
        config:
          region: 'us-west-2'
          temperature: 0.7
@@ -53,7 +53,7 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+  - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
