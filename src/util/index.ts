@@ -50,7 +50,7 @@ import {
   isProviderOptions,
   OutputFileExtension,
 } from '../types';
-import { getConfigDirectoryPath } from './config';
+import { getConfigDirectoryPath } from './config/manage';
 import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;

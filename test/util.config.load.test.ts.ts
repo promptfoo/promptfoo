@@ -3,11 +3,16 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from '../src/cliState';
-import { dereferenceConfig, readConfig, readConfigs, resolveConfigs } from '../src/config';
 import { importModule } from '../src/esm';
 import { readTests } from '../src/testCases';
 import type { UnifiedConfig } from '../src/types';
 import { maybeLoadFromExternalFile } from '../src/util';
+import {
+  dereferenceConfig,
+  readConfig,
+  readConfigs,
+  resolveConfigs,
+} from '../src/util/config/load';
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),

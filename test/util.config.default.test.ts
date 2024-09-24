@@ -1,8 +1,8 @@
 import path from 'path';
-import { maybeReadConfig } from '../src/config';
-import { loadDefaultConfig } from '../src/main';
+import { loadDefaultConfig } from '../src/util/config/default';
+import { maybeReadConfig } from '../src/util/config/load';
 
-jest.mock('../src/config', () => ({
+jest.mock('../src/util/config/load', () => ({
   maybeReadConfig: jest.fn(),
 }));
 
@@ -55,5 +55,19 @@ describe('loadDefaultConfig', () => {
         );
       });
     });
+  });
+
+  it('should use provided directory when specified', async () => {
+    const mockConfig = { prompts: ['Some prompt'], providers: [], tests: [] };
+    jest.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
+
+    const customDir = '/custom/directory';
+    const result = await loadDefaultConfig(['redteam', 'promptfooconfig'], customDir);
+
+    expect(result).toEqual({
+      defaultConfig: mockConfig,
+      defaultConfigPath: path.join(customDir, 'redteam.yaml'),
+    });
+    expect(maybeReadConfig).toHaveBeenCalledWith(path.join(customDir, 'redteam.yaml'));
   });
 });

@@ -9,12 +9,12 @@ import { z } from 'zod';
 import { synthesize } from '..';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
-import { resolveConfigs } from '../../config';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
-import { writePromptfooConfig } from '../../util/config';
+import { resolveConfigs } from '../../util/config/load';
+import { writePromptfooConfig } from '../../util/config/manage';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 import {
   REDTEAM_MODEL,
