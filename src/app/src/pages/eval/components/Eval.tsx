@@ -11,6 +11,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import type { EvaluateTable } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
+import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { useStore } from './store';
 import './Eval.css';
@@ -176,6 +177,10 @@ export default function Eval({
 
   if (failed) {
     return <div className="notice">404 Eval not found</div>;
+  }
+
+  if (loaded && !table) {
+    return <EmptyState />;
   }
 
   if (!loaded || !table) {

@@ -11,7 +11,6 @@ import NodeCache from 'node-cache';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
-import { getAuthor } from '../accounts';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
@@ -26,6 +25,7 @@ import {
 } from '../database/tables';
 import { getEnvBool, getEnvInt } from '../envars';
 import { getDirectory, importModule } from '../esm';
+import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -50,7 +50,7 @@ import {
   isProviderOptions,
   OutputFileExtension,
 } from '../types';
-import { getConfigDirectoryPath } from './config';
+import { getConfigDirectoryPath } from './config/manage';
 import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;

@@ -37,6 +37,7 @@ import {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
 } from '../src/providers/openai';
+import { PythonProvider } from '../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
@@ -91,7 +92,6 @@ jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
 jest.mock('../src/logger');
-
 const defaultMockResponse = {
   status: 200,
   statusText: 'OK',
@@ -1343,6 +1343,18 @@ config:
     expect(provider.id()).toBe('replicate:foo/bar:abc123');
   });
 
+  it('loadApiProvider with file://*.py', async () => {
+    const provider = await loadApiProvider('file://script.py:function_name');
+    expect(provider).toBeInstanceOf(PythonProvider);
+    expect(provider.id()).toBe('python:script.py:function_name');
+  });
+
+  it('loadApiProvider with python:*.py', async () => {
+    const provider = await loadApiProvider('python:script.py');
+    expect(provider).toBeInstanceOf(PythonProvider);
+    expect(provider.id()).toBe('python:script.py:default');
+  });
+
   it('loadApiProvider with cloudflare-ai', async () => {
     const supportedModelTypes = [
       { modelType: 'chat', providerKlass: CloudflareAiChatCompletionProvider },
@@ -1507,5 +1519,21 @@ config:
     };
     const provider = await loadApiProvider('echo', { options: providerOptions });
     expect(provider.delay).toBe(500);
+  });
+
+  it('supports templating in provider URL', async () => {
+    process.env.MYHOST = 'api.example.com';
+    process.env.MYPORT = '8080';
+
+    const provider = await loadApiProvider('https://{{ env.MYHOST }}:{{ env.MYPORT }}/query', {
+      options: {
+        config: {
+          body: {},
+        },
+      },
+    });
+    expect(provider.id()).toBe('https://api.example.com:8080/query');
+    delete process.env.MYHOST;
+    delete process.env.MYPORT;
   });
 });
