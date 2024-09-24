@@ -91,7 +91,6 @@ jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
 jest.mock('../src/logger');
-
 const defaultMockResponse = {
   status: 200,
   statusText: 'OK',
@@ -1507,5 +1506,21 @@ config:
     };
     const provider = await loadApiProvider('echo', { options: providerOptions });
     expect(provider.delay).toBe(500);
+  });
+
+  it('supports templating in provider URL', async () => {
+    process.env.MYHOST = 'api.example.com';
+    process.env.MYPORT = '8080';
+
+    const provider = await loadApiProvider('https://{{ env.MYHOST }}:{{ env.MYPORT }}/query', {
+      options: {
+        config: {
+          body: {},
+        },
+      },
+    });
+    expect(provider.id()).toBe('https://api.example.com:8080/query');
+    delete process.env.MYHOST;
+    delete process.env.MYPORT;
   });
 });
