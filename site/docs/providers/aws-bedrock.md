@@ -49,7 +49,7 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: bedrock:ai21.jamba-1-5-mini-v1:0
+  - id: bedrock:meta.llama3-1-405b-instruct-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7

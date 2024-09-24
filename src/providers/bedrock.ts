@@ -551,6 +551,8 @@ export const BEDROCK_MODEL = {
 };
 
 const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
+  'ai21.jamba-1-5-large-v1:0': BEDROCK_MODEL.AI21,
+  'ai21.jamba-1-5-mini-v1:0': BEDROCK_MODEL.AI21,
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
@@ -568,14 +570,15 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
   'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA2,
+  'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
+  'meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
+  'meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
-  'ai21.jamba-1-5-large-v1:0': BEDROCK_MODEL.AI21,
-  'ai21.jamba-1-5-mini-v1:0': BEDROCK_MODEL.AI21,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
