@@ -25,7 +25,7 @@ import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plug
 import { type UnifiedConfig } from './types';
 import { checkForUpdates } from './updates';
 
-export async function loadDefaultConfig(): Promise<{
+export async function loadDefaultConfig(configNames: string[]): Promise<{
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
 }> {
@@ -35,7 +35,6 @@ export async function loadDefaultConfig(): Promise<{
 
   // NOTE: sorted by frequency of use
   const extensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
-  const configNames = ['redteam', 'promptfooconfig'];
 
   for (const ext of extensions) {
     for (const name of configNames) {
@@ -56,7 +55,7 @@ async function main() {
   await checkForUpdates();
   await runDbMigrations();
 
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig(['promptfooconfig']);
 
   const program = new Command();
 
@@ -80,6 +79,10 @@ async function main() {
   generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
+  const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
+    await loadDefaultConfig(['redteam', 'promptfooconfig']);
+
+  evalCommand(redteamBaseCommand, redteamConfig, redteamConfigPath);
   redteamInitCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
   generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);

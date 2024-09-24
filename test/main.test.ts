@@ -15,7 +15,7 @@ describe('loadDefaultConfig', () => {
   it('should return empty config when no config file is found', async () => {
     jest.mocked(maybeReadConfig).mockResolvedValue(undefined);
 
-    const result = await loadDefaultConfig();
+    const result = await loadDefaultConfig(['redteam', 'promptfooconfig']);
 
     expect(result).toEqual({
       defaultConfig: {},
@@ -32,7 +32,7 @@ describe('loadDefaultConfig', () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(mockConfig);
 
-    const result = await loadDefaultConfig();
+    const result = await loadDefaultConfig(['redteam', 'promptfooconfig']);
 
     expect(result).toEqual({
       defaultConfig: mockConfig,
@@ -44,7 +44,7 @@ describe('loadDefaultConfig', () => {
   it('should check all supported file extensions', async () => {
     jest.mocked(maybeReadConfig).mockResolvedValue(undefined);
 
-    await loadDefaultConfig();
+    await loadDefaultConfig(['redteam', 'promptfooconfig']);
 
     const expectedExtensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
     expectedExtensions.forEach((ext, extIndex) => {
