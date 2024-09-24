@@ -17,13 +17,13 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { versionCommand } from './commands/version';
 import { viewCommand } from './commands/view';
-import { maybeReadConfig } from './config';
 import { runDbMigrations } from './migrate';
 import { generateRedteamCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { type UnifiedConfig } from './types';
 import { checkForUpdates } from './updates';
+import { maybeReadConfig } from './util/config/load';
 
 export async function loadDefaultConfig(configNames: string[]): Promise<{
   defaultConfig: Partial<UnifiedConfig>;

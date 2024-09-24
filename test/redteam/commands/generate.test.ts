@@ -1,9 +1,9 @@
 import fs from 'fs';
-import * as configModule from '../../../src/config';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
+import * as configModule from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/manage';
 
 jest.mock('fs');
@@ -13,7 +13,7 @@ jest.mock('../../../src/util/config/manage');
 jest.mock('../../../src/logger');
 jest.mock('../../../src/telemetry');
 
-jest.mock('../../../src/config', () => ({
+jest.mock('../../../src/util/config/load', () => ({
   readConfigs: jest.fn(),
   resolveConfigs: jest.fn(),
 }));

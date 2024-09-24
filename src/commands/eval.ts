@@ -6,7 +6,6 @@ import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
-import { resolveConfigs } from '../config';
 import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
@@ -30,6 +29,7 @@ import {
   writeMultipleOutputs,
   writeResultsToDatabase,
 } from '../util';
+import { resolveConfigs } from '../util/config/load';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 
