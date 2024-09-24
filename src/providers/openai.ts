@@ -19,7 +19,7 @@ import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
+import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 // see https://platform.openai.com/docs/models
 const OPENAI_CHAT_MODELS = [
@@ -35,6 +35,13 @@ const OPENAI_CHAT_MODELS = [
     cost: {
       input: 3 / 1e6,
       output: 12 / 1e6,
+    },
+  })),
+  ...['gpt-4o-2024-08-06'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
     },
   })),
   ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
@@ -337,26 +344,16 @@ function formatOpenAiError(data: {
   return errorMessage;
 }
 
-function calculateCost(
+export function calculateOpenAICost(
   modelName: string,
   config: OpenAiSharedOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = [...OPENAI_CHAT_MODELS, ...OPENAI_COMPLETION_MODELS].find(
-    (m) => m.id === modelName,
-  );
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  return calculateCost(modelName, config, promptTokens, completionTokens, [
+    ...OPENAI_CHAT_MODELS,
+    ...OPENAI_COMPLETION_MODELS,
+  ]);
 }
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
@@ -448,7 +445,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),
         cached,
-        cost: calculateCost(
+        cost: calculateOpenAICost(
           this.modelName,
           this.config,
           data.usage?.prompt_tokens,
@@ -532,7 +529,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
         : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
-      ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
+      ...(this.config.response_format
+        ? {
+            response_format: maybeLoadFromExternalFile(
+              renderVarsInObject(this.config.response_format, context?.vars),
+            ),
+          }
+        : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(this.config.stop ? { stop: this.config.stop } : {}),
       ...(this.config.passthrough || {}),
@@ -621,7 +624,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             tokenUsage: getTokenUsage(data, cached),
             cached,
             logProbs,
-            cost: calculateCost(
+            cost: calculateOpenAICost(
               this.modelName,
               this.config,
               data.usage?.prompt_tokens,
@@ -636,7 +639,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         tokenUsage: getTokenUsage(data, cached),
         cached,
         logProbs,
-        cost: calculateCost(
+        cost: calculateOpenAICost(
           this.modelName,
           this.config,
           data.usage?.prompt_tokens,
@@ -1077,11 +1080,11 @@ export class OpenAiModerationProvider
 }
 
 export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-3-large');
-export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4o');
-export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-4o', {
+export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
+export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13', {
   config: {
     response_format: { type: 'json_object' },
   },
 });
-export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o');
+export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
 export const DefaultModerationProvider = new OpenAiModerationProvider('text-moderation-latest');

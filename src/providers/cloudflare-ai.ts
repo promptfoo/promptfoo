@@ -160,7 +160,7 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
    * fill in this implementation
    */
   protected getTokenUsageFromResponse(
-    _response: IBuildCloudflareResponse<{}>,
+    _response: IBuildCloudflareResponse<Record<string, unknown>>,
   ): ProviderEmbeddingResponse['tokenUsage'] {
     // TODO: Figure out token usage for invoked + cache situations
     const tokenUsage: ProviderEmbeddingResponse['tokenUsage'] = {
@@ -181,8 +181,10 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
    * @returns
    */
   protected async handleApiCall<
-    InitialResponse extends IBuildCloudflareResponse<{}>,
-    SuccessResponse extends InitialResponse = InitialResponse extends ICloudflareSuccessResponse<{}>
+    InitialResponse extends IBuildCloudflareResponse<Record<string, unknown>>,
+    SuccessResponse extends InitialResponse = InitialResponse extends ICloudflareSuccessResponse<
+      Record<string, unknown>
+    >
       ? InitialResponse
       : never,
   >(

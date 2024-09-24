@@ -120,6 +120,21 @@ describe('maybeLoadFromExternalFile', () => {
     cliState.basePath = undefined;
   });
 
+  it('should handle a path with environment variables in Nunjucks template', () => {
+    process.env.TEST_ROOT_PATH = '/root/dir';
+    const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+
+    const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
+    maybeLoadFromExternalFile(input);
+
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
+
+    delete process.env.TEST_ROOT_PATH;
+  });
+
   it('should ignore basePath when file path is absolute', () => {
     const basePath = '/base/path';
     cliState.basePath = basePath;

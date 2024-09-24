@@ -28,7 +28,6 @@ import {
   printBorder,
   setupEnv,
   writeMultipleOutputs,
-  writeOutput,
   writeResultsToDatabase,
 } from '../util';
 import { filterProviders } from './eval/filterProviders';
@@ -155,7 +154,8 @@ export async function doEval(
     await migrateResultsFromFileSystemToDatabase();
 
     if (getEnvBool('PROMPTFOO_LIGHTWEIGHT_RESULTS')) {
-      config = {};
+      const outputPath = config.outputPath;
+      config = { outputPath };
       summary.results = [];
       summary.table.head.vars = [];
       for (const row of summary.table.body) {
@@ -169,14 +169,12 @@ export async function doEval(
     }
 
     const { outputPath } = config;
-    if (outputPath) {
-      // Write output to file
-      if (typeof outputPath === 'string') {
-        await writeOutput(outputPath, evalId, summary, config, shareableUrl);
-      } else if (Array.isArray(outputPath)) {
-        await writeMultipleOutputs(outputPath, evalId, summary, config, shareableUrl);
-      }
-      logger.info(chalk.yellow(`Writing output to ${outputPath}`));
+    const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    );
+    if (paths.length) {
+      await writeMultipleOutputs(paths, evalId, summary, config, shareableUrl);
+      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
 
     printBorder();
@@ -203,7 +201,7 @@ export async function doEval(
     const passRate = (summary.stats.successes / totalTests) * 100;
     logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
     logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
-    logger.debug(`Pass Rate: ${passRate.toFixed(2)}%`);
+    logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     logger.info(
       `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
     );
@@ -308,8 +306,14 @@ export function evalCommand(
   program: Command,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
-  evaluateOptions: EvaluateOptions,
 ) {
+  const evaluateOptions: EvaluateOptions = {};
+  if (defaultConfig.evaluateOptions) {
+    evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
+    evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
+    evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
+  }
+
   program
     .command('eval')
     .description('Evaluate prompts')

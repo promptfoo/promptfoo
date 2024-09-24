@@ -15,8 +15,10 @@ import {
 } from './providers/azureopenai';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
+import { BrowserProvider } from './providers/browser';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
+import { GolangProvider } from './providers/golangCompletion';
 import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
 import {
@@ -59,6 +61,7 @@ import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WebhookProvider } from './providers/webhook';
+import { WebSocketProvider } from './providers/websocket';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
@@ -70,6 +73,7 @@ import type {
   ProviderOptions,
   ProviderOptionsMap,
 } from './types/providers';
+import { getNunjucksEngine } from './util/templates';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -90,6 +94,7 @@ export async function loadApiProvider(
     env,
   };
   let ret: ApiProvider;
+  providerPath = getNunjucksEngine().renderString(providerPath, {});
   if (
     providerPath.startsWith('file://') &&
     (providerPath.endsWith('.yaml') ||
@@ -373,8 +378,23 @@ export async function loadApiProvider(
     } else {
       ret = new LocalAiChatProvider(modelType, providerOptions);
     }
-  } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
+  } else if (
+    providerPath.startsWith('http:') ||
+    providerPath.startsWith('https:') ||
+    providerPath === 'http' ||
+    providerPath === 'https'
+  ) {
     ret = new HttpProvider(providerPath, providerOptions);
+  } else if (
+    providerPath.startsWith('ws:') ||
+    providerPath.startsWith('wss:') ||
+    providerPath === 'websocket' ||
+    providerPath === 'ws' ||
+    providerPath === 'wss'
+  ) {
+    ret = new WebSocketProvider(providerPath, providerOptions);
+  } else if (providerPath === 'browser') {
+    ret = new BrowserProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
     ret = new RedteamIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
@@ -391,6 +411,9 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('ai21:')) {
     const modelName = providerPath.split(':')[1];
     ret = new AI21ChatCompletionProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('golang:')) {
+    const scriptPath = providerPath.split(':').slice(1).join(':');
+    ret = new GolangProvider(scriptPath, providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);

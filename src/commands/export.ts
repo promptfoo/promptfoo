@@ -52,7 +52,7 @@ export function exportCommand(program: Command) {
           fs.writeFileSync(cmdObj.output, jsonData);
           logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
-          console.log(jsonData);
+          logger.info(jsonData);
         }
 
         telemetry.record('command_used', {

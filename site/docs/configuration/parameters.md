@@ -327,6 +327,10 @@ Translate this to {{language}}: {{body | allcaps}}
 
 In this example, the `body` variable is passed through the `allcaps` filter before it's used in the prompt. This means that the text will be transformed to uppercase.
 
+### Default prompt
+
+If `prompts` is not defined in the config, then by default Promptfoo will use a "passthrough" prompt: `{{prompt}}`. This prompt simply passes through content of the `prompt` variable.
+
 ## Tests File
 
 If you have a lot of tests, you can optionally keep them separate from the main config file.

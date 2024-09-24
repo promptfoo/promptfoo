@@ -11,6 +11,7 @@ import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
+import { createPublicUrl } from '../commands/share';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type {
@@ -58,7 +59,7 @@ export function startServer(
 ) {
   const app = express();
 
-  const staticDir = path.join(getDirectory(), 'web', 'nextui');
+  const staticDir = path.join(getDirectory(), 'app');
 
   app.use(cors());
   app.use(compression());
@@ -87,6 +88,10 @@ export function startServer(
 
   io.on('connection', async (socket) => {
     socket.emit('init', await getLatestEval(filterDescription));
+  });
+
+  app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK' });
   });
 
   app.get('/api/results', (req, res) => {
@@ -165,7 +170,7 @@ export function startServer(
     try {
       updateResult(id, config, table);
       res.json({ message: 'Eval updated successfully' });
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: 'Failed to update eval table' });
     }
   });
@@ -187,7 +192,7 @@ export function startServer(
     try {
       await deleteEval(id);
       res.json({ message: 'Eval deleted successfully' });
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: 'Failed to delete eval' });
     }
   });
@@ -210,7 +215,10 @@ export function startServer(
   });
 
   app.get('/api/progress', async (req, res) => {
-    const results = await getStandaloneEvals();
+    const { tagName, tagValue } = req.query;
+    const tag =
+      tagName && tagValue ? { key: tagName as string, value: tagValue as string } : undefined;
+    const results = await getStandaloneEvals({ tag });
     res.json({
       data: results,
     });
@@ -224,6 +232,19 @@ export function startServer(
 
   app.get('/api/datasets', async (req, res) => {
     res.json({ data: await getTestCases() });
+  });
+
+  app.post('/api/results/share', async (req, res) => {
+    const { id } = req.body;
+    console.log({ body: req.body });
+
+    const result = await readResult(id);
+    if (!result) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+    const url = await createPublicUrl(result.result, true);
+    res.json({ url });
   });
 
   app.post('/api/dataset/generate', async (req, res) => {
@@ -242,6 +263,11 @@ export function startServer(
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
   app.use(express.static(staticDir));
+
+  // Handle client routing, return all requests to the app
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(staticDir, 'index.html'));
+  });
 
   httpServer
     .listen(port, () => {

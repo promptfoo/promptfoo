@@ -316,7 +316,6 @@ export class ReplicateImageProvider extends ReplicateProvider {
     if (isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
-        console.log(cachedResponse);
         logger.debug(`Retrieved cached response for ${prompt}: ${cachedResponse}`);
         response = JSON.parse(cachedResponse as string);
         cached = true;

@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import { getUserEmail, setUserEmail } from '../accounts';
+import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import telemetry from '../telemetry';
 

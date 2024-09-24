@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import path from 'path';
 import { checkNodeVersion } from './checkNodeVersion';
+import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
 import { deleteCommand } from './commands/delete';
@@ -21,7 +22,7 @@ import { runDbMigrations } from './migrate';
 import { generateRedteamCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
-import { type EvaluateOptions, type UnifiedConfig } from './types';
+import { type UnifiedConfig } from './types';
 import { checkForUpdates } from './updates';
 
 export async function loadDefaultConfig(): Promise<{
@@ -55,21 +56,14 @@ async function main() {
   await checkForUpdates();
   await runDbMigrations();
 
-  const program = new Command();
-
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
-  const evaluateOptions: EvaluateOptions = {};
-  if (defaultConfig.evaluateOptions) {
-    evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
-    evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
-    evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
-  }
+  const program = new Command();
 
   cacheCommand(program);
   configCommand(program);
   deleteCommand(program);
-  evalCommand(program, defaultConfig, defaultConfigPath, evaluateOptions);
+  evalCommand(program, defaultConfig, defaultConfigPath);
   exportCommand(program);
   feedbackCommand(program);
   importCommand(program);
@@ -79,6 +73,7 @@ async function main() {
   showCommand(program);
   versionCommand(program);
   viewCommand(program);
+  authCommand(program);
 
   const generateCommand = program.command('generate').description('Generate synthetic data');
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);

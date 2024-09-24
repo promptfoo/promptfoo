@@ -1,7 +1,7 @@
 import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
-import rawlist from '@inquirer/rawlist';
+import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import fs from 'fs';
@@ -112,8 +112,10 @@ def call_api(prompt, options, context):
     # The prompt is the final prompt string after the variables have been processed.
     # Custom logic to process the prompt goes here.
     # For instance, you might call an external API or run some computations.
+    # TODO: Replace with actual LLM API implementation.
+    def call_llm(prompt):
+        return f"Stub response for prompt: {prompt}"
     output = call_llm(prompt)
-
 
     # The result should be a dictionary with at least an 'output' field.
     result = {
@@ -305,7 +307,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     recordOnboardingStep('start');
 
     // Choose use case
-    action = await rawlist({
+    action = await select({
       message: 'What would you like to do?',
       choices: [
         { name: 'Not sure yet', value: 'compare' },
@@ -332,7 +334,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
     language = 'not_sure';
     if (action === 'rag' || action === 'agent') {
-      language = await rawlist({
+      language = await select({
         message: 'What programming language are you developing the app in?',
         choices: [
           { name: 'Not sure yet', value: 'not_sure' },
@@ -433,12 +435,10 @@ export async function createDummyFiles(directory: string | null, interactive: bo
      * The potential of the object type here is given by the agent action conditional
      * for openai as a value choice
      */
-    const providerChoices: (string | Object)[] = (
+    const providerChoices: (string | object)[] = (
       await checkbox({
-        message:
-          'Which model providers would you like to use? (press space to select, enter to complete selection)',
+        message: 'Which model providers would you like to use?',
         choices,
-        required: true,
         loop: false,
         pageSize: process.stdout.rows - 6,
       })

@@ -156,6 +156,15 @@ export const CompletedPromptSchema = PromptSchema.extend({
       totalLatencyMs: z.number(),
       tokenUsage: TokenUsageSchema,
       namedScores: z.record(z.string(), z.number()),
+      namedScoresCount: z.record(z.string(), z.number()),
+      redteam: z
+        .object({
+          pluginPassCount: z.record(z.string(), z.number()),
+          pluginFailCount: z.record(z.string(), z.number()),
+          strategyPassCount: z.record(z.string(), z.number()),
+          strategyFailCount: z.record(z.string(), z.number()),
+        })
+        .optional(),
       cost: z.number(),
     })
     .optional(),
@@ -235,6 +244,12 @@ export interface EvaluateSummary {
   stats: EvaluateStats;
 }
 
+export interface ResultSuggestion {
+  type: string;
+  action: 'replace-prompt';
+  value: string;
+}
+
 export interface GradingResult {
   // Whether the test passed or failed
   pass: boolean;
@@ -259,6 +274,16 @@ export interface GradingResult {
 
   // User comment
   comment?: string;
+
+  // Actions for the user to take
+  suggestions?: ResultSuggestion[];
+
+  // Additional info
+  metadata?: {
+    pluginId?: string;
+    strategyId?: string;
+    [key: string]: any;
+  };
 }
 
 export function isGradingResult(result: any): result is GradingResult {
@@ -280,6 +305,7 @@ export function isGradingResult(result: any): result is GradingResult {
 
 export const BaseAssertionTypesSchema = z.enum([
   'answer-relevance',
+  'classifier',
   'contains-all',
   'contains-any',
   'contains-json',

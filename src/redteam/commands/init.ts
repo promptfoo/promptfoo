@@ -4,16 +4,15 @@ import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
-import rawlist from '@inquirer/rawlist';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getUserEmail, setUserEmail } from '../../accounts';
 import { getEnvString } from '../../envars';
-import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig';
+import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
+import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
 import telemetry, { type EventValue } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
@@ -34,6 +33,7 @@ const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
 
 description: "My first red team"
 
+{% if prompts.length > 0 -%}
 prompts:
   {% for prompt in prompts -%}
   - {{ prompt | dump }}
@@ -43,9 +43,10 @@ prompts:
   # - file:///path/to/prompt.json
   # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
   {% endif %}
+{% endif -%}
 
-providers:
-  # Providers are red team targets. To talk directly to your application, use a custom provider.
+targets:
+  # Red team targets. To talk directly to your application, use a custom provider.
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
   {% for provider in providers -%}
   {% if provider is string -%}
@@ -59,6 +60,7 @@ providers:
   {% endif -%}
   {% endfor %}
 
+# Other redteam settings
 redteam:
   {% if purpose is defined -%}
   purpose: {{ purpose | dump }}
@@ -132,11 +134,11 @@ function recordOnboardingStep(step: string, properties: Record<string, EventValu
 
 async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string> {
   const NOTE =
-    'NOTE: your prompt must include one or more injectable variables like {{query}} or {{name}} as a placeholder for user input (REMOVE THIS LINE)';
+    'NOTE: your prompt must include one or more injectable variables like {{prompt}} or {{name}} as a placeholder for user input (REMOVE THIS LINE)';
 
   let prompt = dedent`You are a helpful and concise assistant.
 
-  User query: {{query}}
+  User query: {{prompt}}
 
   ${NOTE}`;
   prompt = await editor({
@@ -151,7 +153,7 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
       chalk.red(
         `Your prompt must include ${numVariablesRequired} ${
           numVariablesRequired === 1 ? 'variable' : 'variables'
-        } like "{{query}}" as a placeholder for user input.`,
+        } like "{{prompt}}" as a placeholder for user input.`,
       ),
     );
     prompt = await editor({
@@ -181,8 +183,8 @@ export async function redteamInit(directory: string | undefined) {
     message: 'What would you like to do?',
     choices: [
       { name: 'Not sure yet', value: 'not_sure' },
-      { name: 'Red team a prompt, model, or chatbot', value: 'prompt_model_chatbot' },
       { name: 'Red team an HTTP endpoint', value: 'http_endpoint' },
+      { name: 'Red team a model + prompt', value: 'prompt_model_chatbot' },
       { name: 'Red team a RAG', value: 'rag' },
       { name: 'Red team an Agent', value: 'agent' },
     ],
@@ -195,10 +197,13 @@ export async function redteamInit(directory: string | undefined) {
   let purpose: string | undefined;
 
   const useCustomProvider =
-    redTeamChoice === 'rag' || redTeamChoice === 'agent' || redTeamChoice === 'http_endpoint';
+    redTeamChoice === 'rag' ||
+    redTeamChoice === 'agent' ||
+    redTeamChoice === 'http_endpoint' ||
+    redTeamChoice === 'not_sure';
   let deferGeneration = useCustomProvider;
   const defaultPrompt =
-    'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}';
+    'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}';
   const defaultPurpose = 'Travel agent specializing in budget trips to Europe';
   if (useCustomProvider) {
     purpose =
@@ -206,7 +211,6 @@ export async function redteamInit(directory: string | undefined) {
         message: dedent`What is the purpose of your application? This is used to tailor the attacks. Be as specific as possible.
         (e.g. "${defaultPurpose}")\n`,
       })) || defaultPurpose;
-    prompts.push(`{{query}}`);
 
     recordOnboardingStep('choose purpose', { value: purpose });
   } else if (redTeamChoice === 'prompt_model_chatbot') {
@@ -230,13 +234,13 @@ export async function redteamInit(directory: string | undefined) {
     prompts.push(prompt);
   } else {
     prompts.push(
-      'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{query}}',
+      'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}',
     );
   }
 
   let providers: (string | ProviderOptions)[];
   if (useCustomProvider) {
-    if (redTeamChoice === 'http_endpoint') {
+    if (redTeamChoice === 'http_endpoint' || redTeamChoice === 'not_sure') {
       providers = [
         {
           id: 'https://example.com/generate',
@@ -293,7 +297,7 @@ export async function redteamInit(directory: string | undefined) {
     console.clear();
     logger.info(chalk.bold('OpenAI API Configuration\n'));
 
-    const apiKeyChoice = await rawlist({
+    const apiKeyChoice = await select({
       message: `OpenAI API key is required, but I don't see an OPENAI_API_KEY environment variable. How to proceed?`,
       choices: [
         { name: 'Enter API key now', value: 'enter' },
@@ -489,20 +493,10 @@ export async function redteamInit(directory: string | undefined) {
       );
 
       const existingEmail = getUserEmail();
-
-      let email: string;
-      if (existingEmail) {
-        const confirmExistingEmail = await confirm({
-          message: `Do you agree?`,
-          default: true,
-        });
-        if (!confirmExistingEmail) {
-          process.exit(1);
-        }
-        email = existingEmail;
-      } else {
+      let email = existingEmail;
+      if (!existingEmail) {
         email = await input({
-          message: 'Please enter your email address to confirm your agreement:',
+          message: 'Please enter a valid email address to confirm your agreement:',
           validate: (value) => {
             return value.includes('@') || 'Please enter a valid email address';
           },
@@ -510,11 +504,13 @@ export async function redteamInit(directory: string | undefined) {
         setUserEmail(email);
       }
 
-      try {
-        await telemetry.saveConsent(email);
-        writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
-      } catch (err) {
-        logger.error(`Error saving consent: ${(err as Error).message}`);
+      if (email) {
+        try {
+          await telemetry.saveConsent(email);
+          writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
+        } catch (err) {
+          logger.error(`Error saving consent: ${(err as Error).message}`);
+        }
       }
     }
   }
@@ -539,7 +535,9 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   console.clear();
-  logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
+  logger.info(
+    chalk.green(`\nCreated red teaming configuration file at ${chalk.bold(configPath)}\n`),
+  );
 
   telemetry.record('command_used', { name: 'redteam init' });
   await recordOnboardingStep('finish');
@@ -547,10 +545,11 @@ export async function redteamInit(directory: string | undefined) {
   if (deferGeneration) {
     logger.info(
       '\n' +
-        chalk.blue(
-          'To generate test cases after editing your configuration, use the command: ' +
-            chalk.bold('promptfoo redteam generate'),
-        ),
+        chalk.green(dedent`
+          To generate test cases after editing your configuration, use the command:
+
+              ${chalk.bold('promptfoo redteam generate')}
+        `),
     );
     return;
   } else {

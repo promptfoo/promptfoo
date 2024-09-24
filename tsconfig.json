@@ -17,15 +17,9 @@
     "paths": {
       "@promptfoo/*": ["./src/*"],
       "@server/*": ["./src/server/*"],
-      "@app/*": ["./src/web/nextui/src/*"]
+      "@app/*": ["./src/app/*"]
     }
   },
   "include": ["src/", "typings/**/*", "test/"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/web/client/**/*",
-    "src/web/nextui/**/*",
-    "src/workers/**/*"
-  ]
+  "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*"]
 }

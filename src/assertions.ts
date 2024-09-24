@@ -229,7 +229,7 @@ export async function isSql(
   try {
     sqlParser.astify(outputString, opt);
     pass = !inverse;
-  } catch (err) {
+  } catch {
     pass = inverse;
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
@@ -395,7 +395,7 @@ export async function runAssertion({
     try {
       parsedJson = JSON.parse(outputString);
       pass = !inverse;
-    } catch (err) {
+    } catch {
       pass = inverse;
     }
 
@@ -1156,7 +1156,7 @@ ${
         if (parsedPrompt && parsedPrompt.length > 0) {
           prompt = parsedPrompt[parsedPrompt.length - 1].content;
         }
-      } catch (err) {
+      } catch {
         // Ignore error
       }
     }
@@ -1288,7 +1288,7 @@ ${
     if (!assertion.threshold) {
       throw new Error('Latency assertion must have a threshold in milliseconds');
     }
-    if (!latencyMs) {
+    if (latencyMs === undefined) {
       throw new Error(
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
       );
@@ -1372,7 +1372,7 @@ ${
     const grader = getGraderById(baseType);
     invariant(grader, `Unknown promptfoo grader: ${baseType}`);
     invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
-    const { grade, rubric } = await grader.getResult(
+    const { grade, rubric, suggestions } = await grader.getResult(
       prompt,
       outputString,
       test,
@@ -1385,6 +1385,12 @@ ${
         value: rubric,
       },
       ...grade,
+      suggestions,
+      metadata: {
+        // Pass through all test metadata for redteam
+        ...test.metadata,
+        ...grade.metadata,
+      },
     };
   }
 

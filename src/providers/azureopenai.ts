@@ -18,7 +18,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase, calculateCost } from './shared';
 
 interface AzureOpenAiCompletionOptions {
   // Azure identity params
@@ -68,7 +68,131 @@ interface AzureOpenAiCompletionOptions {
   passthrough?: object;
 }
 
-class AzureOpenAiGenericProvider implements ApiProvider {
+const AZURE_OPENAI_MODELS = [
+  {
+    id: 'gpt-4o-2024-08-06',
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-4o',
+    cost: {
+      input: 5 / 1000000,
+      output: 15 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-4o-mini',
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-3.5-turbo-0125',
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-3.5-turbo-instruct',
+    cost: {
+      input: 1.5 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-4',
+    cost: {
+      input: 30 / 1000000,
+      output: 60 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-4-32k',
+    cost: {
+      input: 60 / 1000000,
+      output: 120 / 1000000,
+    },
+  },
+  {
+    id: 'babbage-002',
+    cost: {
+      input: 0.4 / 1000000,
+      output: 0.4 / 1000000,
+    },
+  },
+  {
+    id: 'davinci-002',
+    cost: {
+      input: 2 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+  {
+    id: 'text-embedding-ada-002',
+    cost: {
+      input: 0.1 / 1000000,
+      output: 0.1 / 1000000,
+    },
+  },
+  {
+    id: 'text-embedding-3-large',
+    cost: {
+      input: 0.13 / 1000000,
+      output: 0.13 / 1000000,
+    },
+  },
+  {
+    id: 'text-embedding-3-small',
+    cost: {
+      input: 0.02 / 1000000,
+      output: 0.02 / 1000000,
+    },
+  },
+  // Legacy models
+  {
+    id: 'gpt-3.5-turbo-0301',
+    cost: {
+      input: 2 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-3.5-turbo-0613',
+    cost: {
+      input: 1.5 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-3.5-turbo-1106',
+    cost: {
+      input: 1 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+];
+
+export function calculateAzureOpenAICost(
+  modelName: string,
+  config: AzureOpenAiCompletionOptions,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  return calculateCost(
+    modelName,
+    { cost: undefined },
+    promptTokens,
+    completionTokens,
+    AZURE_OPENAI_MODELS,
+  );
+}
+
+export class AzureOpenAiGenericProvider implements ApiProvider {
   deploymentName: string;
   apiHost?: string;
   apiBaseUrl?: string;
@@ -137,8 +261,15 @@ class AzureOpenAiGenericProvider implements ApiProvider {
     return this._cachedApiKey;
   }
 
-  getApiBaseUrl(): string {
-    return this.apiBaseUrl || `https://${this.apiHost}`;
+  getApiBaseUrl(): string | undefined {
+    if (this.apiBaseUrl) {
+      return this.apiBaseUrl.replace(/\/$/, '');
+    }
+    const host = this.apiHost?.replace(/^(https?:\/\/)/, '').replace(/\/$/, '');
+    if (!host) {
+      return undefined;
+    }
+    return `https://${host}`;
   }
 
   id(): string {
@@ -312,6 +443,12 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
               prompt: data.usage.prompt_tokens,
               completion: data.usage.completion_tokens,
             },
+        cost: calculateAzureOpenAICost(
+          this.deploymentName,
+          this.config,
+          data.usage?.prompt_tokens,
+          data.usage?.completion_tokens,
+        ),
       };
     } catch (err) {
       return {
@@ -443,6 +580,12 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
             },
         cached,
         logProbs,
+        cost: calculateAzureOpenAICost(
+          this.deploymentName,
+          this.config,
+          data.usage?.prompt_tokens,
+          data.usage?.completion_tokens,
+        ),
       };
     } catch (err) {
       return {
@@ -485,10 +628,11 @@ export class AzureOpenAiAssistantProvider extends AzureOpenAiGenericProvider {
 
     const { AssistantsClient, AzureKeyCredential } = await import('@azure/openai-assistants');
 
-    this.assistantsClient = new AssistantsClient(
-      this.getApiBaseUrl(),
-      new AzureKeyCredential(apiKey),
-    );
+    const apiBaseUrl = this.getApiBaseUrl();
+    if (!apiBaseUrl) {
+      throw new Error('Azure OpenAI API host must be set');
+    }
+    this.assistantsClient = new AssistantsClient(apiBaseUrl, new AzureKeyCredential(apiKey));
     this.initializationPromise = null;
   }
 

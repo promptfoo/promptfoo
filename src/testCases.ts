@@ -32,7 +32,7 @@ import { extractVariablesFromTemplates } from './util/templates';
 function parseJson(json: string): any | undefined {
   try {
     return JSON.parse(json);
-  } catch (err) {
+  } catch {
     return undefined;
   }
 }
@@ -186,6 +186,7 @@ export async function readTests(
         testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
         testCases = await _deref(testCases, testFile);
       } else if (testFile.endsWith('.json')) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         testCases = await _deref(require(testFile), testFile);
       } else {
         throw new Error(`Unsupported file type for test file: ${testFile}`);

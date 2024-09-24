@@ -20,6 +20,12 @@ npx promptfoo@latest redteam init
 The redteam configuration uses the following YAML structure:
 
 ```yaml
+targets:
+  - openai:gpt-4o
+
+prompts:
+  - 'Your prompt template here: {{variable}}'
+
 redteam:
   plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
   strategies: Array<string | { id: string }>
@@ -28,11 +34,6 @@ redteam:
   provider: string | ProviderOptions
   purpose: string
   language: string
-
-prompts:
-  - 'Your prompt template here: {{variable}}'
-providers:
-  - openai:gpt-4o
 ```
 
 ### Configuration Fields
@@ -438,7 +439,7 @@ You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_RE
 To use the `openai:chat:gpt-4o-mini` model, you can override the provider on the command line:
 
 ```sh
-npx promptfoo@latest redteam generate -w --provider openai:chat:gpt-4o-mini
+npx promptfoo@latest redteam generate --provider openai:chat:gpt-4o-mini
 ```
 
 Or in the config:
@@ -473,19 +474,19 @@ Disabling remote generation may result in lower quality adversarial inputs. For 
 
 If you need to use a custom provider for generation, you can still benefit from our remote service by leaving `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` set to `false` (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
 
-### Custom Providers
+### Custom Providers/Targets
 
-In some cases your target application may require custom requests or setups.
+Promptfoo is very flexible and allows you to configure almost any code or API, with dozens of [providers](/docs/providers) supported out of the box.
 
-- **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
-- **APIs**: See setup instructions for [OpenAI](/docs/providers/openai), [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
+- **Public APIs**: See setup instructions for [OpenAI](/docs/providers/openai), [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and many [more](/docs/providers).
+- **Custom**: In some cases your target application may require customized setups. See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
 
 #### HTTP requests
 
 For example, to send a customized HTTP request, use a [HTTP Provider](/docs/providers/http/):
 
 ```yaml
-providers:
+targets:
   - id: 'https://example.com/generate'
     config:
       method: 'POST'
@@ -503,7 +504,7 @@ Alternatively, you can use a custom [Python](/docs/providers/python/), [Javascri
 For example, let's create a Python provider. Your config would look like this:
 
 ```yaml
-providers:
+targets:
   - id: 'python:send_redteam.py'
     label: 'Test script 1' # Optional display label
 ```
@@ -594,17 +595,14 @@ def call_api(prompt, options, context):
 
 ### Passthrough prompts
 
-In most cases, if you're handling the prompting in a script, you can just make `prompt` passthrough the variable in your `promptfooconfig.yaml`.
+If you just want to send the entire adversarial input as-is to your target, omit the `prompts` field.
 
 In this case, be sure to specify a `purpose`, because the redteam generator can no longer infer the purpose from your prompt. The purpose is used to tailor the adversarial inputs:
 
 ```yaml
-prompts:
-  - '{{query}}' # Just send the query as-is to the provider
-
 purpose: 'Act as a travel agent with a focus on European holidays'
 
-providers:
+targets:
   - python:send_redteam.py
 
 redteam:
