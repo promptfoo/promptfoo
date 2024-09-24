@@ -28,7 +28,6 @@ import {
   printBorder,
   setupEnv,
   writeMultipleOutputs,
-  writeOutput,
   writeResultsToDatabase,
 } from '../util';
 import { filterProviders } from './eval/filterProviders';
@@ -170,14 +169,12 @@ export async function doEval(
     }
 
     const { outputPath } = config;
-    if (outputPath) {
-      // Write output to file
-      if (typeof outputPath === 'string') {
-        await writeOutput(outputPath, evalId, summary, config, shareableUrl);
-      } else if (Array.isArray(outputPath)) {
-        await writeMultipleOutputs(outputPath, evalId, summary, config, shareableUrl);
-      }
-      logger.info(chalk.yellow(`Writing output to ${outputPath}`));
+    const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    );
+    if (paths.length) {
+      await writeMultipleOutputs(paths, evalId, summary, config, shareableUrl);
+      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
 
     printBorder();
