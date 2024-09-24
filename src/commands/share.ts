@@ -19,7 +19,7 @@ export async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
 export function shareCommand(program: Command) {
   program
     .command('share [evalId]')
-    .description('Create a shareable URL of an eval (defaults to most recent)')
+    .description('Create a shareable URL of an eval (defaults to most recent)' + '\n\n')
     .option('-y, --yes', 'Skip confirmation')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
