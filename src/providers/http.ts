@@ -22,7 +22,7 @@ interface HttpProviderConfig {
   body?: Record<string, any>;
   queryParams?: Record<string, string>;
   responseParser?: string | Function;
-  rawRequest?: string;
+  request?: string;
 }
 
 function createResponseParser(parser: any): (data: any) => ProviderResponse {
@@ -98,8 +98,8 @@ export class HttpProvider implements ApiProvider {
     this.url = this.config.url || url;
     this.responseParser = createResponseParser(this.config.responseParser);
 
-    if (this.config.rawRequest) {
-      this.config.rawRequest = maybeLoadFromExternalFile(this.config.rawRequest) as string;
+    if (this.config.request) {
+      this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
       invariant(
         this.config.body || this.config.method === 'GET',
@@ -124,7 +124,7 @@ export class HttpProvider implements ApiProvider {
       prompt,
     };
 
-    if (this.config.rawRequest) {
+    if (this.config.request) {
       return this.callApiWithRawRequest(vars);
     }
 
@@ -185,8 +185,8 @@ export class HttpProvider implements ApiProvider {
   }
 
   private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
-    invariant(this.config.rawRequest, 'Expected rawRequest to be set in http provider config');
-    const renderedRequest = nunjucks.renderString(this.config.rawRequest, vars);
+    invariant(this.config.request, 'Expected request to be set in http provider config');
+    const renderedRequest = nunjucks.renderString(this.config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') ? 'https' : 'http';
