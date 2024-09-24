@@ -169,8 +169,8 @@ If you have a custom RAG or agent flow, you can include them in your project lik
 ```yaml
 targets:
   # JS and Python are natively supported
-  - file:///path/to/js_agent.js
-  - file://python_agent.py
+  - file://path/to/js_agent.js
+  - file://path/to/python_agent.py
   # Any executable can be run with the `exec:` directive
   - exec:/path/to/shell_agent
   # HTTP requests can be made with the `webhook:` directive

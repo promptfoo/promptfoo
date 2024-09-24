@@ -33,6 +33,12 @@ Here's an example of a Python script that could be used with the Python provider
 import json
 
 def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> ProviderResponse:
+    # Note: The prompt may be in JSON format, so you might need to parse it.
+    # For example, if the prompt is a JSON string representing a conversation:
+    # prompt = '[{"role": "user", "content": "Hello, world!"}]'
+    # You would parse it like this:
+    # prompt = json.loads(prompt)
+
     # The 'options' parameter contains additional configuration for the API call.
     config = options.get('config', None)
     additional_option = config.get('additionalOption', None)
