@@ -7,25 +7,29 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+async function promptForInput(question: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    return await new Promise((resolve) => {
+      rl.question(question, (answer) => {
+        resolve(answer.trim());
+      });
+    });
+  } finally {
+    rl.close();
+  }
+}
 
 async function promptForToken(): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question('Please enter your API token: ', (token) => {
-      resolve(token.trim());
-    });
-  });
+  return promptForInput('Please enter your API token: ');
 }
 
 async function promptForEmail(): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question('Please enter your email: ', (entry) => {
-      resolve(entry.trim());
-    });
-  });
+  return promptForInput('Please enter your email: ');
 }
 
 export function authCommand(program: Command) {
