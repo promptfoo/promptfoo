@@ -3,15 +3,17 @@ import type { Command } from 'commander';
 import readline from 'readline';
 import { URL } from 'url';
 import { getEnvString } from '../envars';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import type { ResultsFile } from '../types';
 import { getLatestEval, readResult, setupEnv } from '../util';
 
-async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
+export async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
   const url = await createShareableUrl(results.results, results.config, showAuth);
   logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+  return url;
 }
 
 export function shareCommand(program: Command) {
@@ -61,19 +63,28 @@ export function shareCommand(program: Command) {
 
           const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
           const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
-
-          reader.question(
-            `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
-            async function (answer: string) {
-              if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y' && answer !== '') {
+          if (cloudConfig.isEnabled()) {
+            logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
+            await createPublicUrl(results, cmdObj.showAuth);
+            process.exit(0);
+          } else {
+            reader.question(
+              `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
+              async function (answer: string) {
+                if (
+                  answer.toLowerCase() !== 'yes' &&
+                  answer.toLowerCase() !== 'y' &&
+                  answer !== ''
+                ) {
+                  reader.close();
+                  process.exit(1);
+                }
                 reader.close();
-                process.exit(1);
-              }
-              reader.close();
 
-              await createPublicUrl(results, cmdObj.showAuth);
-            },
-          );
+                await createPublicUrl(results, cmdObj.showAuth);
+              },
+            );
+          }
         }
       },
     );

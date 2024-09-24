@@ -310,6 +310,30 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('file://file.py');
   });
 
+  it('should parse python: assertion', () => {
+    const assertion = assertionFromString('python:some_python_code');
+    expect(assertion).toEqual({
+      type: 'python',
+      value: 'some_python_code',
+    });
+  });
+
+  it(`should parse file:// prefix assertion`, () => {
+    const assertion = assertionFromString('file://script.py');
+    expect(assertion).toEqual({
+      type: 'python',
+      value: 'script.py',
+    });
+  });
+
+  it(`should parse file:// prefix assertion with function name`, () => {
+    const assertion = assertionFromString('file://script.py:function_name');
+    expect(assertion).toEqual({
+      type: 'python',
+      value: 'script.py:function_name',
+    });
+  });
+
   it('should create a javascript assertion', () => {
     const expected = 'javascript: x > 10';
 

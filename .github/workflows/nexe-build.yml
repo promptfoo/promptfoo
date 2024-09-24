@@ -31,6 +31,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    continue-on-error: true
     strategy:
       matrix:
         os: [linux, macos, win]
@@ -67,8 +68,9 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         with:
           files: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+          tag_name: ${{ github.ref_name }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}

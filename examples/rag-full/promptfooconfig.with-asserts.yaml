@@ -4,11 +4,11 @@ prompts:
   - '{{question}}'
 
 providers:
-  - id: python:retrieve.py
+  - id: file://retrieve.py
     label: RAG retrieval small
     config:
       topK: 5
-  - id: python:retrieve.py
+  - id: file://retrieve.py
     label: RAG retrieval big
     config:
       topK: 10

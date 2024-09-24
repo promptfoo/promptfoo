@@ -23,7 +23,33 @@ promptfoo provides a Docker image that allows you to host a central server that 
 
 The self-hosted app consists of:
 
-- he self-hosted app is an Express server that serves the web UI and API.
+- The self-hosted app is an Express server that serves the web UI and API.
+
+## Using Pre-built Docker Images
+
+A quick way to get started is to use a pre-built image.
+
+To use a pre-built image:
+
+1. Pull the image:
+
+```bash
+docker pull ghcr.io/promptfoo/promptfoo:main
+```
+
+You can use specific version tags instead of `main` for more stable releases.
+
+2. Run the container:
+
+```bash
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo ghcr.io/promptfoo/promptfoo:main
+```
+
+Key points:
+
+- `-v /path/to/local_promptfoo:/root/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
+- Omitting the `-v` argument will result in non-persistent evals.
+- Add any api keys as environment variables on the docker container. For example, `-e OPENAI_API_KEY=sk-abc123` sets the OpenAI API key so users can run evals directly from the web UI. Replace `sk-abc123` with your actual API key.
 
 ## Building from Source
 
@@ -51,32 +77,6 @@ Launch the Docker container using this command:
 ```sh
 docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo
 ```
-
-Key points:
-
-- `-v /path/to/local_promptfoo:/root/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
-- Omitting the `-v` argument will result in non-persistent evals.
-- Add any api keys as environment variables on the docker container. For example, `-e OPENAI_API_KEY=sk-abc123` sets the OpenAI API key so users can run evals directly from the web UI. Replace `sk-abc123` with your actual API key.
-
-## Using Pre-built Docker Images
-
-As an alternative to building from source, we also publish pre-built Docker images on GitHub Container Registry. This can be a quicker way to get started if you don't need to customize the image. However, we generally recommend building from source due to static variable inlining in the pre-built image. Some features, such as the `promptfoo share` command, may not work out of the box with the pre-built image (by default, `promptfoo share` will point to `localhost:3000`).
-
-To use a pre-built image:
-
-1. Pull the image:
-
-```bash
-docker pull ghcr.io/promptfoo/promptfoo:main
-```
-
-2. Run the container:
-
-```bash
-docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo ghcr.io/promptfoo/promptfoo:main
-```
-
-You can use specific version tags instead of `main` for more stable releases.
 
 ## Advanced Configuration
 
