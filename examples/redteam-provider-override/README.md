@@ -7,5 +7,5 @@ promptfoo redteam generate
 Then
 
 ```
-promptfoo redteam eval -c redteam.yaml
+promptfoo redteam eval
 ```
