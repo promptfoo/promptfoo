@@ -20,6 +20,11 @@ jest.mock('../../../src/cache', () => ({
 }));
 
 describe('fetchRemoteGeneration', () => {
+
+  beforeAll(() => {
+    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
+  });
+  
   beforeEach(() => {
     jest.clearAllMocks();
   });
