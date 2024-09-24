@@ -172,7 +172,7 @@ interface BedrockMistralGenerationOptions extends BedrockOptions {
   top_k?: number;
 }
 
-interface BedrockAI21GenerationOptions extends BedrockOptions {
+export interface BedrockAI21GenerationOptions extends BedrockOptions {
   frequency_penalty?: number;
   max_tokens?: number;
   presence_penalty?: number;
