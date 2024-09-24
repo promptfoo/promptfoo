@@ -40,6 +40,46 @@ tests:
 
 If not specified, HTTP POST with content-type application/json is assumed.
 
+## Sending a raw HTTP request
+
+You can also send a raw HTTP request by specifying the `request` property in the provider configuration. This allows you to have full control over the request, including headers and body.
+
+Here's an example of how to use the raw HTTP request feature:
+
+```yaml
+providers:
+  - id: https
+    config:
+      request: |
+        POST /v1/completions HTTP/1.1
+        Host: api.example.com
+        Content-Type: application/json
+        Authorization: Bearer {{api_key}}
+
+        {
+          "model": "llama3.1-405b-base",
+          "prompt": "{{prompt}}",
+          "max_tokens": 100
+        }
+      responseParser: 'json.text'
+```
+
+In this example:
+
+1. The `request` property contains a raw HTTP request, including the method, path, headers, and body.
+2. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
+3. The `responseParser` property is used to extract the desired information from the JSON response.
+
+You can also load the raw request from an external file using the `file://` prefix:
+
+```yaml
+providers:
+  - id: https
+    config:
+      request: file://path/to/request.txt
+      responseParser: 'json.text'
+```
+
 ### Nested objects
 
 Nested objects are supported and should be passed to the `dump` function.
@@ -113,6 +153,26 @@ Extracts the message content from this response:
 }
 ```
 
+## Parsing a text response
+
+If your API responds with a text response, you can use the `responseParser` property to set a Javascript snippet that manipulates the provided `text` object.
+
+For example, this `responseParser` configuration:
+
+```yaml
+providers:
+  - id: 'https://example.com/api'
+    config:
+      # ...
+      responseParser: 'text.slice(11)'
+```
+
+Extracts the message content "hello world" from this response:
+
+```
+Assistant: hello world
+```
+
 ## Query parameters
 
 Query parameters can be specified in the provider config using the `queryParams` field. These will be appended to the URL as GET parameters.
@@ -159,6 +219,7 @@ Supported config options:
 | Option         | Type                     | Description                                                                                                                                   |
 | -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | url            | string                   | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                       |
+| request        | string                   | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                             |
 | method         | string                   | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                                                   |
 | headers        | Record\<string, string\> | Key-value pairs of HTTP headers to include in the request.                                                                                    |
 | body           | Record\<string, any\>    | The request body. For POST requests, this will be sent as JSON.                                                                               |

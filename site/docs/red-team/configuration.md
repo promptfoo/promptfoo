@@ -497,6 +497,25 @@ targets:
       responseParser: 'json.output'
 ```
 
+Or, let's say you have a raw HTTP request exported from a tool like Burp Suite. Put it in a file called `request.txt`:
+
+```
+POST /api/generate HTTP/1.1
+Host: example.com
+Content-Type: application/json
+
+{"prompt": "Tell me a joke"}
+```
+
+Then, in your Promptfoo config, you can reference it like this:
+
+```yaml
+targets:
+  - id: http # or https
+    config:
+      request: file://request.txt
+```
+
 #### Custom scripts
 
 Alternatively, you can use a custom [Python](/docs/providers/python/), [Javascript](/docs/providers/custom-api/), or other [script](/docs/providers/custom-script/) in order to precisely construct your requests.

@@ -69,12 +69,12 @@
     "@azure/identity": "^4.0.0",
     "@azure/openai-assistants": "^1.0.0-beta.5",
     "@ibm-generative-ai/node-sdk": "^2.0.6",
+    "@playwright/browser-chromium": "^1.47.2",
     "@smithy/node-http-handler": "^3.1.1",
     "google-auth-library": "^9.7.0",
     "langfuse": "^3.7.0",
     "node-sql-parser": "^5.2.0",
-    "playwright": "^1.47.2",
-    "@playwright/browser-chromium": "^1.47.2"
+    "playwright": "^1.47.2"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.654.0",
@@ -159,6 +159,7 @@
     "fastest-levenshtein": "^1.0.16",
     "glob": "^10.4.3",
     "groq-sdk": "^0.7.0",
+    "http-z": "^7.1.1",
     "inquirer": "^10.2.2",
     "js-rouge": "3.0.0",
     "js-yaml": "^4.1.0",

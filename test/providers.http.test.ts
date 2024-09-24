@@ -1,8 +1,14 @@
+import dedent from 'dedent';
 import { fetchWithCache } from '../src/cache';
 import { HttpProvider, processBody } from '../src/providers/http';
+import { maybeLoadFromExternalFile } from '../src/util';
 
 jest.mock('../src/cache', () => ({
   fetchWithCache: jest.fn(),
+}));
+
+jest.mock('../src/util', () => ({
+  maybeLoadFromExternalFile: jest.fn((input) => input),
 }));
 
 describe('HttpProvider', () => {
@@ -35,7 +41,7 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: 'test prompt' }),
       }),
       expect.any(Number),
-      'json',
+      'text',
     );
   });
 
@@ -79,13 +85,14 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: 'test prompt' }),
       }),
       expect.any(Number),
-      'json',
+      'text',
     );
   });
 
   const testCases = [
     { parser: (data: any) => data.custom, expected: 'parsed' },
     { parser: 'json.result', expected: 'parsed' },
+    { parser: 'text', expected: JSON.stringify({ result: 'parsed', custom: 'parsed' }) },
   ];
 
   testCases.forEach(({ parser, expected }) => {
@@ -125,7 +132,7 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: 'test prompt' }),
       },
       expect.any(Number),
-      'json',
+      'text',
     );
   });
 
@@ -149,7 +156,7 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: { key: 'value' } }),
       }),
       expect.any(Number),
-      'json',
+      'text',
     );
   });
 
@@ -195,8 +202,125 @@ describe('HttpProvider', () => {
         method: 'GET',
       }),
       expect.any(Number),
-      'json',
+      'text',
     );
+  });
+
+  describe('raw request', () => {
+    it('should handle a basic GET raw request', async () => {
+      const rawRequest = dedent`
+        GET /api/data HTTP/1.1
+        Host: example.com
+        User-Agent: TestAgent/1.0
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          responseParser: (data: any) => data,
+        },
+      });
+
+      const mockResponse = { data: { result: 'success' }, cached: false };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'http://example.com/api/data',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            'user-agent': 'TestAgent/1.0',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+      );
+      expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it('should handle a POST raw request with body and variable substitution', async () => {
+      const rawRequest = dedent`
+        POST /api/submit HTTP/1.1
+        Host: example.com
+        Content-Type: application/json
+
+        {"data": "{{prompt}}"}
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          responseParser: (data: any) => data,
+        },
+      });
+
+      const mockResponse = { data: { result: 'received' }, cached: false };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test data');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/submit',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            'content-type': 'application/json',
+          }),
+          body: '{"data": "test data"}',
+        }),
+        expect.any(Number),
+        'text',
+      );
+      expect(result.output).toEqual({ result: 'received' });
+    });
+
+    it('should load raw request from file if file:// prefix is used', async () => {
+      const filePath = 'file://path/to/request.txt';
+      const fileContent = dedent`
+        GET /api/data HTTP/1.1
+        Host: example.com
+      `;
+      jest.mocked(maybeLoadFromExternalFile).mockReturnValueOnce(fileContent);
+
+      const provider = new HttpProvider('https', {
+        config: {
+          request: filePath,
+          responseParser: (data: any) => data,
+        },
+      });
+
+      const mockResponse = { data: { result: 'success' }, cached: false };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(filePath);
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/data',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+      );
+      expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it('should throw an error for invalid raw requests', async () => {
+      const provider = new HttpProvider('http', {
+        config: {
+          request: 'yo mama',
+        },
+      });
+      await expect(provider.callApi('test prompt')).rejects.toThrow(
+        'Error parsing raw HTTP request',
+      );
+    });
   });
 
   describe('processBody', () => {
