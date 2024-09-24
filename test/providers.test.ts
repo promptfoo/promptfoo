@@ -37,6 +37,7 @@ import {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
 } from '../src/providers/openai';
+import { PythonProvider } from '../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
@@ -1340,6 +1341,18 @@ config:
     const provider = await loadApiProvider('replicate:moderation:foo/bar:abc123');
     expect(provider).toBeInstanceOf(ReplicateModerationProvider);
     expect(provider.id()).toBe('replicate:foo/bar:abc123');
+  });
+
+  it('loadApiProvider with file://*.py', async () => {
+    const provider = await loadApiProvider('file://script.py:function_name');
+    expect(provider).toBeInstanceOf(PythonProvider);
+    expect(provider.id()).toBe('python:script.py:function_name');
+  });
+
+  it('loadApiProvider with python:*.py', async () => {
+    const provider = await loadApiProvider('python:script.py');
+    expect(provider).toBeInstanceOf(PythonProvider);
+    expect(provider.id()).toBe('python:script.py:default');
   });
 
   it('loadApiProvider with cloudflare-ai', async () => {

@@ -70,7 +70,7 @@ First, create `promptfooconfig.yaml`. We'll use a placeholder prompt with a sing
 prompts:
   - '{{ query }}'
 providers:
-  - 'python: retrieve.py'
+  - file://retrieve.py
 tests:
   - vars:
       query: What is our reimbursement policy?
@@ -100,9 +100,9 @@ In order to compare multiple vector databases in your evaluation, create retriev
 
 ```yaml
 providers:
-  - 'python: retrieve_pinecone.py'
-  - 'python: retrieve_milvus.py'
-  - 'python: retrieve_pgvector.py'
+  - file://retrieve_pinecone.py
+  - file://retrieve_milvus.py
+  - file://retrieve_pgvector.py
 ```
 
 Running the eval with `promptfoo eval` will create a comparison view between Pinecone, Milvus, and PGVector:
@@ -326,8 +326,8 @@ prompts: [prompt1.txt, prompt2.txt]
 
 # Test different retrieval and generation methods to find the best
 providers:
-  - python: retrieve_and_generate_v1.py
-  - python: retrieve_and_generate_v2.py
+  - file://retrieve_and_generate_v1.py
+  - file://retrieve_and_generate_v2.py
 
 tests:
   # ...

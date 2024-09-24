@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import type {
+  BedrockAI21GenerationOptions,
   BedrockClaudeMessagesCompletionOptions,
   LlamaMessage,
 } from '../src/providers/bedrock';
@@ -165,6 +166,60 @@ describe('AwsBedrockGenericProvider', () => {
 
       expect(params).toHaveProperty('tool_choice');
       expect(params.tool_choice).toEqual({ type: 'tool', name: 'get_current_weather' });
+    });
+  });
+
+  describe('BEDROCK_MODEL AI21', () => {
+    const modelHandler = BEDROCK_MODEL.AI21;
+
+    it('should include AI21-specific parameters', () => {
+      const config: BedrockAI21GenerationOptions = {
+        region: 'us-east-1',
+        max_tokens: 100,
+        temperature: 0.7,
+        top_p: 0.9,
+        stop: ['END'],
+        frequency_penalty: 0.5,
+        presence_penalty: 0.3,
+      };
+
+      const prompt = 'Write a short story about a robot.';
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.7,
+        top_p: 0.9,
+        stop: ['END'],
+        frequency_penalty: 0.5,
+        presence_penalty: 0.3,
+      });
+    });
+
+    it('should use default values when config is not provided', () => {
+      const config: BedrockAI21GenerationOptions = { region: 'us-east-1' };
+      const prompt = 'Tell me a joke.';
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1024,
+        temperature: 0,
+        top_p: 1.0,
+      });
+    });
+
+    it('should handle output correctly', () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'This is a test response.' } }],
+      };
+      expect(modelHandler.output(mockResponse)).toBe('This is a test response.');
+    });
+
+    it('should throw an error for API errors', () => {
+      const mockErrorResponse = { error: 'API Error' };
+      expect(() => modelHandler.output(mockErrorResponse)).toThrow('AI21 API error: API Error');
     });
   });
 });

@@ -257,7 +257,7 @@ export async function redteamInit(directory: string | undefined) {
         },
       ];
     } else {
-      providers = ['python:chat.py'];
+      providers = ['file://chat.py'];
     }
   } else {
     const providerChoices = [
