@@ -2,12 +2,12 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: bedrock:ai21.jamba-1-5-mini-v1:0
+  - id: bedrock:anthropic.claude-instant-v1
     config:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens_to_sample: 256
-  - id: bedrock:ai21.jamba-1-5-large-v1:0
+  - id: bedrock:anthropic.claude-3-haiku-20240307-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
