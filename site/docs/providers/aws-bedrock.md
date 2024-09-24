@@ -154,7 +154,11 @@ config:
 
 ## Model-graded tests
 
-You can use Bedrock models to grade outputs. For example:
+You can use Bedrock models to grade outputs. By default, model-graded tests use OpenAI and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
+
+Note that because of how model-graded evals are implemented, **the LLM grading models must support chat-formatted prompts** (except for embedding or classification models).
+
+Here's an example of using a Bedrock model for grading:
 
 ```yaml
 providers:
@@ -165,7 +169,8 @@ providers:
     config:
       temperature: 1
 
-prompts: [prompt.txt]
+prompts:
+  - prompt.txt
 
 tests:
   - vars:
@@ -185,6 +190,52 @@ assertion:
     value:
       provider: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
       rubric: $rubric
+```
+
+To set this for all your test cases, add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
+
+```yaml title=promptfooconfig.yaml
+defaultTest:
+  options:
+    provider:
+      id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+      config:
+        temperature: 0
+        # Other provider config options
+```
+
+You can also do this for individual assertions:
+
+```yaml
+# ...
+assert:
+  - type: llm-rubric
+    value: Do not mention that you are an AI or chat assistant
+    provider:
+      text:
+        id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+        config:
+          region: us-east-1
+          temperature: 0
+          # Other provider config options...
+```
+
+Or for individual tests:
+
+```yaml
+# ...
+tests:
+  - vars:
+      # ...
+    options:
+      provider:
+        id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+        config:
+          temperature: 0
+          # Other provider config options
+    assert:
+      - type: llm-rubric
+        value: Do not mention that you are an AI or chat assistant
 ```
 
 ## Embeddings
