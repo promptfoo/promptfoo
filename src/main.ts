@@ -59,33 +59,36 @@ async function main() {
 
   const program = new Command();
 
+  // Main commands
+  evalCommand(program, defaultConfig, defaultConfigPath);
+  initCommand(program);
+  viewCommand(program);
+  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
+  shareCommand(program);
+
+  // Alphabetical order
+  authCommand(program);
   cacheCommand(program);
   configCommand(program);
   deleteCommand(program);
-  evalCommand(program, defaultConfig, defaultConfigPath);
   exportCommand(program);
   feedbackCommand(program);
+  const generateCommand = program.command('generate').description('Generate synthetic data');
   importCommand(program);
-  initCommand(program);
   listCommand(program);
-  shareCommand(program);
   showCommand(program);
   versionCommand(program);
-  viewCommand(program);
-  authCommand(program);
 
-  const generateCommand = program.command('generate').description('Generate synthetic data');
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
-  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
   const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
     await loadDefaultConfig(['redteam', 'promptfooconfig']);
 
-  evalCommand(redteamBaseCommand, redteamConfig, redteamConfigPath);
   redteamInitCommand(redteamBaseCommand);
-  redteamPluginsCommand(redteamBaseCommand);
   generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+  evalCommand(redteamBaseCommand, redteamConfig, redteamConfigPath);
+  redteamPluginsCommand(redteamBaseCommand);
 
   if (!process.argv.slice(2).length) {
     program.outputHelp();
