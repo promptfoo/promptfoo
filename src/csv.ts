@@ -44,7 +44,7 @@ export function assertionFromString(expected: string): Assertion {
   }
   if (
     expected.startsWith('python:') ||
-    (expected.startsWith('file://') && expected.endsWith('.py'))
+    (expected.startsWith('file://') && (expected.endsWith('.py') || expected.includes('.py:')))
   ) {
     const sliceLength = expected.startsWith('python:') ? 'python:'.length : 'file://'.length;
     const functionBody = expected.slice(sliceLength).trim();

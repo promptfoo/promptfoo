@@ -47,6 +47,30 @@ describe('PythonProvider', () => {
       });
       expect(provider.id()).toBe('testId');
     });
+
+    it('should initialize with python: syntax', () => {
+      const provider = new PythonProvider('python:script.py', {
+        id: 'testId',
+        config: { basePath: '/base' },
+      });
+      expect(provider.id()).toBe('testId');
+    });
+
+    it('should initialize with file:// prefix', () => {
+      const provider = new PythonProvider('file://script.py', {
+        id: 'testId',
+        config: { basePath: '/base' },
+      });
+      expect(provider.id()).toBe('testId');
+    });
+
+    it('should initialize with file:// prefix and function name', () => {
+      const provider = new PythonProvider('file://script.py:function_name', {
+        id: 'testId',
+        config: { basePath: '/base' },
+      });
+      expect(provider.id()).toBe('testId');
+    });
   });
 
   describe('callApi', () => {

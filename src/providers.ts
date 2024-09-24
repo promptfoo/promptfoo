@@ -126,7 +126,8 @@ export async function loadApiProvider(
     ret = new ScriptCompletionProvider(scriptPath, providerOptions);
   } else if (
     providerPath.startsWith('python:') ||
-    (providerPath.startsWith('file://') && providerPath.endsWith('.py'))
+    (providerPath.startsWith('file://') &&
+      (providerPath.endsWith('.py') || providerPath.includes('.py:')))
   ) {
     const scriptPath = providerPath.startsWith('file://')
       ? providerPath.slice('file://'.length)
