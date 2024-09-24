@@ -25,7 +25,7 @@ import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plug
 import { type UnifiedConfig } from './types';
 import { checkForUpdates } from './updates';
 
-export async function loadDefaultConfig(): Promise<{
+export async function loadDefaultConfig(configNames: string[]): Promise<{
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
 }> {
@@ -35,13 +35,16 @@ export async function loadDefaultConfig(): Promise<{
 
   // NOTE: sorted by frequency of use
   const extensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
+
   for (const ext of extensions) {
-    const configPath = path.join(pwd, `promptfooconfig.${ext}`);
-    const maybeConfig = await maybeReadConfig(configPath);
-    if (maybeConfig) {
-      defaultConfig = maybeConfig;
-      defaultConfigPath = configPath;
-      break;
+    for (const name of configNames) {
+      const configPath = path.join(pwd, `${name}.${ext}`);
+      const maybeConfig = await maybeReadConfig(configPath);
+      if (maybeConfig) {
+        defaultConfig = maybeConfig;
+        defaultConfigPath = configPath;
+        return { defaultConfig, defaultConfigPath };
+      }
     }
   }
 
@@ -52,33 +55,40 @@ async function main() {
   await checkForUpdates();
   await runDbMigrations();
 
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig(['promptfooconfig']);
 
   const program = new Command();
 
+  // Main commands
+  evalCommand(program, defaultConfig, defaultConfigPath);
+  initCommand(program);
+  viewCommand(program);
+  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
+  shareCommand(program);
+
+  // Alphabetical order
+  authCommand(program);
   cacheCommand(program);
   configCommand(program);
   deleteCommand(program);
-  evalCommand(program, defaultConfig, defaultConfigPath);
   exportCommand(program);
   feedbackCommand(program);
+  const generateCommand = program.command('generate').description('Generate synthetic data');
   importCommand(program);
-  initCommand(program);
   listCommand(program);
-  shareCommand(program);
   showCommand(program);
   versionCommand(program);
-  viewCommand(program);
-  authCommand(program);
 
-  const generateCommand = program.command('generate').description('Generate synthetic data');
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
-  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
+  const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
+    await loadDefaultConfig(['redteam', 'promptfooconfig']);
+
   redteamInitCommand(redteamBaseCommand);
-  redteamPluginsCommand(redteamBaseCommand);
+  evalCommand(redteamBaseCommand, redteamConfig, redteamConfigPath);
   generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+  redteamPluginsCommand(redteamBaseCommand);
 
   if (!process.argv.slice(2).length) {
     program.outputHelp();

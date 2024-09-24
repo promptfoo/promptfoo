@@ -66,7 +66,7 @@ This will create a file `redteam.yaml` with the test cases.
 Run the eval:
 
 ```
-npx promptfoo@latest eval -c redteam.yaml
+npx promptfoo@latest redteam eval
 ```
 
 And view the results:
@@ -325,7 +325,7 @@ The adversarial test cases will be written to `promptfooconfig.yaml`.
 Now that all the red team tests are ready, run the eval:
 
 ```
-npx promptfoo@latest eval -c redteam.yaml
+npx promptfoo@latest redteam eval
 ```
 
 This will take a while, usually ~15 minutes or so depending on how many plugins you have chosen.

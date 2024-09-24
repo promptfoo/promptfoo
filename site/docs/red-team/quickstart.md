@@ -133,17 +133,17 @@ Now that we've generated the test cases, we're ready to run the adversarial eval
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest eval -c redteam.yaml
+      npx promptfoo@latest redteam eval
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo eval -c redteam.yaml
+      promptfoo redteam eval
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo eval -c redteam.yaml
+      promptfoo redteam eval
     </CodeBlock>
   </TabItem>
 </Tabs>

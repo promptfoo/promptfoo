@@ -1,4 +1,4 @@
-To get started, set your OPENAI_API_KEY environment variable.
+To get started, set your `OPENAI_API_KEY` environment variable.
 
 Note: running this may get your OpenAI account flagged for moderation or banned.
 
