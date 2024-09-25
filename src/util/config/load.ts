@@ -208,7 +208,7 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
  * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
  * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
  */
-export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
     const globPaths = globSync(configPath, {
@@ -338,7 +338,8 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       config.prompts.forEach((prompt) => {
         invariant(
           typeof prompt === 'string' ||
-            (typeof prompt === 'object' && typeof prompt.raw === 'string'),
+            (typeof prompt === 'object' &&
+              (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           'Invalid prompt',
         );
         addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
@@ -408,7 +409,7 @@ export async function resolveConfigs(
   let fileConfig: Partial<UnifiedConfig> = {};
   const configPaths = cmdObj.config;
   if (configPaths) {
-    fileConfig = await readConfigs(configPaths);
+    fileConfig = await combineConfigs(configPaths);
   }
 
   // Standalone assertion mode

@@ -14,7 +14,7 @@ jest.mock('../../../src/logger');
 jest.mock('../../../src/telemetry');
 
 jest.mock('../../../src/util/config/load', () => ({
-  readConfigs: jest.fn(),
+  combineConfigs: jest.fn(),
   resolveConfigs: jest.fn(),
 }));
 
@@ -37,7 +37,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should generate redteam tests and write to output file', async () => {
-    jest.mocked(configModule.readConfigs).mockResolvedValue([
+    jest.mocked(configModule.combineConfigs).mockResolvedValue([
       {
         prompts: [{ raw: 'Test prompt', label: 'Test label' }],
         providers: [],
