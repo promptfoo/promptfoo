@@ -64,9 +64,10 @@ The `eval` command will return exit code `100` when there is at least 1 test cas
 
 Initialize a new project with dummy files.
 
-| Option      | Description                  |
-| ----------- | ---------------------------- |
-| `directory` | Directory to create files in |
+| Option             | Description                    |
+| ------------------ | ------------------------------ |
+| `directory`        | Directory to create files in   |
+| `--no-interactive` | Do not run in interactive mode |
 
 ## `promptfoo view`
 
