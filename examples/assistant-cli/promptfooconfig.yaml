@@ -2,4 +2,4 @@ prompts:
   - file://prompts.txt
 providers:
   - openai:gpt-4o-mini
-tests: tests.csv
+tests: file://tests.csv

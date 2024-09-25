@@ -54,11 +54,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
               function: promptInput as PromptFunction,
             };
           } else if (typeof promptInput === 'string') {
-            const prompts = await readPrompts(promptInput);
-            return prompts.map((p) => ({
-              raw: p.raw,
-              label: p.label,
-            }));
+            return readPrompts(promptInput);
           } else {
             return {
               raw: JSON.stringify(promptInput),
@@ -100,7 +96,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   if (options.cache === false || (options.repeat && options.repeat > 1)) {
     cache.disableCache();
   }
-  telemetry.maybeShowNotice();
 
   // Run the eval!
   const ret = await doEvaluate(constructedTestSuite, {

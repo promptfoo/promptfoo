@@ -57,4 +57,4 @@ To meet the needs of larger teams, Promptfoo Enterprise offers:
 - Priority support with a 24-hour SLA
 - Named account manager
 
-If your company is interested in signing up for Promptfoo Enterprise **[contact us](mailto:inquiries@promptfoo.com)** so we can get you up and running with a proof of concept.
+If your company is interested in signing up for Promptfoo Enterprise **[contact us](mailto:inquiries@promptfoo.dev)** so we can get you up and running with a proof of concept.

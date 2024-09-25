@@ -515,6 +515,23 @@ describe('readPrompts', () => {
       expect.stringContaining('Warning: 1 prompt without {{variables}} detected.'),
     );
   });
+
+  it('should handle a prompt with a function', async () => {
+    const promptWithFunction: Partial<Prompt> = {
+      raw: 'dummy raw text',
+      label: 'Function Prompt',
+      function: jest.fn().mockResolvedValue('Hello, world!'),
+    };
+
+    await expect(readPrompts([promptWithFunction])).resolves.toEqual([
+      {
+        raw: 'dummy raw text',
+        label: 'Function Prompt',
+        function: expect.any(Function),
+      },
+    ]);
+    expect(promptWithFunction.function).not.toHaveBeenCalled();
+  });
 });
 
 describe('readProviderPromptMap', () => {

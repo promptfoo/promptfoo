@@ -22,6 +22,9 @@ prompts:
 
   - file://./subfolder/*.json
 
+  - id: file://prompt.md
+    label: markdown prompt
+
   - id: file://prompt.jsonl
     label: prompt_jsonl
   - file://prompt.jsonl

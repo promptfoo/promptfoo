@@ -47,7 +47,7 @@ Edit the config to set up the prompt and the LLM you want to test:
 prompts:
   - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
 
-providers:
+targets:
   - openai:gpt-4o-mini
 ```
 
@@ -66,7 +66,7 @@ This will create a file `redteam.yaml` with the test cases.
 Run the eval:
 
 ```
-npx promptfoo@latest eval -c redteam.yaml
+npx promptfoo@latest redteam eval
 ```
 
 And view the results:
@@ -143,21 +143,21 @@ function getPrompt(context) {
 }
 ```
 
-## Step 2: Configure your LLM providers
+## Step 2: Configure your targets
 
-LLMs are configured with the `providers` property in `promptfooconfig.yaml`. An LLM provider can be a known LLM API (such as OpenAI, Anthropic, Ollama, etc.) or a custom RAG or agent flow you've built yourself.
+LLMs are configured with the `targets` property in `promptfooconfig.yaml`. An LLM target can be a known LLM API (such as OpenAI, Anthropic, Ollama, etc.) or a custom RAG or agent flow you've built yourself.
 
 ### LLM APIs
 
 Promptfoo supports [many LLM providers](/docs/providers) including OpenAI, Anthropic, Mistral, Azure, Groq, Perplexity, Cohere, and more. In most cases all you need to do is set the appropriate API key environment variable.
 
-You should choose at least one provider. If desired, set multiple in order to compare their performance in the red team eval. In this example, we’re comparing performance of GPT, Claude, and Llama:
+You should choose at least one target. If desired, set multiple in order to compare their performance in the red team eval. In this example, we’re comparing performance of GPT, Claude, and Llama:
 
 ```yaml
-providers:
-  - openai:gpt-4
-  - anthropic:messages:claude-3-opus-20240229
-  - ollama:chat:llama3:70b
+targets:
+  - openai:gpt-4o
+  - anthropic:messages:claude-3-5-sonnet-20240620
+  - ollama:chat:llama3.1:70b
 ```
 
 To learn more, find your preferred LLM provider [here](/docs/providers).
@@ -167,11 +167,10 @@ To learn more, find your preferred LLM provider [here](/docs/providers).
 If you have a custom RAG or agent flow, you can include them in your project like this:
 
 ```yaml
-providers:
-  # JS is natively supported
-  - file:///path/to/js_agent.js
-  # Python requires the `python:` directive
-  - python:/path/to/python_agent.py
+targets:
+  # JS and Python are natively supported
+  - file://path/to/js_agent.js
+  - file://path/to/python_agent.py
   # Any executable can be run with the `exec:` directive
   - exec:/path/to/shell_agent
   # HTTP requests can be made with the `webhook:` directive
@@ -190,7 +189,7 @@ To learn more, see:
 In order to pentest a live API endpoint, set the provider id to a URL. This will send an HTTP request to the endpoint. It expects that the LLM or agent output will be in the HTTP response.
 
 ```yaml
-providers:
+targets:
   - id: 'https://example.com/generate'
     config:
       method: 'POST'
@@ -243,10 +242,10 @@ For more information, see [Overriding the LLM grader](/docs/configuration/expect
 Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo redteam generate` command:
 
 ```sh
-npx promptfoo@latest redteam generate -w
+npx promptfoo@latest redteam generate
 ```
 
-This command works by reading your prompts and providers, and then generating a set of adversarial inputs that stress-test your prompts/models in a variety of situations. Test generation usually takes about 5 minutes.
+This command works by reading your prompts and targets, and then generating a set of adversarial inputs that stress-test your prompts/models in a variety of situations. Test generation usually takes about 5 minutes.
 
 The adversarial tests include:
 
@@ -294,7 +293,7 @@ It also tests for a variety of harmful input and output scenarios from the [ML C
 By default, all of the above will be included in the redteam. To use specific types of tests, use `--plugins`:
 
 ```yaml
-npx promptfoo@latest redteam generate -w --plugins 'harmful,jailbreak,hijacking'
+npx promptfoo@latest redteam generate --plugins 'harmful,jailbreak,hijacking'
 ```
 
 The following plugins are enabled by default:
@@ -326,7 +325,7 @@ The adversarial test cases will be written to `promptfooconfig.yaml`.
 Now that all the red team tests are ready, run the eval:
 
 ```
-npx promptfoo@latest eval
+npx promptfoo@latest redteam eval
 ```
 
 This will take a while, usually ~15 minutes or so depending on how many plugins you have chosen.

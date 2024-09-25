@@ -3,12 +3,14 @@
   "editor.formatOnSave": true,
   "cSpell.words": [
     "apidevtools",
+    "chatcompletion",
     "cybercrime",
     "Dedup",
     "deduped",
     "Envar",
     "envars",
     "Evals",
+    "globbed",
     "Groq",
     "mitigations",
     "openai",
@@ -20,7 +22,13 @@
     "redteam",
     "TEMPLATING",
     "TESTCASE",
-    "unindented"
+    "unindented",
+    "uuidv"
   ],
-  "jest.jestCommandLine": "npm run test --"
+  "jest.jestCommandLine": "npm run test --",
+  "eslint.workingDirectories": [
+    {
+      "mode": "auto"
+    }
+  ]
 }

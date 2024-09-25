@@ -14,7 +14,7 @@ env:
   OPENAI_API_KEY: xxx
   ANTHROPIC_API_KEY: xxx
   AZURE_OPENAI_API_HOST: xxx
-  NEXT_TELEMETRY_DISABLED: 1
+  VITE_TELEMETRY_DISABLED: 1
 jobs:
   build:
     name: Build and test on Node ${{ matrix.node }} and ${{ matrix.os }}
@@ -81,7 +81,7 @@ jobs:
           npm run lint
 
       - name: Lint UI
-        working-directory: src/web/nextui
+        working-directory: src/app
         run: |
           npm run lint
 
@@ -199,5 +199,5 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Vitest
-        run: npm run test:webui
+      - name: Run App Tests
+        run: npm run test:app

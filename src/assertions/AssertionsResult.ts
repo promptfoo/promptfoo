@@ -70,6 +70,14 @@ export class AssertionsResult {
       this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score;
     }
 
+    if (result.namedScores) {
+      Object.entries(result.namedScores).forEach(([metricName, score]) => {
+        if (metricName !== metric) {
+          this.namedScores[metricName] = (this.namedScores[metricName] || 0) + score;
+        }
+      });
+    }
+
     if (result.tokensUsed) {
       this.tokensUsed.total += result.tokensUsed.total || 0;
       this.tokensUsed.prompt += result.tokensUsed.prompt || 0;

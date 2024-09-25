@@ -17,6 +17,15 @@ With promptfoo, you can:
 
 The goal: **test-driven LLM development**, not trial-and-error.
 
+<div style={{ border: '1px solid #90EE90', borderRadius: '4px', padding: '1rem', backgroundColor: '#F0FFF0', marginBottom: '1rem', color: '#000000' }}>
+
+**Get Started:**
+
+- [**Red teaming**](/docs/red-team/quickstart) - LLM security scans
+- [**Evaluations**](/docs/getting-started) - LLM quality benchmarks
+
+</div>
+
 promptfoo produces matrix views that let you quickly evaluate outputs across many prompts.
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs:

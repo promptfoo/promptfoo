@@ -3,12 +3,20 @@ import invariant from 'tiny-invariant';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import type { ApiProvider, Assertion, AssertionValue, PluginConfig, TestCase } from '../../types';
+import type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  PluginConfig,
+  ResultSuggestion,
+  TestCase,
+} from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { getNunjucksEngine } from '../../util/templates';
 import { loadRedteamProvider } from '../providers/shared';
+import { removePrefix } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -120,19 +128,18 @@ export abstract class PluginBase {
    */
   protected parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
     const parsePrompt = (line: string): string | null => {
-      const match = line.trim().match(/^prompt:\s*(.*)/i);
-      if (match) {
-        let prompt = match[1];
-        // Handle numbered lists with various formats
-        prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
-        // Handle quotes
-        prompt = prompt.replace(/^["'](.*)["']$/, '$1');
-        // Handle nested quotes
-        prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
-        prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
-        return prompt.trim();
+      if (!line.toLowerCase().includes('prompt:')) {
+        return null;
       }
-      return null;
+      let prompt = removePrefix(line, 'Prompt');
+      // Handle numbered lists with various formats
+      prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
+      // Handle quotes
+      prompt = prompt.replace(/^["'](.*)["']$/, '$1');
+      // Handle nested quotes
+      prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
+      prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
+      return prompt.trim();
     };
 
     // Split by newline or semicolon
@@ -211,13 +218,25 @@ export abstract class RedteamModelGrader {
     }
   }
 
+  getSuggestions({
+    test,
+    rawPrompt,
+    renderedValue,
+  }: {
+    test: AtomicTestCase;
+    rawPrompt: string;
+    renderedValue?: AssertionValue;
+  }): ResultSuggestion[] {
+    return [];
+  }
+
   async getResult(
     prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
     renderedValue: AssertionValue | undefined,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
+  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
     const vars = {
       ...test.metadata,
@@ -240,6 +259,13 @@ export abstract class RedteamModelGrader {
       }),
     });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
-    return { grade, rubric: finalRubric };
+
+    let suggestions;
+    if (!grade.pass) {
+      // TODO(ian): Need to pass in the user input only
+      suggestions = this.getSuggestions({ test, rawPrompt: prompt, renderedValue });
+    }
+
+    return { grade, rubric: finalRubric, suggestions };
   }
 }

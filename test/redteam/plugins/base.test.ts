@@ -301,6 +301,8 @@ describe('PluginBase', () => {
         Prompt: 3 - Third item
         Prompt: 4. Fourth item with: colon
         Prompt: 5) Fifth item with "quotes"
+        6. Prompt: Sixth item
+        7) Prompt: Seventh item
       `;
       const result = testPlugin['parseGeneratedPrompts'](input);
       expect(result).toEqual([
@@ -309,6 +311,8 @@ describe('PluginBase', () => {
         { prompt: 'Third item' },
         { prompt: 'Fourth item with: colon' },
         { prompt: 'Fifth item with "quotes"' },
+        { prompt: 'Sixth item' },
+        { prompt: 'Seventh item' },
       ]);
     });
 

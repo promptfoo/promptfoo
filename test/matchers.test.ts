@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { getAndCheckProvider, getGradingProvider, matchesClassification } from '../src/matchers';
 import {
   matchesSimilarity,
@@ -22,9 +24,26 @@ import type {
 } from '../src/types';
 import { TestGrader } from './utils';
 
+jest.mock('../src/database', () => ({
+  getDb: jest.fn().mockImplementation(() => {
+    throw new TypeError('The "original" argument must be of type function. Received undefined');
+  }),
+}));
 jest.mock('../src/esm');
 jest.mock('../src/logger');
 jest.mock('../src/cliState');
+jest.mock('proxy-agent', () => ({
+  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+}));
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
+jest.mock('better-sqlite3');
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  readFileSync: jest.fn(),
+  existsSync: jest.fn(),
+}));
 
 const Grader = new TestGrader();
 
@@ -213,6 +232,15 @@ describe('matchesSimilarity', () => {
 });
 
 describe('matchesLlmRubric', () => {
+  const mockFilePath = path.join('path', 'to', 'external', 'rubric.txt');
+  const mockFileContent = 'This is an external rubric prompt';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+  });
+
   it('should pass when the grading provider returns a passing result', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -298,6 +326,70 @@ describe('matchesLlmRubric', () => {
     expect(mockCallApi).toHaveBeenCalledWith('Grading prompt');
 
     mockCallApi.mockRestore();
+  });
+
+  it('should load rubric prompt from external file when specified', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockFilePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(fs.existsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
+    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
+      'utf8',
+    );
+    expect(grading.provider.callApi).toHaveBeenCalledWith(expect.stringContaining(mockFileContent));
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+      },
+    });
+  });
+
+  it('should throw an error when the external file is not found', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(false);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockFilePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(rubric, llmOutput, grading)).rejects.toThrow(
+      'File does not exist',
+    );
+
+    expect(fs.existsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
+    );
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(grading.provider.callApi).not.toHaveBeenCalled();
   });
 });
 
@@ -505,7 +597,7 @@ describe('matchesClosedQa', () => {
       try {
         JSON.parse(prompt);
         isJson = true;
-      } catch (err) {
+      } catch {
         isJson = false;
       }
       return Promise.resolve({
@@ -561,11 +653,11 @@ describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {
     const provider = await getGradingProvider(
       'text',
-      'openai:chat:gpt-3.5-turbo-foobar',
+      'openai:chat:gpt-4o-mini-foobar',
       DefaultGradingProvider,
     );
     // ok for this not to match exactly when the string is parsed
-    expect(provider?.id()).toBe('openai:gpt-3.5-turbo-foobar');
+    expect(provider?.id()).toBe('openai:gpt-4o-mini-foobar');
   });
 
   it('should return the correct provider when provider is an ApiProvider', async () => {
@@ -579,14 +671,14 @@ describe('getGradingProvider', () => {
 
   it('should return the correct provider when provider is ProviderOptions', async () => {
     const providerOptions = {
-      id: 'openai:chat:gpt-3.5-turbo-foobar',
+      id: 'openai:chat:gpt-4o-mini-foobar',
       config: {
         apiKey: 'abc123',
         temperature: 3.1415926,
       },
     };
     const provider = await getGradingProvider('text', providerOptions, DefaultGradingProvider);
-    expect(provider?.id()).toBe('openai:chat:gpt-3.5-turbo-foobar');
+    expect(provider?.id()).toBe('openai:chat:gpt-4o-mini-foobar');
   });
 
   it('should return the default provider when provider is not provided', async () => {

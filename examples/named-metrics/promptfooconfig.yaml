@@ -3,7 +3,7 @@ prompts:
   - 'Say this as though you are a seafarer from the 17th century: {{body}}'
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 
 derivedMetrics:
   - name: DoubleConsistency

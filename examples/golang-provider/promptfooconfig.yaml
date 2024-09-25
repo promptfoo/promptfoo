@@ -1,0 +1,26 @@
+description: 'Golang example'
+
+prompts:
+  - 'Write an introductory sentence for a classroom lesson on {{topic}}'
+
+providers:
+  - id: golang:provider.go # defaults to CallApi function
+    config:
+      someOption: foobar
+
+tests:
+  - vars:
+      topic: quantum mechanics
+    assert:
+      - type: contains
+        value: physics
+  - vars:
+      topic: the animal kingdom
+    assert:
+      - type: llm-rubric
+        value: mentions at least 1 animal
+  - vars:
+      topic: turtles
+    assert:
+      - type: llm-rubric
+        value: is funny

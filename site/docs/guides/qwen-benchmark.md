@@ -183,7 +183,7 @@ npx promptfoo@latest eval -o results.csv
 
 The comparison will provide you with a side-by-side performance view of Qwen, GPT-4, and Llama based on your customer support chatbot test cases. Use this data to make informed decisions about which LLM best suits your application.
 
-Contrast this with public benchmarks from the [Chatbot Arena](https://chat.lmsys.org/?leaderboard) leaderboard:
+Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai/?leaderboard) leaderboard:
 
 | Model                | Arena rating |
 | -------------------- | ------------ |

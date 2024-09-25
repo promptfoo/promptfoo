@@ -37,6 +37,7 @@ import {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
 } from '../src/providers/openai';
+import { PythonProvider } from '../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
@@ -91,6 +92,13 @@ jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
 jest.mock('../src/logger');
+const defaultMockResponse = {
+  status: 200,
+  statusText: 'OK',
+  headers: {
+    get: jest.fn().mockReturnValue(null),
+  },
+};
 
 describe('call provider apis', () => {
   afterEach(async () => {
@@ -100,6 +108,7 @@ describe('call provider apis', () => {
 
   it('OpenAiCompletionProvider callApi', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(
         JSON.stringify({
           choices: [{ text: 'Test output' }],
@@ -119,6 +128,7 @@ describe('call provider apis', () => {
 
   it('OpenAiChatCompletionProvider callApi', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(
         JSON.stringify({
           choices: [{ message: { content: 'Test output' } }],
@@ -129,7 +139,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -141,6 +151,7 @@ describe('call provider apis', () => {
 
   it('OpenAiChatCompletionProvider callApi with caching', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(
         JSON.stringify({
           choices: [{ message: { content: 'Test output 2' } }],
@@ -151,7 +162,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
     );
@@ -171,6 +182,7 @@ describe('call provider apis', () => {
 
   it('OpenAiChatCompletionProvider callApi with cache disabled', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(
         JSON.stringify({
           choices: [{ message: { content: 'Test output' } }],
@@ -181,7 +193,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -208,7 +220,7 @@ describe('call provider apis', () => {
       temperature: 3.1415926,
       max_tokens: 201,
     };
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', { config });
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', { config });
     const prompt = 'Test prompt';
     await provider.callApi(prompt);
 
@@ -222,8 +234,136 @@ describe('call provider apis', () => {
     expect(provider.config.max_tokens).toBe(config.max_tokens);
   });
 
+  it('OpenAiChatCompletionProvider callApi with structured output', async () => {
+    const mockResponse = {
+      ...defaultMockResponse,
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [{ message: { content: '{"name": "John", "age": 30}' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        }),
+      ),
+      ok: true,
+    };
+    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+      config: {
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'person',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                age: { type: 'number' },
+              },
+              required: ['name', 'age'],
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+    });
+    const result = await provider.callApi(
+      JSON.stringify([{ role: 'user', content: 'Get me a person' }]),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toEqual({ name: 'John', age: 30 });
+    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+  });
+
+  it('OpenAiChatCompletionProvider callApi handles model refusals', async () => {
+    const mockResponse = {
+      ...defaultMockResponse,
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [{ message: { refusal: 'Content policy violation' } }],
+          usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+        }),
+      ),
+      ok: true,
+    };
+    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const result = await provider.callApi(
+      JSON.stringify([{ role: 'user', content: 'Generate inappropriate content' }]),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.error).toBe('Model refused to generate a response: Content policy violation');
+    expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0 });
+  });
+
+  it('OpenAiChatCompletionProvider callApi with function tool callbacks', async () => {
+    const mockResponse = {
+      ...defaultMockResponse,
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'get_weather',
+                      arguments: '{"location":"New York"}',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        }),
+      ),
+      ok: true,
+    };
+    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+    const mockWeatherFunction = jest.fn().mockResolvedValue('Sunny, 25°C');
+
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+      config: {
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get the weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: { type: 'string' },
+                },
+                required: ['location'],
+              },
+            },
+          },
+        ],
+        functionToolCallbacks: {
+          get_weather: mockWeatherFunction,
+        },
+      },
+    });
+    const result = await provider.callApi(
+      JSON.stringify([{ role: 'user', content: "What's the weather in New York?" }]),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
+    expect(result.output).toBe('Sunny, 25°C');
+    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+  });
+
   it('AzureOpenAiCompletionProvider callApi', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(
         JSON.stringify({
           choices: [{ text: 'Test output' }],
@@ -243,6 +383,7 @@ describe('call provider apis', () => {
 
   it('AzureOpenAiChatCompletionProvider callApi', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(
         JSON.stringify({
           choices: [{ message: { content: 'Test output' } }],
@@ -252,7 +393,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -273,6 +414,7 @@ describe('call provider apis', () => {
       },
     ];
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(
         JSON.stringify({
           choices: [
@@ -286,7 +428,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo', {
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { dataSources },
     });
     const result = await provider.callApi(
@@ -305,6 +447,7 @@ describe('call provider apis', () => {
     disableCache();
 
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(
         JSON.stringify({
           choices: [{ message: { content: 'Test output' } }],
@@ -314,7 +457,7 @@ describe('call provider apis', () => {
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -328,6 +471,7 @@ describe('call provider apis', () => {
 
   it('LlamaProvider callApi', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(
         JSON.stringify({
           content: 'Test output',
@@ -345,6 +489,7 @@ describe('call provider apis', () => {
 
   it('OllamaCompletionProvider callApi', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn()
         .mockResolvedValue(`{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.898068Z","response":"Gre","done":false}
 {"model":"llama2:13b","created_at":"2023-08-08T21:50:34.929199Z","response":"at","done":false}
@@ -367,6 +512,7 @@ describe('call provider apis', () => {
 
   it('OllamaChatProvider callApi', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn()
         .mockResolvedValue(`{"model":"orca-mini","created_at":"2023-12-16T01:46:19.263682972Z","message":{"role":"assistant","content":" Because","images":null},"done":false}
 {"model":"orca-mini","created_at":"2023-12-16T01:46:19.275143974Z","message":{"role":"assistant","content":" of","images":null},"done":false}
@@ -387,6 +533,7 @@ describe('call provider apis', () => {
 
   it('WebhookProvider callApi', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(
         JSON.stringify({
           output: 'Test output',
@@ -408,6 +555,7 @@ describe('call provider apis', () => {
   ])('HuggingfaceTextGenerationProvider callApi with %s', (format, mockedData) => {
     it('returns expected output', async () => {
       const mockResponse = {
+        ...defaultMockResponse,
         text: jest.fn().mockResolvedValue(JSON.stringify(mockedData)),
       };
       jest.mocked(fetch).mockResolvedValue(mockResponse as never);
@@ -422,6 +570,7 @@ describe('call provider apis', () => {
 
   it('HuggingfaceFeatureExtractionProvider callEmbeddingApi', async () => {
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(JSON.stringify([0.1, 0.2, 0.3, 0.4, 0.5])),
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
@@ -447,6 +596,7 @@ describe('call provider apis', () => {
       ],
     ];
     const mockResponse = {
+      ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(JSON.stringify(mockClassification)),
     };
     jest.mocked(fetch).mockResolvedValue(mockResponse as never);
@@ -499,6 +649,7 @@ describe('call provider apis', () => {
           },
         };
         const mockResponse = {
+          ...defaultMockResponse,
           text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
           ok: true,
         };
@@ -534,6 +685,7 @@ describe('call provider apis', () => {
             },
           };
           const mockResponse = {
+            ...defaultMockResponse,
             text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
             ok: true,
           };
@@ -566,6 +718,7 @@ describe('call provider apis', () => {
           messages: [],
         };
         const mockResponse = {
+          ...defaultMockResponse,
           text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
           ok: true,
         };
@@ -608,6 +761,7 @@ describe('call provider apis', () => {
           },
         };
         const mockResponse = {
+          ...defaultMockResponse,
           text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
           ok: true,
         };
@@ -652,6 +806,7 @@ describe('call provider apis', () => {
           },
         };
         const mockResponse = {
+          ...defaultMockResponse,
           text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
           ok: true,
         };
@@ -682,6 +837,7 @@ describe('call provider apis', () => {
         };
 
         const mockResponse = {
+          ...defaultMockResponse,
           text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
           ok: true,
         };
@@ -763,6 +919,206 @@ describe('call provider apis', () => {
       );
 
       jest.restoreAllMocks();
+    });
+  });
+
+  describe('OpenAiChatCompletionProvider with functionToolCallbacks', () => {
+    it('should call function tool and return result', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  function_call: {
+                    name: 'addNumbers',
+                    arguments: '{"a":5,"b":6}',
+                  },
+                },
+              },
+            ],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+        ),
+        ok: true,
+      };
+      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'addNumbers',
+                description: 'Add two numbers together',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    a: { type: 'number' },
+                    b: { type: 'number' },
+                  },
+                  required: ['a', 'b'],
+                },
+              },
+            },
+          ],
+          functionToolCallbacks: {
+            addNumbers: (parametersJsonString) => {
+              const { a, b } = JSON.parse(parametersJsonString);
+              return Promise.resolve(JSON.stringify(a + b));
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Add 5 and 6');
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('11');
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
+    it('should handle multiple function tool calls', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'addNumbers',
+                        arguments: '{"a":5,"b":6}',
+                      },
+                    },
+                    {
+                      function: {
+                        name: 'multiplyNumbers',
+                        arguments: '{"x":2,"y":3}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 15, prompt_tokens: 7, completion_tokens: 8 },
+          }),
+        ),
+        ok: true,
+      };
+      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'addNumbers',
+                description: 'Add two numbers together',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    a: { type: 'number' },
+                    b: { type: 'number' },
+                  },
+                  required: ['a', 'b'],
+                },
+              },
+            },
+            {
+              type: 'function',
+              function: {
+                name: 'multiplyNumbers',
+                description: 'Multiply two numbers',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    x: { type: 'number' },
+                    y: { type: 'number' },
+                  },
+                  required: ['x', 'y'],
+                },
+              },
+            },
+          ],
+          functionToolCallbacks: {
+            addNumbers: (parametersJsonString) => {
+              const { a, b } = JSON.parse(parametersJsonString);
+              return Promise.resolve(JSON.stringify(a + b));
+            },
+            multiplyNumbers: (parametersJsonString) => {
+              const { x, y } = JSON.parse(parametersJsonString);
+              return Promise.resolve(JSON.stringify(x * y));
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Add 5 and 6, then multiply 2 and 3');
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('11\n6');
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8 });
+    });
+
+    it('should handle errors in function tool callbacks', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  function_call: {
+                    name: 'errorFunction',
+                    arguments: '{}',
+                  },
+                },
+              },
+            ],
+            usage: { total_tokens: 5, prompt_tokens: 2, completion_tokens: 3 },
+          }),
+        ),
+        ok: true,
+      };
+      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'errorFunction',
+                description: 'A function that always throws an error',
+                parameters: {
+                  type: 'object',
+                  properties: {},
+                },
+              },
+            },
+          ],
+          functionToolCallbacks: {
+            errorFunction: () => {
+              throw new Error('Test error');
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Call the error function');
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(result.output).toEqual({ arguments: '{}', name: 'errorFunction' });
+      expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
     });
   });
 });
@@ -987,6 +1343,18 @@ config:
     expect(provider.id()).toBe('replicate:foo/bar:abc123');
   });
 
+  it('loadApiProvider with file://*.py', async () => {
+    const provider = await loadApiProvider('file://script.py:function_name');
+    expect(provider).toBeInstanceOf(PythonProvider);
+    expect(provider.id()).toBe('python:script.py:function_name');
+  });
+
+  it('loadApiProvider with python:*.py', async () => {
+    const provider = await loadApiProvider('python:script.py');
+    expect(provider).toBeInstanceOf(PythonProvider);
+    expect(provider.id()).toBe('python:script.py:default');
+  });
+
   it('loadApiProvider with cloudflare-ai', async () => {
     const supportedModelTypes = [
       { modelType: 'chat', providerKlass: CloudflareAiChatCompletionProvider },
@@ -1151,5 +1519,21 @@ config:
     };
     const provider = await loadApiProvider('echo', { options: providerOptions });
     expect(provider.delay).toBe(500);
+  });
+
+  it('supports templating in provider URL', async () => {
+    process.env.MYHOST = 'api.example.com';
+    process.env.MYPORT = '8080';
+
+    const provider = await loadApiProvider('https://{{ env.MYHOST }}:{{ env.MYPORT }}/query', {
+      options: {
+        config: {
+          body: {},
+        },
+      },
+    });
+    expect(provider.id()).toBe('https://api.example.com:8080/query');
+    delete process.env.MYHOST;
+    delete process.env.MYPORT;
   });
 });

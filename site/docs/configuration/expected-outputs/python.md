@@ -78,6 +78,8 @@ To reference an external file, use the `file://` prefix:
 assert:
   - type: python
     value: file://relative/path/to/script.py
+    config:
+      outputLengthLimit: 10
 ```
 
 This file will be called with an `output` string and an `AssertContext` object (see above).
@@ -98,6 +100,15 @@ def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
       'score': 0.6,
       'reason': 'Looks good to me',
     }
+```
+
+This is an example of an assertion that uses data from a configuration defined in the assertion's YML file:
+
+```py
+from typing import Dict, Union
+
+def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+    return output.length() <= context.get('config', {}).get('outputLengthLimit', 0)
 ```
 
 You can also return nested metrics and assertions via a `GradingResult` object:

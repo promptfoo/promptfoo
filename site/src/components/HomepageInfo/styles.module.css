@@ -83,3 +83,40 @@
     font-size: 2rem;
   }
 }
+
+.exampleTabs {
+  display: flex;
+  justify-content: center;
+  border-bottom: 1px solid #e0e0e0;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+.exampleTab {
+  padding: 1rem 1rem;
+  border: none;
+  background: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.exampleTabActive {
+  border-bottom: 2px solid #1890ff;
+  color: #1890ff;
+}
+
+/* Add this for dark mode support */
+[data-theme='dark'] .exampleTabs {
+  border-bottom-color: #444;
+}
+
+[data-theme='dark'] .exampleTabActive {
+  border-bottom-color: #1890ff;
+  color: #1890ff;
+}
+
+/* ... rest of the existing styles ... */

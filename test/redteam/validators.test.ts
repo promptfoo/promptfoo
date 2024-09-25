@@ -342,14 +342,14 @@ describe('redteamConfigSchema', () => {
 
   it('should accept a provider string', () => {
     const input = {
-      provider: 'openai:gpt-3.5-turbo',
+      provider: 'openai:gpt-4o-mini',
       plugins: ['overreliance'],
       strategies: ['jailbreak'],
     };
     expect(RedteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
-        provider: 'openai:gpt-3.5-turbo',
+        provider: 'openai:gpt-4o-mini',
         plugins: [{ id: 'overreliance', numTests: undefined }],
         strategies: [{ id: 'jailbreak' }],
       },

@@ -356,6 +356,10 @@
                                     "properties": {
                                       "type": {},
                                       "value": {},
+                                      "config": {
+                                        "type": "object",
+                                        "additionalProperties": {}
+                                      },
                                       "threshold": {
                                         "type": "number"
                                       },
@@ -514,6 +518,9 @@
                                 "type": "boolean"
                               },
                               "disableConversationVar": {
+                                "type": "boolean"
+                              },
+                              "runSerially": {
                                 "type": "boolean"
                               }
                             }
@@ -836,7 +843,7 @@
             "promptSuffix": {
               "type": "string"
             },
-            "envFile": {
+            "envPath": {
               "type": "string"
             }
           },

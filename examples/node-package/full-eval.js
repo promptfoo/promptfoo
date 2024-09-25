@@ -54,8 +54,8 @@ const customFunction = (prompt, context) => {
 customFunction.label = 'My custom function';
 
 const providers = [
-  // Call the OpenAI API GPT 3.5
-  'openai:gpt-3.5-turbo',
+  // Call the OpenAI API GPT 4o Mini
+  'openai:gpt-4o-mini',
 
   // Or use a custom function.
   customFunction,
