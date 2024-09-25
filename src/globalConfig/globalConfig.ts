@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import type { GlobalConfig } from '../configTypes';
-import { getConfigDirectoryPath } from '../util/config';
+import { getConfigDirectoryPath } from '../util/config/manage';
 
 export function readGlobalConfig(): GlobalConfig {
   const configDir = getConfigDirectoryPath();

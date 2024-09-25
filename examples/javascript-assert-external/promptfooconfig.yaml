@@ -8,6 +8,8 @@ defaultTest:
   assert:
     - type: javascript
       value: file://assert.js
+      config:
+        foo: bar
 
 tests:
   - vars:

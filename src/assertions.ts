@@ -313,6 +313,7 @@ export async function runAssertion({
     vars: test.vars || {},
     test,
     logProbs,
+    ...(assertion.config ? { config: assertion.config } : {}),
   };
 
   // Render assertion values

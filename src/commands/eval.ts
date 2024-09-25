@@ -2,11 +2,11 @@ import chalk from 'chalk';
 import chokidar from 'chokidar';
 import type { Command } from 'commander';
 import dedent from 'dedent';
+import fs from 'fs';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
-import { resolveConfigs } from '../config';
 import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
@@ -30,6 +30,8 @@ import {
   writeMultipleOutputs,
   writeResultsToDatabase,
 } from '../util';
+import { loadDefaultConfig } from '../util/config/default';
+import { resolveConfigs } from '../util/config/load';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 
@@ -425,7 +427,7 @@ export function evalCommand(
       defaultConfig?.evaluateOptions?.interactiveProviders,
     )
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
-    .action((opts) => {
+    .action(async (opts) => {
       if (opts.interactiveProviders) {
         logger.warn(
           chalk.yellow(dedent`
@@ -451,6 +453,24 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
       }
+
+      if (opts.config !== undefined) {
+        const configPaths: string[] = Array.isArray(opts.config) ? opts.config : [opts.config];
+        for (const configPath of configPaths) {
+          if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
+            const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
+              await loadDefaultConfig(['redteam', 'promptfooconfig'], configPath);
+            if (newConfigPath) {
+              opts.config = opts.config.filter((path: string) => path !== configPath);
+              opts.config.push(newConfigPath);
+              defaultConfig = { ...defaultConfig, ...dirConfig };
+            } else {
+              logger.warn(`No configuration file found in directory: ${configPath}`);
+            }
+          }
+        }
+      }
+
       doEval(opts, defaultConfig, defaultConfigPath, evaluateOptions);
     });
 }

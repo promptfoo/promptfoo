@@ -4,17 +4,17 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
-import { readAssertions } from './assertions';
-import { validateAssertions } from './assertions/validateAssertions';
-import cliState from './cliState';
-import { filterTests } from './commands/eval/filterTests';
-import { getEnvBool } from './envars';
-import { importModule } from './esm';
-import logger from './logger';
-import { readPrompts, readProviderPromptMap } from './prompts';
-import { loadApiProviders } from './providers';
-import telemetry from './telemetry';
-import { readTest, readTests } from './testCases';
+import { readAssertions } from '../../assertions';
+import { validateAssertions } from '../../assertions/validateAssertions';
+import cliState from '../../cliState';
+import { filterTests } from '../../commands/eval/filterTests';
+import { getEnvBool } from '../../envars';
+import { importModule } from '../../esm';
+import logger from '../../logger';
+import { readPrompts, readProviderPromptMap } from '../../prompts';
+import { loadApiProviders } from '../../providers';
+import telemetry from '../../telemetry';
+import { readTest, readTests } from '../../testCases';
 import type {
   CommandLineOptions,
   Prompt,
@@ -25,8 +25,8 @@ import type {
   TestCase,
   TestSuite,
   UnifiedConfig,
-} from './types';
-import { isJavascriptFile, maybeLoadFromExternalFile, readFilters } from './util';
+} from '../../types';
+import { isJavascriptFile, maybeLoadFromExternalFile, readFilters } from '../../util';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
