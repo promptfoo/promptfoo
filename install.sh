@@ -145,7 +145,8 @@
         *) handle_error "Unsupported architecture: $ARCH" ;;
         esac
         case $OS in
-        linux | darwin) ;;
+        linux) ;;
+        darwin) OS="macos" ;;
         *) handle_error "Unsupported operating system: $OS" ;;
         esac
     }
@@ -221,6 +222,10 @@
     main() {
         detect_os_arch
         check_existing_installation
+        echo "Detected OS: $OS"
+        echo "Detected ARCH: $ARCH"
+        echo "Latest version: $(promptfoo_latest_version)"
+        echo "Download URL: https://github.com/$GITHUB_REPO/releases/download/$(promptfoo_latest_version)/promptfoo-$OS-$ARCH"
         install_promptfoo
         update_path
         cleanup
