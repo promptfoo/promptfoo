@@ -334,6 +334,8 @@ See the full example [here](https://github.com/promptfoo/promptfoo/tree/main/exa
 
 ## Installation
 
+You can install promptfoo using npm, npx, Homebrew, as a pre-built binary, or by cloning the repository.
+
 Requires Node.js 18 or newer.
 
 You can install promptfoo using npm, npx, Homebrew, or by cloning the repository.
@@ -369,6 +371,16 @@ If you prefer using Homebrew, you can install promptfoo with:
 ```sh
 brew install promptfoo
 ```
+
+### Pre-built binary
+
+You can quickly install the pre-built binary of promptfoo using our install script:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/promptfoo/promptfoo/main/install.sh | bash
+```
+
+This script will automatically download and install the latest version of promptfoo for your operating system and architecture. It will install promptfoo as both `promptfoo` and `pf` commands.
 
 ### From source
 
