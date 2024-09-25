@@ -197,3 +197,57 @@ This command will generate test cases for a specific config and write them to a 
 ```sh
 promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test cases for {{location}} must be European cities'
 ```
+
+## `promptfoo redteam generate`
+
+BETA: Generate adversarial test cases to challenge your prompts and models.
+
+| Option                  | Description                                                      | Default              |
+| ----------------------- | ---------------------------------------------------------------- | -------------------- |
+| `-c, --config <path>`   | Path to the configuration file                                   | promptfooconfig.yaml |
+| `-o, --output <path>`   | Path to write the generated test cases                           | stdout               |
+| `-w, --write`           | Write the generated test cases directly to the config file       | false                |
+| `--purpose <purpose>`   | Set the system purpose. If not set, inferred from config         |                      |
+| `--injectVar <varname>` | The name of the prompt variable that represents the user's input | `{{query}}`          |
+| `--plugins <plugins>`   | Comma-separated list of plugins to enable                        | all plugins          |
+| `--no-cache`            | Do not read or write results to disk cache                       | false                |
+| `--env-path <path>`     | Path to .env file                                                |                      |
+
+For example, let's suppose we have the following `promptfooconfig.yaml`:
+
+```yaml
+prompts:
+  - 'Act as a trip planner and help the user plan their trip'
+
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
+```
+
+This command will generate adversarial test cases and write them to the file:
+
+```sh
+promptfoo redteam generate -w
+```
+
+This command overrides the system purpose and the variable to inject adversarial user input:
+
+```sh
+promptfoo redteam generate -w --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
+```
+
+:::danger
+Adversarial testing produces offensive, toxic, and harmful test inputs, and may cause your system to produce harmful outputs.
+:::
+
+While in beta, this implementation requires `OPENAI_API_KEY` to be set.
+
+## ASCII-only outputs
+
+To disable terminal colors for printed outputs, set `FORCE_COLOR=0` (this is supported by the [chalk](https://github.com/chalk/chalk) library).
+
+For the `eval` command, you may also want to disable the progress bar and table as well, because they use special characters:
+
+```sh
+FORCE_COLOR=0 promptfoo eval --no-progress-bar --no-table
+```
