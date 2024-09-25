@@ -570,7 +570,6 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
   'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA2,
-  'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'us.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'us.meta.llama3-2-11b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
