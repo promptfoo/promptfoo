@@ -316,17 +316,17 @@ export function evalCommand(
     evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
   }
 
-  program
+  const evalCmd = program
     .command('eval')
     .description('Evaluate prompts')
+    .option(
+      '-c, --config <paths...>',
+      'Path to configuration file. Automatically loads promptfooconfig.yaml/js/json/etc.',
+    )
     .option('-p, --prompts <paths...>', 'Paths to prompt files (.txt)')
     .option(
       '-r, --providers <name or path...>',
       'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
-    )
-    .option(
-      '-c, --config <paths...>',
-      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
     )
     .option(
       // TODO(ian): Remove `vars` for v1
@@ -427,7 +427,13 @@ export function evalCommand(
       defaultConfig?.evaluateOptions?.interactiveProviders,
     )
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
+    .option('-h, --help', 'Display help for command')
     .action(async (opts) => {
+      if (opts.help) {
+        evalCmd.help();
+        return;
+      }
+
       if (opts.interactiveProviders) {
         logger.warn(
           chalk.yellow(dedent`
