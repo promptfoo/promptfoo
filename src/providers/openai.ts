@@ -790,6 +790,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         if (functionCallsWithCallbacks.length === 0) {
           break;
         }
+        console.log("procesando run", run.thread_id);
+        const threadId = run.thread_id;
+        
         logger.debug(
           `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
             ({ function: { name } }) => name,
@@ -800,9 +803,22 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             logger.debug(
               `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
             );
+            let functionArguments;
+            try {
+              functionArguments = JSON.parse(toolCall.function.arguments);
+            } catch (error) {
+              functionArguments = {};
+              logger.warn(`Error parsing function arguments: ${error}`);
+            }
+            
+            const mergedArguments = {
+              ...functionArguments,
+              thread_id: threadId
+            };
+            
             const result = await this.assistantConfig.functionToolCallbacks![
               toolCall.function.name
-            ](toolCall.function.arguments);
+            ](JSON.stringify(mergedArguments));
             return {
               tool_call_id: toolCall.id,
               output: result,
