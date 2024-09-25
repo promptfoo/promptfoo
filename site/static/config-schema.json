@@ -356,6 +356,10 @@
                                     "properties": {
                                       "type": {},
                                       "value": {},
+                                      "config": {
+                                        "type": "object",
+                                        "additionalProperties": {}
+                                      },
                                       "threshold": {
                                         "type": "number"
                                       },
