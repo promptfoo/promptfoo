@@ -239,6 +239,7 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   let providers: (string | ProviderOptions)[];
+  let writeChatPy = false;
   if (useCustomProvider) {
     if (redTeamChoice === 'http_endpoint' || redTeamChoice === 'not_sure') {
       providers = [
@@ -258,6 +259,7 @@ export async function redteamInit(directory: string | undefined) {
       ];
     } else {
       providers = ['file://chat.py'];
+      writeChatPy = true;
     }
   } else {
     const providerChoices = [
@@ -530,7 +532,7 @@ export async function redteamInit(directory: string | undefined) {
   });
   fs.writeFileSync(configPath, redteamConfig, 'utf8');
 
-  if (useCustomProvider) {
+  if (writeChatPy) {
     fs.writeFileSync(path.join(projectDir, 'chat.py'), CUSTOM_PROVIDER_TEMPLATE, 'utf8');
   }
 
