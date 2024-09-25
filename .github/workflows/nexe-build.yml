@@ -29,11 +29,28 @@ jobs:
 
   nexe-build:
     needs: build
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [linux, mac, windows]
-        arch: [x64, arm64]
+        include:
+          - target: linux
+            runner: ubuntu-latest-4xl-arm64
+            arch: arm64
+          - target: mac
+            runner: ubuntu-latest-4xl-arm64
+            arch: arm64
+          - target: windows
+            runner: ubuntu-latest-xl
+            arch: arm64
+          - target: linux
+            runner: ubuntu-latest-xl
+            arch: x64
+          - target: mac
+            runner: ubuntu-latest-xl
+            arch: x64
+          - target: windows
+            runner: ubuntu-latest-xl
+            arch: x64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     continue-on-error: true
     steps:
@@ -62,11 +79,19 @@ jobs:
         run: |
           NODE_VERSION=$(node -v)
           NEXE_TARGET="${{ matrix.target }}-${{ matrix.arch }}-${NODE_VERSION:1}"
+          OUTPUT_NAME="promptfoo-${{ matrix.target }}-${{ matrix.arch }}"
+
           if [[ "${{ matrix.target }}" == "windows" ]]; then
-            npx nexe --build -t "$NEXE_TARGET" -r drizzle/ -r package.json -r "dist/**/*" -i dist/src/main.js -o "promptfoo-${{ matrix.target }}-${{ matrix.arch }}.exe"
-          else
-            npx nexe --build -t "$NEXE_TARGET" -r drizzle/ -r package.json -r "dist/**/*" -i dist/src/main.js -o "promptfoo-${{ matrix.target }}-${{ matrix.arch }}"
+            OUTPUT_NAME="${OUTPUT_NAME}.exe"
           fi
+
+          npx nexe --build \
+            -t "$NEXE_TARGET" \
+            -r drizzle/ \
+            -r package.json \
+            -r "dist/**/*" \
+            -i dist/src/main.js \
+            -o "$OUTPUT_NAME"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
