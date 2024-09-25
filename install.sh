@@ -6,16 +6,16 @@
 
 # Usage:
 #   To install or update promptfoo:
-#     curl -sSL https://get.promptfoo.dev | bash
+#     curl -sSL https://raw.githubusercontent.com/promptfoo/promptfoo/main/install.sh | bash
 #
 #   To install a specific version:
-#     curl -sSL https://get.promptfoo.dev | bash -s -- -v <version>
+#     curl -sSL https://raw.githubusercontent.com/promptfoo/promptfoo/main/install.sh | bash -s -- -v <version>
 #
 #   To install without prompts (non-interactive):
-#     curl -sSL https://get.promptfoo.dev | bash -s -- -y
+#     curl -sSL https://raw.githubusercontent.com/promptfoo/promptfoo/main/install.sh | bash -s -- -y
 #
 #   To install to a custom directory:
-#     curl -sSL https://get.promptfoo.dev | bash -s -- -d <directory>
+#     curl -sSL https://raw.githubusercontent.com/promptfoo/promptfoo/main/install.sh | bash -s -- -d <directory>
 #
 # Options:
 #   -v, --version <version>  Install a specific version of promptfoo
