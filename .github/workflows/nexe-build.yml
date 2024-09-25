@@ -33,22 +33,22 @@ jobs:
       matrix:
         include:
           - target: linux
-            runner: ubuntu-latest-4xl-arm64
+            runner: ubuntu-arm64
             arch: arm64
           - target: mac
-            runner: ubuntu-latest-4xl-arm64
+            runner: ubuntu-arm64
             arch: arm64
           - target: windows
-            runner: ubuntu-latest-xl
+            runner: ubuntu-arm64
             arch: arm64
           - target: linux
-            runner: ubuntu-latest-xl
+            runner: ubuntu-latest
             arch: x64
           - target: mac
-            runner: ubuntu-latest-xl
+            runner: ubuntu-latest
             arch: x64
           - target: windows
-            runner: ubuntu-latest-xl
+            runner: ubuntu-latest
             arch: x64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
