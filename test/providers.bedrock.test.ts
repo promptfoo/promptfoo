@@ -6,9 +6,11 @@ import type {
 } from '../src/providers/bedrock';
 import {
   addConfigParam,
+  AWS_BEDROCK_MODELS,
   AwsBedrockGenericProvider,
   BEDROCK_MODEL,
   formatPromptLlama2Chat,
+  formatPromptLlama3Instruct,
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
@@ -355,7 +357,7 @@ describe('llama', () => {
         const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
         const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
         expect(handler.params(config, prompt)).toEqual({
-          prompt: `<s>[INST] Describe the purpose of a "hello world" program in one sentence. [/INST]`,
+          prompt: `<s>[INST] Describe the purpose of a \"hello world\" program in one sentence. [/INST]`,
           temperature: 0.5,
           top_p: 0.9,
           max_gen_len: 512,
@@ -453,6 +455,52 @@ describe('llama', () => {
       });
     });
 
+    describe('LLAMA3_1', () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_1);
+
+      it('should generate correct prompt for a single user message', () => {
+        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
+        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+          temperature: 0.5,
+          top_p: 0.9,
+          max_gen_len: 512,
+        });
+      });
+
+      // Add more tests for LLAMA3_1 as needed
+    });
+
+    describe('LLAMA3_2', () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+
+      it('should generate correct prompt for a single user message', () => {
+        const config = { temperature: 0.5, top_p: 0.9, max_new_tokens: 512 };
+        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+          temperature: 0.5,
+          top_p: 0.9,
+          max_new_tokens: 512,
+        });
+      });
+
+      it('should use max_new_tokens instead of max_gen_len', () => {
+        const config = { max_new_tokens: 1000 };
+        const prompt = 'Test prompt';
+        const params = handler.params(config, prompt);
+        expect(params).toHaveProperty('max_new_tokens', 1000);
+        expect(params).not.toHaveProperty('max_gen_len');
+      });
+
+      // Add more tests for LLAMA3_2 as needed
+    });
+
     it('should throw an error for unsupported LLAMA version', () => {
       expect(() => getLlamaModelHandler(1 as LlamaVersion)).toThrow('Unsupported LLAMA version: 1');
     });
@@ -463,6 +511,7 @@ describe('llama', () => {
       expect(handler.output({})).toBeUndefined();
     });
   });
+
   describe('formatPromptLlama2Chat', () => {
     it('should format a single user message correctly', () => {
       const messages: LlamaMessage[] = [
@@ -537,5 +586,29 @@ describe('llama', () => {
       `}\n\n`;
       expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
     });
+  });
+
+  describe('formatPromptLlama3Instruct', () => {
+    // Add tests for the new formatPromptLlama3Instruct function
+    it('should format a single user message correctly', () => {
+      const messages: LlamaMessage[] = [{ role: 'user', content: 'Hello, how are you?' }];
+      const expected = dedent`
+        <|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+        Hello, how are you?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
+      expect(formatPromptLlama3Instruct(messages)).toBe(expected);
+    });
+  });
+});
+
+describe('AWS_BEDROCK_MODELS', () => {
+  it('should include new LLAMA3_1 and LLAMA3_2 models', () => {
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-1b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-3b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-11b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-90b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['meta.llama3-1-405b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3);
+    expect(AWS_BEDROCK_MODELS['meta.llama3-1-70b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3);
+    expect(AWS_BEDROCK_MODELS['meta.llama3-1-8b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3);
   });
 });
