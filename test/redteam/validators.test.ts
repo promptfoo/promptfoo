@@ -5,7 +5,6 @@ import {
   COLLECTIONS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  ALIASED_PLUGIN_MAPPINGS,
 } from '../../src/redteam/constants';
 import {
   RedteamGenerateOptionsSchema,
