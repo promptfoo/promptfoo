@@ -32,3 +32,7 @@ export function writePromptfooConfig(config: Partial<UnifiedConfig>, outputPath:
   ]);
   fs.writeFileSync(outputPath, yaml.dump(orderedConfig, { skipInvalid: true }));
 }
+
+export function writeTestFile(tests: UnifiedConfig['tests'], outputPath: string) {
+  fs.writeFileSync(outputPath, yaml.dump(tests, { skipInvalid: true }));
+}
