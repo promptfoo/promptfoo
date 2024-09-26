@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: buildjet-4vcpu-ubuntu-2204-arm
     timeout-minutes: 10
     continue-on-error: true
     steps:
@@ -33,22 +33,22 @@ jobs:
       matrix:
         include:
           - target: linux
-            runner: ubuntu-arm64
+            runner: buildjet-4vcpu-ubuntu-2204-arm
             arch: arm64
           - target: mac
-            runner: ubuntu-arm64
+            runner: buildjet-4vcpu-ubuntu-2204-arm
             arch: arm64
           - target: windows
-            runner: ubuntu-arm64
+            runner: buildjet-4vcpu-ubuntu-2204-arm
             arch: arm64
           - target: linux
-            runner: ubuntu-latest
+            runner: buildjet-4vcpu-ubuntu-2204
             arch: x64
           - target: mac
-            runner: ubuntu-latest
+            runner: buildjet-4vcpu-ubuntu-2204
             arch: x64
           - target: windows
-            runner: ubuntu-latest
+            runner: buildjet-4vcpu-ubuntu-2204
             arch: x64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
