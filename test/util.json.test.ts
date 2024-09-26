@@ -143,6 +143,59 @@ describe('json utilities', () => {
         },
       ]);
     });
+
+    it('should handle this case', () => {
+      const obj = {
+        vars: [
+          {
+            language: 'Klingon',
+            body: 'Live long and prosper',
+          },
+          {
+            language: 'Elvish',
+            body: 'Good morning',
+          },
+          {
+            language: 'Esperanto',
+            body: 'I love learning languages',
+          },
+          {
+            language: 'Morse Code',
+            body: 'Help',
+          },
+          {
+            language: 'Emoji',
+            body: 'I am feeling happy 😊',
+          },
+          {
+            language: 'Binary',
+            body: 'Yes',
+          },
+          {
+            language: 'Javascript',
+            body: 'Hello, World!',
+          },
+          {
+            language: 'Shakespearean',
+            body: 'To be or not to be',
+          },
+          {
+            language: 'Leet Speak',
+            body: 'You are amazing',
+          },
+          {
+            language: 'Old English',
+            body: 'What is thy name?',
+          },
+          {
+            language: 'Yoda Speak',
+            body: 'Strong with the force, you are',
+          },
+        ],
+      };
+      const input = JSON.stringify(obj);
+      expect(extractJsonObjects(input)).toEqual([obj]);
+    });
   });
 
   describe('orderKeys', () => {
