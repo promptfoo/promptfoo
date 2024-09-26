@@ -12,6 +12,7 @@ import {
   COLLECTIONS,
   ALIASED_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
+  ALIASED_PLUGIN_MAPPINGS,
 } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
 import { ProviderSchema } from '../validators/providers';
@@ -156,7 +157,17 @@ export const RedteamConfigSchema = z
           ? { id: plugin, numTests: data.numTests, config: undefined }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests };
 
-      if (pluginObj.id === 'harmful') {
+      // Handle high-level aliased plugin names
+      if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
+        Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach((mapping) => {
+          mapping.plugins.forEach((id) => {
+            const key = `${id}:${JSON.stringify(pluginObj.config)}`;
+            if (!pluginMap.has(key)) {
+              pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
+            }
+          });
+        });
+      } else if (pluginObj.id === 'harmful') {
         Object.keys(HARM_PLUGINS).forEach((id) => {
           const key = `${id}:${JSON.stringify(pluginObj.config)}`;
           if (!pluginMap.has(key)) {
@@ -178,8 +189,60 @@ export const RedteamConfigSchema = z
           }
         });
       } else {
-        const key = `${pluginObj.id}:${JSON.stringify(pluginObj.config)}`;
-        pluginMap.set(key, pluginObj);
+        // Handle granular names and expand collections
+        const mapping = Object.entries(ALIASED_PLUGIN_MAPPINGS).find(([, value]) =>
+          Object.keys(value).includes(pluginObj.id),
+        );
+        if (mapping) {
+          const [, aliasedMapping] = mapping;
+          aliasedMapping[pluginObj.id].plugins.forEach((id) => {
+            if (COLLECTIONS.includes(id as any)) {
+              // Expand collection
+              if (id === 'harmful') {
+                Object.keys(HARM_PLUGINS).forEach((harmId) => {
+                  const key = `${harmId}:${JSON.stringify(pluginObj.config)}`;
+                  if (!pluginMap.has(key)) {
+                    pluginMap.set(key, {
+                      id: harmId,
+                      numTests: pluginObj.numTests,
+                      config: pluginObj.config,
+                    });
+                  }
+                });
+              } else if (id === 'pii') {
+                PII_PLUGINS.forEach((piiId) => {
+                  const key = `${piiId}:${JSON.stringify(pluginObj.config)}`;
+                  if (!pluginMap.has(key)) {
+                    pluginMap.set(key, {
+                      id: piiId,
+                      numTests: pluginObj.numTests,
+                      config: pluginObj.config,
+                    });
+                  }
+                });
+              } else if (id === 'default') {
+                REDTEAM_DEFAULT_PLUGINS.forEach((defaultId) => {
+                  const key = `${defaultId}:${JSON.stringify(pluginObj.config)}`;
+                  if (!pluginMap.has(key)) {
+                    pluginMap.set(key, {
+                      id: defaultId,
+                      numTests: pluginObj.numTests,
+                      config: pluginObj.config,
+                    });
+                  }
+                });
+              }
+            } else {
+              const key = `${id}:${JSON.stringify(pluginObj.config)}`;
+              if (!pluginMap.has(key)) {
+                pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
+              }
+            }
+          });
+        } else {
+          const key = `${pluginObj.id}:${JSON.stringify(pluginObj.config)}`;
+          pluginMap.set(key, pluginObj);
+        }
       }
     });
 
