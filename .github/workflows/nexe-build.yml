@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: buildjet-4vcpu-ubuntu-2204-arm
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     continue-on-error: true
     steps:
@@ -29,30 +29,13 @@ jobs:
 
   nexe-build:
     needs: build
-    strategy:
-      matrix:
-        include:
-          - target: linux
-            runner: buildjet-4vcpu-ubuntu-2204-arm
-            arch: arm64
-          - target: mac
-            runner: buildjet-4vcpu-ubuntu-2204-arm
-            arch: arm64
-          - target: windows
-            runner: buildjet-4vcpu-ubuntu-2204-arm
-            arch: arm64
-          - target: linux
-            runner: buildjet-4vcpu-ubuntu-2204
-            arch: x64
-          - target: mac
-            runner: buildjet-4vcpu-ubuntu-2204
-            arch: x64
-          - target: windows
-            runner: buildjet-4vcpu-ubuntu-2204
-            arch: x64
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
     timeout-minutes: 180
     continue-on-error: true
+    strategy:
+      matrix:
+        os: [linux, macos, win]
+        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -68,40 +51,26 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nexe
-          key: ubuntu-${{ matrix.target }}-${{ matrix.arch }}-node-${{ matrix.node-version }}-nexe-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-nexe-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ubuntu-${{ matrix.target }}-${{ matrix.arch }}-node-${{ matrix.node-version }}-nexe-
+            ${{ runner.os }}-${{ matrix.arch }}-nexe-
           save-always: true
       - name: Install nexe globally
         run: npm install -g nexe
       - name: Build executable
-        shell: bash
-        run: |
-          NODE_VERSION=$(node -v)
-          NEXE_TARGET="${{ matrix.target }}-${{ matrix.arch }}-${NODE_VERSION:1}"
-          OUTPUT_NAME="promptfoo-${{ matrix.target }}-${{ matrix.arch }}"
+        run: npx nexe --build -r drizzle/ -r package.json -r "dist/**/*" -i dist/src/main.js -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}
 
-          if [[ "${{ matrix.target }}" == "windows" ]]; then
-            OUTPUT_NAME="${OUTPUT_NAME}.exe"
-          fi
-
-          npx nexe --build \
-            -t "$NEXE_TARGET" \
-            -r drizzle/ \
-            -r package.json \
-            -r "dist/**/*" \
-            -i dist/src/main.js \
-            -o "$OUTPUT_NAME"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: promptfoo-${{ matrix.target }}-${{ matrix.arch }}
-          path: ./promptfoo-${{ matrix.target }}-${{ matrix.arch }}${{ matrix.target == 'windows' && '.exe' || '' }}
+          name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+          path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+
       - name: Release
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         with:
-          files: ./promptfoo-${{ matrix.target }}-${{ matrix.arch }}${{ matrix.target == 'windows' && '.exe' || '' }}
+          files: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
           tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
