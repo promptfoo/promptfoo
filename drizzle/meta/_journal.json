@@ -43,6 +43,13 @@
       "when": 1725929907379,
       "tag": "0005_silky_millenium_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1727375251394,
+      "tag": "0006_tranquil_darkstar",
+      "breakpoints": true
     }
   ]
 }

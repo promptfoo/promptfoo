@@ -12,6 +12,7 @@ import cliState from '../cliState';
 import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
+import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
 import { generateTable } from '../table';
@@ -132,14 +133,15 @@ export async function doEval(
       logger.warn(
         chalk.yellow(dedent`
       TestSuite Schema Validation Error:
-      
+
         ${JSON.stringify(testSuiteSchema.error.format())}
-      
+
       Please review your promptfooconfig.yaml configuration.`),
       );
     }
 
-    const summary = await evaluate(testSuite, {
+    const resultsFile = Eval.create(config, testSuite.prompts);
+    const summary = await evaluate(testSuite, resultsFile, {
       ...options,
       eventSource: 'cli',
     });

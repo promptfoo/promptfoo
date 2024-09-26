@@ -11,6 +11,7 @@ import cliState from './cliState';
 import { getEnvBool, getEnvInt, isCI } from './envars';
 import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
+import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { generatePrompts } from './suggestions';
@@ -100,6 +101,7 @@ export function generateVarCombinations(
 }
 
 class Evaluator {
+  resultsFile: Eval;
   testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
@@ -109,8 +111,9 @@ class Evaluator {
   >;
   registers: Record<string, string | object>;
 
-  constructor(testSuite: TestSuite, options: EvaluateOptions) {
+  constructor(testSuite: TestSuite, resultsFile: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
+    this.resultsFile = resultsFile;
     this.options = options;
     this.stats = {
       successes: 0,
@@ -164,6 +167,7 @@ class Evaluator {
       provider: {
         id: provider.id(),
         label: provider.label,
+        config: provider.config,
       },
       prompt: {
         raw: renderedPrompt,
@@ -541,6 +545,7 @@ class Evaluator {
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
             for (const prompt of testSuite.prompts) {
+              console.log(`inside loop`, colIndex);
               const providerKey = provider.label || provider.id();
               if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
                 continue;
@@ -617,6 +622,9 @@ class Evaluator {
       if (options.progressCallback) {
         options.progressCallback(results.length, runEvalOptions.length, index, evalStep);
       }
+      const { rowIndex, colIndex } = evalStep;
+      console.log(`adding result`, colIndex);
+      await this.resultsFile.addResult(row, colIndex, rowIndex, evalStep.test.description);
 
       // Bookkeeping for table
       let resultText: string | undefined;
@@ -637,7 +645,6 @@ class Evaluator {
         resultText = outputTextDisplay;
       }
 
-      const { rowIndex, colIndex } = evalStep;
       if (!table.body[rowIndex]) {
         table.body[rowIndex] = {
           description: evalStep.test.description,
@@ -904,7 +911,7 @@ class Evaluator {
   }
 }
 
-export function evaluate(testSuite: TestSuite, options: EvaluateOptions) {
-  const ev = new Evaluator(testSuite, options);
+export function evaluate(testSuite: TestSuite, resultsFile: Eval, options: EvaluateOptions) {
+  const ev = new Evaluator(testSuite, resultsFile, options);
   return ev.evaluate();
 }

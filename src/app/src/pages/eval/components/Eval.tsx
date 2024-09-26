@@ -1,5 +1,3 @@
-'use client';
-
 import * as React from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
@@ -8,14 +6,138 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import CircularProgress from '@mui/material/CircularProgress';
-import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
+import type EvalModel from '@promptfoo/models/eval';
+import type EvalResult from '@promptfoo/models/eval_result';
+import type {
+  SharedResults,
+  ResultLightweightWithLabel,
+  ResultsFile,
+  CompletedPrompt,
+  TokenUsage,
+  EvaluateTableRow,
+} from '@promptfoo/types';
 import type { EvaluateTable } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
+import invariant from 'tiny-invariant';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { useStore } from './store';
 import './Eval.css';
 
+class PromptMetrics {
+  score: number;
+  testPassCount: number;
+  testFailCount: number;
+  assertPassCount: number;
+  assertFailCount: number;
+  totalLatencyMs: number;
+  tokenUsage: TokenUsage;
+  namedScores: Record<string, number>;
+  namedScoresCount: Record<string, number>;
+  cost: number;
+
+  constructor() {
+    this.score = 0;
+    this.testPassCount = 0;
+    this.testFailCount = 0;
+    this.assertPassCount = 0;
+    this.assertFailCount = 0;
+    this.totalLatencyMs = 0;
+    this.tokenUsage = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+    };
+    this.namedScores = {};
+    this.namedScoresCount = {};
+    this.cost = 0;
+  }
+}
+
+function convertResultsToTable(eval_: EvalModel): EvaluateTable {
+  // first we need to get our prompts, we can get that from any of the results in each column
+  const results = eval_.results;
+  const rows: EvaluateTableRow[] = [];
+  const completedPrompts: Record<string, CompletedPrompt> = {};
+  const varsForHeader = new Set<string>();
+  const varValuesForRow = new Map<number, Record<string, string>>();
+  for (const result of results) {
+    // vars
+    for (const varName of Object.keys(result.vars || {})) {
+      varsForHeader.add(varName);
+    }
+    let row = rows[result.rowIdx];
+    if (!row) {
+      rows[result.rowIdx] = {
+        description: result.description || undefined,
+        outputs: [],
+        vars: Object.values(result.vars || {}),
+        test: {},
+      };
+      varValuesForRow.set(result.rowIdx, result.vars || {});
+      row = rows[result.rowIdx];
+    }
+    row.outputs[result.columnIdx] = {
+      ...result,
+      text: result.providerResponse?.output || '',
+      prompt: result.prompt.raw,
+      provider: result.provider?.label || result.provider?.id || 'unknown provider',
+    };
+    invariant(result.promptId, 'Prompt ID is required');
+    const completedPromptId = `${result.promptId}-${JSON.stringify(result.provider)}`;
+    if (!completedPrompts[completedPromptId]) {
+      completedPrompts[completedPromptId] = {
+        ...result.prompt,
+        provider: result.provider?.label || result.provider?.id || 'unknown provider',
+        metrics: new PromptMetrics(),
+      };
+    }
+    const prompt = completedPrompts[completedPromptId];
+    invariant(prompt.metrics, 'Prompt metrics are required');
+    prompt.metrics.score += result.score;
+    prompt.metrics.testPassCount += result.pass ? 1 : 0;
+    prompt.metrics.testFailCount += result.pass ? 0 : 1;
+    prompt.metrics.assertPassCount +=
+      result.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+    prompt.metrics.assertFailCount +=
+      result.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+    prompt.metrics.totalLatencyMs += result.latencyMs || 0;
+    // @ts-expect-error
+    prompt.metrics.tokenUsage.cached += result.providerResponse?.tokenUsage?.cached || 0;
+    // @ts-expect-error
+    prompt.metrics.tokenUsage.completion += result.providerResponse?.tokenUsage?.completion || 0;
+    // @ts-expect-error
+    prompt.metrics.tokenUsage.prompt += result.providerResponse?.tokenUsage?.prompt || 0;
+    // @ts-expect-error
+    prompt.metrics.tokenUsage.total += result.providerResponse?.tokenUsage?.total || 0;
+    prompt.metrics.cost += result.cost || 0;
+  }
+
+  console.log('completedPrompts', completedPrompts);
+
+  // const completedPrompts: CompletedPrompt[] = []
+  // for (const provider of eval_.config.providers || []) {
+  //   for (const prompt of eval_.config.prompts || []) {
+  //     completedPrompts.push({
+  //       ...prompt,
+  //       provider: provider.label || provider.id(),
+  //       metrics: new PromptMetrics(),
+  //     });
+  //   }
+  // }
+  const sortedVars = [...varsForHeader].sort();
+  for (const [rowIdx, row] of rows.entries()) {
+    row.vars = sortedVars.map((varName) => varValuesForRow.get(rowIdx)?.[varName] || '');
+  }
+  return {
+    head: {
+      prompts: Object.values(completedPrompts),
+      vars: [...varsForHeader].sort(),
+    },
+    body: rows,
+  };
+}
 interface EvalOptions {
   fetchId?: string;
   preloadedData?: SharedResults;
@@ -55,7 +177,8 @@ export default function Eval({
     async (id: string) => {
       const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
       const body = (await resp.json()) as { data: ResultsFile };
-      setTable(body.data.results.table);
+
+      setTable(convertResultsToTable(body.data));
       setConfig(body.data.config);
       setAuthor(body.data.author);
       setEvalId(id);
@@ -100,7 +223,7 @@ export default function Eval({
       socket.on('init', (data) => {
         console.log('Initialized socket connection', data);
         setLoaded(true);
-        setTable(data?.results.table);
+        setTable(convertResultsToTable(data));
         setConfig(data?.config);
         setAuthor(data?.author || null);
         fetchRecentFileEvals().then((newRecentEvals) => {
