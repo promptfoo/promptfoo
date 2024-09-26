@@ -117,6 +117,7 @@ export type EnvOverrides = {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_KEY?: string;
   COHERE_API_KEY?: string;
+  FAL_KEY?: string;
   GOOGLE_API_HOST?: string;
   GOOGLE_API_KEY?: string;
   GROQ_API_KEY?: string;

@@ -18,6 +18,7 @@ import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './pro
 import { BrowserProvider } from './providers/browser';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
+import { FalImageGenerationProvider } from './providers/fal';
 import { GolangProvider } from './providers/golangCompletion';
 import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
@@ -269,6 +270,15 @@ export async function loadApiProvider(
       ret = new ReplicateProvider(
         modelName ? modelType + ':' + modelName : modelType,
         providerOptions,
+      );
+    }
+  } else if (providerPath.startsWith('fal:')) {
+    const [_, modelType, modelName] = providerPath.split(':');
+    if (modelType === 'image') {
+      ret = new FalImageGenerationProvider(modelName, providerOptions);
+    } else {
+      throw new Error(
+        `Invalid fal provider path: ${providerPath}. Use one of the following providers: fal:image:<model name>`,
       );
     }
   } else if (providerPath.startsWith('bam:')) {
