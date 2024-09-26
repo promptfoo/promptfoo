@@ -184,11 +184,16 @@ export class HttpProvider implements ApiProvider {
     }
     logger.debug(`\tHTTP response: ${response.data}`);
 
+    const rawText = response.data as string;
+    let parsedData;
+    try {
+      parsedData = JSON.parse(rawText);
+    } catch {
+      parsedData = null;
+    }
+
     return {
-      output: this.responseParser(
-        response.data,
-        typeof response.data === 'string' ? response.data : JSON.stringify(response.data),
-      ),
+      output: this.responseParser(parsedData, rawText),
     };
   }
 
@@ -223,11 +228,16 @@ export class HttpProvider implements ApiProvider {
     }
     logger.debug(`\tHTTP response: ${response.data}`);
 
+    const rawText = response.data as string;
+    let parsedData;
+    try {
+      parsedData = JSON.parse(rawText);
+    } catch {
+      parsedData = null;
+    }
+
     return {
-      output: this.responseParser(
-        response.data,
-        typeof response.data === 'string' ? response.data : JSON.stringify(response.data),
-      ),
+      output: this.responseParser(parsedData, rawText),
     };
   }
 }
