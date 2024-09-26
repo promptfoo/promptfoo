@@ -470,8 +470,6 @@ describe('llama', () => {
           max_gen_len: 512,
         });
       });
-
-      // Add more tests for LLAMA3_1 as needed
     });
 
     describe('LLAMA3_2', () => {
@@ -497,8 +495,6 @@ describe('llama', () => {
         expect(params).toHaveProperty('max_new_tokens', 1000);
         expect(params).not.toHaveProperty('max_gen_len');
       });
-
-      // Add more tests for LLAMA3_2 as needed
     });
 
     it('should throw an error for unsupported LLAMA version', () => {
@@ -589,7 +585,6 @@ describe('llama', () => {
   });
 
   describe('formatPromptLlama3Instruct', () => {
-    // Add tests for the new formatPromptLlama3Instruct function
     it('should format a single user message correctly', () => {
       const messages: LlamaMessage[] = [{ role: 'user', content: 'Hello, how are you?' }];
       const expected = dedent`

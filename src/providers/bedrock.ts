@@ -211,6 +211,13 @@ export function addConfigParam(
   }
 }
 
+export enum LlamaVersion {
+  V2 = 2,
+  V3 = 3,
+  V3_1 = 3.1,
+  V3_2 = 3.2,
+}
+
 export interface LlamaMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -274,14 +281,7 @@ export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => 
   return formattedPrompt;
 };
 
-export enum LlamaVersion {
-  V2 = 2,
-  V3 = 3,
-  V3_1 = 3.1,
-  V3_2 = 3.2,
-}
-
-export const getLlamaModelHandler = (version: number) => {
+export const getLlamaModelHandler = (version: LlamaVersion) => {
   if (![LlamaVersion.V2, LlamaVersion.V3, LlamaVersion.V3_1, LlamaVersion.V3_2].includes(version)) {
     throw new Error(`Unsupported LLAMA version: ${version}`);
   }
