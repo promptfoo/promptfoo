@@ -166,7 +166,11 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
     logger.info(
       '\n' +
         chalk.green(
-          `Run ${chalk.bold(`promptfoo redteam eval -c ${relativeOutputPath}`)} to run the red team!`,
+          `Run ${chalk.bold(
+            relativeOutputPath === 'redteam.yaml'
+              ? 'promptfoo redteam eval'
+              : `promptfoo redteam eval -c ${relativeOutputPath}`,
+          )} to run the red team!`,
         ),
     );
     printBorder();

@@ -28,7 +28,10 @@ describe('HttpProvider', () => {
         responseParser: (data: any) => data.result,
       },
     });
-    const mockResponse = { data: { result: 'response text' }, cached: false };
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      cached: false,
+    };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test prompt');
@@ -103,7 +106,10 @@ describe('HttpProvider', () => {
           responseParser: parser,
         },
       });
-      const mockResponse = { data: { result: 'parsed', custom: 'parsed' }, cached: false };
+      const mockResponse = {
+        data: JSON.stringify({ result: 'parsed', custom: 'parsed' }),
+        cached: false,
+      };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -220,7 +226,10 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = { data: { result: 'success' }, cached: false };
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+      };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -255,7 +264,10 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = { data: { result: 'received' }, cached: false };
+      const mockResponse = {
+        data: JSON.stringify({ result: 'received' }),
+        cached: false,
+      };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test data');
@@ -291,7 +303,10 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = { data: { result: 'success' }, cached: false };
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+      };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');

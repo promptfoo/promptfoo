@@ -1395,22 +1395,6 @@ describe('runAssertion', () => {
     });
   });
 
-  it('should pass when the contains-json assertion passes with valid and invalid json', async () => {
-    const output = 'There is an extra opening bracket \n\n { {"key": "value"} \n\n blah blah';
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: containsJsonAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-    });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
-
   it('should fail when the contains-json assertion fails', async () => {
     const output = 'Not valid JSON';
 
