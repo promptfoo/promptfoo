@@ -13,6 +13,7 @@ import {
   ALIASED_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   ALIASED_PLUGIN_MAPPINGS,
+  type Strategy,
 } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
 import { ProviderSchema } from '../validators/providers';
@@ -150,6 +151,7 @@ export const RedteamConfigSchema = z
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
+    const strategySet = new Set<Strategy>();
 
     data.plugins.forEach((plugin) => {
       const pluginObj =
@@ -159,12 +161,57 @@ export const RedteamConfigSchema = z
 
       // Handle high-level aliased plugin names
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
-        Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach((mapping) => {
-          mapping.plugins.forEach((id) => {
-            const key = `${id}:${JSON.stringify(pluginObj.config)}`;
-            if (!pluginMap.has(key)) {
-              pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
+        const aliasedMappings = ALIASED_PLUGIN_MAPPINGS[pluginObj.id];
+        Object.values(aliasedMappings).forEach(({ plugins, strategies }) => {
+          // Expand plugins
+          plugins.forEach((id) => {
+            if (COLLECTIONS.includes(id as any)) {
+              // Expand collection
+              if (id === 'harmful') {
+                Object.keys(HARM_PLUGINS).forEach((harmId) => {
+                  const key = `${harmId}:${JSON.stringify(pluginObj.config)}`;
+                  if (!pluginMap.has(key)) {
+                    pluginMap.set(key, {
+                      id: harmId,
+                      numTests: pluginObj.numTests,
+                      config: pluginObj.config,
+                    });
+                  }
+                });
+              } else if (id === 'pii') {
+                PII_PLUGINS.forEach((piiId) => {
+                  const key = `${piiId}:${JSON.stringify(pluginObj.config)}`;
+                  if (!pluginMap.has(key)) {
+                    pluginMap.set(key, {
+                      id: piiId,
+                      numTests: pluginObj.numTests,
+                      config: pluginObj.config,
+                    });
+                  }
+                });
+              } else if (id === 'default') {
+                REDTEAM_DEFAULT_PLUGINS.forEach((defaultId) => {
+                  const key = `${defaultId}:${JSON.stringify(pluginObj.config)}`;
+                  if (!pluginMap.has(key)) {
+                    pluginMap.set(key, {
+                      id: defaultId,
+                      numTests: pluginObj.numTests,
+                      config: pluginObj.config,
+                    });
+                  }
+                });
+              }
+            } else {
+              const key = `${id}:${JSON.stringify(pluginObj.config)}`;
+              if (!pluginMap.has(key)) {
+                pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
+              }
             }
+          });
+
+          // Collect strategies
+          strategies.forEach((strategy) => {
+            strategySet.add(strategy as Strategy);
           });
         });
       } else if (pluginObj.id === 'harmful') {
@@ -239,6 +286,11 @@ export const RedteamConfigSchema = z
               }
             }
           });
+
+          // Collect strategies
+          aliasedMapping[pluginObj.id].strategies.forEach((strategy) => {
+            strategySet.add(strategy as Strategy);
+          });
         } else {
           const key = `${pluginObj.id}:${JSON.stringify(pluginObj.config)}`;
           pluginMap.set(key, pluginObj);
@@ -255,8 +307,8 @@ export const RedteamConfigSchema = z
         return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
       });
 
-    const strategies = data.strategies
-      ?.map((strategy) => {
+    const strategies = Array.from(new Set([...(data.strategies || []), ...Array.from(strategySet)]))
+      .map((strategy) => {
         if (typeof strategy === 'string') {
           if (strategy === 'basic') {
             return [];
