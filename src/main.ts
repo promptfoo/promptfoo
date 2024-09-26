@@ -54,11 +54,8 @@ async function main() {
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
-  const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
-    await loadDefaultConfig(['redteam', 'promptfooconfig']);
-
   redteamInitCommand(redteamBaseCommand);
-  evalCommand(redteamBaseCommand, redteamConfig, redteamConfigPath);
+  evalCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamPluginsCommand(redteamBaseCommand);
 
