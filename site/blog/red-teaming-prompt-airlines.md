@@ -55,13 +55,13 @@ We now have all the ingredients necessary to launch a Promptfoo red team assessm
 
 First, you’ll need to install Promptfoo through your CLI. We recommend installing globally using npm:
 
-```
+```sh
 npm install -g promptfoo
 ```
 
 Once installed, initialize a red team project:
 
-```
+```sh
 promptfoo redteam init promptairlines_redteam
 ```
 
@@ -89,15 +89,15 @@ Once you’ve configured your payloads, you will need to update your promptfooco
 
 You will also need to update your request.txt file to include where Promptfoo should inject its payloads.
 
-In this case, the appropriate language would be `{{ prompt | dump }}`. You can learn more about parameter configuration in our [documentation](https://www.promptfoo.dev/docs/configuration/parameters/).
+![modifying raw request](/img/blog/prompt-airlines/promptfoo_request.png)
 
-![modifying rawrequest](/img/blog/prompt-airlines/promptfoo_request.png)
+In this case, the appropriate language would be `{{ prompt | dump }}`. You can learn more about parameter configuration in our [documentation](https://www.promptfoo.dev/docs/configuration/parameters/).
 
 ### Generating the Attack and Evaluating Results
 
 When you’ve successfully configured your YAML file, run the following command to generate the payloads:
 
-```
+```sh
 promptfoo redteam generate
 ```
 
@@ -113,7 +113,7 @@ promptfoo eval -c redteam.yaml
 
 You can view the results in your local browser through running the following code:
 
-```
+```sh
 promptfoo view
 ```
 
@@ -131,13 +131,13 @@ Using Promptfoo, we were able to convince Prompt Airlines to:
 ![one successful payload](/img/blog/prompt-airlines/payload_example_1.png)
 ![second successful payload](/img/blog/prompt-airlines/payload_example_2.png)
 
-You can also innspect the full prompt through the magnifier:
+You can also inspect the full prompt through the magnifier:
 
 ![inspecting the full prompt](/img/blog/prompt-airlines/magnifier_glass.png)
 
 Promptfoo’s red team assessment shows us that Prompt Airlines chatbot is vulnerable to jailbreaking through impersonation and character roleplay, two common techniques in adversarial attacks. Queries using leetspeak and base64 encoding were unsuccessful, and direct questions with malicious queries were neutralized.
 
-We can use this information to further refine our adverserial prompts against Prompt Airlines and continue testing other endpoints.
+We can use this information to further refine our adversarial prompts against Prompt Airlines and continue testing other endpoints.
 
 ## Conclusion
 
