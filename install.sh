@@ -27,6 +27,12 @@
 {
     set -e
 
+    echo "WARNING: This installation script is in alpha. Expect bugs and issues."
+    echo "It does not work for ARM-based systems."
+    echo "Please report any problems you encounter to the promptfoo team."
+    echo "Press Ctrl+C to cancel or wait 5 seconds to continue..."
+    sleep 5
+
     # Configuration variables
     GITHUB_REPO="promptfoo/promptfoo"
     INSTALL_DIR="$HOME/.promptfoo"
