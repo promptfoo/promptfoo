@@ -372,7 +372,10 @@ export async function synthesize({
   invariant(typeof resp.output !== 'undefined', 'resp.output must be defined');
   const output = typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
   const respObjects = extractJsonObjects(output);
-  invariant(respObjects.length === 1, 'Expected exactly one JSON object in the response');
+  invariant(
+    respObjects.length === 1,
+    `Expected exactly one JSON object in the response for personas, got ${respObjects.length}`,
+  );
   const personas = (respObjects[0] as { personas: string[] }).personas;
   logger.debug(
     `Generated ${personas.length} persona${personas.length === 1 ? '' : 's'}:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
@@ -424,7 +427,7 @@ export async function synthesize({
 
     invariant(
       personaResponseObjects.length === 1,
-      `Expected exactly one JSON object in the response for persona ${persona}`,
+      `Expected exactly one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
     );
     const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
     logger.debug(`Received ${parsed.vars.length} test cases`);
