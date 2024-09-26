@@ -1,5 +1,11 @@
 ian:
   name: Ian Webster
-  title: promptfoo maintainer
+  title: promptfoo maintainer 
   url: https://github.com/typpo
   image_url: https://github.com/typpo.png
+
+vanessa:
+  name: Vanessa Sauter
+  title: solutions architect @ promptfoo
+  url: https://github.com/vsauter
+
