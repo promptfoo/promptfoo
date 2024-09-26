@@ -11,6 +11,9 @@ providers:
     label: llama3.2 11b
   - id: bedrock:us.meta.llama3-2-90b-instruct-v1:0
     label: llama3.2 90b
+    config:
+      options:
+        max_new_tokens: 100
 
 tests:
   - vars:

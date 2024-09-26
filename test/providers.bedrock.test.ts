@@ -593,6 +593,37 @@ describe('llama', () => {
         Hello, how are you?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
       expect(formatPromptLlama3Instruct(messages)).toBe(expected);
     });
+
+    it('should format multiple messages correctly', () => {
+      const messages: LlamaMessage[] = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there! How can I help you?' },
+        { role: 'user', content: "What's the weather like?" },
+      ];
+      const expected = dedent`
+        <|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+        Hello<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+        Hi there! How can I help you?<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+        What's the weather like?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
+      expect(formatPromptLlama3Instruct(messages)).toBe(expected);
+    });
+
+    it('should handle system messages correctly', () => {
+      const messages: LlamaMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Hello' },
+      ];
+      const expected = dedent`
+        <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+        You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+        Hello<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
+      expect(formatPromptLlama3Instruct(messages)).toBe(expected);
+    });
   });
 });
 

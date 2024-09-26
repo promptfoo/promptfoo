@@ -591,9 +591,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-11b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
-  'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
-  'meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
-  'meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
+  'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
+  'meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
+  'meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
@@ -617,7 +617,13 @@ function getHandlerForModel(modelName: string) {
   if (modelName.startsWith('meta.llama2')) {
     return BEDROCK_MODEL.LLAMA2;
   }
-  if (modelName.startsWith('meta.llama3')) {
+  if (modelName.includes('meta.llama3-1')) {
+    return BEDROCK_MODEL.LLAMA3_1;
+  }
+  if (modelName.includes('meta.llama3-2')) {
+    return BEDROCK_MODEL.LLAMA3_2;
+  }
+  if (modelName.includes('meta.llama3')) {
     return BEDROCK_MODEL.LLAMA3;
   }
   if (modelName.startsWith('cohere.command-r')) {
