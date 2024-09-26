@@ -27,7 +27,7 @@ async function main() {
   await checkForUpdates();
   await runDbMigrations();
 
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig(['promptfooconfig']);
+  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
   const program = new Command();
 
@@ -63,7 +63,7 @@ async function main() {
     program.outputHelp();
     process.exit(0);
   }
-  program.parse(process.argv);
+  program.parse();
 }
 
 if (require.main === module) {

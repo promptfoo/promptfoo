@@ -15,13 +15,11 @@ describe('loadDefaultConfig', () => {
   it('should return empty config when no config file is found', async () => {
     jest.mocked(maybeReadConfig).mockResolvedValue(undefined);
 
-    const result = await loadDefaultConfig(['redteam', 'promptfooconfig']);
-
-    expect(result).toEqual({
+    await expect(loadDefaultConfig()).resolves.toEqual({
       defaultConfig: {},
       defaultConfigPath: undefined,
     });
-    expect(maybeReadConfig).toHaveBeenCalledTimes(18); // Once for each extension * 2 (redteam and promptfooconfig)
+    expect(maybeReadConfig).toHaveBeenCalledTimes(9); // Once for each extension
   });
 
   it('should return the first valid config file found', async () => {
@@ -32,11 +30,9 @@ describe('loadDefaultConfig', () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(mockConfig);
 
-    const result = await loadDefaultConfig(['redteam', 'promptfooconfig']);
-
-    expect(result).toEqual({
+    await expect(loadDefaultConfig()).resolves.toEqual({
       defaultConfig: mockConfig,
-      defaultConfigPath: path.normalize('/test/path/redteam.yml'),
+      defaultConfigPath: path.normalize('/test/path/promptfooconfig.json'),
     });
     expect(maybeReadConfig).toHaveBeenCalledTimes(3);
   });
@@ -44,16 +40,14 @@ describe('loadDefaultConfig', () => {
   it('should check all supported file extensions', async () => {
     jest.mocked(maybeReadConfig).mockResolvedValue(undefined);
 
-    await loadDefaultConfig(['redteam', 'promptfooconfig']);
+    await loadDefaultConfig();
 
     const expectedExtensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
     expectedExtensions.forEach((ext, extIndex) => {
-      ['redteam', 'promptfooconfig'].forEach((configName, index) => {
-        expect(maybeReadConfig).toHaveBeenNthCalledWith(
-          extIndex * 2 + index + 1,
-          path.normalize(`/test/path/${configName}.${ext}`),
-        );
-      });
+      expect(maybeReadConfig).toHaveBeenNthCalledWith(
+        extIndex + 1,
+        path.normalize(`/test/path/promptfooconfig.${ext}`),
+      );
     });
   });
 
@@ -62,12 +56,10 @@ describe('loadDefaultConfig', () => {
     jest.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
 
     const customDir = '/custom/directory';
-    const result = await loadDefaultConfig(['redteam', 'promptfooconfig'], customDir);
-
-    expect(result).toEqual({
+    await expect(loadDefaultConfig(customDir)).resolves.toEqual({
       defaultConfig: mockConfig,
-      defaultConfigPath: path.join(customDir, 'redteam.yaml'),
+      defaultConfigPath: path.join(customDir, 'promptfooconfig.yaml'),
     });
-    expect(maybeReadConfig).toHaveBeenCalledWith(path.join(customDir, 'redteam.yaml'));
+    expect(maybeReadConfig).toHaveBeenCalledWith(path.join(customDir, 'promptfooconfig.yaml'));
   });
 });
