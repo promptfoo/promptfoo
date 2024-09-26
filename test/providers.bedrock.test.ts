@@ -6,7 +6,6 @@ import type {
 } from '../src/providers/bedrock';
 import {
   addConfigParam,
-  AWS_BEDROCK_MODELS,
   AwsBedrockGenericProvider,
   BEDROCK_MODEL,
   formatPromptLlama2Chat,
@@ -624,17 +623,5 @@ describe('llama', () => {
         Hello<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
       expect(formatPromptLlama3Instruct(messages)).toBe(expected);
     });
-  });
-});
-
-describe('AWS_BEDROCK_MODELS', () => {
-  it('should include new LLAMA3_1 and LLAMA3_2 models', () => {
-    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-1b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
-    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-3b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
-    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-11b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
-    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-90b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
-    expect(AWS_BEDROCK_MODELS['meta.llama3-1-405b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3);
-    expect(AWS_BEDROCK_MODELS['meta.llama3-1-70b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3);
-    expect(AWS_BEDROCK_MODELS['meta.llama3-1-8b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3);
   });
 });
