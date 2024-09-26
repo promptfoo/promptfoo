@@ -25,6 +25,16 @@ tests:
         value: 'Select'
 
   - vars:
+      product: bananas
+      database: file://database.sql
+
+    assert:
+      # Ensure output is a valid SQL query
+      - type: is-sql
+      - type: icontains
+        value: 'Select'
+
+  - vars:
       product: apples
       database: file://database.sql
     assert:

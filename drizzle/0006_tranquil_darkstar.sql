@@ -1,0 +1,22 @@
+CREATE TABLE `eval_result` (
+	`id` text PRIMARY KEY NOT NULL,
+	`eval_id` text NOT NULL,
+	`prompt_id` text,
+	`column_idx` integer NOT NULL,
+	`test_idx` integer NOT NULL,
+	`description` text,
+	`provider` text NOT NULL,
+	`latency_ms` integer,
+	`cost` real,
+	`vars` text,
+	`vars_hash` text,
+	`prompt` text,
+	`provider_response` text NOT NULL,
+	`error` text,
+	`pass` integer NOT NULL,
+	`score` real NOT NULL,
+	`grading_result` text,
+	`named_scores` text,
+	`metadata` text,
+	FOREIGN KEY (`eval_id`) REFERENCES `evals`(`id`) ON UPDATE no action ON DELETE no action
+);

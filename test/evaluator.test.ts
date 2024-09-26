@@ -1,7 +1,8 @@
 import glob from 'glob';
 import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
-import type { ApiProvider, Prompt, TestSuite } from '../src/types';
+import Eval from '../src/models/eval';
+import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
@@ -11,22 +12,19 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  promises: {
-    readFile: jest.fn(),
-  },
-}));
+// jest.mock('fs', () => ({
+//   readFileSync: jest.fn(),
+//   writeFileSync: jest.fn(),
+//   statSync: jest.fn(),
+//   readdirSync: jest.fn(),
+//   existsSync: jest.fn(),
+//   mkdirSync: jest.fn(),
+//   promises: {
+//     readFile: jest.fn(),
+//   },
+// }));
 
 jest.mock('../src/esm');
-jest.mock('../src/database', () => ({
-  getDb: jest.fn(),
-}));
 jest.mock('../src/logger');
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
@@ -80,8 +78,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -102,8 +100,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -124,8 +122,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -146,8 +144,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -168,8 +166,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
     expect(summary.stats.successes).toBe(4);
@@ -190,8 +188,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
@@ -207,8 +205,8 @@ describe('evaluator', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -224,8 +222,8 @@ describe('evaluator', () => {
       providers: [mockApiProvider, mockApiProvider, mockApiProvider],
       prompts: [toPrompt('Test prompt')],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
     expect(summary.stats.successes).toBe(3);
@@ -251,8 +249,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -276,8 +274,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -301,8 +299,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -326,8 +324,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -356,8 +354,8 @@ describe('evaluator', () => {
         },
       },
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -386,8 +384,8 @@ describe('evaluator', () => {
         },
       },
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -406,8 +404,8 @@ describe('evaluator', () => {
         },
       },
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -433,8 +431,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -468,8 +466,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiJsonProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -502,8 +500,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -602,8 +600,10 @@ describe('evaluator', () => {
         },
       ],
     };
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
-    await expect(evaluate(testSuite, {})).resolves.toEqual(
+    expect(summary).toEqual(
       expect.objectContaining({
         stats: expect.objectContaining({
           successes: 1,
@@ -635,8 +635,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -672,8 +672,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary).toMatchObject({
@@ -732,8 +732,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
@@ -790,8 +790,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
     expect(summary.stats.successes).toBe(4);
@@ -852,8 +852,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const result = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const result = await evaluate(testSuite, resultsFile, {});
 
     expect(result).toMatchObject({
       stats: {
@@ -900,8 +900,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(summary.table.body[0].test.metadata).toEqual({
       defaultKey: 'defaultValue',
@@ -932,8 +932,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
@@ -977,8 +977,8 @@ describe('evaluator', () => {
         'unlabeled-provider-id': ['prompt2'],
       },
     };
-
-    await expect(evaluate(testSuite, {})).resolves.toEqual(
+    const resultsFile = new Eval({});
+    await expect(evaluate(testSuite, resultsFile, {})).resolves.toEqual(
       expect.objectContaining({
         stats: expect.objectContaining({
           successes: 2,
@@ -1036,8 +1036,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -1072,8 +1072,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -1108,8 +1108,8 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    await expect(evaluate(testSuite, {})).resolves.toEqual(
+    const resultsFile = new Eval({});
+    await expect(evaluate(testSuite, resultsFile, {})).resolves.toEqual(
       expect.objectContaining({
         stats: expect.objectContaining({
           successes: 1,
@@ -1155,7 +1155,8 @@ describe('evaluator', () => {
         },
       ],
     };
-    await expect(evaluate(testSuite, {})).resolves.toEqual(
+    const resultsFile = new Eval({});
+    await expect(evaluate(testSuite, resultsFile, {})).resolves.toEqual(
       expect.objectContaining({
         stats: expect.objectContaining({
           successes: 1,
@@ -1187,8 +1188,8 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(summary.stats.successes).toBe(0);
     expect(summary.stats.failures).toBe(1);
@@ -1212,8 +1213,8 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -1258,8 +1259,8 @@ describe('evaluator', () => {
       ],
       tests: [{ vars: { problem: '8x + 31 = 2' } }],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    const summary = await evaluate(testSuite, resultsFile, {});
 
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -1307,8 +1308,8 @@ describe('evaluator', () => {
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
     mockedRunExtensionHook.mockClear();
-
-    await evaluate(testSuite, {});
+    const resultsFile = new Eval({});
+    await evaluate(testSuite, resultsFile, {});
 
     // Check if runExtensionHook was called 4 times (beforeAll, beforeEach, afterEach, afterAll)
     expect(mockedRunExtensionHook).toHaveBeenCalledTimes(4);

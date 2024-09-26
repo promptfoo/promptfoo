@@ -6,8 +6,16 @@ import {
   primaryKey,
   index,
   uniqueIndex,
+  real,
 } from 'drizzle-orm/sqlite-core';
-import type { EvaluateSummary, UnifiedConfig } from '../types';
+import type {
+  EvaluateSummary,
+  Prompt,
+  ProviderResponse,
+  GradingResult,
+  UnifiedConfig,
+  ProviderOptions,
+} from '../types';
 
 // ------------ Prompts ------------
 
@@ -51,12 +59,53 @@ export const evals = sqliteTable(
       .default(sql`CURRENT_TIMESTAMP`),
     author: text('author'),
     description: text('description'),
-    results: text('results', { mode: 'json' }).$type<EvaluateSummary>().notNull(),
+    results: text('results', { mode: 'json' }).notNull(),
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
     authorIdx: index('evals_author_idx').on(table.author),
+  }),
+);
+
+export const evalResult = sqliteTable(
+  'eval_result',
+  {
+    id: text('id').primaryKey(),
+    evalId: text('eval_id')
+      .notNull()
+      .references(() => evals.id),
+    promptId: text('prompt_id'),
+    columnIdx: integer('column_idx').notNull(),
+    rowIdx: integer('test_idx').notNull(),
+    description: text('description'),
+
+    // Provider-related fields
+    provider: text('provider', { mode: 'json' }).$type<ProviderOptions>().notNull(),
+    latencyMs: integer('latency_ms'),
+    cost: real('cost'),
+
+    // Input-related fields
+    vars: text('vars', { mode: 'json' }).$type<Record<string, string>>(), // prompt.raw - hashed
+    varsHash: text('vars_hash'),
+    prompt: text('prompt', { mode: 'json' }).$type<Prompt>().notNull(),
+    // Output-related fields
+    providerResponse: text('provider_response', { mode: 'json' })
+      .$type<ProviderResponse>()
+      .notNull(),
+    error: text('error'),
+
+    // Result-related fields
+    pass: integer('pass', { mode: 'boolean' }).notNull(),
+    score: real('score').notNull(),
+    gradingResult: text('grading_result', { mode: 'json' }).$type<GradingResult>().notNull(),
+    namedScores: text('named_scores', { mode: 'json' }).$type<Record<string, number>>(),
+
+    // Metadata fields
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, string>>(),
+  },
+  (table) => ({
+    evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
   }),
 );
 

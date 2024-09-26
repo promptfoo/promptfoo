@@ -2,6 +2,7 @@ import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
+import Eval from './models/eval';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
@@ -99,20 +100,21 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   }
 
   const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
-
+  const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
+  const resultsFile = Eval.create(unifiedConfig, constructedTestSuite.prompts);
   // Run the eval!
   const ret = await doEvaluate(
     {
       ...constructedTestSuite,
       providerPromptMap: parsedProviderPromptMap,
     },
+    resultsFile,
     {
       eventSource: 'library',
       ...options,
     },
   );
 
-  const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
   let evalId: string | null = null;
   if (testSuite.writeLatestResults) {
     await migrateResultsFromFileSystemToDatabase();

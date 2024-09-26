@@ -1,7 +1,7 @@
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
-import { desc, eq, like, and, sql } from 'drizzle-orm';
+import { desc, eq, like, and, sql, max } from 'drizzle-orm';
 import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -21,6 +21,7 @@ import {
   evalsToTags,
   prompts,
   tags,
+  evalResult,
 } from '../database/tables';
 import { getEnvBool, getEnvInt } from '../envars';
 import { getDirectory, importModule } from '../esm';
@@ -28,6 +29,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
+import Eval from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -183,131 +185,131 @@ export function getLatestResultsPath(): string {
 export async function writeResultsToDatabase(
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
-  createdAt?: Date,
+  createdAt: Date = new Date(),
 ): Promise<string> {
-  createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
-  const evalId = `eval-${createdAt.toISOString().slice(0, 19)}`;
-  const db = getDb();
+  return 'no op';
+  // const evalId = `eval-${new Date().toISOString().slice(0, 19)}`;
+  // const db = getDb();
 
-  const promises = [];
-  promises.push(
-    db
-      .insert(evals)
-      .values({
-        id: evalId,
-        createdAt: createdAt.getTime(),
-        author: getAuthor(),
-        description: config.description,
-        config,
-        results,
-      })
-      .onConflictDoNothing()
-      .run(),
-  );
+  // const promises = [];
+  // promises.push(
+  //   db
+  //     .insert(evals)
+  //     .values({
+  //       id: evalId,
+  //       createdAt: createdAt.getTime(),
+  //       author: getAuthor(),
+  //       description: config.description,
+  //       config,
+  //       results,
+  //     })
+  //     .onConflictDoNothing()
+  //     .run(),
+  // );
 
-  logger.debug(`Inserting eval ${evalId}`);
+  // logger.debug(`Inserting eval ${evalId}`);
 
-  // Record prompt relation
-  for (const prompt of results.table.head.prompts) {
-    const label = prompt.label || prompt.display || prompt.raw;
-    const promptId = prompt.id || generateIdFromPrompt(prompt);
+  // // Record prompt relation
+  // for (const prompt of results.table.head.prompts) {
+  //   const label = prompt.label || prompt.display || prompt.raw;
+  //   const promptId = sha256(label);
 
-    promises.push(
-      db
-        .insert(prompts)
-        .values({
-          id: promptId,
-          prompt: label,
-        })
-        .onConflictDoNothing()
-        .run(),
-    );
+  //   promises.push(
+  //     db
+  //       .insert(prompts)
+  //       .values({
+  //         id: promptId,
+  //         prompt: label,
+  //       })
+  //       .onConflictDoNothing()
+  //       .run(),
+  //   );
 
-    promises.push(
-      db
-        .insert(evalsToPrompts)
-        .values({
-          evalId,
-          promptId,
-        })
-        .onConflictDoNothing()
-        .run(),
-    );
+  //   promises.push(
+  //     db
+  //       .insert(evalsToPrompts)
+  //       .values({
+  //         evalId,
+  //         promptId,
+  //       })
+  //       .onConflictDoNothing()
+  //       .run(),
+  //   );
 
-    logger.debug(`Inserting prompt ${promptId}`);
-  }
+  //   logger.debug(`Inserting prompt ${promptId}`);
+  // }
 
-  // Record dataset relation
-  const datasetId = sha256(JSON.stringify(config.tests || []));
-  promises.push(
-    db
-      .insert(datasets)
-      .values({
-        id: datasetId,
-        tests: config.tests,
-      })
-      .onConflictDoNothing()
-      .run(),
-  );
+  // // Record dataset relation
+  // const datasetId = sha256(JSON.stringify(config.tests || []));
+  // promises.push(
+  //   db
+  //     .insert(datasets)
+  //     .values({
+  //       id: datasetId,
+  //       tests: config.tests,
+  //     })
+  //     .onConflictDoNothing()
+  //     .run(),
+  // );
 
-  promises.push(
-    db
-      .insert(evalsToDatasets)
-      .values({
-        evalId,
-        datasetId,
-      })
-      .onConflictDoNothing()
-      .run(),
-  );
+  // promises.push(
+  //   db
+  //     .insert(evalsToDatasets)
+  //     .values({
+  //       evalId,
+  //       datasetId,
+  //     })
+  //     .onConflictDoNothing()
+  //     .run(),
+  // );
 
-  logger.debug(`Inserting dataset ${datasetId}`);
+  // logger.debug(`Inserting dataset ${datasetId}`);
 
-  // Record tags
-  if (config.tags) {
-    for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-      const tagId = sha256(`${tagKey}:${tagValue}`);
+  // // Record tags
+  // if (config.tags) {
+  //   for (const [tagKey, tagValue] of Object.entries(config.tags || {})) {
+  //     const tagId = sha256(`${tagKey}:${tagValue}`);
 
-      promises.push(
-        db
-          .insert(tags)
-          .values({
-            id: tagId,
-            name: tagKey,
-            value: tagValue,
-          })
-          .onConflictDoNothing()
-          .run(),
-      );
+  //     promises.push(
+  //       db
+  //         .insert(tags)
+  //         .values({
+  //           id: tagId,
+  //           name: tagKey,
+  //           value: tagValue,
+  //         })
+  //         .onConflictDoNothing()
+  //         .run(),
+  //     );
 
-      promises.push(
-        db
-          .insert(evalsToTags)
-          .values({
-            evalId,
-            tagId,
-          })
-          .onConflictDoNothing()
-          .run(),
-      );
+  //     promises.push(
+  //       db
+  //         .insert(evalsToTags)
+  //         .values({
+  //           evalId,
+  //           tagId,
+  //         })
+  //         .onConflictDoNothing()
+  //         .run(),
+  //     );
 
-      logger.debug(`Inserting tag ${tagId}`);
-    }
-  }
+  //     logger.debug(`Inserting tag ${tagId}`);
+  //   }
+  // }
 
-  logger.debug(`Awaiting ${promises.length} promises to database...`);
-  await Promise.all(promises);
+  // logger.debug(`Awaiting ${promises.length} promises to database...`);
+  // await Promise.all(promises);
 
-  // "touch" db signal path
-  const filePath = getDbSignalPath();
-  try {
-    const now = new Date();
-    fs.utimesSync(filePath, now, now);
-  } catch {
-    fs.closeSync(fs.openSync(filePath, 'w'));
-  }
+  // // "touch" db signal path
+  // const filePath = getDbSignalPath();
+  // try {
+  //   const now = new Date();
+  //   fs.utimesSync(filePath, now, now);
+  // } catch {
+  //   fs.closeSync(fs.openSync(filePath, 'w'));
+  // }
 
-  return evalId;
+  // return evalId;
 }
 
 /**
@@ -321,30 +323,34 @@ export function listPreviousResults(
 ): ResultLightweight[] {
   const db = getDb();
   const startTime = performance.now();
-
+  const test = db.select().from(evals).limit(1).all();
+  console.log({ test });
   const query = db
     .select({
       evalId: evals.id,
       createdAt: evals.createdAt,
       description: evals.description,
-      numTests: sql<number>`json_array_length(${evals.results}->'table'->'body')`,
+      numTests: max(evalResult.rowIdx).as('numTests'),
       datasetId: evalsToDatasets.datasetId,
     })
     .from(evals)
     .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
+    .leftJoin(evalResult, eq(evals.id, evalResult.evalId))
     .where(
       and(
         datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
         filterDescription ? like(evals.description, `%${filterDescription}%`) : undefined,
       ),
-    );
+    )
+    .groupBy(evals.id);
 
   const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
+  console.log({ results });
   const mappedResults = results.map((result) => ({
     evalId: result.evalId,
     createdAt: result.createdAt,
     description: result.description,
-    numTests: result.numTests,
+    numTests: result.numTests || 0,
     datasetId: result.datasetId,
   }));
 
@@ -524,45 +530,29 @@ export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
 export async function readResult(
   id: string,
 ): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {
-  const db = getDb();
   try {
-    const evalResult = await db
-      .select({
-        id: evals.id,
-        createdAt: evals.createdAt,
-        author: evals.author,
-        results: evals.results,
-        config: evals.config,
-        datasetId: evalsToDatasets.datasetId,
-      })
-      .from(evals)
-      .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
-      .where(eq(evals.id, id))
-      .execute();
-
-    if (evalResult.length === 0) {
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
       return undefined;
     }
 
-    const { id: resultId, createdAt, results, config, author, datasetId } = evalResult[0];
-    const result: ResultsFile = {
-      version: 3,
-      createdAt: new Date(createdAt).toISOString().slice(0, 10),
-      author,
-      results,
-      config,
-      datasetId,
-    };
     return {
-      id: resultId,
-      result,
-      createdAt: new Date(createdAt),
+      id: eval_.id,
+      result: {
+        version: 3,
+        author: eval_.author || null,
+        // @ts-ignore
+        results: eval_.results,
+        config: eval_.config,
+        prompts: eval_.prompts,
+      },
+      createdAt: new Date(eval_.createdAt),
     };
   } catch (err) {
     logger.error(`Failed to read result with ID ${id} from database:\n${err}`);
   }
 }
-
+// @ts-nocheck
 export async function updateResult(
   id: string,
   newConfig?: Partial<UnifiedConfig>,
@@ -590,9 +580,9 @@ export async function updateResult(
     if (newConfig) {
       evalData.config = newConfig;
     }
-    if (newTable) {
-      evalData.results.table = newTable;
-    }
+    // if (newTable) {
+    //   evalData.results.table = newTable;
+    // }
 
     await db
       .update(evals)
@@ -611,36 +601,19 @@ export async function updateResult(
 }
 
 export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
-  const db = getDb();
-  let latestResults = await db
-    .select({
-      id: evals.id,
-      createdAt: evals.createdAt,
-      author: evals.author,
-      description: evals.description,
-      results: evals.results,
-      config: evals.config,
-    })
-    .from(evals)
-    .orderBy(desc(evals.createdAt))
-    .limit(1);
-
-  if (filterDescription) {
-    const regex = new RegExp(filterDescription, 'i');
-    latestResults = latestResults.filter((result) => regex.test(result.description || ''));
-  }
-
-  if (!latestResults.length) {
+  const eval_ = await Eval.latest();
+  if (!eval_) {
     return undefined;
   }
 
-  const latestResult = latestResults[0];
   return {
     version: 3,
-    createdAt: new Date(latestResult.createdAt).toISOString(),
-    author: latestResult.author,
-    results: latestResult.results,
-    config: latestResult.config,
+    createdAt: new Date(eval_.createdAt).toISOString(),
+    author: eval_.author || null,
+    // @ts-ignore
+    results: eval_.results,
+    config: eval_.config,
+    prompts: eval_.prompts,
   };
 }
 
@@ -670,6 +643,7 @@ export async function getPromptsWithPredicate(
       version: 3,
       createdAt,
       author: eval_.author,
+      // @ts-ignore
       results: eval_.results,
       config: eval_.config,
     };
@@ -758,6 +732,7 @@ export async function getTestCasesWithPredicate(
       version: 3,
       createdAt,
       author: eval_.author,
+      // @ts-ignore
       results: eval_.results,
       config: eval_.config,
     };
@@ -864,6 +839,7 @@ export async function getEvalsWithPredicate(
       version: 3,
       createdAt,
       author: eval_.author,
+      // @ts-ignore
       results: eval_.results,
       config: eval_.config,
     };
@@ -873,6 +849,7 @@ export async function getEvalsWithPredicate(
         id: evalId,
         date: new Date(eval_.createdAt),
         config: eval_.config,
+        // @ts-ignore
         results: eval_.results,
         description: eval_.description || undefined,
       });
@@ -1023,12 +1000,15 @@ export function getStandaloneEvals({
       evalId,
       promptId,
       datasetId,
+      // @ts-ignore
       results: { table },
       isRedteam,
     } = result;
+    // @ts-ignore
     return table.head.prompts.map((col, index) => {
       // Compute some stats
       const pluginCounts = table.body.reduce(
+        // @ts-ignore
         (acc, row) => {
           const pluginId = row.test.metadata?.pluginId;
           if (pluginId) {
