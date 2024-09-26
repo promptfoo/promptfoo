@@ -57,6 +57,7 @@ interface BedrockLlamaGenerationOptions extends BedrockOptions {
   temperature?: number;
   top_p?: number;
   max_gen_len?: number;
+  max_new_tokens?: number;
 }
 
 interface BedrockCohereCommandGenerationOptions extends BedrockOptions {
@@ -213,6 +214,8 @@ export function addConfigParam(
 export enum LlamaVersion {
   V2 = 2,
   V3 = 3,
+  V3_1 = 3.1,
+  V3_2 = 3.2,
 }
 
 export interface LlamaMessage {
@@ -264,7 +267,7 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
   return formattedPrompt;
 };
 
-const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => {
+export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => {
   let formattedPrompt = '<|begin_of_text|>';
 
   for (const message of messages) {
@@ -279,7 +282,7 @@ const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => {
 };
 
 export const getLlamaModelHandler = (version: LlamaVersion) => {
-  if (version !== LlamaVersion.V2 && version !== LlamaVersion.V3) {
+  if (![LlamaVersion.V2, LlamaVersion.V3, LlamaVersion.V3_1, LlamaVersion.V3_2].includes(version)) {
     throw new Error(`Unsupported LLAMA version: ${version}`);
   }
 
@@ -293,6 +296,8 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
           finalPrompt = formatPromptLlama2Chat(messages as LlamaMessage[]);
           break;
         case LlamaVersion.V3:
+        case LlamaVersion.V3_1:
+        case LlamaVersion.V3_2:
           finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[]);
           break;
         default:
@@ -310,13 +315,23 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         0.01,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1);
-      addConfigParam(
-        params,
-        'max_gen_len',
-        config?.max_gen_len,
-        getEnvInt('AWS_BEDROCK_MAX_GEN_LEN'),
-        1024,
-      );
+      if ([LlamaVersion.V2, LlamaVersion.V3, LlamaVersion.V3_1].includes(version)) {
+        addConfigParam(
+          params,
+          'max_gen_len',
+          config?.max_gen_len,
+          getEnvInt('AWS_BEDROCK_MAX_GEN_LEN'),
+          1024,
+        );
+      }
+      if (LlamaVersion.V3_2 === version) {
+        addConfigParam(
+          params,
+          'max_new_tokens',
+          config?.max_new_tokens,
+          getEnvInt('AWS_BEDROCK_MAX_NEW_TOKENS'),
+        );
+      }
       return params;
     },
     output: (responseJson: any) => responseJson?.generation,
@@ -461,7 +476,9 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => responseJson?.results[0]?.outputText,
   },
   LLAMA2: getLlamaModelHandler(LlamaVersion.V2),
-  LLAMA3: getLlamaModelHandler(LlamaVersion.V3), // Prompt format of llama3 instruct differs from llama2.
+  LLAMA3: getLlamaModelHandler(LlamaVersion.V3),
+  LLAMA3_1: getLlamaModelHandler(LlamaVersion.V3_1),
+  LLAMA3_2: getLlamaModelHandler(LlamaVersion.V3_2),
   COHERE_COMMAND: {
     params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
       const params: any = { prompt };
@@ -550,7 +567,7 @@ export const BEDROCK_MODEL = {
   },
 };
 
-const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
+export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'ai21.jamba-1-5-large-v1:0': BEDROCK_MODEL.AI21,
   'ai21.jamba-1-5-mini-v1:0': BEDROCK_MODEL.AI21,
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
@@ -570,13 +587,13 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
   'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA2,
-  'us.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
-  'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
-  'us.meta.llama3-2-11b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
-  'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
-  'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
-  'meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
-  'meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
+  'us.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'us.meta.llama3-2-11b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
+  'meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
+  'meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
@@ -600,7 +617,13 @@ function getHandlerForModel(modelName: string) {
   if (modelName.startsWith('meta.llama2')) {
     return BEDROCK_MODEL.LLAMA2;
   }
-  if (modelName.startsWith('meta.llama3')) {
+  if (modelName.includes('meta.llama3-1')) {
+    return BEDROCK_MODEL.LLAMA3_1;
+  }
+  if (modelName.includes('meta.llama3-2')) {
+    return BEDROCK_MODEL.LLAMA3_2;
+  }
+  if (modelName.includes('meta.llama3')) {
     return BEDROCK_MODEL.LLAMA3;
   }
   if (modelName.startsWith('cohere.command-r')) {
