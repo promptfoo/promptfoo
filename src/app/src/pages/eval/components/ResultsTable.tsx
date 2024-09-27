@@ -145,6 +145,7 @@ function ResultsTable({
     async (
       rowIndex: number,
       promptIndex: number,
+      resultId: string,
       isPass?: boolean,
       score?: number,
       comment?: string,
@@ -200,12 +201,12 @@ function ResultsTable({
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
         try {
-          const response = await callApi(`/eval/${evalId}`, {
-            method: 'PATCH',
+          const response = await callApi(`/eval/${evalId}/results/${resultId}/rating`, {
+            method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ table: newTable }),
+            body: JSON.stringify({ ...gradingResult }),
           });
           if (!response.ok) {
             throw new Error('Network response was not ok');
@@ -542,6 +543,7 @@ function ResultsTable({
                     null,
                     output.originalRowIndex ?? info.row.index,
                     output.originalPromptIndex ?? idx,
+                    output.id,
                   )}
                   firstOutput={getFirstOutput(info.row.index)}
                   showDiffs={filterMode === 'different'}

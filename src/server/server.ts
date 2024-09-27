@@ -16,6 +16,7 @@ import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type {
   EvaluateTestSuiteWithEvaluateOptions,
+  GradingResult,
   Job,
   Prompt,
   PromptWithMetadata,
@@ -25,6 +26,7 @@ import type {
 } from '../index';
 import promptfoo from '../index';
 import logger from '../logger';
+import EvalResult from '../models/eval_result';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
   getPrompts,
@@ -174,6 +176,16 @@ export function startServer(
     } catch {
       res.status(500).json({ error: 'Failed to update eval table' });
     }
+  });
+
+  app.post('/api/eval/:id/results/:id/rating', async (req, res) => {
+    const { id } = req.params;
+    const gradingResult = req.body as GradingResult;
+    const result = await EvalResult.findById(id);
+    invariant(result, 'Result not found');
+    result.gradingResult = gradingResult;
+    await result.save();
+    return res.json(result);
   });
 
   app.post('/api/eval', async (req, res) => {
