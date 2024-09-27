@@ -34,10 +34,10 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
     disableCache();
   }
   const configPath = options.config || options.defaultConfigPath;
-  invariant(
-    typeof configPath === 'string',
-    'Configuration path must be a valid string. Check options.config and options.defaultConfigPath.',
-  );
+  if (typeof configPath !== 'string') {
+    logger.info("Can't generate without configuration");
+    return;
+  }
   const redteamOutputPath = path.join(path.dirname(configPath), options.output || 'redteam.yaml');
 
   const resolved = await resolveConfigs(

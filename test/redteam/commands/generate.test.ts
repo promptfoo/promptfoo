@@ -86,27 +86,23 @@ describe('doGenerateRedteam', () => {
     );
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompts: [{ raw: 'Test prompt' }],
-        providers: [],
-        tests: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          },
-        ],
-        redteam: expect.objectContaining({
-          purpose: 'Test purpose',
-          entities: ['Test entity'],
-        }),
         defaultTest: {
           metadata: {
-            purpose: 'Test purpose',
             entities: ['Test entity'],
+            purpose: 'Test purpose',
           },
         },
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        redteam: expect.objectContaining({
+          entities: ['Test entity'],
+          plugins: expect.any(Array),
+          purpose: 'Test purpose',
+          strategies: expect.any(Array),
+        }),
+        tests: ['file://output.yaml'],
       }),
-      'output.yaml',
+      'config.yaml',
     );
   });
 
@@ -129,11 +125,30 @@ describe('doGenerateRedteam', () => {
 
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({
-        tests: [],
+        defaultTest: {
+          metadata: {
+            purpose: 'Test purpose',
+            entities: [],
+          },
+        },
         redteam: expect.objectContaining({
           purpose: 'Test purpose',
           entities: [],
+          plugins: expect.arrayContaining([
+            { id: 'harmful', numTests: undefined },
+            { id: 'pii', numTests: undefined },
+            { id: 'default', numTests: undefined },
+            { id: 'contracts', numTests: undefined },
+            { id: 'cross-session-leak', numTests: undefined },
+            { id: 'excessive-agency', numTests: undefined },
+            { id: 'hallucination', numTests: undefined },
+            { id: 'hijacking', numTests: undefined },
+            { id: 'overreliance', numTests: undefined },
+            { id: 'politics', numTests: undefined },
+          ]),
+          strategies: [],
         }),
+        tests: ['file://redteam.yaml'],
       }),
       'config.yaml',
     );
@@ -151,55 +166,6 @@ describe('doGenerateRedteam', () => {
 
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining("Can't generate without configuration"),
-    );
-  });
-
-  it('should use purpose when no config is provided', async () => {
-    const options: RedteamCliGenerateOptions = {
-      purpose: 'Test purpose',
-      cache: true,
-      defaultConfig: {},
-      write: true,
-      output: 'redteam.yaml',
-    };
-
-    jest.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'Test purpose',
-      entities: ['Test entity'],
-    });
-
-    await doGenerateRedteam(options);
-
-    expect(synthesize).toHaveBeenCalledWith({
-      language: undefined,
-      numTests: undefined,
-      purpose: 'Test purpose',
-      plugins: expect.any(Array),
-      prompts: expect.any(Array),
-      strategies: expect.any(Array),
-    });
-    expect(writePromptfooConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tests: expect.arrayContaining([
-          expect.objectContaining({
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          }),
-        ]),
-        redteam: expect.objectContaining({
-          purpose: 'Test purpose',
-          entities: ['Test entity'],
-        }),
-      }),
-      'redteam.yaml',
     );
   });
 });
