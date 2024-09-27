@@ -14,7 +14,7 @@ import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
-import { writePromptfooConfig, writeTestFile } from '../../util/config/manage';
+import { writePromptfooConfig } from '../../util/config/manage';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 import {
   REDTEAM_MODEL,
@@ -142,47 +142,61 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
     plugins: plugins || [],
   };
 
-  logger.info('Output options:');
-  logger.info(`- output: ${options.output || 'Not specified'}`);
-  logger.info(`- write: ${options.write}`);
-  logger.info(`- configPath: ${configPath || 'Not specified'}`);
-
-  const promptfooconfigPath = path.join(
-    cliState.basePath || '',
-    options.write && configPath ? configPath : 'promptfooconfig.yaml',
-  );
-
-  const redteamPath = path.join(cliState.basePath || '', options.output || 'promptfooconfig.yaml');
-
-  const command =
-    path.relative(process.cwd(), promptfooconfigPath) === 'promptfooconfig.yaml'
-      ? 'promptfoo redteam eval'
-      : `promptfoo redteam eval -c ${path.relative(process.cwd(), promptfooconfigPath)}`;
-
-  const existingYaml = configPath
-    ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
-    : {};
-  const updatedYaml: Partial<UnifiedConfig> = {
-    ...existingYaml,
-    defaultTest: {
-      ...(existingYaml.defaultTest || {}),
+  if (options.output) {
+    const existingYaml = configPath
+      ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
+      : {};
+    const updatedYaml: Partial<UnifiedConfig> = {
+      ...existingYaml,
+      defaultTest: {
+        ...(existingYaml.defaultTest || {}),
+        metadata: {
+          ...(existingYaml.defaultTest?.metadata || {}),
+          purpose,
+          entities,
+        },
+      },
+      tests: redteamTests,
+      redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
+    };
+    writePromptfooConfig(updatedYaml, options.output);
+    printBorder();
+    const relativeOutputPath = path.relative(process.cwd(), options.output);
+    logger.info(`Wrote ${redteamTests.length} new test cases to ${relativeOutputPath}`);
+    logger.info(
+      '\n' +
+        chalk.green(
+          `Run ${chalk.bold(
+            relativeOutputPath === 'redteam.yaml'
+              ? 'promptfoo redteam eval'
+              : `promptfoo redteam eval -c ${relativeOutputPath}`,
+          )} to run the red team!`,
+        ),
+    );
+    printBorder();
+  } else if (options.write && configPath) {
+    const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
+    existingConfig.defaultTest = {
+      ...(existingConfig.defaultTest || {}),
       metadata: {
-        ...(existingYaml.defaultTest?.metadata || {}),
+        ...(existingConfig.defaultTest?.metadata || {}),
         purpose,
         entities,
       },
-    },
-    tests: redteamPath,
-    redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
-  };
-  writePromptfooConfig(updatedYaml, promptfooconfigPath);
-  writeTestFile(redteamTests, redteamPath);
-  printBorder();
-  const relativeOutputPath = path.relative(process.cwd(), options.output || 'redteam.yaml');
-  logger.info(`Wrote ${redteamTests.length} new test cases to ${relativeOutputPath}`);
-  logger.info('\n' + chalk.green(`Run ${command} to run the red team!`));
-  printBorder();
-  // If write option is true and a config path exists
+    };
+    existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
+    existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+    writePromptfooConfig(existingConfig, configPath);
+    logger.info(
+      `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
+    );
+    const command = configPath.endsWith('promptfooconfig.yaml')
+      ? 'promptfoo eval'
+      : `promptfoo eval -c ${path.relative(process.cwd(), configPath)}`;
+    logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
+  } else {
+    writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml');
+  }
 
   telemetry.record('command_used', {
     duration: Math.round((Date.now() - startTime) / 1000),
