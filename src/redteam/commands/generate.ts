@@ -33,34 +33,22 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
     logger.info('Cache is disabled');
     disableCache();
   }
-
-  let testSuite: TestSuite;
-  let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
-  if (configPath) {
-    const resolved = await resolveConfigs(
-      {
-        config: [configPath],
-      },
-      options.defaultConfig,
-    );
-    testSuite = resolved.testSuite;
-    redteamConfig = resolved.config.redteam;
-  } else if (options.purpose) {
-    // There is a purpose, so we can just have a dummy test suite for standalone invocation
-    testSuite = {
-      prompts: [],
-      providers: [],
-      tests: [],
-    };
-  } else {
-    logger.info(
-      chalk.red(
-        `\nCan't generate without configuration - run ${chalk.yellow.bold('promptfoo redteam init')} first`,
-      ),
-    );
-    return;
-  }
+  invariant(
+    typeof configPath === 'string',
+    'Configuration path must be a valid string. Check options.config and options.defaultConfigPath.',
+  );
+  const redteamOutputPath = path.join(path.dirname(configPath), options.output || 'redteam.yaml');
+
+  const resolved = await resolveConfigs(
+    {
+      config: [configPath],
+    },
+    options.defaultConfig,
+  );
+
+  const testSuite: TestSuite = resolved.testSuite;
+  const redteamConfig: RedteamFileConfig | undefined = resolved.config.redteam;
 
   const startTime = Date.now();
   telemetry.record('command_used', {
@@ -142,22 +130,10 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
     plugins: plugins || [],
   };
 
-  logger.info('Output options:');
-  logger.info(`- output: ${options.output || 'Not specified'}`);
-  logger.info(`- write: ${options.write}`);
-  logger.info(`- configPath: ${configPath || 'Not specified'}`);
-
-  const promptfooconfigPath = path.join(
-    cliState.basePath || '',
-    options.write && configPath ? configPath : 'promptfooconfig.yaml',
-  );
-
-  const redteamPath = path.join(cliState.basePath || '', options.output || 'promptfooconfig.yaml');
-
   const command =
-    path.relative(process.cwd(), promptfooconfigPath) === 'promptfooconfig.yaml'
+    path.relative(process.cwd(), configPath) === 'promptfooconfig.yaml'
       ? 'promptfoo redteam eval'
-      : `promptfoo redteam eval -c ${path.relative(process.cwd(), promptfooconfigPath)}`;
+      : `promptfoo redteam eval -c ${path.relative(process.cwd(), configPath)}`;
 
   const existingYaml = configPath
     ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
@@ -172,18 +148,17 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
         entities,
       },
     },
-    tests: redteamPath,
+    tests: `file://${path.relative(path.dirname(configPath), redteamOutputPath)}`,
     redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
   };
-  writePromptfooConfig(updatedYaml, promptfooconfigPath);
-  writeTestFile(redteamTests, redteamPath);
+  writePromptfooConfig(updatedYaml, configPath);
+  writeTestFile(redteamTests, redteamOutputPath);
+
   printBorder();
   const relativeOutputPath = path.relative(process.cwd(), options.output || 'redteam.yaml');
   logger.info(`Wrote ${redteamTests.length} new test cases to ${relativeOutputPath}`);
   logger.info('\n' + chalk.green(`Run ${command} to run the red team!`));
   printBorder();
-  // If write option is true and a config path exists
-
   telemetry.record('command_used', {
     duration: Math.round((Date.now() - startTime) / 1000),
     name: 'generate redteam',
