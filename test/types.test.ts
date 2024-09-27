@@ -182,9 +182,16 @@ describe('TestSuiteConfigSchema', () => {
         targets: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
         providers: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
       })
-        .refine((data) => !!data.targets !== !!data.providers, {
-          message: "Either 'targets' or 'providers' must be provided, but not both",
-        })
+        .refine(
+          (data) => {
+            const hasTargets = Boolean(data.targets);
+            const hasProviders = Boolean(data.providers);
+            return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+          },
+          {
+            message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+          },
+        )
         .safeParse(config);
       if (!result.success) {
         console.error(`Validation failed for ${file}:`, result.error);
