@@ -27,7 +27,7 @@ jobs:
         # TODO(Michael): Re-enable once issues are resolved, 2024-08-23
         node: ['18.x', '20.x']
         python: ['3.9']
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-arm64, windows-latest, macOS-latest]
         exclude:
           # Remove when https://github.com/nodejs/node/issues/51766 is resolved
           - node: '22.x'
@@ -61,7 +61,7 @@ jobs:
   style-check:
     name: Style Check
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-arm64
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -99,7 +99,7 @@ jobs:
   assets:
     name: Generate Assets
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-arm64
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -129,7 +129,7 @@ jobs:
   python:
     name: Check Python
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-arm64
     strategy:
       matrix:
         python-version: [3.9, 3.12]
@@ -159,7 +159,7 @@ jobs:
   docs:
     name: Build Docs
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-arm64
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -185,7 +185,7 @@ jobs:
   webui:
     name: webui tests
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-arm64
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
