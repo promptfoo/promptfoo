@@ -7,16 +7,14 @@ import * as configModule from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/manage';
 
 jest.mock('fs');
-jest.mock('yaml');
-jest.mock('../../../src/redteam');
-jest.mock('../../../src/util/config/manage');
 jest.mock('../../../src/logger');
+jest.mock('../../../src/redteam');
 jest.mock('../../../src/telemetry');
-
 jest.mock('../../../src/util/config/load', () => ({
   combineConfigs: jest.fn(),
   resolveConfigs: jest.fn(),
 }));
+jest.mock('../../../src/util/config/manage');
 
 describe('doGenerateRedteam', () => {
   beforeEach(() => {
