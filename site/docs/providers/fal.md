@@ -16,12 +16,15 @@ Browse our [model gallery](https://fal.ai/models) for a list of available models
 
 To use fal, you need to set up your API key:
 
-1. Create am API key in the [fal dashboard](https://fal.ai/dashboard/keys).
-2. Set the `FAL_KEY` environment variable:
-
-```sh
-export FAL_KEY=your_api_key_here
-```
+1. Install the fal client as a dependency:
+   ```sh
+   npm install -g @fal-ai/serverless-client
+   ```
+2. Create am API key in the [fal dashboard](https://fal.ai/dashboard/keys).
+3. Set the `FAL_KEY` environment variable:
+   ```sh
+   export FAL_KEY=your_api_key_here
+   ```
 
 Alternatively, you can specify the `apiKey` in the provider configuration (see below).
 
