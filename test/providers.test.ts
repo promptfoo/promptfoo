@@ -1550,8 +1550,6 @@ config:
     const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit called');
     });
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
     const unknownProviderPath = 'unknown:provider';
 
     await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow('process.exit called');
@@ -1566,10 +1564,7 @@ config:
           For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
       `,
     );
-
     expect(mockExit).toHaveBeenCalledWith(1);
-
     mockExit.mockRestore();
-    consoleErrorSpy.mockRestore();
   });
 });
