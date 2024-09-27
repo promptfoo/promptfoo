@@ -101,9 +101,6 @@ describe('index.ts exports', () => {
 
 describe('evaluate function', () => {
   it('should handle function prompts correctly', async () => {
-    // Mock the necessary dependencies
-
-    // Use a named function expression instead of an arrow function
     const mockPromptFunction = function testPrompt() {
       return 'Test prompt';
     };
@@ -115,8 +112,6 @@ describe('evaluate function', () => {
     };
 
     await index.evaluate(testSuite);
-
-    // Check if readProviderPromptMap was called with the correct arguments
     expect(readProviderPromptMap).toHaveBeenCalledWith(testSuite, [
       {
         raw: mockPromptFunction.toString(),
@@ -124,8 +119,6 @@ describe('evaluate function', () => {
         function: mockPromptFunction,
       },
     ]);
-
-    // Check if doEvaluate was called with the correct arguments
     expect(doEvaluate).toHaveBeenCalledWith(
       expect.objectContaining({
         prompts: [
