@@ -61,7 +61,7 @@ Then create adversarial test cases:
 npx promptfoo@latest redteam generate
 ```
 
-This process generates a file named `redteam.yaml` containing the adversarial test cases. Additionally, it updates `promptfooconfig.yaml` to include references to these newly created test cases.
+This will create a file `redteam.yaml` with the test cases.
 
 Run the eval:
 
@@ -214,7 +214,7 @@ You can also reference nested objects. For example, `json.choices[0].message.con
 
 ### Configuring the grader
 
-The results of the red team are graded by a model. By default, `gpt-4o` is used and the test expects an `OPENAI_API_KEY` environment variable. If a key is not present promptfoo will grade for you.
+The results of the red team are graded by a model. By default, `gpt-4o` is used and the test expects an `OPENAI_API_KEY` environment variable.
 
 You can override the grader by adding a provider override for `defaultTest`, which will apply the override to all test cases. Here’s an example of using Llama3 as a grader locally:
 
