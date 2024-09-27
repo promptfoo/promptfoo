@@ -75,6 +75,7 @@ export class BrowserProvider implements ApiProvider {
 
     const browser = await chromium.launch({
       headless: this.headless,
+      args: ['--ignore-certificate-errors'],
     });
     const page = await browser.newPage();
     const extracted: Record<string, any> = {};

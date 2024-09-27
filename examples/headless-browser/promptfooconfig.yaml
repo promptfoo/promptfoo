@@ -6,7 +6,7 @@ prompts:
 providers:
   - id: browser
     config:
-      headless: true
+      headless: true # set to false to see the browser
       steps:
         # Load the page
         - action: navigate
