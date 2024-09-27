@@ -70,6 +70,7 @@ export type EnvVars = {
   COHERE_MAX_TOKENS?: string;
   COHERE_P?: string;
   COHERE_TEMPERATURE?: string;
+  FAL_KEY?: string;
   GROQ_API_KEY?: string;
   HELICONE_API_KEY?: string;
   HF_API_TOKEN?: string;
