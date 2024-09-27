@@ -29,7 +29,7 @@ jobs:
 
   nexe-build:
     needs: build
-    runs-on: ${{ matrix.arch == 'x64' && 'ubuntu-latest' || 'ubuntu-arm64' }}
+    runs-on: ${{ matrix.os == 'macos' && (matrix.arch == 'arm64' && 'macos-latest' || 'macos-13') || (matrix.arch == 'x64' && 'ubuntu-latest' || 'ubuntu-arm64') }}
     timeout-minutes: 300
     continue-on-error: true
     strategy:
@@ -68,14 +68,14 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}
-          path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+          name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'win' && '.exe' || '' }}
+          path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'win' && '.exe' || '' }}
 
       - name: Release
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         with:
-          files: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+          files: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'win' && '.exe' || '' }}
           tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
