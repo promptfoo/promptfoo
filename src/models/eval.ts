@@ -96,7 +96,7 @@ export default class Eval {
     author?: string,
   ) {
     createdAt = createdAt || new Date();
-    const evalId = getEvalId(createdAt);
+    const evalId = id || getEvalId(createdAt);
     const db = getDb();
     db.transaction((tx) => {
       tx.insert(evals)
