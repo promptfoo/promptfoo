@@ -473,7 +473,7 @@ export function evalCommand(
         for (const configPath of configPaths) {
           if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
             const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-              await loadDefaultConfig(['redteam', 'promptfooconfig'], configPath);
+              await loadDefaultConfig(configPath);
             if (newConfigPath) {
               opts.config = opts.config.filter((path: string) => path !== configPath);
               opts.config.push(newConfigPath);

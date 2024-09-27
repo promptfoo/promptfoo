@@ -27,7 +27,7 @@ async function main() {
   await checkForUpdates();
   await runDbMigrations();
 
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig(['promptfooconfig']);
+  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
   const program = new Command();
 
@@ -54,11 +54,8 @@ async function main() {
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
-  const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
-    await loadDefaultConfig(['redteam', 'promptfooconfig']);
-
   redteamInitCommand(redteamBaseCommand);
-  evalCommand(redteamBaseCommand, redteamConfig, redteamConfigPath);
+  evalCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamPluginsCommand(redteamBaseCommand);
 
@@ -66,7 +63,7 @@ async function main() {
     program.outputHelp();
     process.exit(0);
   }
-  program.parse(process.argv);
+  program.parse();
 }
 
 if (require.main === module) {
