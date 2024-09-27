@@ -236,7 +236,6 @@ export function startServer(
 
   app.post('/api/results/share', async (req, res) => {
     const { id } = req.body;
-    console.log({ body: req.body });
 
     const result = await readResult(id);
     if (!result) {
