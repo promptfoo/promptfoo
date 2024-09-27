@@ -13,7 +13,13 @@ import {
 } from '../database/tables';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
-import type { EvaluateResult, Prompt, UnifiedConfig } from '../types';
+import type {
+  AtomicTestCase,
+  CompletedPrompt,
+  EvaluateResult,
+  Prompt,
+  UnifiedConfig,
+} from '../types';
 import { sha256 } from '../util';
 import EvalResult from './eval_result';
 
@@ -29,7 +35,7 @@ export default class Eval {
   config: Partial<UnifiedConfig>;
   results: EvalResult[];
   datasetId?: string;
-  prompts: { id: string | null; prompt: string | null }[];
+  prompts: CompletedPrompt[];
 
   static async latest() {
     const db = getDb();
@@ -50,7 +56,7 @@ export default class Eval {
   static async findById(id: string) {
     const db = getDb();
 
-    const [eval_, results, promptsData] = await Promise.all([
+    const [eval_, results] = await Promise.all([
       db.select().from(evals).where(eq(evals.id, id)),
       db.select().from(evalResult).where(eq(evalResult.evalId, id)).execute(),
 
@@ -74,13 +80,10 @@ export default class Eval {
       createdAt: new Date(eval_[0].createdAt),
       author: eval_[0].author || undefined,
       description: eval_[0].description || undefined,
+      prompts: eval_[0].prompts || [],
     });
 
     evalInstance.results = results.map((r) => new EvalResult(r));
-
-    evalInstance.prompts = promptsData
-      .map((p) => ({ id: p.id, prompt: p.prompt }))
-      .filter((p) => p.prompt !== null);
 
     return evalInstance;
   }
@@ -184,7 +187,13 @@ export default class Eval {
 
   constructor(
     config: Partial<UnifiedConfig>,
-    opts?: { id?: string; createdAt?: Date; author?: string; description?: string },
+    opts?: {
+      id?: string;
+      createdAt?: Date;
+      author?: string;
+      description?: string;
+      prompts?: CompletedPrompt[];
+    },
   ) {
     const createdAt = opts?.createdAt || new Date();
     this.createdAt = createdAt.getTime();
@@ -192,11 +201,17 @@ export default class Eval {
     this.author = opts?.author;
     this.config = config;
     this.results = [];
-    this.prompts = [];
+    this.prompts = opts?.prompts || [];
   }
 
-  async addResult(result: EvaluateResult, columnIdx: number, rowIdx: number, description?: string) {
-    const newResult = await EvalResult.create(this.id, result, columnIdx, rowIdx, description);
+  async addResult(result: EvaluateResult, columnIdx: number, rowIdx: number, test: AtomicTestCase) {
+    const newResult = await EvalResult.create(this.id, result, columnIdx, rowIdx, test);
     this.results.push(newResult);
+  }
+
+  async addPrompts(prompts: CompletedPrompt[]) {
+    this.prompts = prompts;
+    const db = getDb();
+    await db.update(evals).set({ prompts }).where(eq(evals.id, this.id)).run();
   }
 }

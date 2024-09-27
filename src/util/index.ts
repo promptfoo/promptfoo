@@ -196,6 +196,10 @@ export async function writeResultsToDatabase(
   config: Partial<UnifiedConfig>,
   createdAt: Date = new Date(),
 ): Promise<string> {
+  const evalId = `eval-${new Date().toISOString().slice(0, 19)}`;
+  const db = getDb();
+  db.update(evals).set({ results }).where(eq(evals.id, evalId)).run();
+
   return 'no op';
   // const evalId = `eval-${new Date().toISOString().slice(0, 19)}`;
   // const db = getDb();

@@ -211,7 +211,7 @@ export interface EvaluateTableOutput {
   latencyMs: number;
   provider?: string;
   tokenUsage?: Partial<TokenUsage>;
-  gradingResult?: GradingResult;
+  gradingResult?: GradingResult | null;
   cost: number;
   metadata?: Record<string, any>;
 }

@@ -15,6 +15,9 @@ import type {
   GradingResult,
   UnifiedConfig,
   ProviderOptions,
+  TestCase,
+  AtomicTestCase,
+  CompletedPrompt,
 } from '../types';
 
 // ------------ Prompts ------------
@@ -61,6 +64,7 @@ export const evals = sqliteTable(
     description: text('description'),
     results: text('results', { mode: 'json' }).notNull(),
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
+    prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
@@ -75,30 +79,28 @@ export const evalResult = sqliteTable(
     evalId: text('eval_id')
       .notNull()
       .references(() => evals.id),
-    promptId: text('prompt_id'),
     columnIdx: integer('column_idx').notNull(),
-    rowIdx: integer('test_idx').notNull(),
-    description: text('description'),
+    rowIdx: integer('row_idx').notNull(),
+
+    testCase: text('test_case', { mode: 'json' }).$type<AtomicTestCase>().notNull(),
+    prompt: text('prompt', { mode: 'json' }).$type<Prompt>().notNull(),
+    promptId: text('prompt_id'),
 
     // Provider-related fields
     provider: text('provider', { mode: 'json' }).$type<ProviderOptions>().notNull(),
+    providerId: text('provider_id'),
+
     latencyMs: integer('latency_ms'),
     cost: real('cost'),
 
-    // Input-related fields
-    vars: text('vars', { mode: 'json' }).$type<Record<string, string>>(), // prompt.raw - hashed
-    varsHash: text('vars_hash'),
-    prompt: text('prompt', { mode: 'json' }).$type<Prompt>().notNull(),
     // Output-related fields
-    providerResponse: text('provider_response', { mode: 'json' })
-      .$type<ProviderResponse>()
-      .notNull(),
+    providerResponse: text('provider_response', { mode: 'json' }).$type<ProviderResponse>(),
     error: text('error'),
 
     // Result-related fields
     pass: integer('pass', { mode: 'boolean' }).notNull(),
     score: real('score').notNull(),
-    gradingResult: text('grading_result', { mode: 'json' }).$type<GradingResult>().notNull(),
+    gradingResult: text('grading_result', { mode: 'json' }).$type<GradingResult>(),
     namedScores: text('named_scores', { mode: 'json' }).$type<Record<string, number>>(),
 
     // Metadata fields
