@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { eq } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResult } from '../database/tables';
 import { hashPrompt } from '../prompts/utils';
@@ -10,7 +11,6 @@ import type {
   ProviderResponse,
 } from '../types';
 import { type EvaluateResult } from '../types';
-import { sha256 } from '../util';
 
 export default class EvalResult {
   static async create(
@@ -47,6 +47,12 @@ export default class EvalResult {
       })
       .returning();
     return new EvalResult(dbResult[0]);
+  }
+
+  static async findById(id: string) {
+    const db = getDb();
+    const result = await db.select().from(evalResult).where(eq(evalResult.id, id));
+    return result.length > 0 ? new EvalResult(result[0]) : null;
   }
 
   id: string;
@@ -102,5 +108,10 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
+  }
+
+  async save() {
+    const db = getDb();
+    await db.update(evalResult).set(this).where(eq(evalResult.id, this.id));
   }
 }

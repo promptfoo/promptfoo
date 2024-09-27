@@ -666,6 +666,7 @@ class Evaluator {
         };
       }
       table.body[rowIndex].outputs[colIndex] = {
+        id: `${rowIndex}-${colIndex}`,
         pass: row.success,
         score: row.score,
         namedScores: row.namedScores,

@@ -203,6 +203,7 @@ export interface EvaluateResult {
 }
 
 export interface EvaluateTableOutput {
+  id: string;
   pass: boolean;
   score: number;
   namedScores: Record<string, number>;

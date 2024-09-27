@@ -357,7 +357,7 @@ export function listPreviousResults(
     .groupBy(evals.id);
 
   const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
-  console.log({ results });
+
   const mappedResults = results.map((result) => ({
     evalId: result.evalId,
     createdAt: result.createdAt,

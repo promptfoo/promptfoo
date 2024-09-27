@@ -240,6 +240,7 @@ describe('util', () => {
           {
             outputs: [
               {
+                id: '0-0',
                 pass: true,
                 score: 1.0,
                 namedScores: {},
@@ -312,6 +313,7 @@ describe('util', () => {
           {
             outputs: [
               {
+                id: '0-0',
                 pass: true,
                 score: 1.0,
                 namedScores: {},
@@ -384,6 +386,7 @@ describe('util', () => {
           {
             outputs: [
               {
+                id: '0-0',
                 pass: true,
                 score: 1.0,
                 namedScores: {},
@@ -456,6 +459,7 @@ describe('util', () => {
           {
             outputs: [
               {
+                id: '0-0',
                 pass: true,
                 score: 1.0,
                 namedScores: {},
@@ -522,6 +526,7 @@ describe('util', () => {
               vars: ['value1', 'value2'],
               outputs: [
                 {
+                  id: '0-0',
                   pass: true,
                   score: 1.0,
                   namedScores: { accuracy: 0.9 },
