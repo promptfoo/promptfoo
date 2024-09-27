@@ -2,7 +2,13 @@ import { randomUUID } from 'crypto';
 import { getDb } from '../database';
 import { evalResult } from '../database/tables';
 import { hashPrompt } from '../prompts/utils';
-import type { GradingResult, Prompt, ProviderOptions, ProviderResponse } from '../types';
+import type {
+  AtomicTestCase,
+  GradingResult,
+  Prompt,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types';
 import { type EvaluateResult } from '../types';
 import { sha256 } from '../util';
 
@@ -12,34 +18,21 @@ export default class EvalResult {
     result: EvaluateResult,
     columnIdx: number,
     rowIdx: number,
-    description?: string,
+    testCase: AtomicTestCase,
   ) {
     const db = getDb();
 
-    const {
-      vars,
-      prompt,
-      error,
-      score,
-      latencyMs,
-      success,
-      provider,
-      gradingResult,
-      namedScores,
-      cost,
-    } = result;
+    const { prompt, error, score, latencyMs, success, provider, gradingResult, namedScores, cost } =
+      result;
 
     const dbResult = await db
       .insert(evalResult)
       .values({
-        // @ts-expect-error
         id: randomUUID(),
         evalId,
-        description,
+        testCase,
         columnIdx,
         rowIdx,
-        vars,
-        varsHash: sha256(JSON.stringify(vars)),
         prompt,
         promptId: hashPrompt(prompt),
         error: error?.toString(),
@@ -61,15 +54,14 @@ export default class EvalResult {
   description?: string | null;
   columnIdx: number;
   rowIdx: number;
-  vars: Record<string, string> | null;
-  varsHash: string;
+  testCase: AtomicTestCase;
   prompt: Prompt;
   promptId: string;
   error?: string | null;
   pass: boolean;
   score: number;
-  providerResponse: ProviderResponse;
-  gradingResult: GradingResult;
+  providerResponse: ProviderResponse | null;
+  gradingResult: GradingResult | null;
   namedScores: Record<string, number>;
   provider: ProviderOptions;
   latencyMs: number;
@@ -78,18 +70,16 @@ export default class EvalResult {
   constructor(opts: {
     id: string;
     evalId: string;
-    description?: string | null;
     columnIdx: number;
     rowIdx: number;
-    vars: Record<string, string> | null;
-    varsHash: string | null;
+    testCase: AtomicTestCase;
     prompt: Prompt;
     promptId?: string | null;
     error?: string | null;
     pass: boolean;
     score: number;
-    providerResponse: ProviderResponse;
-    gradingResult: GradingResult;
+    providerResponse: ProviderResponse | null;
+    gradingResult: GradingResult | null;
     namedScores?: Record<string, number> | null;
     provider: ProviderOptions;
     latencyMs?: number | null;
@@ -97,11 +87,10 @@ export default class EvalResult {
   }) {
     this.id = opts.id;
     this.evalId = opts.evalId;
-    this.description = opts.description;
+
     this.columnIdx = opts.columnIdx;
     this.rowIdx = opts.rowIdx;
-    this.vars = opts.vars;
-    this.varsHash = opts.varsHash || sha256(JSON.stringify(opts.vars));
+    this.testCase = opts.testCase;
     this.prompt = opts.prompt;
     this.promptId = opts.promptId || hashPrompt(opts.prompt);
     this.error = opts.error;

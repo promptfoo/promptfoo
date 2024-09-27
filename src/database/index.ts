@@ -17,7 +17,7 @@ export function getDbSignalPath() {
 export function getDb() {
   if (!dbInstance) {
     const sqlite = new Database(getDbPath());
-    dbInstance = drizzle(sqlite, { logger: true });
+    dbInstance = drizzle(sqlite, { logger: false });
   }
   return dbInstance;
 }

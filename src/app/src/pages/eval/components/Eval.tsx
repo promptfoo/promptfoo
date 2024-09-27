@@ -64,7 +64,7 @@ function convertResultsToTable(eval_: EvalModel): EvaluateTable {
   const varValuesForRow = new Map<number, Record<string, string>>();
   for (const result of results) {
     // vars
-    for (const varName of Object.keys(result.vars || {})) {
+    for (const varName of Object.keys(result.testCase.vars || {})) {
       varsForHeader.add(varName);
     }
     let row = rows[result.rowIdx];
@@ -72,15 +72,45 @@ function convertResultsToTable(eval_: EvalModel): EvaluateTable {
       rows[result.rowIdx] = {
         description: result.description || undefined,
         outputs: [],
-        vars: Object.values(result.vars || {}),
+        vars: result.testCase.vars
+          ? Object.values(varsForHeader)
+              .map((varName) => {
+                const varValue = result.testCase.vars?.[varName] || '';
+                if (typeof varValue === 'string') {
+                  return varValue;
+                }
+                return JSON.stringify(varValue);
+              })
+              .flat()
+          : [],
         test: {},
       };
-      varValuesForRow.set(result.rowIdx, result.vars || {});
+      varValuesForRow.set(result.rowIdx, result.testCase.vars as Record<string, string>);
       row = rows[result.rowIdx];
     }
+
+    // format text
+    let resultText: string | undefined;
+    const outputTextDisplay = (
+      typeof result.providerResponse?.output === 'object'
+        ? JSON.stringify(result.providerResponse.output)
+        : result.providerResponse?.output || result.error || ''
+    ) as string;
+    if (result.testCase.assert) {
+      if (result.pass) {
+        resultText = `${outputTextDisplay || result.error || ''}`;
+      } else {
+        resultText = `${result.error}\n---\n${outputTextDisplay}`;
+      }
+    } else if (result.error) {
+      resultText = `${result.error}`;
+    } else {
+      resultText = outputTextDisplay;
+    }
+
     row.outputs[result.columnIdx] = {
       ...result,
-      text: result.providerResponse?.output || '',
+      text: resultText || '',
       prompt: result.prompt.raw,
       provider: result.provider?.label || result.provider?.id || 'unknown provider',
     };
@@ -112,20 +142,11 @@ function convertResultsToTable(eval_: EvalModel): EvaluateTable {
     // @ts-expect-error
     prompt.metrics.tokenUsage.total += result.providerResponse?.tokenUsage?.total || 0;
     prompt.metrics.cost += result.cost || 0;
+    prompt.metrics.namedScores = eval_.prompts[result.columnIdx]?.metrics?.namedScores || {};
+    prompt.metrics.namedScoresCount =
+      eval_.prompts[result.columnIdx]?.metrics?.namedScoresCount || {};
   }
 
-  console.log('completedPrompts', completedPrompts);
-
-  // const completedPrompts: CompletedPrompt[] = []
-  // for (const provider of eval_.config.providers || []) {
-  //   for (const prompt of eval_.config.prompts || []) {
-  //     completedPrompts.push({
-  //       ...prompt,
-  //       provider: provider.label || provider.id(),
-  //       metrics: new PromptMetrics(),
-  //     });
-  //   }
-  // }
   const sortedVars = [...varsForHeader].sort();
   for (const [rowIdx, row] of rows.entries()) {
     row.vars = sortedVars.map((varName) => varValuesForRow.get(rowIdx)?.[varName] || '');

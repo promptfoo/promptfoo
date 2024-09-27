@@ -623,8 +623,12 @@ class Evaluator {
         options.progressCallback(results.length, runEvalOptions.length, index, evalStep);
       }
       const { rowIndex, colIndex } = evalStep;
-      console.log(`adding result`, colIndex);
-      await this.resultsFile.addResult(row, colIndex, rowIndex, evalStep.test.description);
+      try {
+        await this.resultsFile.addResult(row, colIndex, rowIndex, evalStep.test);
+      } catch (error) {
+        logger.error(`Error adding result: ${error}`);
+        logger.error(row.response);
+      }
 
       // Bookkeeping for table
       let resultText: string | undefined;
@@ -719,6 +723,8 @@ class Evaluator {
       metrics.tokenUsage.total =
         (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.cost += row.cost || 0;
+
+      await this.resultsFile.addPrompts(table.head.prompts);
 
       await runExtensionHook(testSuite.extensions, 'afterEach', {
         test: evalStep.test,
