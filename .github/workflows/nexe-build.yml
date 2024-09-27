@@ -30,7 +30,7 @@ jobs:
   nexe-build:
     needs: build
     runs-on: ${{ matrix.arch == 'x64' && 'ubuntu-latest' || 'ubuntu-arm64' }}
-    timeout-minutes: 180
+    timeout-minutes: 300
     continue-on-error: true
     strategy:
       matrix:
