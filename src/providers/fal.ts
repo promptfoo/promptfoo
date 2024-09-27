@@ -70,6 +70,10 @@ class FalProvider<Input = any> implements ApiProvider {
       fetch: fetch as any, // TODO fix type incompatibility
     });
 
+    if (!response) {
+      response = await this.runInference(input);
+    }
+
     if (!cached && isCacheEnabled() && cache) {
       try {
         await cache.set(cacheKey, JSON.stringify(response));
@@ -111,7 +115,7 @@ export class FalImageGenerationProvider extends FalProvider<FalImageGenerationIn
     modelName: string,
     options: { config?: FalImageGenerationOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    super("image", modelName, options);
+    super('image', modelName, options);
   }
 
   toString(): string {
