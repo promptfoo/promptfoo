@@ -327,8 +327,7 @@ export function listPreviousResults(
 ): ResultLightweight[] {
   const db = getDb();
   const startTime = performance.now();
-  const test = db.select().from(evals).limit(1).all();
-  console.log({ test });
+
   const query = db
     .select({
       evalId: evals.id,
