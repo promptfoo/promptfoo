@@ -29,7 +29,7 @@ jobs:
 
   nexe-build:
     needs: build
-    runs-on: ${{ matrix.arch == 'x64' && 'ubuntu-latest' || 'ubuntu-arm64' }}
+    runs-on: ${{ matrix.os == 'macos' && (matrix.arch == 'arm64' && 'macos-latest' || 'macos-13') || (matrix.arch == 'x64' && 'ubuntu-latest' || 'ubuntu-arm64') }}
     timeout-minutes: 300
     continue-on-error: true
     strategy:
