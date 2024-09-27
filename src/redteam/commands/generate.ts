@@ -148,7 +148,12 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
         entities,
       },
     },
-    tests: `file://${path.relative(path.dirname(configPath), redteamOutputPath)}`,
+    tests: [
+      ...new Set([
+        ...(existingYaml?.tests || []),
+        `file://${path.relative(path.dirname(configPath), redteamOutputPath)}`,
+      ]),
+    ],
     redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
   };
   writePromptfooConfig(updatedYaml, configPath);
