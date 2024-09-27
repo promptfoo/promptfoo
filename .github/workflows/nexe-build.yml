@@ -66,6 +66,7 @@ jobs:
             -r drizzle/ \
             -r package.json \
             -r "dist/**/*" \
+            -r "node_modules/**/*" \
             -i dist/src/main.js \
             -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'win' && '.exe' || '' }}
       - name: Upload Artifact
