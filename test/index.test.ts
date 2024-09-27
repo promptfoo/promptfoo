@@ -1,4 +1,22 @@
+import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
+import { readProviderPromptMap } from '../src/prompts';
+
+jest.mock('../src/telemetry');
+jest.mock('../src/evaluator', () => {
+  const originalModule = jest.requireActual('../src/evaluator');
+  return {
+    ...originalModule,
+    evaluate: jest.fn().mockResolvedValue({ results: [] }),
+  };
+});
+jest.mock('../src/prompts', () => {
+  const originalModule = jest.requireActual('../src/prompts');
+  return {
+    ...originalModule,
+    readProviderPromptMap: jest.fn().mockReturnValue({}),
+  };
+});
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
@@ -78,5 +96,50 @@ describe('index.ts exports', () => {
       providers: index.providers,
       redteam: index.redteam,
     });
+  });
+});
+
+describe('evaluate function', () => {
+  it('should handle function prompts correctly', async () => {
+    // Mock the necessary dependencies
+
+    // Use a named function expression instead of an arrow function
+    const mockPromptFunction = function testPrompt() {
+      return 'Test prompt';
+    };
+
+    const testSuite = {
+      prompts: [mockPromptFunction],
+      providers: [],
+      tests: [],
+    };
+
+    await index.evaluate(testSuite);
+
+    // Check if readProviderPromptMap was called with the correct arguments
+    expect(readProviderPromptMap).toHaveBeenCalledWith(testSuite, [
+      {
+        raw: mockPromptFunction.toString(),
+        label: 'testPrompt',
+        function: mockPromptFunction,
+      },
+    ]);
+
+    // Check if doEvaluate was called with the correct arguments
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompts: [
+          {
+            raw: mockPromptFunction.toString(),
+            label: 'testPrompt',
+            function: mockPromptFunction,
+          },
+        ],
+        providerPromptMap: {},
+      }),
+      expect.objectContaining({
+        eventSource: 'library',
+      }),
+    );
   });
 });

@@ -2,7 +2,7 @@ import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
-import { readPrompts } from './prompts';
+import { readPrompts, readProviderPromptMap } from './prompts';
 import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
@@ -98,8 +98,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     cache.disableCache();
   }
 
-  const parsedProviderPromptMap = prompts_1.readProviderPromptMap(
-    testSuite,
+  const parsedProviderPromptMap = readProviderPromptMap(
+    testSuite as never,
     constructedTestSuite.prompts,
   );
 
