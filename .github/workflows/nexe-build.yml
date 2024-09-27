@@ -29,7 +29,7 @@ jobs:
 
   nexe-build:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'x64' && 'ubuntu-latest' || 'ubuntu-arm64' }}
     timeout-minutes: 180
     continue-on-error: true
     strategy:
@@ -51,15 +51,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nexe
-          key: ${{ runner.os }}-${{ matrix.arch }}-nexe-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ matrix.arch }}-${{ runner.os }}-nexe-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.arch }}-nexe-
+            ${{ matrix.arch }}-${{ runner.os }}-nexe-
           save-always: true
       - name: Install nexe globally
         run: npm install -g nexe
       - name: Build executable
-        run: npx nexe --build -r drizzle/ -r package.json -r "dist/**/*" -i dist/src/main.js -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}
-
+        run: |
+          npx nexe --build \
+            -r drizzle/ \
+            -r package.json \
+            -r "dist/**/*" \
+            -i dist/src/main.js \
+            -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'win' && '.exe' || '' }}
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
