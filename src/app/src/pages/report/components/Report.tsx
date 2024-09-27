@@ -215,9 +215,7 @@ const App: React.FC = () => {
   );
 
   const handlePromptChipClick = () => {
-    if (prompts.length > 1) {
-      setIsPromptModalOpen(true);
-    }
+    setIsPromptModalOpen(true);
   };
 
   const handlePromptSelect = (index: number) => {
@@ -334,7 +332,11 @@ const App: React.FC = () => {
                 <ListItemText
                   primary={`${prompt.provider}`}
                   secondary={
-                    prompt.raw.length > 100 ? `${prompt.raw.substring(0, 100)}...` : prompt.raw
+                    <pre>
+                      {prompt.raw.length > 100 && prompts.length > 1
+                        ? `${prompt.raw.substring(0, 100)}...`
+                        : prompt.raw}
+                    </pre>
                   }
                 />
               </ListItem>
