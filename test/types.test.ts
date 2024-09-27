@@ -172,13 +172,12 @@ describe('TestSuiteConfigSchema', () => {
   });
 
   for (const file of configFiles) {
-    const relativePath = path.relative(rootDir, file);
-    // Redteam has some aliases that are not part of validation.
-    // https://promptfoo.slack.com/archives/C075591T82G/p1726543510276649?thread_ts=1726459997.469519&cid=C075591T82G
-    // One day once we've moved these aliases into the zod validator, we can remove this.
-    it(`should validate ${relativePath}`, async () => {
+    it(`should validate ${path.relative(rootDir, file)}`, async () => {
       const configContent = fs.readFileSync(file, 'utf8');
       const config = yaml.load(configContent);
+      // Redteam has some aliases that are not part of validation.
+      // https://promptfoo.slack.com/archives/C075591T82G/p1726543510276649?thread_ts=1726459997.469519&cid=C075591T82G
+      // One day once we've moved these aliases into the zod validator, we can remove this.
       const result = TestSuiteConfigSchema.extend({
         targets: TestSuiteConfigSchema.shape.providers.optional(),
         providers: TestSuiteConfigSchema.shape.providers.optional(),
