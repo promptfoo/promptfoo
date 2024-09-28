@@ -1,4 +1,4 @@
-import { CommandLineOptions, RedteamCliGenerateOptions } from '@promptfoo/types';
+import type { CommandLineOptions, RedteamCliGenerateOptions } from '@promptfoo/types';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { createHash } from 'crypto';
