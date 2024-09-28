@@ -70,6 +70,12 @@ The Headless Browser Provider supports the following actions:
 - `selector`: The CSS selector of the input element
 - `text`: The text to type into the input
 
+Special characters can be sent using the following placeholders:
+
+- `<enter>`
+- `<tab>`
+- `<escape>`
+
 #### screenshot
 
 - `filename`: The filename to save the screenshot to
