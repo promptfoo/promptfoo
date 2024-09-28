@@ -17,49 +17,47 @@ providers:
 
 promptfoo supports a wide range of providers:
 
-### API Based Providers
+| Api Providers                        | Description                              | Syntax & Example                                |
+| ------------------------------------ | ---------------------------------------- | ----------------------------------------------- |
+| [OpenAI](./openai.md)                | GPT models including GPT-4 and GPT-3.5   | `openai:o1-preview`                             |
+| [Anthropic](./anthropic.md)          | Claude models                            | `anthropic:messages:claude-3-5-sonnet-20240620` |
+| [AI21 Labs](./ai21.md)               | Jurassic and Jamba models                | `ai21:jamba-1.5-mini`                           |
+| [AWS Bedrock](./aws-bedrock.md)      | AWS-hosted models from various providers | `bedrock:us.meta.llama3-2-90b-instruct-v1:0`    |
+| [Azure OpenAI](./azure.md)           | Azure-hosted OpenAI models               | `azureopenai:gpt-4o-custom-deployment-name`     |
+| [Cloudflare AI](./cloudflare-ai.md)  | Cloudflare's AI platform                 | `cloudflare-ai:@cf/meta/llama-3-8b-instruct`    |
+| [Cohere](./cohere.md)                | Cohere's language models                 | `cohere:command`                                |
+| [fal.ai](./fal.md)                   | Image Generation Provider                | `fal:image:fal-ai/fast-sdxl`                    |
+| [Google AI Studio (PaLM)](./palm.md) | Gemini and PaLM models                   | `google:gemini-pro`                             |
+| [Google Vertex AI](./vertex.md)      | Google Cloud's AI platform               | `vertex:gemini-pro`                             |
+| [Groq](./groq.md)                    | High-performance inference API           | `groq:llama3-70b-8192-tool-use-preview`         |
+| [Hugging Face](./huggingface.md)     | Access thousands of models               | `huggingface:text-generation:gpt2`              |
+| [IBM BAM](./ibm-bam.md)              | IBM's foundation models                  | `bam:chat:ibm/granite-13b-chat-v2`              |
+| [Mistral AI](./mistral.md)           | Mistral's language models                | `mistral:open-mistral-nemo`                     |
+| [OpenLLM](./openllm.md)              | BentoML's model serving framework        | Compatible with OpenAI syntax                   |
+| [OpenRouter](./openrouter.md)        | Unified API for multiple providers       | `openrouter:mistral/7b-instruct`                |
+| [Perplexity AI](./perplexity.md)     | Specialized in question-answering        | Compatible with OpenAI syntax                   |
+| [Replicate](./replicate.md)          | Various hosted models                    | `replicate:stability-ai/sdxl`                   |
+| [Together AI](./togetherai.md)       | Various hosted models                    | Compatible with OpenAI syntax                   |
+| [vLLM](./vllm.md)                    | High-throughput inference engine         | Compatible with OpenAI syntax                   |
+| [Voyage AI](./voyage.md)             | Specialized embedding models             | `voyage:voyage-3`                               |
 
-- [OpenAI](./openai.md): `openai:model_name` (e.g., `openai:gpt-4o-mini`)
-- [Anthropic](./anthropic.md): `anthropic:model_name` (e.g., `anthropic:messages:claude-3-5-sonnet-20240620`)
-- [AI21 Labs](./ai21.md): `ai21:model_name` (e.g., `ai21:j2-ultra`)
-- [AWS Bedrock](./aws-bedrock.md): `bedrock:model_name` (e.g., `bedrock:anthropic.claude-3-5sonnet-20240620-v1:0`)
-- [Azure OpenAI](./azure.md): `azureopenai:deployment_name`
-- [Cloudflare AI](./cloudflare-ai.md): `cloudflare-ai:model_name`
-- [Cohere](./cohere.md): `cohere:model_name` (e.g., `cohere:command`)
-- [fal.ai](./fal.md): `fal:model_type:model_name`
-- [Google AI Studio (PaLM)](./palm.md): `google:model_name` (e.g., `google:gemini-pro`)
-- [Google Vertex AI](./vertex.md): `vertex:model_name` (e.g., `vertex:gemini-pro`)
-- [Groq](./groq.md): `groq:model_name`
-- [Hugging Face](./huggingface.md): `huggingface:task:model_name` (e.g., `huggingface:text-generation:gpt2`)
-- [IBM BAM](./ibm-bam.md): `bam:model_name`
-- [LiteLLM](./litellm.md): Compatible with OpenAI syntax
-- [llama.cpp](./llama.cpp.md): `llama:model_name`
-- [LocalAI](./localai.md): `localai:model_name`
-- [Mistral AI](./mistral.md): `mistral:model_name`
-- [OpenLLM](./openllm.md): Compatible with OpenAI syntax
-- [OpenRouter](./openrouter.md): `openrouter:model_name`
-- [Perplexity AI](./perplexity.md): Compatible with OpenAI syntax
-- [Replicate](./replicate.md): `replicate:model_name:version`
-- [Together AI](./togetherai.md): Compatible with OpenAI syntax
-- [vLLM](./vllm.md): Compatible with OpenAI syntax
-- [Voyage AI](./voyage.md): `voyage:model_name`
+| Local Providers             | Description                    | Syntax & Example         |
+| --------------------------- | ------------------------------ | ------------------------ |
+| [Ollama](./ollama.md)       | Run open-source models locally | `ollama:llama3.2:latest` |
+| [LocalAI](./localai.md)     | Self-hosted AI models          | `localai:gpt4all-j`      |
+| [llama.cpp](./llama.cpp.md) | Run Llama models locally       | `llama:7b`               |
 
-### Local Providers
-
-- [Ollama](./ollama.md): `ollama:model_name` (e.g., `ollama:llama3.2`)
-
-### Custom and Specialized Providers
-
-- [Javascript](./custom-api.md): For custom API integrations
-- [Shell Command](./custom-script.md): For custom script-based providers
-- [Echo](./echo.md): `echo` (for testing purposes)
-- [Browser](./browser.md): browser-based interactions (ChatGPT, LMArena, etc.)
-- [HTTP](./http.md): For generic HTTP-based providers
-- [Manual Input](./manual-input.md): `promptfoo:manual-input`
-- [Python](./python.md): For Python-based custom providers
-- [Webhook](./webhook.md): For webhook-based integrations
-- [WebSocket](./websocket.md): For WebSocket-based providers
-- [Text Generation WebUI](./text-generation-webui.md): For text generation web interfaces
+| Custom Providers                                    | Description                              | Syntax & Example                              |
+| --------------------------------------------------- | ---------------------------------------- | --------------------------------------------- |
+| [Echo](./echo.md)                                   | For testing purposes                     | `echo`                                        |
+| [Manual Input](./manual-input.md)                   | For manual response entry                | `promptfoo:manual-input`                      |
+| [LiteLLM](./litellm.md)                             | Unified interface for multiple providers | Compatible with OpenAI syntax                 |
+| [Javascript](./custom-api.md)                       | Custom JavaScript-based providers        | `file://path/to/custom_provider.js`           |
+| [Python](./python.md)                               | Custom Python-based providers            | `file://path/to/custom_provider.py`           |
+| [HTTP](./http.md)                                   | Generic HTTP-based providers             | `https://api.example.com/v1/chat/completions` |
+| [WebSocket](./websocket.md)                         | WebSocket-based providers                | `ws://example.com/ws`                         |
+| [Shell Command](./custom-script.md)                 | Custom script-based providers            | `exec: python chain.py`                       |
+| [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                             | Compatible with OpenAI syntax                 |
 
 ## Provider Syntax
 
@@ -67,7 +65,7 @@ Providers are specified using various syntax options:
 
 1. Simple string format:
 
-   ```
+   ```yaml
    provider_name:model_name
    ```
 
