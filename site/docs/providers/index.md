@@ -2,19 +2,6 @@
 
 Providers in promptfoo are the interfaces to various language models and AI services. This guide will help you understand how to configure and use providers in your promptfoo evaluations.
 
-## Table of Contents
-
-- [LLM Providers in promptfoo](#llm-providers-in-promptfoo)
-  - [Table of Contents](#table-of-contents)
-  - [Quick Start](#quick-start)
-  - [Provider Syntax](#provider-syntax)
-  - [Available Providers](#available-providers)
-  - [Configuring Providers](#configuring-providers)
-  - [Custom Integrations](#custom-integrations)
-  - [Common Configuration Options](#common-configuration-options)
-  - [Using Multiple Providers](#using-multiple-providers)
-  - [Troubleshooting](#troubleshooting)
-
 ## Quick Start
 
 Here's a basic example of configuring providers in your promptfoo YAML config:
@@ -25,6 +12,54 @@ providers:
   - anthropic:messages:claude-3-5-sonnet-20240620
   - vertex:gemini-pro
 ```
+
+## Available Providers
+
+promptfoo supports a wide range of providers:
+
+### API Based Providers
+
+- [OpenAI](./openai.md): `openai:model_name` (e.g., `openai:gpt-4o-mini`)
+- [Anthropic](./anthropic.md): `anthropic:model_name` (e.g., `anthropic:messages:claude-3-5-sonnet-20240620`)
+- [AI21 Labs](./ai21.md): `ai21:model_name` (e.g., `ai21:j2-ultra`)
+- [AWS Bedrock](./aws-bedrock.md): `bedrock:model_name` (e.g., `bedrock:anthropic.claude-3-5sonnet-20240620-v1:0`)
+- [Azure OpenAI](./azure.md): `azureopenai:deployment_name`
+- [Cloudflare AI](./cloudflare-ai.md): `cloudflare-ai:model_name`
+- [Cohere](./cohere.md): `cohere:model_name` (e.g., `cohere:command`)
+- [fal.ai](./fal.md): `fal:model_type:model_name`
+- [Google AI Studio (PaLM)](./palm.md): `google:model_name` (e.g., `google:gemini-pro`)
+- [Google Vertex AI](./vertex.md): `vertex:model_name` (e.g., `vertex:gemini-pro`)
+- [Groq](./groq.md): `groq:model_name`
+- [Hugging Face](./huggingface.md): `huggingface:task:model_name` (e.g., `huggingface:text-generation:gpt2`)
+- [IBM BAM](./ibm-bam.md): `bam:model_name`
+- [LiteLLM](./litellm.md): Compatible with OpenAI syntax
+- [llama.cpp](./llama.cpp.md): `llama:model_name`
+- [LocalAI](./localai.md): `localai:model_name`
+- [Mistral AI](./mistral.md): `mistral:model_name`
+- [OpenLLM](./openllm.md): Compatible with OpenAI syntax
+- [OpenRouter](./openrouter.md): `openrouter:model_name`
+- [Perplexity AI](./perplexity.md): Compatible with OpenAI syntax
+- [Replicate](./replicate.md): `replicate:model_name:version`
+- [Together AI](./togetherai.md): Compatible with OpenAI syntax
+- [vLLM](./vllm.md): Compatible with OpenAI syntax
+- [Voyage AI](./voyage.md): `voyage:model_name`
+
+### Local Providers
+
+- [Ollama](./ollama.md): `ollama:model_name` (e.g., `ollama:llama3.2`)
+
+### Custom and Specialized Providers
+
+- [Javascript](./custom-api.md): For custom API integrations
+- [Shell Command](./custom-script.md): For custom script-based providers
+- [Echo](./echo.md): `echo` (for testing purposes)
+- [Browser](./browser.md): browser-based interactions (ChatGPT, LMArena, etc.)
+- [HTTP](./http.md): For generic HTTP-based providers
+- [Manual Input](./manual-input.md): `promptfoo:manual-input`
+- [Python](./python.md): For Python-based custom providers
+- [Webhook](./webhook.md): For webhook-based integrations
+- [WebSocket](./websocket.md): For WebSocket-based providers
+- [Text Generation WebUI](./text-generation-webui.md): For text generation web interfaces
 
 ## Provider Syntax
 
@@ -61,46 +96,6 @@ Providers are specified using various syntax options:
    ```yaml
    - file://path/to/provider_config.yaml
    ```
-
-## Available Providers
-
-promptfoo supports a wide range of providers:
-
-- [OpenAI](./openai.md): `openai:model_name` (e.g., `openai:gpt-4o-mini`)
-- [Anthropic](./anthropic.md): `anthropic:model_name` (e.g., `anthropic:claude-3-sonnet-20240229`)
-- [AI21 Labs](./ai21.md): `ai21:model_name` (e.g., `ai21:j2-ultra`)
-- [AWS Bedrock](./aws-bedrock.md): `bedrock:model_name` (e.g., `bedrock:anthropic.claude-v2`)
-- [Azure OpenAI](./azure.md): `azureopenai:deployment_name`
-- [Browser](./browser.md): For browser-based interactions
-- [Cloudflare AI](./cloudflare-ai.md): `cloudflare-ai:model_name`
-- [Cohere](./cohere.md): `cohere:model_name` (e.g., `cohere:command`)
-- [Custom API](./custom-api.md): For custom API integrations
-- [Custom Script](./custom-script.md): For custom script-based providers
-- [Echo](./echo.md): `echo` (for testing purposes)
-- [fal.ai](./fal.md): `fal:model_type:model_name`
-- [Google AI Studio (PaLM)](./palm.md): `google:model_name` (e.g., `google:gemini-pro`)
-- [Google Vertex AI](./vertex.md): `vertex:model_name` (e.g., `vertex:gemini-pro`)
-- [Groq](./groq.md): `groq:model_name`
-- [HTTP](./http.md): For generic HTTP-based providers
-- [Hugging Face](./huggingface.md): `huggingface:task:model_name` (e.g., `huggingface:text-generation:gpt2`)
-- [IBM BAM](./ibm-bam.md): `bam:model_name`
-- [LiteLLM](./litellm.md): Compatible with OpenAI syntax
-- [llama.cpp](./llama.cpp.md): `llama:model_name`
-- [LocalAI](./localai.md): `localai:model_name`
-- [Manual Input](./manual-input.md): `promptfoo:manual-input`
-- [Mistral AI](./mistral.md): `mistral:model_name`
-- [Ollama](./ollama.md): `ollama:model_name` (e.g., `ollama:llama2`)
-- [OpenLLM](./openllm.md): Compatible with OpenAI syntax
-- [OpenRouter](./openrouter.md): `openrouter:model_name`
-- [Perplexity AI](./perplexity.md): Compatible with OpenAI syntax
-- [Python](./python.md): For Python-based custom providers
-- [Replicate](./replicate.md): `replicate:model_name:version`
-- [Text Generation WebUI](./text-generation-webui.md): For text generation web interfaces
-- [Together AI](./togetherai.md): Compatible with OpenAI syntax
-- [vLLM](./vllm.md): Compatible with OpenAI syntax
-- [Voyage AI](./voyage.md): `voyage:model_name`
-- [Webhook](./webhook.md): For webhook-based integrations
-- [WebSocket](./websocket.md): For WebSocket-based providers
 
 ## Configuring Providers
 
