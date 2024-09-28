@@ -20,6 +20,7 @@ import { runDbMigrations } from './migrate';
 import { generateRedteamCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
+import { runRedteamCommand } from './redteam/commands/run';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 
@@ -58,6 +59,7 @@ async function main() {
   evalCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamPluginsCommand(redteamBaseCommand);
+  runRedteamCommand(redteamBaseCommand);
 
   if (!process.argv.slice(2).length) {
     program.outputHelp();
