@@ -1567,4 +1567,15 @@ config:
     expect(mockExit).toHaveBeenCalledWith(1);
     mockExit.mockRestore();
   });
+
+  it('renders label using Nunjucks', async () => {
+    process.env.someVariable = 'foo';
+    const providerOptions = {
+      id: 'openai:chat:gpt-4o',
+      config: {},
+      label: '{{ env.someVariable }}',
+    };
+    const provider = await loadApiProvider('openai:chat:gpt-4o', { options: providerOptions });
+    expect(provider.label).toBe('foo');
+  });
 });

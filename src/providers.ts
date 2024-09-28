@@ -457,7 +457,7 @@ export async function loadApiProvider(
   }
   ret.transform = options.transform;
   ret.delay = options.delay;
-  ret.label ||= options.label;
+  ret.label ||= getNunjucksEngine().renderString(options.label || '', {});
   return ret;
 }
 
