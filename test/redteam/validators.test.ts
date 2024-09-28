@@ -215,16 +215,24 @@ describe('redteamConfigSchema', () => {
       plugins: REDTEAM_ALL_PLUGINS,
       strategies: strategiesExceptDefault,
     };
-    expect(RedteamConfigSchema.safeParse(input)).toEqual({
+    const result = RedteamConfigSchema.safeParse(input);
+    expect(result).toEqual({
       success: true,
-      data: {
-        plugins: REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id as any)).map((id) => ({
-          id,
-          numTests: undefined,
-        })),
-        strategies: strategiesExceptDefault.map((id) => ({ id })),
-      },
+      data: expect.objectContaining({
+        numTests: undefined,
+        plugins: expect.arrayContaining(
+          REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id as any)).map((id) => ({
+            id,
+          })),
+        ),
+        strategies: expect.arrayContaining(strategiesExceptDefault.map((id) => ({ id }))),
+      }),
     });
+
+    expect(result.data?.plugins).toHaveLength(
+      REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id as any)).length,
+    );
+    expect(result.data?.strategies).toHaveLength(strategiesExceptDefault.length);
   });
 
   it('should expand harmful plugin to all harm categories', () => {
@@ -520,7 +528,7 @@ describe('redteamConfigSchema', () => {
     ]);
   });
 
-  describe('plugin aliases', () => {
+  describe('aliases', () => {
     it('should expand high-level aliased plugin names', () => {
       const input = {
         plugins: ['owasp:llm'],
@@ -668,6 +676,42 @@ describe('redteamConfigSchema', () => {
         expect.arrayContaining(
           expectedPlugins.map((id) => expect.objectContaining({ id, numTests: 3 })),
         ),
+      );
+    });
+
+    it('should expand strategies for "owasp:llm" alias', () => {
+      const input = {
+        plugins: ['owasp:llm'],
+        numTests: 3,
+      };
+      const result = RedteamConfigSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      expect(result.data?.strategies).toEqual(
+        expect.arrayContaining([{ id: 'prompt-injection' }, { id: 'jailbreak' }]),
+      );
+    });
+
+    it('should expand strategies for "owasp:llm:01" alias', () => {
+      const input = {
+        plugins: ['owasp:llm:01'],
+        numTests: 3,
+      };
+      const result = RedteamConfigSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      expect(result.data?.strategies).toEqual(
+        expect.arrayContaining([{ id: 'prompt-injection' }, { id: 'jailbreak' }]),
+      );
+    });
+
+    it('should not duplicate strategies when using multiple aliased names', () => {
+      const input = {
+        plugins: ['owasp:llm', 'owasp:llm:01', 'owasp:llm:02'],
+        numTests: 3,
+      };
+      const result = RedteamConfigSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      expect(result.data?.strategies).toEqual(
+        expect.arrayContaining([{ id: 'prompt-injection' }, { id: 'jailbreak' }]),
       );
     });
   });

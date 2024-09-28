@@ -156,7 +156,10 @@ export const RedteamConfigSchema = z
 
     const addPlugin = (id: string, config: any, numTests: number | undefined) => {
       const key = `${id}:${JSON.stringify(config)}`;
-      const pluginObject: RedteamPluginObject = { id, numTests: numTests ?? data.numTests };
+      const pluginObject: RedteamPluginObject = { id };
+      if (numTests !== undefined || data.numTests !== undefined) {
+        pluginObject.numTests = numTests ?? data.numTests;
+      }
       if (config !== undefined) {
         pluginObject.config = config;
       }
@@ -239,19 +242,21 @@ export const RedteamConfigSchema = z
         return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
       });
 
-    const strategies = Array.from(new Set([...(data.strategies || []), ...Array.from(strategySet)]))
-      .map((strategy) => {
-        if (typeof strategy === 'string') {
-          if (strategy === 'basic') {
-            return [];
+    const strategies = Array.from(
+      new Set(
+        [...(data.strategies || []), ...Array.from(strategySet)].flatMap((strategy) => {
+          if (typeof strategy === 'string') {
+            if (strategy === 'basic') {
+              return [];
+            }
+            return strategy === 'default' ? DEFAULT_STRATEGIES.map((id) => id) : [strategy];
           }
-          return strategy === 'default'
-            ? DEFAULT_STRATEGIES.map((id) => ({ id }))
-            : { id: strategy };
-        }
-        return strategy;
-      })
-      .flat();
+          return [strategy.id];
+        }),
+      ),
+    )
+      .map((id) => ({ id }))
+      .sort((a, b) => a.id.localeCompare(b.id));
 
     return {
       numTests: data.numTests,
