@@ -132,7 +132,33 @@ export class BrowserProvider implements ApiProvider {
         );
         logger.debug(`Waiting for and typing into ${renderedArgs.selector}: ${renderedArgs.text}`);
         await this.waitForSelector(page, renderedArgs.selector);
-        //await page.type(renderedArgs.selector, renderedArgs.text);
+
+        if (typeof renderedArgs.text === 'string') {
+          // Handle special characters
+          const specialKeys = {
+            '<enter>': 'Enter',
+            '<tab>': 'Tab',
+            '<escape>': 'Escape',
+          };
+
+          for (const [placeholder, key] of Object.entries(specialKeys)) {
+            const lowerText = renderedArgs.text.toLowerCase();
+            if (lowerText.includes(placeholder)) {
+              const parts = lowerText.split(placeholder);
+              for (let i = 0; i < parts.length; i++) {
+                if (parts[i]) {
+                  await page.fill(renderedArgs.selector, parts[i]);
+                }
+                if (i < parts.length - 1) {
+                  await page.press(renderedArgs.selector, key);
+                }
+              }
+              return;
+            }
+          }
+        }
+
+        // If no special characters, use the original fill method
         await page.fill(renderedArgs.selector, renderedArgs.text);
         break;
       case 'screenshot':
