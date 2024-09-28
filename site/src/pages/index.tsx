@@ -17,7 +17,7 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1>Find & fix problems in your LLM apps</h1>
+        <h1>Test & secure your LLM apps</h1>
         <p>Open-source LLM testing used by 30,000+ developers</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
@@ -79,19 +79,17 @@ function HomepageWalkthrough() {
       image2x: '/img/riskreport-1@2x.png',
       description: (
         <>
-          <p className={styles.walkthroughHeading}>Automated pentesting for your app</p>
-          <p>
-            Run an automatic scan tailored to your application that detects security, legal, and
-            brand risks:
-          </p>
+          <p className={styles.walkthroughHeading}>Automated red teaming for gen AI</p>
+          <p>Run custom scans that detect security, legal, and brand risk:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest redteam init</code>
           </pre>
-          <p>Our probes cover common failures like:</p>
+          <p>Our probes adapt dynamically to your app and uncover common failures like:</p>
           <ul>
             <li>PII leaks</li>
             <li>Insecure tool use</li>
             <li>Cross-session data leaks</li>
+            <li>Direct and indirect prompt injections</li>
             <li>Jailbreaks</li>
             <li>Harmful content</li>
             <li>Specialized medical and legal advice</li>
