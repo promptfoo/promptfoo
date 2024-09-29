@@ -37,11 +37,8 @@ import {
   migrateResultsFromFileSystemToDatabase,
   getStandaloneEvals,
   deleteEval,
-<<<<<<< HEAD:src/web/server.ts
   getEvalsByDescription,
-=======
   writeResultsToDatabase,
->>>>>>> main:src/server/server.ts
 } from '../util';
 
 // Running jobs
@@ -222,7 +219,10 @@ export function startServer(
     const { tagName, tagValue, description } = req.query;
     const tag =
       tagName && tagValue ? { key: tagName as string, value: tagValue as string } : undefined;
-    const results = await getStandaloneEvals({ tag, description });
+    const results = await getStandaloneEvals({
+      tag,
+      description: description as string | undefined,
+    });
     res.json({
       data: results,
     });
@@ -238,7 +238,6 @@ export function startServer(
     res.json({ data: await getTestCases() });
   });
 
-<<<<<<< HEAD:src/web/server.ts
   app.get('/api/eval', async (req, res) => {
     const description = req.query.description;
     if (typeof description !== 'string') {
@@ -251,11 +250,6 @@ export function startServer(
     res.json({ data });
   });
 
-  app.get('/api/config', (req, res) => {
-    res.json({
-      apiBaseUrl: apiBaseUrl || '',
-    });
-=======
   app.post('/api/results/share', async (req, res) => {
     const { id } = req.body;
 
@@ -266,7 +260,6 @@ export function startServer(
     }
     const url = await createPublicUrl(result.result, true);
     res.json({ url });
->>>>>>> main:src/server/server.ts
   });
 
   app.post('/api/dataset/generate', async (req, res) => {

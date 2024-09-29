@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { getApiBaseUrl } from '@/api';
+import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
@@ -442,7 +442,8 @@ function ordinalSuffixOf(i: number): string {
 
 const fetchEvalsWithDescription = async (description: string) => {
   try {
-    const res = await fetch(`${await getApiBaseUrl()}/api/eval?description=${description}`);
+    console.log(`Fetching evals with description: ${description}`);
+    const res = await callApi(`/eval?description=${description}`);
     return await res.json();
   } catch (err) {
     const error = err as Error;
@@ -482,13 +483,7 @@ function PerformanceOverTimeChart({ table, evalId }: ChartProps) {
   }, [config?.description]);
 
   useEffect(() => {
-    if (
-      !lineCanvasRef.current ||
-      !evalId ||
-      !config?.description ||
-      !dataset ||
-      dataset.prompts.length <= 1
-    ) {
+    if (!lineCanvasRef.current || !evalId || !config?.description || !dataset) {
       return;
     }
 
@@ -535,6 +530,7 @@ function PerformanceOverTimeChart({ table, evalId }: ChartProps) {
       }
     });
 
+    console.log('evalIdToIndex', evalIdToIndex);
     if (evalIdToIndex.size == 1) {
       return;
     }
