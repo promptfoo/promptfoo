@@ -541,7 +541,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
         tooltip: {
           callbacks: {
             title: (context: any) => {
-              return `Eval: ${context[0].raw.evalId}`;
+              return context[0].raw.evalData.evalId;
             },
             label: (context: any) => {
               const item = context.raw as { x: number; y: number; evalData: ProgressData };
@@ -612,7 +612,7 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
         setShowPerformanceOverTimeChart(true);
       }
     } else {
-      setShowCharts(false);
+      setShowPerformanceOverTimeChart(false);
     }
   }, [config?.description, recentEvals]);
 
@@ -628,7 +628,7 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
   if (table.head.prompts.length < 2 && showPerformanceOverTimeChart) {
     return (
       <ErrorBoundary fallback={null}>
-        <Paper style={{ position: 'relative', padding: theme.spacing(3) }}>
+        <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
           <IconButton
             style={{ position: 'absolute', right: 0, top: 0 }}
             onClick={() => setShowCharts(false)}
