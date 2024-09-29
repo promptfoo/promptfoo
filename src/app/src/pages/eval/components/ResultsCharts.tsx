@@ -604,11 +604,11 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
   const { table, evalId, config } = useStore();
 
   useEffect(() => {
-    if (config?.description) {
+    if (config?.description && import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL) {
       const filteredEvals = recentEvals.filter(
         (evaluation) => evaluation.description === config.description,
       );
-      if (filteredEvals.length > 1 && import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL) {
+      if (filteredEvals.length > 1) {
         setShowPerformanceOverTimeChart(true);
       }
     } else {
