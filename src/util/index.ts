@@ -908,14 +908,6 @@ export async function getEvalFromId(hash: string) {
   return undefined;
 }
 
-export async function getEvalsByDescription(
-  description: string,
-  limit: number = DEFAULT_QUERY_LIMIT,
-) {
-  // TODO(ian): Make this use a proper database query...
-  return getTestCasesWithPredicate((result) => result.config.description === description, limit);
-}
-
 export async function deleteEval(evalId: string) {
   const db = getDb();
   await db.transaction(async () => {

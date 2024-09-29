@@ -37,7 +37,6 @@ import {
   migrateResultsFromFileSystemToDatabase,
   getStandaloneEvals,
   deleteEval,
-  getEvalsByDescription,
   writeResultsToDatabase,
 } from '../util';
 
@@ -237,20 +236,6 @@ export function startServer(
   app.get('/api/datasets', async (req, res) => {
     res.json({ data: await getTestCases() });
   });
-
-  /*
-  app.get('/api/eval', async (req, res) => {
-    const description = req.query.description;
-    if (typeof description !== 'string') {
-      res.status(400).send('description is required and must be a string');
-      return;
-    }
-    const limit =
-      typeof req.query.limit === 'string' ? Number.parseInt(req.query.limit, 10) : undefined;
-    const data = await getEvalsByDescription(description, limit);
-    res.json({ data });
-  });
-  */
 
   app.post('/api/results/share', async (req, res) => {
     const { id } = req.body;
