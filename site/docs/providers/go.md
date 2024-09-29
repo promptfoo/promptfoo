@@ -1,6 +1,14 @@
+---
+sidebar_label: Custom Go (Golang)
+---
+
 # Custom Go Provider
 
-The Go provider allows you to use a Go script as an API provider for evaluating prompts. This is useful when you have custom logic or models implemented in Go that you want to integrate with your test suite.
+The Go (`golang`) provider allows you to use a Go script as an API provider for evaluating prompts. This is useful when you have custom logic or models implemented in Go that you want to integrate with your test suite.
+
+:::info
+The golang provider currently experimental
+:::
 
 ## Configuration
 
