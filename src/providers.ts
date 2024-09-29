@@ -430,8 +430,14 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('ai21:')) {
     const modelName = providerPath.split(':')[1];
     ret = new AI21ChatCompletionProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('golang:')) {
-    const scriptPath = providerPath.split(':').slice(1).join(':');
+  } else if (
+    providerPath.startsWith('golang:') ||
+    (providerPath.startsWith('file://') &&
+      (providerPath.endsWith('.go') || providerPath.includes('.go:')))
+  ) {
+    const scriptPath = providerPath.startsWith('file://')
+      ? providerPath.slice('file://'.length)
+      : providerPath.split(':').slice(1).join(':');
     ret = new GolangProvider(scriptPath, providerOptions);
   } else if (isJavascriptFile(providerPath)) {
     if (providerPath.startsWith('file://')) {
