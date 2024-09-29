@@ -27,12 +27,7 @@ import {
   type TooltipItem,
 } from 'chart.js';
 import { useStore } from './store';
-import type {
-  EvaluateTable,
-  UnifiedConfig,
-  TestCasesWithMetadata,
-  ResultLightweightWithLabel,
-} from './types';
+import type { EvaluateTable, UnifiedConfig, ResultLightweightWithLabel } from './types';
 
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;
@@ -425,65 +420,48 @@ function MetricChart({ table }: ChartProps) {
   return <canvas ref={metricCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
 }
 
-function ordinalSuffixOf(i: number): string {
-  const j = i % 10,
-    k = i % 100;
-  if (j === 1 && k !== 11) {
-    return i + 'st';
-  }
-  if (j === 2 && k !== 12) {
-    return i + 'nd';
-  }
-  if (j === 3 && k !== 13) {
-    return i + 'rd';
-  }
-  return i + 'th';
+interface ProgressData {
+  evalId: string;
+  description: string;
+  promptId: string;
+  createdAt: number;
+  label: string;
+  provider: string;
+  metrics: {
+    testPassCount: number;
+    testFailCount: number;
+    score: number;
+  };
 }
 
-const fetchEvalsWithDescription = async (description: string) => {
-  try {
-    console.log(`Fetching evals with description: ${description}`);
-    const res = await callApi(`/eval?description=${description}`);
-    return await res.json();
-  } catch (err) {
-    const error = err as Error;
-    throw new Error(`Fetch dataset data using given id failed: ${error.message}.`);
-  }
-};
-
-function PerformanceOverTimeChart({ table, evalId }: ChartProps) {
+function PerformanceOverTimeChart({ evalId }: ChartProps) {
   const { config } = useStore();
   const lineCanvasRef = useRef(null);
   const lineChartInstance = useRef<Chart | null>(null);
-  const [dataset, setDataset] = useState<TestCasesWithMetadata>();
-
-  interface PointMetadata {
-    evalId: string;
-    highlight: boolean;
-    label: string;
-    date: string;
-    score: string;
-  }
-
-  interface Point {
-    x: number;
-    y: number;
-    metadata: PointMetadata;
-  }
+  const [progressData, setProgressData] = useState<ProgressData[]>([]);
 
   useEffect(() => {
-    (async () => {
+    const fetchProgressData = async () => {
       if (!config?.description) {
         return;
       }
-      const data = await fetchEvalsWithDescription(config.description);
-      // Current eval
-      setDataset(data.data[0]);
-    })();
+
+      try {
+        const res = await callApi(
+          `/progress?description=${encodeURIComponent(config.description)}`,
+        );
+        const data = await res.json();
+        setProgressData(data.data);
+      } catch (error) {
+        console.error('Error fetching progress data:', error);
+      }
+    };
+
+    fetchProgressData();
   }, [config?.description]);
 
   useEffect(() => {
-    if (!lineCanvasRef.current || !evalId || !config?.description || !dataset) {
+    if (!lineCanvasRef.current || !evalId || progressData.length === 0) {
       return;
     }
 
@@ -491,144 +469,128 @@ function PerformanceOverTimeChart({ table, evalId }: ChartProps) {
       lineChartInstance.current.destroy();
     }
 
-    const evalIdToIndex = new Map<string, number>();
-    const highestScoreMap = new Map<string, Point>();
-    let currentIndex = 1;
-    const allPoints: Point[] = [];
-
-    dataset.prompts.forEach((promptObject, index) => {
-      const evalIdKey = promptObject.evalId;
-      const isCurrentEval = evalIdKey === evalId;
-
-      if (!evalIdToIndex.has(evalIdKey)) {
-        evalIdToIndex.set(evalIdKey, currentIndex);
-        currentIndex++;
-      }
-
-      if (promptObject.prompt.metrics) {
-        const point: Point = {
-          x: evalIdToIndex.get(evalIdKey)!,
-          y:
-            (promptObject.prompt.metrics.testPassCount /
-              (promptObject.prompt.metrics.testPassCount +
-                promptObject.prompt.metrics.testFailCount)) *
-            100,
-          metadata: {
-            evalId: promptObject.evalId,
-            highlight: isCurrentEval,
-            label: promptObject.prompt.label,
-            date: promptObject.evalId.split('T')[0],
-            score: promptObject.prompt.metrics.score.toFixed(2),
-          },
-        };
-
-        allPoints.push(point);
-
-        if (!highestScoreMap.has(evalIdKey) || highestScoreMap.get(evalIdKey)!.y < point.y) {
-          highestScoreMap.set(evalIdKey, point);
+    // Group evaluations by createdAt and assign evaluation numbers
+    const evaluationGroups = progressData.reduce(
+      (groups, eval_) => {
+        const date = new Date(eval_.createdAt).toISOString();
+        if (!groups[date]) {
+          groups[date] = [];
         }
-      }
+        groups[date].push(eval_);
+        return groups;
+      },
+      {} as Record<string, ProgressData[]>,
+    );
+
+    const evaluations = Object.values(evaluationGroups).flatMap((group, groupIndex) =>
+      group.map((item) => ({
+        ...item,
+        evaluationNumber: groupIndex + 1,
+      })),
+    );
+
+    const datasets = evaluations.reduce(
+      (acc, eval_) => {
+        const passRate =
+          (eval_.metrics.testPassCount /
+            (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
+          100;
+
+        if (!acc[eval_.evaluationNumber]) {
+          acc[eval_.evaluationNumber] = [];
+        }
+        acc[eval_.evaluationNumber].push({
+          x: eval_.evaluationNumber,
+          y: passRate,
+          evalData: eval_,
+        });
+        return acc;
+      },
+      {} as Record<number, { x: number; y: number; evalData: ProgressData }[]>,
+    );
+
+    const chartData = Object.values(datasets).flat();
+
+    // Find the highest pass rate for each evaluation number to connect with a line
+    const highestPassRates = Object.values(datasets).map((group) => {
+      return group.reduce((max, current) => (current.y > max.y ? current : max));
     });
 
-    console.log('evalIdToIndex', evalIdToIndex);
-    if (evalIdToIndex.size == 1) {
-      return;
-    }
-
-    const highestScorePoints: Point[] = Array.from(highestScoreMap.values());
+    const chartOptions = {
+      responsive: true,
+      scales: {
+        x: {
+          type: 'linear' as const,
+          position: 'bottom' as const,
+          title: {
+            display: true,
+            text: 'Evaluation',
+          },
+          ticks: {
+            stepSize: 1,
+          },
+        },
+        y: {
+          title: {
+            display: true,
+            text: 'Pass Rate (%)',
+          },
+        },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            title: (context: any) => {
+              return `Eval: ${context[0].raw.evalId}`;
+            },
+            label: (context: any) => {
+              const item = context.raw as { x: number; y: number; evalData: ProgressData };
+              const { evalData } = item;
+              const passRate =
+                (evalData.metrics.testPassCount /
+                  (evalData.metrics.testPassCount + evalData.metrics.testFailCount)) *
+                100;
+              return [
+                `Label: ${evalData.label}`,
+                `Provider: ${evalData.provider}`,
+                `Pass Rate: ${passRate.toFixed(2)}%`,
+                `Score: ${evalData.metrics.score.toFixed(2)}`,
+              ];
+            },
+          },
+        },
+      },
+      onClick: (event: any, elements: any) => {
+        if (elements.length > 0) {
+          const index = elements[0].index;
+          window.open(`/eval/?evalId=${chartData[index].evalData.evalId}`, '_blank');
+        }
+      },
+    };
 
     lineChartInstance.current = new Chart(lineCanvasRef.current, {
-      type: 'line',
+      type: 'scatter',
       data: {
         datasets: [
           {
             type: 'scatter',
-            data: allPoints,
-            backgroundColor: allPoints.map((point) => (point.metadata.highlight ? 'red' : 'black')),
-            pointRadius: allPoints.map((point) => (point.metadata.highlight ? 3.0 : 2.5)),
+            data: chartData,
+            pointBackgroundColor: chartData.map((point) =>
+              point.evalData.evalId === evalId ? '#4CAF50' : '#2196F3',
+            ),
           },
           {
             type: 'line',
-            data: highestScorePoints,
-            backgroundColor: 'black',
+            data: highestPassRates,
+            borderColor: '#2196F3AA',
+            borderWidth: 2,
             pointRadius: 0,
-            pointHitRadius: 0,
           },
         ],
       },
-      options: {
-        animation: false,
-        scales: {
-          x: {
-            title: {
-              display: true,
-              text: `Eval Index`,
-            },
-            type: 'linear',
-            position: 'bottom',
-            ticks: {
-              callback: (value) => {
-                if (Number.isInteger(value)) {
-                  return ordinalSuffixOf(Number(value));
-                }
-                return '';
-              },
-            },
-          },
-          y: {
-            title: {
-              display: true,
-              text: `Pass Rate`,
-            },
-            ticks: {
-              callback: (value: string | number, index: number, values: any[]) => {
-                let ret = String(Math.round(Number(value)));
-                if (index === values.length - 1) {
-                  ret += '%';
-                }
-                return ret;
-              },
-            },
-          },
-        },
-
-        plugins: {
-          legend: {
-            display: true,
-          },
-          tooltip: {
-            callbacks: {
-              title: (context) => {
-                return `Pass Rate: ${context[0].parsed.y.toFixed(2)}%`;
-              },
-              label: (context) => {
-                const point = context.raw as Point;
-                let label = point.metadata.label;
-                if (label && label.length > 30) {
-                  label = label.substring(0, 30) + '...';
-                }
-                return [
-                  `evalId: ${point.metadata.evalId}`,
-                  `Prompt: ${label}`,
-                  `Date: ${point.metadata.date}`,
-                  `Score: ${point.metadata.score}`,
-                ];
-              },
-            },
-          },
-        },
-
-        onClick: (event, elements) => {
-          if (elements.length > 0) {
-            const topMostElement = elements[0];
-            const pointData = (topMostElement.element as any).$context.raw as Point;
-            const evalId = pointData.metadata.evalId;
-            window.open(`/eval/?evalId=${evalId}`, '_blank');
-          }
-        },
-      },
+      options: chartOptions,
     });
-  }, [table, evalId, config, dataset]);
+  }, [progressData, evalId]);
 
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
@@ -646,7 +608,7 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
       const filteredEvals = recentEvals.filter(
         (evaluation) => evaluation.description === config.description,
       );
-      if (filteredEvals.length > 1) {
+      if (filteredEvals.length > 1 && import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL) {
         setShowPerformanceOverTimeChart(true);
       }
     } else {

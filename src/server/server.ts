@@ -238,6 +238,7 @@ export function startServer(
     res.json({ data: await getTestCases() });
   });
 
+  /*
   app.get('/api/eval', async (req, res) => {
     const description = req.query.description;
     if (typeof description !== 'string') {
@@ -249,6 +250,7 @@ export function startServer(
     const data = await getEvalsByDescription(description, limit);
     res.json({ data });
   });
+  */
 
   app.post('/api/results/share', async (req, res) => {
     const { id } = req.body;

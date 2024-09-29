@@ -29,7 +29,7 @@ const router = createBrowserRouter(
       <Route path="/progress" element={<ProgressPage />} />
       <Route path="/datasets" element={<DatasetsPage />} />
       <Route path="/report" element={<ReportPage />} />
-      {import.meta.env.PROMPTFOO_EXPERIMENTAL && (
+      {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
         <Route path="/dashboard" element={<DashboardPage />} />
       )}
     </Route>,
