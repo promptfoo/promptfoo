@@ -89,26 +89,3 @@ Or in the CLI:
 ```
 promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -v vars.csv -r 'file://path/to/your/script.go'
 ```
-
-## Additional Functions
-
-In addition to `CallApi`, you can implement other functions in your Go script:
-
-```go
-func SomeOtherFunction(prompt string, options map[string]interface{}, context map[string]interface{}) (map[string]interface{}, error) {
-    return CallApi(prompt+"\nWrite in ALL CAPS", options, context)
-}
-
-func AsyncProvider(prompt string, options map[string]interface{}, context map[string]interface{}) (map[string]interface{}, error) {
-    // In Go, we don't have async/await syntax, but we can use goroutines and channels for concurrency
-    // For this example, we'll just call the regular function
-    return CallApi(prompt, options, context)
-}
-```
-
-To use a specific function, specify it in the provider ID:
-
-```yaml
-providers:
-  - id: 'file://path/to/your/script.go:SomeOtherFunction'
-```
