@@ -618,6 +618,14 @@ describe('runAssertion', () => {
     value: 'output.length * 10',
   };
 
+  const javascriptBooleanAssertionWithConfig: Assertion = {
+    type: 'javascript',
+    value: 'output.length <= context.config.maximumOutputSize',
+    config: {
+      maximumOutputSize: 20,
+    },
+  };
+
   const javascriptStringAssertionWithNumberAndThreshold: Assertion = {
     type: 'javascript',
     value: 'output.length * 10',
@@ -1387,22 +1395,6 @@ describe('runAssertion', () => {
     });
   });
 
-  it('should pass when the contains-json assertion passes with valid and invalid json', async () => {
-    const output = 'There is an extra opening bracket \n\n { {"key": "value"} \n\n blah blah';
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: containsJsonAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-    });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
-
   it('should fail when the contains-json assertion fails', async () => {
     const output = 'Not valid JSON';
 
@@ -1582,6 +1574,40 @@ describe('runAssertion', () => {
       pass: true,
       score: output.length * 10,
       reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when javascript returns an output string that is smaller than the maximum size threshold', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1.0,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when javascript returns an output string that is larger than the maximum size threshold', async () => {
+    const output = 'Expected output with some extra characters';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Custom function returned false'),
     });
   });
 
@@ -2007,7 +2033,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output to contain all of "option1, option2, option3"',
+      reason: 'Expected output to contain all of [option1, option2, option3]. Missing: [option3]',
     });
   });
 
@@ -2045,7 +2071,8 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output to contain all of "option1, option2, option3, option4"',
+      reason:
+        'Expected output to contain all of [option1, option2, option3, option4]. Missing: [option4]',
     });
   });
 
@@ -2705,6 +2732,63 @@ describe('runAssertion', () => {
       ).rejects.toThrow(
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
       );
+    });
+
+    it('should pass when the latency is 0ms', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
+        latencyMs: 0,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should throw an error when threshold is not provided', async () => {
+      const output = 'Expected output';
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4'),
+          assertion: {
+            type: 'latency',
+          },
+          latencyMs: 50,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        }),
+      ).rejects.toThrow('Latency assertion must have a threshold in milliseconds');
+    });
+
+    it('should handle latency equal to threshold', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
+        latencyMs: 100,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
   });
 

@@ -17,6 +17,7 @@ import type { Environment } from 'nunjucks';
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -24,7 +25,9 @@ import type {
   Prompt,
   NunjucksFilterMap,
 } from '../../types';
+import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { shouldGenerateRemote } from '../util';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { loadRedteamProvider } from './shared';
@@ -97,9 +100,15 @@ export async function evaluateResponse(
       content: targetResponse,
     },
   ]);
-  const judgeResp = await redteamProvider.callApi(judgeBody);
+  const judgeResp = await redteamProvider.callApi(judgeBody, {
+    prompt: {
+      raw: judgeBody,
+      label: 'judge',
+    },
+    vars: {},
+  });
   invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
-  let { rating: score } = JSON.parse(judgeResp.output);
+  let { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
 
   // Apply penalty if the phrase is present
   if (containsPenalizedPhrase) {
@@ -120,12 +129,18 @@ export async function getNewPrompt(
   redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
 ): Promise<{ improvement: string; prompt: string }> {
   const redteamBody = JSON.stringify(redteamHistory);
-  const redteamResp = await redteamProvider.callApi(redteamBody);
+  const redteamResp = await redteamProvider.callApi(redteamBody, {
+    prompt: {
+      raw: redteamBody,
+      label: 'history',
+    },
+    vars: {},
+  });
   invariant(
     typeof redteamResp.output === 'string',
     `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
   );
-  return JSON.parse(redteamResp.output) as { improvement: string; prompt: string };
+  return extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output);
 }
 
 /**
@@ -150,9 +165,15 @@ export async function checkIfOnTopic(
       content: targetPrompt,
     },
   ]);
-  const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
+  const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody, {
+    prompt: {
+      raw: isOnTopicBody,
+      label: 'on-topic',
+    },
+    vars: {},
+  });
   invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-  const { onTopic } = JSON.parse(isOnTopicResp.output);
+  const { onTopic } = extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output);
   invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
   return onTopic;
 }
@@ -526,14 +547,27 @@ class RedteamIterativeTreeProvider implements ApiProvider {
   ): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
+
+    let redteamProvider: ApiProvider;
+
+    if (shouldGenerateRemote()) {
+      redteamProvider = new PromptfooChatCompletionProvider({
+        task: 'iterative:tree',
+        jsonOnly: true,
+        preferSmallModel: false,
+      });
+    } else {
+      redteamProvider = await loadRedteamProvider({
+        provider: this.config.redteamProvider,
+        jsonOnly: true,
+      });
+    }
+
     return runRedteamConversation({
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: await loadRedteamProvider({
-        provider: this.config.redteamProvider,
-        jsonOnly: true,
-      }),
+      redteamProvider,
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
     });

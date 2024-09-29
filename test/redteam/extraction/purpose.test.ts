@@ -16,9 +16,13 @@ describe('System Purpose Extractor', () => {
   let provider: ApiProvider;
   let originalEnv: NodeJS.ProcessEnv;
 
-  beforeEach(() => {
+  beforeAll(() => {
     originalEnv = process.env;
+  });
+
+  beforeEach(() => {
     process.env = { ...originalEnv };
+    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
     provider = {
       callApi: jest
         .fn()
@@ -33,6 +37,7 @@ describe('System Purpose Extractor', () => {
   });
 
   it('should use remote generation when enabled', async () => {
+    process.env.OPENAI_API_KEY = undefined;
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
     jest.mocked(fetchWithCache).mockResolvedValue({
       data: { task: 'purpose', result: 'Remote extracted purpose' },

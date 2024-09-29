@@ -67,19 +67,27 @@ In the example below, we're evaluating a RAG chat bot used on a corporate intran
 First, create `promptfooconfig.yaml`. We'll use a placeholder prompt with a single `{{ query }}` variable. This file instructs promptfoo to run several test cases through the retrieval script.
 
 ```yaml
-prompts: ['{{ query }}']
-providers: ['python: retrieve.py']
+prompts:
+  - '{{ query }}'
+providers:
+  - file://retrieve.py
 tests:
   - vars:
       query: What is our reimbursement policy?
     assert:
       - type: contains-all
-        value: ['reimbursement.md', 'hr-policies.html', 'Employee Reimbursement Policy']
+        value:
+          - 'reimbursement.md'
+          - 'hr-policies.html'
+          - 'Employee Reimbursement Policy'
   - vars:
       query: How many weeks is maternity leave?
     assert:
       - type: contains-all
-        value: ['parental-leave.md', 'hr-policies.html', 'Maternity Leave']
+        value:
+          - 'parental-leave.md'
+          - 'hr-policies.html'
+          - 'Maternity Leave'
 ```
 
 In the above example, the `contains-all` assertion ensures that the output from `retrieve.py` contains all the listed substrings. The `context-recall` assertions use an LLM model to ensure that the retrieval performs well.
@@ -92,9 +100,9 @@ In order to compare multiple vector databases in your evaluation, create retriev
 
 ```yaml
 providers:
-  - 'python: retrieve_pinecone.py'
-  - 'python: retrieve_milvus.py'
-  - 'python: retrieve_pgvector.py'
+  - file://retrieve_pinecone.py
+  - file://retrieve_milvus.py
+  - file://retrieve_pgvector.py
 ```
 
 Running the eval with `promptfoo eval` will create a comparison view between Pinecone, Milvus, and PGVector:
@@ -235,7 +243,9 @@ Think carefully and respond to the user concisely and accurately. For each state
 Now, update the config to list multiple prompts:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 ```
 
 Let's also introduce a metric
@@ -251,7 +261,10 @@ In the above example, both prompts perform well. So we might go with prompt 1, w
 Imagine we're exploring budget and want to compare the performance of GPT-4 vs Llama. Update the `providers` config to list each of the models:
 
 ```yaml
-providers: [openai:gpt-4o-mini, openai:gpt-4o, ollama:llama3.1]
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
+  - ollama:llama3.1
 ```
 
 Let's also add a heuristic that prefers shorter outputs. Using the `defaultTest` directive, we apply this to all RAG tests:
@@ -313,8 +326,8 @@ prompts: [prompt1.txt, prompt2.txt]
 
 # Test different retrieval and generation methods to find the best
 providers:
-  - python: retrieve_and_generate_v1.py
-  - python: retrieve_and_generate_v2.py
+  - file://retrieve_and_generate_v1.py
+  - file://retrieve_and_generate_v2.py
 
 tests:
   # ...

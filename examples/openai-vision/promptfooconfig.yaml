@@ -1,5 +1,7 @@
-prompts: [prompt.json]
-providers: [openai:chat:gpt-4o]
+prompts:
+  - file://prompt.json
+providers:
+  - openai:chat:gpt-4o
 
 tests:
   - vars:

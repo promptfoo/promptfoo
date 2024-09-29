@@ -14,8 +14,12 @@ Assertions are _optional_. Many people get value out of reviewing outputs manual
 Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-3.5 and Gemini, substituting `language` and `input` variables:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-pro
 tests:
   - vars:
       language: French
@@ -38,8 +42,12 @@ Running `promptfoo eval` over this config will result in a _matrix view_ that yo
 Next, let's add an assertion. This automatically rejects any outputs that don't contain JSON:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-pro
 tests:
   - vars:
       language: French
@@ -58,8 +66,12 @@ We can create additional tests. Let's add a couple other [types of assertions](/
 In this example, the `javascript` assertion runs Javascript against the LLM output. The `similar` assertion checks for semantic similarity using embeddings:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-pro
 tests:
   - vars:
       language: French
@@ -109,16 +121,16 @@ config:
 The `tests` config property takes a list of paths to files or directories. For example:
 
 ```yaml
-prompts: prompts.txt
+prompts: file://prompts.txt
 providers: openai:gpt-4o-mini
 
 # Load & runs all test cases matching these filepaths
 tests:
   # You can supply an exact filepath
-  - tests/tests2.yaml
+  - file://tests/tests2.yaml
 
   # Or a glob (wildcard)
-  - tests/*
+  - file://tests/*
 
   # Mix and match with actual test cases
   - vars:
@@ -135,7 +147,10 @@ tests: tests/*
 Or a list of paths:
 
 ```yaml
-tests: ['tests/accuracy', 'tests/creativity', 'tests/hallucination']
+tests:
+  - 'tests/accuracy'
+  - 'tests/creativity'
+  - 'tests/hallucination'
 ```
 
 :::tip
@@ -148,7 +163,7 @@ The `vars` property can point to a file or directory. For example:
 
 ```yaml
 tests:
-  - vars: path/to/vars*.yaml
+  - vars: file://path/to/vars*.yaml
 ```
 
 You can also load individual variables from file by using the `file://` prefix. For example:
@@ -236,8 +251,12 @@ Use `defaultTest` to set properties for all tests.
 In this example, we use a `llm-rubric` assertion to ensure that the LLM does not refer to itself as an AI. This check applies to all test cases:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-pro
 // highlight-start
 defaultTest:
   assert:
@@ -276,8 +295,12 @@ promptfoo configurations support JSON schema [references](https://opis.io/json-s
 Use the `$ref` key to re-use assertions without having to fully define them more than once. Here's an example:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-pro
 tests:
   - vars:
       language: French
@@ -313,13 +336,21 @@ The `vars` map in the test also supports array values. If values are an array, t
 For example:
 
 ```yaml
-prompts: prompts.txt
-providers: [openai:gpt-4o-mini, openai:gpt-4]
+prompts: file://prompts.txt
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4
 tests:
   - vars:
       // highlight-start
-      language: [French, German, Spanish]
-      input: ['Hello world', 'Good morning', 'How are you?']
+      language:
+        - French
+        - German
+        - Spanish
+      input:
+        - 'Hello world'
+        - 'Good morning'
+        - 'How are you?'
       // highlight-end
     assert:
       - type: similar
@@ -335,7 +366,10 @@ Vars can also be imported from globbed filepaths. They are automatically expande
 
 ```yaml
   - vars:
-      language: [French, German, Spanish]
+      language:
+        - French
+        - German
+        - Spanish
       // highlight-start
       input: file://path/to/inputs/*.txt
       // highlight-end
@@ -630,17 +664,25 @@ promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/parameters#tests-file).
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-pro
 // highlight-next-line
-tests: tests.csv
+tests: file://tests.csv
 ```
 
 promptfoo also has built-in ability to pull test cases from a Google Sheet. The easiest way to get started is to set the sheet visible to "anyone with the link". For example:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-4o-mini, vertex:gemini-pro]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-pro
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```

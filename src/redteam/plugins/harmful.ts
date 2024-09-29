@@ -1,6 +1,7 @@
 import dedent from 'dedent';
-import { getEnvString } from '../../envars';
-import PromptfooHarmfulCompletionProvider from '../../providers/promptfoo';
+import { getEnvBool, getEnvString } from '../../envars';
+import logger from '../../logger';
+import { PromptfooHarmfulCompletionProvider } from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
@@ -171,24 +172,26 @@ class HarmfulPlugin extends PluginBase {
   protected getAssertions(prompt: string): Assertion[] {
     const assertions: Assertion[] = [];
 
-    if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
-      assertions.push({
-        metric: 'Harmful',
-        type: 'moderation',
-        value: LLAMA_GUARD_ENABLED_CATEGORIES,
-        provider: LLAMA_GUARD_REPLICATE_PROVIDER,
-      });
-    } else if (getEnvString('OPENAI_API_KEY')) {
-      assertions.push({
-        metric: 'Harmful',
-        type: 'moderation',
-      });
+    if (!getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION')) {
+      if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
+        assertions.push({
+          metric: 'Harmful',
+          type: 'moderation',
+          value: LLAMA_GUARD_ENABLED_CATEGORIES,
+          provider: LLAMA_GUARD_REPLICATE_PROVIDER,
+        });
+      } else if (getEnvString('OPENAI_API_KEY')) {
+        assertions.push({
+          metric: 'Harmful',
+          type: 'moderation',
+        });
+      }
     }
 
     return [
       {
         type: `promptfoo:redteam:${this.category.key}`,
-        metric: `${this.category.key}`,
+        metric: 'Harmful',
       },
     ];
   }
@@ -208,18 +211,20 @@ function createTestCase(
     },
   ];
 
-  if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
-    assertions.push({
-      metric: 'Harmful',
-      type: 'moderation',
-      value: LLAMA_GUARD_ENABLED_CATEGORIES,
-      provider: LLAMA_GUARD_REPLICATE_PROVIDER,
-    });
-  } else if (getEnvString('OPENAI_API_KEY')) {
-    assertions.push({
-      metric: 'Harmful',
-      type: 'moderation',
-    });
+  if (!getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION')) {
+    if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
+      assertions.push({
+        metric: 'Harmful',
+        type: 'moderation',
+        value: LLAMA_GUARD_ENABLED_CATEGORIES,
+        provider: LLAMA_GUARD_REPLICATE_PROVIDER,
+      });
+    } else if (getEnvString('OPENAI_API_KEY')) {
+      assertions.push({
+        metric: 'Harmful',
+        type: 'moderation',
+      });
+    }
   }
 
   return {
@@ -239,6 +244,7 @@ async function generateTestsForCategory(
   provider: ApiProvider | PromptfooHarmfulCompletionProvider,
   purpose: string,
   harmCategory: string,
+  delayMs: number,
   count: number,
 ): Promise<TestCase[]> {
   if (provider instanceof PromptfooHarmfulCompletionProvider) {
@@ -246,11 +252,15 @@ async function generateTestsForCategory(
     for (let i = 0; i < count; i++) {
       const result = await provider.callApi('');
       results.push(result);
+      if (delayMs > 0) {
+        logger.debug(`Delaying for ${delayMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
     return results.map((result) => createTestCase(injectVar, result.output || '', harmCategory));
   } else {
     const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, {});
-    return plugin.generateTests(count);
+    return plugin.generateTests(count, delayMs);
   }
 }
 
@@ -260,6 +270,7 @@ export async function getHarmfulTests(
   injectVar: string,
   plugins: string[],
   numTests: number,
+  delayMs: number = 0,
 ): Promise<TestCase[]> {
   const testCases: TestCase[] = [];
   const harmCategoriesToUse =
@@ -286,6 +297,7 @@ export async function getHarmfulTests(
         adversarialProvider,
         purpose,
         harmCategory,
+        delayMs,
         remainingCount,
       );
       newTests.push(...results);
@@ -308,7 +320,7 @@ export async function getHarmfulTests(
 
     for (const harmCategory of redteamProviderHarmCategories) {
       const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, {});
-      const results = await plugin.generateTests(remainingCount);
+      const results = await plugin.generateTests(remainingCount, delayMs);
       for (const result of results) {
         if (result.vars) {
           result.vars.harmCategory = harmCategory;

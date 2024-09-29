@@ -10,7 +10,7 @@ import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
 
-interface Strategy {
+export interface Strategy {
   key: string;
   action: (
     testCases: TestCaseWithPlugin[],
@@ -31,10 +31,9 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'prompt-injection',
-    action: async (testCases, injectVar) => {
-      const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
-      logger.debug('Adding prompt injections to `harmful` plugin test cases');
-      const newTestCases = addInjections(harmfulPrompts, injectVar);
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding prompt injections to all test cases');
+      const newTestCases = await addInjections(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
       return newTestCases;
     },

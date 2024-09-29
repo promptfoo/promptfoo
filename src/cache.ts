@@ -7,7 +7,7 @@ import path from 'path';
 import { getEnvBool, getEnvString, getEnvInt } from './envars';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
-import { getConfigDirectoryPath } from './util/config';
+import { getConfigDirectoryPath } from './util/config/manage';
 
 let cacheInstance: Cache | undefined;
 
@@ -56,7 +56,7 @@ export async function fetchWithCache(
         cached: false,
         data: format === 'json' ? JSON.parse(respText) : respText,
       };
-    } catch (error) {
+    } catch {
       throw new Error(`Error parsing response as JSON: ${respText}`);
     }
   }

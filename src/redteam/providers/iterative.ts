@@ -1,15 +1,18 @@
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
   type ApiProvider,
   type CallApiContextParams,
   type CallApiOptionsParams,
   type Prompt,
   type NunjucksFilterMap,
-  type RedteamConfig,
+  type RedteamFileConfig,
 } from '../../types';
+import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { shouldGenerateRemote } from '../util';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { loadRedteamProvider } from './shared';
 
@@ -58,15 +61,21 @@ async function runRedteamConversation({
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
-    const redteamResp = await redteamProvider.callApi(redteamBody);
+    const redteamResp = await redteamProvider.callApi(redteamBody, {
+      prompt: {
+        raw: redteamBody,
+        label: 'history',
+      },
+      vars: {},
+    });
     invariant(
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
     );
-    const { improvement, prompt: newInjectVar } = JSON.parse(redteamResp.output) as {
+    const { improvement, prompt: newInjectVar } = extractFirstJsonObject<{
       improvement: string;
       prompt: string;
-    };
+    }>(redteamResp.output);
 
     // Update the application prompt with the new injection.
     logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
@@ -91,9 +100,16 @@ async function runRedteamConversation({
         content: targetPrompt,
       },
     ]);
-    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
+    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody, {
+      prompt: {
+        raw: isOnTopicBody,
+        label: 'on-topic',
+      },
+      vars: {},
+    });
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-    const isOnTopic = JSON.parse(isOnTopicResp.output).onTopic;
+    const isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean })
+      .onTopic;
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
     const targetResp = await targetProvider.callApi(targetPrompt);
@@ -121,9 +137,15 @@ async function runRedteamConversation({
         content: targetResponse,
       },
     ]);
-    const judgeResp = await redteamProvider.callApi(judgeBody);
+    const judgeResp = await redteamProvider.callApi(judgeBody, {
+      prompt: {
+        raw: judgeBody,
+        label: 'judge',
+      },
+      vars: {},
+    });
     invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
-    let { rating: score } = JSON.parse(judgeResp.output);
+    let { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
 
     // Apply penalty if the phrase is present
     if (containsPenalizedPhrase) {
@@ -156,16 +178,24 @@ async function runRedteamConversation({
 }
 
 class RedteamIterativeProvider implements ApiProvider {
-  private readonly redteamProvider: RedteamConfig['provider'];
+  private readonly redteamProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
 
   constructor(readonly config: Record<string, string | object>) {
-    logger.debug(`RedteamIterativeProvider config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
     // Redteam provider can be set from the config.
-    this.redteamProvider = config.redteamProvider;
+
+    if (shouldGenerateRemote()) {
+      this.redteamProvider = new PromptfooChatCompletionProvider({
+        task: 'iterative',
+        jsonOnly: true,
+        preferSmallModel: false,
+      });
+    } else {
+      this.redteamProvider = config.redteamProvider;
+    }
   }
 
   id() {

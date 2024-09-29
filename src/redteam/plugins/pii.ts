@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
+import logger from '../../logger';
 import type { ApiProvider, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import type { PII_PLUGINS } from '../constants';
@@ -155,7 +155,12 @@ export async function getPiiLeakTestsForCategory(
   );
 
   const { output: generatedPrompts } = piiLeakPrompts;
-  invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
+  if (typeof generatedPrompts !== 'string') {
+    logger.error(
+      `Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`,
+    );
+    return [];
+  }
 
   const prompts = generatedPrompts
     .split('\n')

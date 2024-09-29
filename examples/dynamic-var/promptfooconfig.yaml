@@ -3,7 +3,8 @@ description: 'Dynamic var example'
 prompts:
   - "You are an office assistant. Using this context:\n\n<context>{{context}}</context>\n\nAnswer this question:\n\n<question>{{question}}</question>"
 
-providers: [openai:gpt-4o-mini]
+providers:
+  - openai:gpt-4o-mini
 
 tests:
   - vars:

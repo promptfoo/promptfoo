@@ -1,16 +1,15 @@
 import confirm from '@inquirer/confirm';
 import type { Command } from 'commander';
 import logger from '../logger';
-import { createDummyFiles } from '../onboarding';
+import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 
 export function initCommand(program: Command) {
   program
     .command('init [directory]')
     .description('Initialize project with dummy files')
-    .option('--no-interactive', 'Run in interactive mode')
+    .option('--no-interactive', 'Do not run in interactive mode')
     .action(async (directory: string | null, cmdObj: { interactive: boolean }) => {
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'init - started',
       });
@@ -27,7 +26,7 @@ export function initCommand(program: Command) {
         }
       }
 
-      const details = await createDummyFiles(directory, cmdObj.interactive);
+      const details = await initializeProject(directory, cmdObj.interactive);
       telemetry.record('command_used', {
         ...details,
         name: 'init',

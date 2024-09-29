@@ -18,6 +18,7 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
+  PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_WARNING?: boolean;
@@ -27,12 +28,14 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_UPDATE?: boolean;
   PROMPTFOO_DISABLE_VAR_EXPANSION?: boolean;
   PROMPTFOO_FAILED_TEST_EXIT_CODE?: number;
+  PROMPTFOO_LIGHTWEIGHT_RESULTS?: boolean;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
   PROMPTFOO_PROMPT_SEPARATOR?: string;
   PROMPTFOO_PYTHON?: string;
   PROMPTFOO_REMOTE_API_BASE_URL?: string;
   PROMPTFOO_REMOTE_APP_BASE_URL?: string;
+  PROMPTFOO_REMOTE_GENERATION_URL?: string;
   PROMPTFOO_REQUEST_BACKOFF_MS?: number;
   PROMPTFOO_REQUIRE_JSON_PROMPTS?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
@@ -40,17 +43,34 @@ export type EnvVars = {
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
+  PROMPTFOO_TELEMETRY_DEBUG?: boolean;
+  PROMPTFOO_EXPERIMENTAL?: boolean;
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
 
   // 3rd party
+  AI21_API_BASE_URL?: string;
+  AI21_API_KEY?: string;
+  ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
+  AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
+  AWS_BEDROCK_MAX_NEW_TOKENS?: number;
+  AWS_BEDROCK_MAX_TOKENS?: string;
+  AWS_BEDROCK_PRESENCE_PENALTY?: string;
+  AWS_BEDROCK_REGION?: string;
+  AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
+  AWS_BEDROCK_TOP_P?: string;
   COHERE_CLIENT_NAME?: string;
+  COHERE_K?: string;
+  COHERE_MAX_TOKENS?: string;
+  COHERE_P?: string;
+  COHERE_TEMPERATURE?: string;
+  FAL_KEY?: string;
   GROQ_API_KEY?: string;
   HELICONE_API_KEY?: string;
   HF_API_TOKEN?: string;
@@ -60,10 +80,15 @@ export type EnvVars = {
   LLAMA_BASE_URL?: string;
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
+  MISTRAL_MAX_TOKENS?: string;
+  MISTRAL_TEMPERATURE?: string;
+  MISTRAL_TOP_K?: string;
+  MISTRAL_TOP_P?: string;
   OLLAMA_API_KEY?: string;
   OLLAMA_BASE_URL?: string;
   OPENAI_BEST_OF?: number;
   OPENAI_FREQUENCY_PENALTY?: number;
+  OPENAI_MAX_COMPLETION_TOKENS?: number;
   OPENAI_MAX_TOKENS?: number;
   OPENAI_PRESENCE_PENALTY?: number;
   OPENAI_STOP?: string;
@@ -93,6 +118,13 @@ export type EnvVars = {
   GITLAB_CI?: boolean;
   JENKINS?: boolean;
   TRAVIS?: boolean;
+  APPVEYOR?: boolean;
+  CODEBUILD_BUILD_ID?: boolean;
+  TF_BUILD?: boolean;
+  BITBUCKET_COMMIT?: boolean;
+  BUDDY?: boolean;
+  BUILDKITE?: boolean;
+  TEAMCITY_VERSION?: boolean;
 } & EnvOverrides;
 
 type EnvVarKey = keyof EnvVars;
@@ -172,4 +204,22 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
     }
   }
   return defaultValue;
+}
+
+export function isCI() {
+  return (
+    getEnvBool('CI') ||
+    getEnvBool('GITHUB_ACTIONS') ||
+    getEnvBool('TRAVIS') ||
+    getEnvBool('CIRCLECI') ||
+    getEnvBool('JENKINS') ||
+    getEnvBool('GITLAB_CI') ||
+    getEnvBool('APPVEYOR') ||
+    getEnvBool('CODEBUILD_BUILD_ID') ||
+    getEnvBool('TF_BUILD') ||
+    getEnvBool('BITBUCKET_COMMIT') ||
+    getEnvBool('BUDDY') ||
+    getEnvBool('BUILDKITE') ||
+    getEnvBool('TEAMCITY_VERSION')
+  );
 }

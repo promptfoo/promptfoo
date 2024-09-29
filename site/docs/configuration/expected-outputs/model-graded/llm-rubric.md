@@ -50,8 +50,11 @@ assert:
 You can incorporate test variables into your LLM rubric. This is particularly useful for detecting hallucinations or ensuring the output addresses specific aspects of the input. Here's an example:
 
 ```yaml
-providers: [openai:gpt-4o]
-prompts: [prompt1.txt, prompt2.txt]
+providers:
+  - openai:gpt-4o
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 defaultTest:
   assert:
     - type: llm-rubric
@@ -70,7 +73,7 @@ By default, `llm-rubric` uses GPT-4 for grading. You can override this in severa
 1. Using the `--grader` CLI option:
 
    ```sh
-   promptfoo eval --grader openai:gpt-3.5-turbo
+   promptfoo eval --grader openai:gpt-4o-mini
    ```
 
 2. Using `test.options` or `defaultTest.options`:
@@ -78,7 +81,7 @@ By default, `llm-rubric` uses GPT-4 for grading. You can override this in severa
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-3.5-turbo
+       provider: openai:gpt-4o-mini
      assert:
        - description: Evaluate output using LLM
          assert:
@@ -94,7 +97,7 @@ By default, `llm-rubric` uses GPT-4 for grading. You can override this in severa
        assert:
          - type: llm-rubric
             value: Is written in a professional tone
-            provider: openai:gpt-3.5-turbo
+            provider: openai:gpt-4o-mini
    ```
 
 ### Customizing the rubric prompt

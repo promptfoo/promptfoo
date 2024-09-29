@@ -1,8 +1,10 @@
+import invariant from 'tiny-invariant';
+
 export function isValidJson(str: string): boolean {
   try {
     JSON.parse(str);
     return true;
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -27,33 +29,36 @@ export function safeJsonStringify(value: any, prettyPrint: boolean = false): str
 }
 
 export function extractJsonObjects(str: string): object[] {
-  // This will extract all json objects from a string
+  const jsonObjects: object[] = [];
+  const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
 
-  const jsonObjects = [];
-  let openBracket = str.indexOf('{');
-  let closeBracket = str.indexOf('}', openBracket);
-  // Iterate over the string until we find a valid JSON-like pattern
-  // Iterate over all trailing } until the contents parse as json
-  while (openBracket !== -1) {
-    const jsonStr = str.slice(openBracket, closeBracket + 1);
-    try {
-      jsonObjects.push(JSON.parse(jsonStr));
-      // This is a valid JSON object, so start looking for
-      // an opening bracket after the last closing bracket
-      openBracket = str.indexOf('{', closeBracket + 1);
-      closeBracket = str.indexOf('}', openBracket);
-    } catch (err) {
-      // Not a valid object, move on to the next closing bracket
-      closeBracket = str.indexOf('}', closeBracket + 1);
-      while (closeBracket === -1) {
-        // No closing brackets made a valid json object, so
-        // start looking with the next opening bracket
-        openBracket = str.indexOf('{', openBracket + 1);
-        closeBracket = str.indexOf('}', openBracket);
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === '{') {
+      for (let j = i + 1; j <= Math.min(i + maxJsonLength, str.length); j++) {
+        try {
+          const potentialJson = str.slice(i, j);
+          const parsedObj = JSON.parse(potentialJson);
+          jsonObjects.push(parsedObj);
+          i = j - 1; // Move i to the end of the valid JSON object
+          break;
+        } catch {
+          // If it's not valid JSON yet, continue to the next character
+          if (j === str.length || j === i + maxJsonLength) {
+            // If we've reached the end of the string or max length, stop trying with this starting point
+            break;
+          }
+        }
       }
     }
   }
+
   return jsonObjects;
+}
+
+export function extractFirstJsonObject<T>(str: string): T {
+  const jsonObjects = extractJsonObjects(str);
+  invariant(jsonObjects.length >= 1, `Expected a JSON object, but got ${JSON.stringify(str)}`);
+  return jsonObjects[0] as T;
 }
 
 /**

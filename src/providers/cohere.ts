@@ -111,7 +111,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
       } else {
         throw new Error('Prompt is not a JSON object');
       }
-    } catch (error) {
+    } catch {
       body = {
         message: prompt,
         ...params,

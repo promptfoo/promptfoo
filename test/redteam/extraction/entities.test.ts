@@ -25,9 +25,13 @@ describe('Entities Extractor', () => {
   let provider: ApiProvider;
   let originalEnv: NodeJS.ProcessEnv;
 
-  beforeEach(() => {
+  beforeAll(() => {
     originalEnv = process.env;
+  });
+
+  beforeEach(() => {
     process.env = { ...originalEnv };
+    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
     provider = {
       callApi: jest.fn().mockResolvedValue({ output: 'Entity: Apple\nEntity: Google' }),
       id: jest.fn().mockReturnValue('test-provider'),
@@ -40,6 +44,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should use remote generation when enabled', async () => {
+    process.env.OPENAI_API_KEY = undefined;
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
     jest.mocked(fetchWithCache).mockResolvedValue({
       data: { task: 'entities', result: ['Apple', 'Google'] },
@@ -61,6 +66,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should fall back to local extraction when remote generation fails', async () => {
+    process.env.OPENAI_API_KEY = undefined;
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
     jest.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
 

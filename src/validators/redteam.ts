@@ -12,8 +12,11 @@ import {
   COLLECTIONS,
   ALIASED_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
+  ALIASED_PLUGIN_MAPPINGS,
+  type Strategy,
+  type Plugin,
 } from '../redteam/constants';
-import type { RedteamConfig, RedteamPluginObject } from '../types/redteam';
+import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
 import { ProviderSchema } from '../validators/providers';
 
 /**
@@ -40,7 +43,7 @@ export const RedteamPluginSchema = z.union([
     .union([
       z.enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]]),
       z.string().refine((value) => value.startsWith('file://'), {
-        message: 'Custom plugin must be one of `promptfoo redteam plugins` or start with "file://"',
+        message: 'Plugin must be one of `promptfoo redteam plugins` or start with "file://"',
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
@@ -90,6 +93,12 @@ export const RedteamGenerateOptionsSchema = z.object({
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
+  delay: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Delay in milliseconds between plugin API calls'),
 });
 
 /**
@@ -134,42 +143,95 @@ export const RedteamConfigSchema = z
       .positive()
       .optional()
       .describe('Maximum number of concurrent API calls'),
+    delay: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Delay in milliseconds between plugin API calls'),
   })
-  .transform((data): RedteamConfig => {
+  .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
+    const strategySet = new Set<Strategy>();
 
-    data.plugins.forEach((plugin) => {
+    const addPlugin = (id: string, config: any, numTests: number | undefined) => {
+      const key = `${id}:${JSON.stringify(config)}`;
+      const pluginObject: RedteamPluginObject = { id };
+      if (numTests !== undefined || data.numTests !== undefined) {
+        pluginObject.numTests = numTests ?? data.numTests;
+      }
+      if (config !== undefined) {
+        pluginObject.config = config;
+      }
+      pluginMap.set(key, pluginObject);
+    };
+
+    const expandCollection = (
+      collection: string[] | ReadonlySet<Plugin>,
+      config: any,
+      numTests: number | undefined,
+    ) => {
+      (Array.isArray(collection) ? collection : Array.from(collection)).forEach((item) => {
+        // Only add the plugin if it doesn't already exist or if the existing one has undefined numTests
+        const existingPlugin = pluginMap.get(`${item}:${JSON.stringify(config)}`);
+        if (!existingPlugin || existingPlugin.numTests === undefined) {
+          addPlugin(item, config, numTests);
+        }
+      });
+    };
+
+    const handleCollectionExpansion = (id: string, config: any, numTests: number | undefined) => {
+      if (id === 'harmful') {
+        expandCollection(Object.keys(HARM_PLUGINS), config, numTests);
+      } else if (id === 'pii') {
+        expandCollection([...PII_PLUGINS], config, numTests);
+      } else if (id === 'default') {
+        expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests);
+      }
+    };
+
+    const handlePlugin = (plugin: string | RedteamPluginObject) => {
       const pluginObj =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests };
 
-      if (pluginObj.id === 'harmful') {
-        Object.keys(HARM_PLUGINS).forEach((id) => {
-          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
-          if (!pluginMap.has(key)) {
-            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
-          }
+      if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
+        Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {
+          plugins.forEach((id) => {
+            if (COLLECTIONS.includes(id as any)) {
+              handleCollectionExpansion(id, pluginObj.config, pluginObj.numTests);
+            } else {
+              addPlugin(id, pluginObj.config, pluginObj.numTests);
+            }
+          });
+          strategies.forEach((strategy) => strategySet.add(strategy as Strategy));
         });
-      } else if (pluginObj.id === 'pii') {
-        PII_PLUGINS.forEach((id) => {
-          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
-          if (!pluginMap.has(key)) {
-            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
-          }
-        });
-      } else if (pluginObj.id === 'default') {
-        REDTEAM_DEFAULT_PLUGINS.forEach((id) => {
-          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
-          if (!pluginMap.has(key)) {
-            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
-          }
-        });
+      } else if (COLLECTIONS.includes(pluginObj.id as any)) {
+        handleCollectionExpansion(pluginObj.id, pluginObj.config, pluginObj.numTests);
       } else {
-        const key = `${pluginObj.id}:${JSON.stringify(pluginObj.config)}`;
-        pluginMap.set(key, pluginObj);
+        const mapping = Object.entries(ALIASED_PLUGIN_MAPPINGS).find(([, value]) =>
+          Object.keys(value).includes(pluginObj.id),
+        );
+        if (mapping) {
+          const [, aliasedMapping] = mapping;
+          aliasedMapping[pluginObj.id].plugins.forEach((id) => {
+            if (COLLECTIONS.includes(id as any)) {
+              handleCollectionExpansion(id, pluginObj.config, pluginObj.numTests);
+            } else {
+              addPlugin(id, pluginObj.config, pluginObj.numTests);
+            }
+          });
+          aliasedMapping[pluginObj.id].strategies.forEach((strategy) =>
+            strategySet.add(strategy as Strategy),
+          );
+        } else {
+          addPlugin(pluginObj.id, pluginObj.config, pluginObj.numTests);
+        }
       }
-    });
+    };
+
+    data.plugins.forEach(handlePlugin);
 
     const uniquePlugins = Array.from(pluginMap.values())
       .filter((plugin) => !COLLECTIONS.includes(plugin.id as (typeof COLLECTIONS)[number]))
@@ -180,19 +242,21 @@ export const RedteamConfigSchema = z
         return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
       });
 
-    const strategies = data.strategies
-      ?.map((strategy) => {
-        if (typeof strategy === 'string') {
-          if (strategy === 'basic') {
-            return [];
+    const strategies = Array.from(
+      new Set(
+        [...(data.strategies || []), ...Array.from(strategySet)].flatMap((strategy) => {
+          if (typeof strategy === 'string') {
+            if (strategy === 'basic') {
+              return [];
+            }
+            return strategy === 'default' ? DEFAULT_STRATEGIES.map((id) => id) : [strategy];
           }
-          return strategy === 'default'
-            ? DEFAULT_STRATEGIES.map((id) => ({ id }))
-            : { id: strategy };
-        }
-        return strategy;
-      })
-      .flat();
+          return [strategy.id];
+        }),
+      ),
+    )
+      .map((id) => ({ id }))
+      .sort((a, b) => a.id.localeCompare(b.id));
 
     return {
       numTests: data.numTests,
@@ -202,6 +266,7 @@ export const RedteamConfigSchema = z
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
+      ...(data.delay ? { delay: data.delay } : {}),
     };
   });
 
@@ -210,6 +275,6 @@ export const RedteamConfigSchema = z
 function assert<T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
-assert<TypeEqualityGuard<RedteamConfig, z.infer<typeof RedteamConfigSchema>>>();
+assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>>();
 // TODO: Why is this never?
 // assert<TypeEqualityGuard<RedteamPluginObject, z.infer<typeof RedteamPluginObjectSchema>>>();

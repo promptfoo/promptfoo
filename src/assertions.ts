@@ -229,7 +229,7 @@ export async function isSql(
   try {
     sqlParser.astify(outputString, opt);
     pass = !inverse;
-  } catch (err) {
+  } catch {
     pass = inverse;
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
@@ -313,6 +313,7 @@ export async function runAssertion({
     vars: test.vars || {},
     test,
     logProbs,
+    ...(assertion.config ? { config: assertion.config } : {}),
   };
 
   // Render assertion values
@@ -395,7 +396,7 @@ export async function runAssertion({
     try {
       parsedJson = JSON.parse(outputString);
       pass = !inverse;
-    } catch (err) {
+    } catch {
       pass = inverse;
     }
 
@@ -548,13 +549,14 @@ export async function runAssertion({
       Array.isArray(renderedValue),
       '"contains-all" assertion type must have an array value',
     );
-    pass = renderedValue.every((value) => outputString.includes(String(value))) !== inverse;
+    const missingStrings = renderedValue.filter((value) => !outputString.includes(String(value)));
+    pass = (missingStrings.length === 0) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(', ')}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain all of [${renderedValue.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
       assertion,
     };
   }
@@ -568,16 +570,16 @@ export async function runAssertion({
       Array.isArray(renderedValue),
       '"icontains-all" assertion type must have an array value',
     );
-    pass =
-      renderedValue.every((value) =>
-        outputString.toLowerCase().includes(String(value).toLowerCase()),
-      ) !== inverse;
+    const missingStrings = renderedValue.filter(
+      (value) => !outputString.toLowerCase().includes(String(value).toLowerCase()),
+    );
+    pass = (missingStrings.length === 0) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(', ')}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain all of [${renderedValue.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
       assertion,
     };
   }
@@ -784,6 +786,18 @@ export async function runAssertion({
         return ret;
       }
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
+
+      /**
+       * Removes trailing newline from the rendered value.
+       * This is necessary for handling multi-line string literals in YAML
+       * that are defined on a single line in the YAML file.
+       *
+       * @example
+       * value: |
+       *   output === 'true'
+       */
+      renderedValue = renderedValue.trimEnd();
+
       let result: boolean | number | GradingResult;
       if (typeof valueFromScript === 'undefined') {
         const functionBody = renderedValue.includes('\n')
@@ -1143,7 +1157,7 @@ ${
         if (parsedPrompt && parsedPrompt.length > 0) {
           prompt = parsedPrompt[parsedPrompt.length - 1].content;
         }
-      } catch (err) {
+      } catch {
         // Ignore error
       }
     }
@@ -1275,7 +1289,7 @@ ${
     if (!assertion.threshold) {
       throw new Error('Latency assertion must have a threshold in milliseconds');
     }
-    if (!latencyMs) {
+    if (latencyMs === undefined) {
       throw new Error(
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
       );
@@ -1359,7 +1373,7 @@ ${
     const grader = getGraderById(baseType);
     invariant(grader, `Unknown promptfoo grader: ${baseType}`);
     invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
-    const { grade, rubric } = await grader.getResult(
+    const { grade, rubric, suggestions } = await grader.getResult(
       prompt,
       outputString,
       test,
@@ -1372,6 +1386,12 @@ ${
         value: rubric,
       },
       ...grade,
+      suggestions,
+      metadata: {
+        // Pass through all test metadata for redteam
+        ...test.metadata,
+        ...grade.metadata,
+      },
     };
   }
 

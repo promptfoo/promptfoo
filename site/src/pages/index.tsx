@@ -17,7 +17,7 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1>Find and fix LLM vulnerabilities</h1>
+        <h1>Test & secure your LLM apps</h1>
         <p>Open-source LLM testing used by 30,000+ developers</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
@@ -53,9 +53,7 @@ function HomepageWalkthrough() {
       image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
       description: (
         <>
-          <p>
-            <strong>Build reliable prompts, RAGs, and agents</strong>
-          </p>
+          <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
           <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest init</code>
@@ -65,7 +63,9 @@ function HomepageWalkthrough() {
             dependencies, or logins.
           </p>
           <p>
-            <Link to="/docs/intro">&raquo; Get Started</Link>
+            <strong>
+              <Link to="/docs/intro">&raquo; Get Started</Link>
+            </strong>
           </p>
         </>
       ),
@@ -77,63 +77,64 @@ function HomepageWalkthrough() {
       caption: 'Security & Red Teaming',
       image: '/img/riskreport-1.png',
       image2x: '/img/riskreport-1@2x.png',
-      imageDark: '/img/riskreport-1-dark.png',
-      image2xDark: '/img/riskreport-1-dark@2x.png',
       description: (
         <>
-          <p>
-            <strong>Automated pentesting for your app</strong>
-          </p>
-          <p>
-            Run an automatic scan tailored to your application that detects security, legal, and
-            brand risks:
-          </p>
+          <p className={styles.walkthroughHeading}>Automated red teaming for gen AI</p>
+          <p>Run custom scans that detect security, legal, and brand risk:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest redteam init</code>
           </pre>
-          <p>Our probes cover common failures like:</p>
+          <p>Our probes adapt dynamically to your app and uncover common failures like:</p>
           <ul>
             <li>PII leaks</li>
             <li>Insecure tool use</li>
+            <li>Cross-session data leaks</li>
+            <li>Direct and indirect prompt injections</li>
             <li>Jailbreaks</li>
             <li>Harmful content</li>
-            <li>Competitor endorsements</li>
-            <li>Political statements</li>
             <li>Specialized medical and legal advice</li>
             <li>
               and <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
             </li>
           </ul>
           <p>
-            <Link to="/docs/red-team">&raquo; Scan for vulnerabilities in your LLM app</Link>
+            <strong>
+              <Link to="/docs/red-team/quickstart/">
+                &raquo; Scan for vulnerabilities in your LLM app
+              </Link>
+            </strong>
           </p>
         </>
       ),
       icon: <SecurityIcon />,
-      destinationUrl: '/docs/red-team',
+      destinationUrl: '/docs/red-team/quickstart/',
     },
     {
       id: 3,
       caption: 'Continuous Monitoring',
-      image: '/img/docs/github-action-comment.png',
-      image2x: '/img/docs/github-action-comment@2x.png',
+      image: '/img/continuous-monitoring.png',
+      image2x: '/img/continuous-monitoring@2x.png',
       description: (
         <>
+          <p className={styles.walkthroughHeading}>Spot issues before they're deployed</p>
           <p>
-            <strong>Fits in your development workflow</strong>
+            Promptfoo provides a high-level view of your system's security posture across different
+            models, prompts, and applications.
           </p>
           <p>
-            Promptfoo's simple file-based config and local runtime make it easy to set up in{' '}
+            Our simple file-based config and local runtime make it easy to set up in{' '}
             <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI/CD
             services.
           </p>
           <p>
-            <Link to="/docs/getting-started">&raquo; See setup docs</Link>
+            <strong>
+              <Link to="/docs/red-team/quickstart/">&raquo; See setup docs</Link>
+            </strong>
           </p>
         </>
       ),
       icon: <DescriptionIcon />,
-      destinationUrl: '/docs/getting-started',
+      destinationUrl: '/docs/red-team/quickstart/',
     },
   ];
 
@@ -182,11 +183,11 @@ function HomepageWalkthrough() {
 }
 
 export default function Home(): JSX.Element {
-  const [getStartedUrl, setGetStartedUrl] = React.useState('/docs/intro');
+  const [getStartedUrl, setGetStartedUrl] = React.useState('/docs/intro/');
 
   React.useEffect(() => {
     if (window.location.hash === '#redteam') {
-      setGetStartedUrl('/docs/red-team');
+      setGetStartedUrl('/docs/red-team/quickstart/');
     }
   }, []);
 
@@ -214,7 +215,7 @@ export default function Home(): JSX.Element {
           <div className="container">
             <h2>Detect & fix critical failures</h2>
             <div>
-              <Link to="/llm-vulnerability-scanner">
+              <Link to="/llm-vulnerability-scanner/">
                 <img
                   loading="lazy"
                   src="/img/riskreport-2.png"

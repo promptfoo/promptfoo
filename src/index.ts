@@ -5,6 +5,11 @@ import { evaluate as doEvaluate } from './evaluator';
 import { readPrompts } from './prompts';
 import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
+import { extractEntities } from './redteam/extraction/entities';
+import { extractSystemPurpose } from './redteam/extraction/purpose';
+import { GRADERS } from './redteam/graders';
+import { Plugins } from './redteam/plugins';
+import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
 import { readTests } from './testCases';
 import type {
@@ -49,11 +54,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
               function: promptInput as PromptFunction,
             };
           } else if (typeof promptInput === 'string') {
-            const prompts = await readPrompts(promptInput);
-            return prompts.map((p) => ({
-              raw: p.raw,
-              label: p.label,
-            }));
+            return readPrompts(promptInput);
           } else {
             return {
               raw: JSON.stringify(promptInput),
@@ -95,7 +96,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   if (options.cache === false || (options.repeat && options.repeat > 1)) {
     cache.disableCache();
   }
-  telemetry.maybeShowNotice();
 
   // Run the eval!
   const ret = await doEvaluate(constructedTestSuite, {
@@ -122,11 +122,22 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   return ret;
 }
 
-export { evaluate, assertions, providers };
+const redteam = {
+  Extractors: {
+    extractEntities,
+    extractSystemPurpose,
+  },
+  Graders: GRADERS,
+  Plugins,
+  Strategies,
+};
+
+export { assertions, cache, evaluate, providers, redteam };
 
 export default {
-  evaluate,
   assertions,
-  providers,
   cache,
+  evaluate,
+  providers,
+  redteam,
 };

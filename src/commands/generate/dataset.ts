@@ -3,12 +3,12 @@ import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
-import { resolveConfigs } from '../../config';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCases';
 import type { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
+import { resolveConfigs } from '../../util/config/load';
 
 interface DatasetGenerateOptions {
   cache: boolean;
@@ -121,6 +121,6 @@ export function generateDatasetCommand(
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
     .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file <path>', 'Path to .env file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .action((opts) => doGenerateDataset({ ...opts, defaultConfig, defaultConfigPath }));
 }

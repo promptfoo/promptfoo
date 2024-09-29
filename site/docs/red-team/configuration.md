@@ -7,6 +7,13 @@ sidebar_label: 'Configuration'
 
 The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
 
+The most important components of your redteam configuration are:
+
+- **Targets**: The endpoints or models you want to test (also known as "providers").
+- **Plugins**: Adversarial input generators that produce potentially malicious payloads.
+- **Strategies**: Techniques used to deliver these payloads to the target (e.g. adding a prompt injection, or by applying a specific attack algorithm).
+- **Purpose**: A description of the system's purpose, used to guide adversarial input generation.
+
 ## Getting Started
 
 To initialize a basic redteam configuration, run:
@@ -20,6 +27,9 @@ npx promptfoo@latest redteam init
 The redteam configuration uses the following YAML structure:
 
 ```yaml
+targets:
+  - openai:gpt-4o
+
 redteam:
   plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
   strategies: Array<string | { id: string }>
@@ -28,32 +38,21 @@ redteam:
   provider: string | ProviderOptions
   purpose: string
   language: string
-
-prompts:
-  - 'Your prompt template here: {{variable}}'
-providers:
-  - openai:gpt-4-turbo
 ```
 
 ### Configuration Fields
 
-| Field        | Type                      | Description                                                              | Default                         |
-| ------------ | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
-| `injectVar`  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
-| `numTests`   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
-| `plugins`    | `Array<string\|object>`   | Plugins to use for redteam generation                                    | `default`                       |
-| `provider`   | `string\|ProviderOptions` | AI model provider for generating adversarial inputs                      | `openai:gpt-4o`                 |
-| `purpose`    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
-| `strategies` | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
-| `language`   | `string`                  | Language for generated tests                                             | English                         |
+| Field                   | Type                      | Description                                                              | Default                         |
+| ----------------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
+| `injectVar`             | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
+| `numTests`              | `number`                  | Default number of tests to generate per plugin                           | 5                               |
+| `plugins`               | `Array<string\|object>`   | Plugins to use for redteam generation                                    | `default`                       |
+| `provider` or `targets` | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4o`                 |
+| `purpose`               | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
+| `strategies`            | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
+| `language`              | `string`                  | Language for generated tests                                             | English                         |
 
 ## Core Concepts
-
-There are three main components that affect the generation of redteam tests:
-
-1. Individual plugins
-2. Collections of related plugins
-3. Strategies
 
 ### Plugins
 
@@ -189,10 +188,96 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 
   - By default uses a [target URL](https://promptfoo.dev/plugin-helpers/ssrf.txt) on the promptfoo.dev host. We recommend placing with your own internal URL.
 
+- `ascii-smuggling`: Tests if the model is vulnerable to attacks using special Unicode characters to embed invisible instructions in text.
+
 ### Plugin Collections
 
 - `harmful`: Includes all available harm plugins
 - `pii`: Includes all available PII plugins
+
+#### Standards
+
+Promptfoo supports several preset configurations based on common security frameworks and standards.
+
+##### NIST AI Risk Management Framework (AI RMF)
+
+The NIST AI RMF preset includes plugins that align with the NIST AI Risk Management Framework measures. You can use this preset by including `nist:ai:measure` in your plugins list.
+
+Example usage:
+
+```yaml
+plugins:
+  - nist:ai:measure
+```
+
+You can target specific measures within the NIST AI RMF:
+
+```yaml
+plugins:
+  - nist:ai:measure:1.1
+  - nist:ai:measure:2.3
+  - nist:ai:measure:3.2
+```
+
+##### OWASP Top 10 for Large Language Model Applications
+
+The OWASP LLM Top 10 preset includes plugins that address the security risks outlined in the OWASP Top 10 for Large Language Model Applications. You can use this preset by including `owasp:llm` in your plugins list.
+
+Example usage:
+
+```yaml
+plugins:
+  - owasp:llm
+```
+
+You can target specific items within the OWASP LLM Top 10:
+
+```yaml
+plugins:
+  - owasp:llm:01
+  - owasp:llm:06
+  - owasp:llm:09
+```
+
+##### OWASP API Security Top 10
+
+The OWASP API Security Top 10 preset includes plugins that address the security risks outlined in the OWASP API Security Top 10. You can use this preset by including `owasp:api` in your plugins list.
+
+Example usage:
+
+```yaml
+plugins:
+  - owasp:api
+```
+
+You can target specific items within the OWASP API Security Top 10:
+
+```yaml
+plugins:
+  - owasp:api:01
+  - owasp:api:05
+  - owasp:api:10
+```
+
+##### MITRE ATLAS
+
+The MITRE ATLAS preset includes plugins that align with the MITRE ATLAS framework for AI system threats. You can use this preset by including `mitre:atlas` in your plugins list.
+
+Example usage:
+
+```yaml
+plugins:
+  - mitre:atlas
+```
+
+You can target specific tactics within MITRE ATLAS:
+
+```yaml
+plugins:
+  - mitre:atlas:reconnaissance
+  - mitre:atlas:initial-access
+  - mitre:atlas:impact
+```
 
 ### Custom Policies
 
@@ -333,14 +418,26 @@ The `redteam.provider` field allows you to specify a provider configuration for 
 
 Note that this is separate from the "target" model(s), which are set in the top-level [`providers` configuration](/docs/configuration/guide/).
 
-A common use case is to use a [custom HTTP endpoint](/docs/providers/http/) or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
+A common use case is to use an alternative platform like [Azure](/docs/providers/azure/), [Bedrock](/docs/providers/aws-bedrock), or [HuggingFace](/docs/providers/huggingface/).
+
+You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementations](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
+
+:::warning
+Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4o.
+:::
+
+### How attacks are generated
+
+By default, Promptfoo uses your local OpenAI key to perform attack generation. If you do not have a key, it will use our API to generate initial inputs, but the actual attacks are still performed locally.
+
+You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
 
 ### Changing the model
 
 To use the `openai:chat:gpt-4o-mini` model, you can override the provider on the command line:
 
 ```sh
-npx promptfoo@latest redteam generate -w --provider openai:chat:gpt-4o-mini
+npx promptfoo@latest redteam generate --provider openai:chat:gpt-4o-mini
 ```
 
 Or in the config:
@@ -375,19 +472,19 @@ Disabling remote generation may result in lower quality adversarial inputs. For 
 
 If you need to use a custom provider for generation, you can still benefit from our remote service by leaving `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` set to `false` (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
 
-### Custom Providers
+### Custom Providers/Targets
 
-In some cases your target application may require custom requests or setups.
+Promptfoo is very flexible and allows you to configure almost any code or API, with dozens of [providers](/docs/providers) supported out of the box.
 
-- **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
-- **APIs**: See setup instructions for [OpenAI](/docs/providers/openai), [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
+- **Public APIs**: See setup instructions for [OpenAI](/docs/providers/openai), [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and many [more](/docs/providers).
+- **Custom**: In some cases your target application may require customized setups. See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
 
 #### HTTP requests
 
 For example, to send a customized HTTP request, use a [HTTP Provider](/docs/providers/http/):
 
 ```yaml
-providers:
+targets:
   - id: 'https://example.com/generate'
     config:
       method: 'POST'
@@ -398,6 +495,25 @@ providers:
       responseParser: 'json.output'
 ```
 
+Or, let's say you have a raw HTTP request exported from a tool like Burp Suite. Put it in a file called `request.txt`:
+
+```
+POST /api/generate HTTP/1.1
+Host: example.com
+Content-Type: application/json
+
+{"prompt": "Tell me a joke"}
+```
+
+Then, in your Promptfoo config, you can reference it like this:
+
+```yaml
+targets:
+  - id: http # or https
+    config:
+      request: file://request.txt
+```
+
 #### Custom scripts
 
 Alternatively, you can use a custom [Python](/docs/providers/python/), [Javascript](/docs/providers/custom-api/), or other [script](/docs/providers/custom-script/) in order to precisely construct your requests.
@@ -405,8 +521,8 @@ Alternatively, you can use a custom [Python](/docs/providers/python/), [Javascri
 For example, let's create a Python provider. Your config would look like this:
 
 ```yaml
-providers:
-  - id: 'python:send_redteam.py'
+targets:
+  - id: 'file://send_redteam.py'
     label: 'Test script 1' # Optional display label
 ```
 
@@ -496,18 +612,15 @@ def call_api(prompt, options, context):
 
 ### Passthrough prompts
 
-In most cases, if you're handling the prompting in a script, you can just make `prompt` passthrough the variable in your `promptfooconfig.yaml`.
+If you just want to send the entire adversarial input as-is to your target, omit the `prompts` field.
 
 In this case, be sure to specify a `purpose`, because the redteam generator can no longer infer the purpose from your prompt. The purpose is used to tailor the adversarial inputs:
 
 ```yaml
-prompts:
-  - '{{query}}' # Just send the query as-is to the provider
-
 purpose: 'Act as a travel agent with a focus on European holidays'
 
-providers:
-  - python:send_redteam.py
+targets:
+  - file://send_redteam.py
 
 redteam:
   numTests: 10
@@ -572,7 +685,7 @@ redteam:
 redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
-  provider: 'openai:chat:gpt-4-turbo'
+  provider: 'openai:chat:gpt-4o'
   language: 'French'
   numTests: 20
   plugins:

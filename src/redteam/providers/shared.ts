@@ -1,6 +1,6 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { isProviderOptions, isApiProvider, type RedteamConfig } from '../../types';
+import { isProviderOptions, isApiProvider, type RedteamFileConfig } from '../../types';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 export async function loadRedteamProvider({
@@ -8,7 +8,7 @@ export async function loadRedteamProvider({
   jsonOnly = false,
   preferSmallModel = false,
 }: {
-  provider?: RedteamConfig['provider'];
+  provider?: RedteamFileConfig['provider'];
   jsonOnly?: boolean;
   preferSmallModel?: boolean;
 } = {}) {

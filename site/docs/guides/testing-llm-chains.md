@@ -61,7 +61,7 @@ Now, let's configure promptfoo to run this LangChain script with a bunch of test
 ```yaml
 prompts: prompt.txt
 providers:
-  - openai:chat:gpt-4-0613
+  - openai:chat:gpt-4o
   - exec:python langchain_example.py
 tests:
   - vars:
@@ -142,9 +142,12 @@ Note that you can always write the logic directly in Javascript if you're comfor
 Now, we can set up a promptfoo config pointing to `chainProvider.js`:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 // highlight-start
-providers: ['./chainProvider.js']
+providers:
+  - './chainProvider.js'
 // highlight-end
 tests:
   - vars:

@@ -116,6 +116,86 @@ describe('json utilities', () => {
       const expectedOutput = [{ key2: 'value2' }];
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
     });
+
+    it('should handle incomplete JSON', () => {
+      const input = `{
+  "incomplete": "object"`;
+      expect(extractJsonObjects(input)).toEqual([]);
+    });
+
+    it('should handle string containing incomplete JSON', () => {
+      const input = `{
+  "key1": "value1",
+  "key2": {
+    "nested": "value2"
+  },
+  "key3": "value3"
+}
+{
+  "incomplete": "object"`;
+      expect(extractJsonObjects(input)).toEqual([
+        {
+          key1: 'value1',
+          key2: {
+            nested: 'value2',
+          },
+          key3: 'value3',
+        },
+      ]);
+    });
+
+    it('should handle this case', () => {
+      const obj = {
+        vars: [
+          {
+            language: 'Klingon',
+            body: 'Live long and prosper',
+          },
+          {
+            language: 'Elvish',
+            body: 'Good morning',
+          },
+          {
+            language: 'Esperanto',
+            body: 'I love learning languages',
+          },
+          {
+            language: 'Morse Code',
+            body: 'Help',
+          },
+          {
+            language: 'Emoji',
+            body: 'I am feeling happy 😊',
+          },
+          {
+            language: 'Binary',
+            body: 'Yes',
+          },
+          {
+            language: 'Javascript',
+            body: 'Hello, World!',
+          },
+          {
+            language: 'Shakespearean',
+            body: 'To be or not to be',
+          },
+          {
+            language: 'Leet Speak',
+            body: 'You are amazing',
+          },
+          {
+            language: 'Old English',
+            body: 'What is thy name?',
+          },
+          {
+            language: 'Yoda Speak',
+            body: 'Strong with the force, you are',
+          },
+        ],
+      };
+      const input = JSON.stringify(obj);
+      expect(extractJsonObjects(input)).toEqual([obj]);
+    });
   });
 
   describe('orderKeys', () => {

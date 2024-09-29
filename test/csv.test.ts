@@ -1,5 +1,10 @@
 import { assertionFromString, testCaseFromCsvRow } from '../src/csv';
+import logger from '../src/logger';
 import type { Assertion, CsvRow, TestCase } from '../src/types';
+
+jest.mock('../src/logger', () => ({
+  warn: jest.fn(),
+}));
 
 describe('testCaseFromCsvRow', () => {
   it('should create a TestCase with assertions and options from a CSV row', () => {
@@ -55,6 +60,20 @@ describe('testCaseFromCsvRow', () => {
 
     const result = testCaseFromCsvRow(row);
     expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should log a warning for single underscore usage with reserved keys', () => {
+    const row: CsvRow = {
+      _expected: 'equals:Expected output',
+      var1: 'value1',
+    };
+
+    testCaseFromCsvRow(row);
+    testCaseFromCsvRow(row);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'You used a single underscore for the key "_expected". Did you mean to use "__expected" instead?',
+    );
+    expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -291,11 +310,118 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('file://file.py');
   });
 
+  it('should parse python: assertion', () => {
+    const assertion = assertionFromString('python:some_python_code');
+    expect(assertion).toEqual({
+      type: 'python',
+      value: 'some_python_code',
+    });
+  });
+
+  it(`should parse file:// prefix assertion`, () => {
+    const assertion = assertionFromString('file://script.py');
+    expect(assertion).toEqual({
+      type: 'python',
+      value: 'script.py',
+    });
+  });
+
+  it(`should parse file:// prefix assertion with function name`, () => {
+    const assertion = assertionFromString('file://script.py:function_name');
+    expect(assertion).toEqual({
+      type: 'python',
+      value: 'script.py:function_name',
+    });
+  });
+
   it('should create a javascript assertion', () => {
     const expected = 'javascript: x > 10';
 
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('javascript');
     expect(result.value).toBe('x > 10');
+  });
+
+  it('should create an llm-rubric assertion with "grade:" prefix', () => {
+    const expected = 'grade:Evaluate the response based on clarity and accuracy';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('llm-rubric');
+    expect(result.value).toBe('Evaluate the response based on clarity and accuracy');
+  });
+
+  it('should create an llm-rubric assertion with "llm-rubric:" prefix', () => {
+    const expected = 'llm-rubric:Rate the answer on a scale of 1-10 for completeness';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('llm-rubric');
+    expect(result.value).toBe('Rate the answer on a scale of 1-10 for completeness');
+  });
+
+  it('should handle legacy javascript option', () => {
+    const expected = 'javascript:output === "Expected output"';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('javascript');
+    expect(result.value).toBe('output === "Expected output"');
+  });
+
+  it('should handle legacy eval option', () => {
+    const expected = 'eval:output === "Expected output"';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('javascript');
+    expect(result.value).toBe('output === "Expected output"');
+  });
+
+  it('should handle legacy fn option', () => {
+    const expected = 'fn:output === "Expected output"';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('javascript');
+    expect(result.value).toBe('output === "Expected output"');
+  });
+
+  it('should use DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD for similar assertion without threshold', () => {
+    const expected = 'similar:Expected output';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('similar');
+    expect(result.value).toBe('Expected output');
+    expect(result.threshold).toBe(0.8); // DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD
+  });
+
+  it('should use 0.75 as default threshold for other assertions requiring threshold', () => {
+    const assertionTypes = [
+      'answer-relevance',
+      'classifier',
+      'context-faithfulness',
+      'context-recall',
+      'context-relevance',
+      'cost',
+      'latency',
+      'levenshtein',
+      'perplexity-score',
+      'perplexity',
+      'rouge-n',
+      'starts-with',
+    ];
+
+    for (const type of assertionTypes) {
+      const expected = `${type}:Expected output`;
+      const result: Assertion = assertionFromString(expected);
+      expect(result.type).toBe(type);
+      expect(result.value).toBe('Expected output');
+      expect(result.threshold).toBe(0.75);
+    }
+  });
+
+  it('should use provided threshold when specified', () => {
+    const expected = 'similar(0.9):Expected output';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('similar');
+    expect(result.value).toBe('Expected output');
+    expect(result.threshold).toBe(0.9);
   });
 });

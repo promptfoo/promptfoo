@@ -56,8 +56,8 @@ export class PolicyPlugin extends PluginBase {
     ];
   }
 
-  async generateTests(n: number): Promise<TestCase[]> {
-    const tests = await super.generateTests(n);
+  async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
+    const tests = await super.generateTests(n, delayMs);
     return tests.map((test) => ({
       ...test,
       metadata: {

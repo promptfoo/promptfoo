@@ -1,3 +1,6 @@
+import cliState from '../cliState';
+import { getEnvBool, getEnvString } from '../envars';
+
 const REFUSAL_PREFIXES = [
   'Sorry',
   "I'm sorry",
@@ -19,6 +22,15 @@ const REFUSAL_SUBSTRINGS = [
   "I'm not able to provide",
 ];
 
+export function shouldGenerateRemote(): boolean {
+  // Generate remotely when the user has not disabled it and does not have an OpenAI key.
+  return (
+    (!getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION') &&
+      !getEnvString('OPENAI_API_KEY')) ||
+    (cliState.remote ?? false)
+  );
+}
+
 export function isBasicRefusal(response: string): boolean {
   const lowerResponse = response.trim().toLowerCase();
   return (
@@ -27,9 +39,16 @@ export function isBasicRefusal(response: string): boolean {
   );
 }
 
+/**
+ * Remove a prefix from a string.
+ *
+ * @param str - The string to remove the prefix from.
+ * @param prefix - The prefix to remove - case insensitive.
+ * @returns The string with the prefix removed.
+ */
 export function removePrefix(str: string, prefix: string) {
   // Remove asterisks from the prefix if if they exist. GPT loves to add them. eg: **Prompt:**
-  str = str.replace(/^\*\*(.+?)\*\*:?\s*/, '$1');
+  str = str.replace(/^\*+(.+?)\*+:?\s*/i, '$1');
   str = str.replace(new RegExp(prefix + ':', 'i'), '').trim();
   return str;
 }

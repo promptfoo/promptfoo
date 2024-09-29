@@ -8,7 +8,7 @@ import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
-import { getEnvBool, getEnvInt } from './envars';
+import { getEnvBool, getEnvInt, isCI } from './envars';
 import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
@@ -402,6 +402,7 @@ class Evaluator {
               cached: 0,
             },
             namedScores: {},
+            namedScoresCount: {},
             cost: 0,
           },
         };
@@ -423,6 +424,9 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
+      telemetry.recordAndSendOnce('feature_used', {
+        feature: 'scenarios',
+      });
       for (const scenario of testSuite.scenarios) {
         for (const data of scenario.config) {
           // Merge defaultTest with scenario config
@@ -650,6 +654,7 @@ class Evaluator {
       metrics.score += row.score;
       for (const [key, value] of Object.entries(row.namedScores)) {
         metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+        metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
       }
 
       if (testSuite.derivedMetrics) {
@@ -751,7 +756,26 @@ class Evaluator {
     if (this.options.showProgressBar) {
       await createMultiBars(runEvalOptions);
     }
-    await async.forEachOfLimit(runEvalOptions, concurrency, processEvalStep);
+
+    // Separate serial and concurrent eval options
+    const serialRunEvalOptions: RunEvalOptions[] = [];
+    const concurrentRunEvalOptions: RunEvalOptions[] = [];
+
+    for (const evalOption of runEvalOptions) {
+      if (evalOption.test.options?.runSerially) {
+        serialRunEvalOptions.push(evalOption);
+      } else {
+        concurrentRunEvalOptions.push(evalOption);
+      }
+    }
+
+    // Run serial evaluations first
+    for (const evalStep of serialRunEvalOptions) {
+      await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
+    }
+
+    // Then run concurrent evaluations
+    await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, processEvalStep);
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = table.body.reduce(
@@ -852,13 +876,7 @@ class Evaluator {
         new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
       ).sort(),
       eventSource: options.eventSource || 'default',
-      ci:
-        getEnvBool('CI') ||
-        getEnvBool('GITHUB_ACTIONS') ||
-        getEnvBool('TRAVIS') ||
-        getEnvBool('CIRCLECI') ||
-        getEnvBool('JENKINS') ||
-        getEnvBool('GITLAB_CI'),
+      ci: isCI(),
       hasAnyPass: results.some((r) => r.success),
       isRedteam: Boolean(testSuite.redteam),
     });

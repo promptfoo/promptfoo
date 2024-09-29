@@ -3,16 +3,18 @@ import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
+import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   Prompt,
   NunjucksFilterMap,
-  RedteamConfig,
+  RedteamFileConfig,
 } from '../../../types';
+import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
-import { isBasicRefusal } from '../../util';
+import { isBasicRefusal, shouldGenerateRemote } from '../../util';
 import { loadRedteamProvider } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
@@ -23,7 +25,7 @@ interface CrescendoConfig {
   injectVar: string;
   maxRounds?: number;
   maxBacktracks?: number;
-  redteamProvider: RedteamConfig['provider'];
+  redteamProvider: RedteamFileConfig['provider'];
 }
 
 interface ConversationMessage {
@@ -79,21 +81,37 @@ class CrescendoProvider implements ApiProvider {
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      this.redTeamProvider = await loadRedteamProvider({
-        provider: this.config.redteamProvider,
-        preferSmallModel: true,
-        jsonOnly: true,
-      });
+      if (shouldGenerateRemote()) {
+        this.redTeamProvider = new PromptfooChatCompletionProvider({
+          task: 'crescendo',
+          jsonOnly: true,
+          preferSmallModel: true,
+        });
+      } else {
+        this.redTeamProvider = await loadRedteamProvider({
+          provider: this.config.redteamProvider,
+          preferSmallModel: true,
+          jsonOnly: true,
+        });
+      }
     }
     return this.redTeamProvider;
   }
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      this.scoringProvider = await loadRedteamProvider({
-        provider: this.config.redteamProvider,
-        preferSmallModel: true,
-      });
+      if (shouldGenerateRemote()) {
+        this.scoringProvider = new PromptfooChatCompletionProvider({
+          task: 'crescendo',
+          jsonOnly: false,
+          preferSmallModel: true,
+        });
+      } else {
+        this.scoringProvider = await loadRedteamProvider({
+          provider: this.config.redteamProvider,
+          preferSmallModel: true,
+        });
+      }
     }
     return this.scoringProvider;
   }
@@ -267,10 +285,20 @@ class CrescendoProvider implements ApiProvider {
     logger.debug(`Sending to red teaming chat:`);
     this.logChatHistory(this.redTeamingChatConversationId);
     const redTeamingChat = await this.getRedTeamProvider();
-    const response = await redTeamingChat.callApi(JSON.stringify(redTeamingHistory));
+    const response = await redTeamingChat.callApi(JSON.stringify(redTeamingHistory), {
+      prompt: {
+        raw: JSON.stringify(redTeamingHistory),
+        label: 'history',
+      },
+      vars: {},
+    });
     invariant(typeof response.output === 'string', 'Expected output to be a string');
 
-    const parsedOutput = JSON.parse(response.output);
+    const parsedOutput = extractFirstJsonObject<{
+      generatedQuestion: string;
+      rationaleBehindJailbreak: string;
+      lastResponseSummary: string;
+    }>(response.output);
     const expectedKeys = ['generatedQuestion', 'rationaleBehindJailbreak', 'lastResponseSummary'];
 
     for (const key of expectedKeys) {
@@ -282,7 +310,7 @@ class CrescendoProvider implements ApiProvider {
 
     logger.debug(dedent`
       Received from red teaming chat:
-      
+
       generatedQuestion: ${parsedOutput.generatedQuestion}
       rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
       lastResponseSummary: ${parsedOutput.lastResponseSummary}
@@ -319,7 +347,7 @@ class CrescendoProvider implements ApiProvider {
     this.logChatHistory(this.targetConversationId);
 
     try {
-      const parsed = JSON.parse(renderedPrompt);
+      const parsed = extractFirstJsonObject<ConversationMessage[]>(renderedPrompt);
       // If successful, then load it directly into the chat history
       for (const message of parsed) {
         if (
@@ -331,7 +359,7 @@ class CrescendoProvider implements ApiProvider {
         }
         this.memory.addMessage(this.targetConversationId, message);
       }
-    } catch (e) {
+    } catch {
       // Otherwise, just send the rendered prompt as a string
       this.memory.addMessage(this.targetConversationId, {
         role: 'user',
@@ -386,15 +414,21 @@ class CrescendoProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await scoringProvider.callApi(refusalBody);
+    const refusalResponse = await scoringProvider.callApi(refusalBody, {
+      prompt: {
+        raw: refusalBody,
+        label: 'refusal',
+      },
+      vars: {},
+    });
     invariant(typeof refusalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Refusal score response: ${refusalResponse.output}`);
 
-    const parsed = JSON.parse(refusalResponse.output) as {
+    const parsed = extractFirstJsonObject<{
       value: boolean;
       metadata: number;
       rationale: string;
-    };
+    }>(refusalResponse.output);
 
     invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
     invariant(
@@ -422,16 +456,22 @@ class CrescendoProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await scoringProvider.callApi(evalBody);
+    const evalResponse = await scoringProvider.callApi(evalBody, {
+      prompt: {
+        raw: evalBody,
+        label: 'eval',
+      },
+      vars: {},
+    });
     invariant(typeof evalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Eval score response: ${evalResponse.output}`);
 
-    const parsed = JSON.parse(evalResponse.output) as {
+    const parsed = extractFirstJsonObject<{
       value: boolean;
       description: string;
       rationale: string;
       metadata: number;
-    };
+    }>(evalResponse.output);
 
     invariant(typeof parsed.value === 'boolean', 'Expected eval grader value to be a boolean');
     invariant(typeof parsed.metadata === 'number', 'Expected eval grader metadata to be a number');
