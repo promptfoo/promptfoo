@@ -215,10 +215,13 @@ export function startServer(
   });
 
   app.get('/api/progress', async (req, res) => {
-    const { tagName, tagValue } = req.query;
+    const { tagName, tagValue, description } = req.query;
     const tag =
       tagName && tagValue ? { key: tagName as string, value: tagValue as string } : undefined;
-    const results = await getStandaloneEvals({ tag });
+    const results = await getStandaloneEvals({
+      tag,
+      description: description as string | undefined,
+    });
     res.json({
       data: results,
     });
