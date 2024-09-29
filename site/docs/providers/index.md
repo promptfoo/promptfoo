@@ -1,4 +1,4 @@
-# LLM Providers in promptfoo
+# LLM Providers
 
 Providers in promptfoo are the interfaces to various language models and AI services. This guide will help you understand how to configure and use providers in your promptfoo evaluations.
 
@@ -19,6 +19,10 @@ providers:
 | --------------------------------------------------- | ---------------------------------------- | ----------------------------------------------- |
 | [OpenAI](./openai.md)                               | GPT models including GPT-4 and GPT-3.5   | `openai:o1-preview`                             |
 | [Anthropic](./anthropic.md)                         | Claude models                            | `anthropic:messages:claude-3-5-sonnet-20240620` |
+| [HTTP](./http.md)                                   | Generic HTTP-based providers             | `https://api.example.com/v1/chat/completions`   |
+| [Javascript](./custom-api.md)                       | Custom - JavaScript file                 | `file://path/to/custom_provider.js`             |
+| [Python](./python.md)                               | Custom - Python file                     | `file://path/to/custom_provider.py`             |
+| [Shell Command](./custom-script.md)                 | Custom - script-based providers          | `exec: python chain.py`                         |
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                | `ai21:jamba-1.5-mini`                           |
 | [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers | `bedrock:us.meta.llama3-2-90b-instruct-v1:0`    |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models               | `azureopenai:gpt-4o-custom-deployment-name`     |
@@ -42,13 +46,10 @@ providers:
 | [Ollama](./ollama.md)                               | Local                                    | `ollama:llama3.2:latest`                        |
 | [LocalAI](./localai.md)                             | Local                                    | `localai:gpt4all-j`                             |
 | [llama.cpp](./llama.cpp.md)                         | Local                                    | `llama:7b`                                      |
+| [WebSocket](./websocket.md)                         | WebSocket-based providers                | `ws://example.com/ws`                           |
 | [Echo](./echo.md)                                   | Custom - For testing purposes            | `echo`                                          |
 | [Manual Input](./manual-input.md)                   | Custom - CLI manual entry                | `promptfoo:manual-input`                        |
-| [Javascript](./custom-api.md)                       | Custom - JavaScript file                 | `file://path/to/custom_provider.js`             |
-| [Python](./python.md)                               | Custom - Python file                     | `file://path/to/custom_provider.py`             |
-| [HTTP](./http.md)                                   | Generic HTTP-based providers             | `https://api.example.com/v1/chat/completions`   |
-| [WebSocket](./websocket.md)                         | WebSocket-based providers                | `ws://example.com/ws`                           |
-| [Shell Command](./custom-script.md)                 | Custom - script-based providers          | `exec: python chain.py`                         |
+| [Go](./go.md)                                       | Custom - Go file                         | `file://path/to/your/script.go`                 |
 | [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                             | Compatible with OpenAI syntax                   |
 
 ## Provider Syntax
@@ -180,53 +181,3 @@ providers:
       presence_penalty: 0.5
       stop: ["\n", 'Human:', 'AI:']
 ```
-
-## Using Multiple Providers
-
-promptfoo allows easy comparison of multiple providers:
-
-```yaml
-providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
-  - anthropic:claude-3-sonnet-20240229
-  - vertex:gemini-pro
-  - file://custom_provider.js
-```
-
-This setup enables A/B testing and model comparison across different providers.
-
-## Troubleshooting
-
-If you encounter issues with a provider:
-
-1. Verify API keys and environment variables:
-
-   ```sh
-   echo $OPENAI_API_KEY
-   ```
-
-2. Check configuration syntax:
-
-   ```yaml
-   providers:
-     - id: openai:gpt-4o-mini
-       config:
-         temperature: 0.7 # Make sure this is a number, not a string
-   ```
-
-3. Look for provider-specific error messages in the promptfoo output:
-
-   ```
-   Error: OpenAI API request failed: Invalid API key provided
-   ```
-
-4. Consult provider documentation for known issues or limitations.
-
-5. For custom integrations, use debug logging:
-
-   ```sh
-   LOG_LEVEL=debug npx promptfoo eval
-   ```
-
-For more detailed information on each provider, refer to their specific documentation pages linked in the [Available Providers](#available-providers) section.
