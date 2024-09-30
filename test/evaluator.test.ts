@@ -500,7 +500,6 @@ describe('evaluator', () => {
           ],
           options: {}, // No test transform, relying on provider's transform
         },
-        1,
       ],
     };
 
