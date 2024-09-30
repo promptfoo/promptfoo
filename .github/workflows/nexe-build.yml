@@ -11,9 +11,12 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'x64' && 'ubuntu-latest' || 'ubuntu-arm64' }}
     timeout-minutes: 10
     continue-on-error: true
+    strategy:
+      matrix:
+        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,13 +27,14 @@ jobs:
       - run: npm run build
       - uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: dist-${{ matrix.arch }}
           path: dist/
 
   nexe-build:
     needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
+    runs-on: ${{ matrix.os == 'macos' && (matrix.arch == 'arm64' && 'macos-latest' || 'macos-13') || (matrix.arch == 'x64' && 'ubuntu-latest' || 'ubuntu-arm64') }}
+    timeout-minutes: 300
+    continue-on-error: true
     strategy:
       matrix:
         os: [linux, macos, win]
@@ -43,32 +47,39 @@ jobs:
           cache: 'npm'
       - uses: actions/download-artifact@v4
         with:
-          name: dist
+          name: dist-${{ matrix.arch }}
           path: dist/
       - run: npm ci
       - name: Cache nexe build artifacts
         uses: actions/cache@v4
         with:
           path: ~/.nexe
-          key: ${{ runner.os }}-${{ matrix.arch }}-nexe-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ matrix.arch }}-${{ runner.os }}-nexe-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.arch }}-nexe-
+            ${{ matrix.arch }}-${{ runner.os }}-nexe-
           save-always: true
       - name: Install nexe globally
         run: npm install -g nexe
       - name: Build executable
-        run: npx nexe --build -r drizzle/ -r package.json -r "dist/**/*" -i dist/src/main.js -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}
-
+        run: |
+          npx nexe --build \
+            -r drizzle/ \
+            -r package.json \
+            -r "dist/**/*" \
+            -r "node_modules/**/*" \
+            -i dist/src/main.js \
+            -o promptfoo-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'win' && '.exe' || '' }}
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}
-          path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+          name: promptfoo-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'win' && '.exe' || '' }}
+          path: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'win' && '.exe' || '' }}
 
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         with:
-          files: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}
+          files: ./promptfoo-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'win' && '.exe' || '' }}
+          tag_name: ${{ github.ref_name }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}

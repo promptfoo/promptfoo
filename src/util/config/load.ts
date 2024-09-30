@@ -4,17 +4,17 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
-import { readAssertions } from './assertions';
-import { validateAssertions } from './assertions/validateAssertions';
-import cliState from './cliState';
-import { filterTests } from './commands/eval/filterTests';
-import { getEnvBool } from './envars';
-import { importModule } from './esm';
-import logger from './logger';
-import { readPrompts, readProviderPromptMap } from './prompts';
-import { loadApiProviders } from './providers';
-import telemetry from './telemetry';
-import { readTest, readTests } from './testCases';
+import { readAssertions } from '../../assertions';
+import { validateAssertions } from '../../assertions/validateAssertions';
+import cliState from '../../cliState';
+import { filterTests } from '../../commands/eval/filterTests';
+import { getEnvBool } from '../../envars';
+import { importModule } from '../../esm';
+import logger from '../../logger';
+import { readPrompts, readProviderPromptMap } from '../../prompts';
+import { loadApiProviders } from '../../providers';
+import telemetry from '../../telemetry';
+import { readTest, readTests } from '../../testCases';
 import type {
   CommandLineOptions,
   Prompt,
@@ -25,8 +25,8 @@ import type {
   TestCase,
   TestSuite,
   UnifiedConfig,
-} from './types';
-import { isJavascriptFile, maybeLoadFromExternalFile, readFilters } from './util';
+} from '../../types';
+import { isJavascriptFile, maybeLoadFromExternalFile, readFilters } from '../../util';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
@@ -208,7 +208,7 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
  * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
  * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
  */
-export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
     const globPaths = globSync(configPath, {
@@ -293,17 +293,66 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
-  const seenPrompts = new Map<string, Prompt>();
-  for (const [idx, config] of configs.entries()) {
-    const parsedPrompts = await readPrompts(config.prompts, path.dirname(configPaths[idx]));
-    for (const prompt of parsedPrompts) {
-      const key = typeof prompt === 'string' ? prompt : prompt.raw;
-      if (!seenPrompts.has(key)) {
-        seenPrompts.set(key, prompt as Prompt);
+  const configsAreStringOrArray = configs.every(
+    (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
+  );
+
+  let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
+
+  const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
+    if (typeof relativePath === 'string') {
+      if (relativePath.startsWith('file://')) {
+        relativePath =
+          'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
       }
+      return relativePath;
+    } else if (typeof relativePath === 'object' && relativePath.id) {
+      if (relativePath.id.startsWith('file://')) {
+        relativePath.id =
+          'file://' +
+          path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
+      }
+      return relativePath;
+    } else {
+      throw new Error(`Invalid prompt object: ${JSON.stringify(relativePath)}`);
     }
+  };
+
+  const seenPrompts = new Set<string | Prompt>();
+  const addSeenPrompt = (prompt: string | Prompt) => {
+    if (typeof prompt === 'string') {
+      seenPrompts.add(prompt);
+    } else if (typeof prompt === 'object' && prompt.id) {
+      seenPrompts.add(prompt);
+    } else {
+      throw new Error('Invalid prompt object');
+    }
+  };
+  configs.forEach((config, idx) => {
+    if (typeof config.prompts === 'string') {
+      invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
+      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
+      addSeenPrompt(absolutePrompt);
+    } else if (Array.isArray(config.prompts)) {
+      invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
+      config.prompts.forEach((prompt) => {
+        invariant(
+          typeof prompt === 'string' ||
+            (typeof prompt === 'object' &&
+              (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
+          'Invalid prompt',
+        );
+        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+      });
+    } else {
+      // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
+      invariant(typeof prompts === 'object', 'Cannot mix configs with map and array-type prompts');
+      prompts = { ...prompts, ...config.prompts };
+    }
+  });
+  if (Array.isArray(prompts)) {
+    prompts.push(...Array.from(seenPrompts));
   }
-  const prompts: UnifiedConfig['prompts'] = Array.from(seenPrompts.values());
 
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
@@ -332,6 +381,13 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
     env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
     evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
+    outputPath: configs.flatMap((config) =>
+      typeof config.outputPath === 'string'
+        ? [config.outputPath]
+        : Array.isArray(config.outputPath)
+          ? config.outputPath
+          : [],
+    ),
     commandLineOptions: configs.reduce(
       (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
@@ -353,7 +409,7 @@ export async function resolveConfigs(
   let fileConfig: Partial<UnifiedConfig> = {};
   const configPaths = cmdObj.config;
   if (configPaths) {
-    fileConfig = await readConfigs(configPaths);
+    fileConfig = await combineConfigs(configPaths);
   }
 
   // Standalone assertion mode

@@ -35,3 +35,30 @@
   border-top: 2px solid #e0e0e0;
   padding-top: 1.5rem;
 }
+
+@media (prefers-color-scheme: dark) {
+  .risk-category-drawer .MuiListItem-root.failure-item {
+    border-color: #424242;
+    background-color: #2c2c2c;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .risk-category-drawer .MuiListItem-root.failure-item:hover {
+    border-color: #616161;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .risk-category-drawer .prompt {
+    color: #e0e0e0;
+  }
+
+  .risk-category-drawer .output {
+    color: #b0b0b0;
+    background-color: #1e1e1e;
+  }
+
+  .risk-category-drawer .failed-tests-header {
+    color: #e0e0e0;
+    border-top-color: #424242;
+  }
+}

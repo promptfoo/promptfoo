@@ -116,23 +116,53 @@ const config = {
             label: 'Tutorial',
           },
           */
-          { to: '/docs/intro/', label: 'Docs', position: 'left' },
+          {
+            type: 'dropdown',
+            label: 'Product',
+            position: 'left',
+            items: [
+              {
+                to: '/docs/red-team/',
+                label: 'Red Teaming',
+              },
+              {
+                to: '/llm-vulnerability-scanner/',
+                label: 'Vulnerability Scanner',
+              },
+              {
+                to: '/docs/getting-started/',
+                label: 'LLM evaluations',
+              },
+            ],
+          },
+          {
+            type: 'dropdown',
+            label: 'Company',
+            position: 'left',
+            items: [
+              {
+                href: '/about/',
+                label: 'About',
+              },
+              {
+                href: '/contact/',
+                label: 'Contact',
+              },
+              {
+                href: '/careers/',
+                label: 'Careers',
+              },
+              {
+                href: '/blog/',
+                label: 'Blog',
+              },
+            ],
+          },
+          {
+            href: '/docs/intro/',
+            label: 'Docs',
+          },
           { to: '/pricing/', label: 'Enterprise', position: 'left' },
-          {
-            to: '/llm-vulnerability-scanner/',
-            label: 'Vulnerability Scanner',
-            position: 'left',
-          },
-          {
-            to: '/docs/red-team/',
-            label: 'Red Teaming',
-            position: 'left',
-          },
-          {
-            href: '/blog/',
-            label: 'Blog',
-            position: 'left',
-          },
           {
             href: 'https://github.com/promptfoo/promptfoo',
             label: 'GitHub',
@@ -141,11 +171,6 @@ const config = {
           {
             href: 'https://discord.gg/gHPS9jjfbs',
             label: 'Discord',
-            position: 'right',
-          },
-          {
-            href: '/contact/',
-            label: 'Contact',
             position: 'right',
           },
         ],
@@ -212,11 +237,15 @@ const config = {
             ],
           },
           {
-            title: 'About',
+            title: 'Resources',
             items: [
               {
+                label: 'About',
+                href: '/about/',
+              },
+              {
                 label: 'Blog',
-                href: '/blog',
+                href: '/blog/',
               },
               {
                 label: 'Enterprise',
@@ -237,6 +266,10 @@ const config = {
               {
                 label: 'Discord',
                 href: 'https://discord.gg/gHPS9jjfbs',
+              },
+              {
+                label: 'LinkedIn',
+                href: 'https://www.linkedin.com/company/promptfoo/',
               },
             ],
           },

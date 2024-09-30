@@ -1,8 +1,6 @@
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import useShareConfig, { useShareAppBaseUrl } from '@app/stores/shareConfig';
 import { callApi } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -123,8 +121,6 @@ export default function ResultsView({
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const { apiShareBaseUrl } = useShareConfig();
-  const appShareBaseUrl = useShareAppBaseUrl();
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
@@ -140,33 +136,22 @@ export default function ResultsView({
 
   const handleShareButtonClick = async () => {
     setShareLoading(true);
-    let shareUrl = '';
-    try {
-      if (IS_RUNNING_LOCALLY) {
-        const response = await fetch(`${apiShareBaseUrl}/api/eval`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            data: {
-              version: 2,
-              createdAt: new Date().toISOString(),
-              results: {
-                table,
-              },
-              config,
-            },
-          }),
-        });
-        const { id } = await response.json();
-        shareUrl = `${appShareBaseUrl}/eval/${id}`;
-      } else {
-        shareUrl = `${window.location.host}/eval/?evalId=${currentEvalId}`;
-      }
 
-      setShareUrl(shareUrl);
-      setShareModalOpen(true);
+    try {
+      const response = await callApi('/results/share', {
+        method: 'POST',
+        body: JSON.stringify({ id: currentEvalId }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      const { url } = await response.json();
+      if (response.ok) {
+        setShareUrl(url);
+        setShareModalOpen(true);
+      } else {
+        alert('Sorry, something went wrong.');
+      }
     } catch {
       alert('Sorry, something went wrong.');
     } finally {
@@ -305,7 +290,7 @@ export default function ResultsView({
     if (newDescription !== null && newDescription !== config.description) {
       const newConfig = { ...config, description: newDescription };
       try {
-        const response = await callApi(`/api/eval/${evalId}`, {
+        const response = await callApi(`/eval/${evalId}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -438,7 +423,7 @@ export default function ResultsView({
           />
         ))}
       </ResponsiveStack>
-      <ResponsiveStack direction="row" spacing={1} alignItems="center">
+      <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
         <Box>
           <FormControl sx={{ minWidth: 200, maxWidth: 350 }} size="small">
             <InputLabel id="visible-columns-label">Columns</InputLabel>
@@ -584,7 +569,10 @@ export default function ResultsView({
           </ResponsiveStack>
         </Box>
       </ResponsiveStack>
-      <ResultsCharts columnVisibility={currentColumnState.columnVisibility} />
+      <ResultsCharts
+        columnVisibility={currentColumnState.columnVisibility}
+        recentEvals={recentEvals}
+      />
       <ResultsTable
         maxTextLength={maxTextLength}
         columnVisibility={currentColumnState.columnVisibility}

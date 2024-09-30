@@ -64,7 +64,7 @@ Content-Type: application/json
 - `categories.jailbreak`: Indicates if the input may be attempting a jailbreak.
 - `flagged`: True if the input is classified as either prompt injection or jailbreak.
 
-### 2. PII Detection
+### PII Detection
 
 Detects personally identifiable information (PII) in the input text. This system can identify a wide range of PII elements.
 

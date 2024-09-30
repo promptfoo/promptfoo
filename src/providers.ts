@@ -1,3 +1,5 @@
+import chalk from 'chalk';
+import dedent from 'dedent';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
@@ -15,8 +17,10 @@ import {
 } from './providers/azureopenai';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
+import { BrowserProvider } from './providers/browser';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
+import { FalImageGenerationProvider } from './providers/fal';
 import { GolangProvider } from './providers/golangCompletion';
 import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
@@ -72,6 +76,8 @@ import type {
   ProviderOptions,
   ProviderOptionsMap,
 } from './types/providers';
+import { isJavascriptFile } from './util';
+import { getNunjucksEngine } from './util/templates';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -92,6 +98,7 @@ export async function loadApiProvider(
     env,
   };
   let ret: ApiProvider;
+  providerPath = getNunjucksEngine().renderString(providerPath, {});
   if (
     providerPath.startsWith('file://') &&
     (providerPath.endsWith('.yaml') ||
@@ -121,8 +128,14 @@ export async function loadApiProvider(
     // Load script module
     const scriptPath = providerPath.split(':')[1];
     ret = new ScriptCompletionProvider(scriptPath, providerOptions);
-  } else if (providerPath.startsWith('python:')) {
-    const scriptPath = providerPath.split(':').slice(1).join(':');
+  } else if (
+    providerPath.startsWith('python:') ||
+    (providerPath.startsWith('file://') &&
+      (providerPath.endsWith('.py') || providerPath.includes('.py:')))
+  ) {
+    const scriptPath = providerPath.startsWith('file://')
+      ? providerPath.slice('file://'.length)
+      : providerPath.split(':').slice(1).join(':');
     ret = new PythonProvider(scriptPath, providerOptions);
   } else if (providerPath.startsWith('openai:')) {
     // Load OpenAI module
@@ -262,6 +275,15 @@ export async function loadApiProvider(
         providerOptions,
       );
     }
+  } else if (providerPath.startsWith('fal:')) {
+    const [_, modelType, modelName] = providerPath.split(':');
+    if (modelType === 'image') {
+      ret = new FalImageGenerationProvider(modelName, providerOptions);
+    } else {
+      throw new Error(
+        `Invalid fal provider path: ${providerPath}. Use one of the following providers: fal:image:<model name>`,
+      );
+    }
   } else if (providerPath.startsWith('bam:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
@@ -375,10 +397,23 @@ export async function loadApiProvider(
     } else {
       ret = new LocalAiChatProvider(modelType, providerOptions);
     }
-  } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
+  } else if (
+    providerPath.startsWith('http:') ||
+    providerPath.startsWith('https:') ||
+    providerPath === 'http' ||
+    providerPath === 'https'
+  ) {
     ret = new HttpProvider(providerPath, providerOptions);
-  } else if (providerPath.startsWith('ws:') || providerPath.startsWith('wss:')) {
+  } else if (
+    providerPath.startsWith('ws:') ||
+    providerPath.startsWith('wss:') ||
+    providerPath === 'websocket' ||
+    providerPath === 'ws' ||
+    providerPath === 'wss'
+  ) {
     ret = new WebSocketProvider(providerPath, providerOptions);
+  } else if (providerPath === 'browser') {
+    ret = new BrowserProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
     ret = new RedteamIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
@@ -395,10 +430,16 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('ai21:')) {
     const modelName = providerPath.split(':')[1];
     ret = new AI21ChatCompletionProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('golang:')) {
-    const scriptPath = providerPath.split(':').slice(1).join(':');
+  } else if (
+    providerPath.startsWith('golang:') ||
+    (providerPath.startsWith('file://') &&
+      (providerPath.endsWith('.go') || providerPath.includes('.go:')))
+  ) {
+    const scriptPath = providerPath.startsWith('file://')
+      ? providerPath.slice('file://'.length)
+      : providerPath.split(':').slice(1).join(':');
     ret = new GolangProvider(scriptPath, providerOptions);
-  } else {
+  } else if (isJavascriptFile(providerPath)) {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
     }
@@ -409,10 +450,20 @@ export async function loadApiProvider(
 
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
+  } else {
+    logger.error(dedent`
+      Could not identify provider: ${chalk.bold(providerPath)}. 
+      
+      ${chalk.white(dedent`
+        Please check your configuration and ensure the provider is correctly specified.
+  
+        For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
+    `);
+    process.exit(1);
   }
   ret.transform = options.transform;
   ret.delay = options.delay;
-  ret.label ||= options.label;
+  ret.label ||= getNunjucksEngine().renderString(options.label || '', {});
   return ret;
 }
 

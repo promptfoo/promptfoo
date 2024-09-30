@@ -42,8 +42,11 @@ export function assertionFromString(expected: string): Assertion {
       value: expected.slice(expected.startsWith('grade:') ? 6 : 11),
     };
   }
-  if (expected.startsWith('python:')) {
-    const sliceLength = 'python:'.length;
+  if (
+    expected.startsWith('python:') ||
+    (expected.startsWith('file://') && (expected.endsWith('.py') || expected.includes('.py:')))
+  ) {
+    const sliceLength = expected.startsWith('python:') ? 'python:'.length : 'file://'.length;
     const functionBody = expected.slice(sliceLength).trim();
     return {
       type: 'python',

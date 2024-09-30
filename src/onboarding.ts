@@ -1,7 +1,7 @@
 import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
-import rawlist from '@inquirer/rawlist';
+import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import fs from 'fs';
@@ -307,7 +307,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     recordOnboardingStep('start');
 
     // Choose use case
-    action = await rawlist({
+    action = await select({
       message: 'What would you like to do?',
       choices: [
         { name: 'Not sure yet', value: 'compare' },
@@ -334,7 +334,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
     language = 'not_sure';
     if (action === 'rag' || action === 'agent') {
-      language = await rawlist({
+      language = await select({
         message: 'What programming language are you developing the app in?',
         choices: [
           { name: 'Not sure yet', value: 'not_sure' },
@@ -399,7 +399,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: 'Local Python script',
-        value: ['python:provider.py'],
+        value: ['file://provider.py'],
       },
       {
         name: 'Local Javascript script',
@@ -437,10 +437,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
      */
     const providerChoices: (string | object)[] = (
       await checkbox({
-        message:
-          'Which model providers would you like to use? (press space to select, enter to complete selection)',
+        message: 'Which model providers would you like to use?',
         choices,
-        required: true,
         loop: false,
         pageSize: process.stdout.rows - 6,
       })
@@ -467,7 +465,10 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       }
 
       if (
-        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
+        providerChoices.some(
+          (choice) =>
+            typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
+        )
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.js'), JAVASCRIPT_PROVIDER);
         logger.info('⌛ Wrote provider.js');
@@ -479,7 +480,12 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         logger.info('⌛ Wrote provider.sh');
       }
       if (
-        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
+        providerChoices.some(
+          (choice) =>
+            typeof choice === 'string' &&
+            (choice.startsWith('python:') ||
+              (choice.startsWith('file://') && choice.endsWith('.py'))),
+        )
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.py'), PYTHON_PROVIDER);
         logger.info('⌛ Wrote provider.py');

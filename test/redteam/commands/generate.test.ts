@@ -1,22 +1,20 @@
 import fs from 'fs';
-import * as configModule from '../../../src/config';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
-import { writePromptfooConfig } from '../../../src/util/config';
+import * as configModule from '../../../src/util/config/load';
+import { writePromptfooConfig } from '../../../src/util/config/manage';
 
 jest.mock('fs');
-jest.mock('yaml');
-jest.mock('../../../src/redteam');
-jest.mock('../../../src/util/config');
 jest.mock('../../../src/logger');
+jest.mock('../../../src/redteam');
 jest.mock('../../../src/telemetry');
-
-jest.mock('../../../src/config', () => ({
-  readConfigs: jest.fn(),
+jest.mock('../../../src/util/config/load', () => ({
+  combineConfigs: jest.fn(),
   resolveConfigs: jest.fn(),
 }));
+jest.mock('../../../src/util/config/manage');
 
 describe('doGenerateRedteam', () => {
   beforeEach(() => {
@@ -37,7 +35,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should generate redteam tests and write to output file', async () => {
-    jest.mocked(configModule.readConfigs).mockResolvedValue([
+    jest.mocked(configModule.combineConfigs).mockResolvedValue([
       {
         prompts: [{ raw: 'Test prompt', label: 'Test label' }],
         providers: [],

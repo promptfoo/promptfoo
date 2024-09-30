@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
@@ -26,14 +27,18 @@ import {
   type TooltipItem,
 } from 'chart.js';
 import { useStore } from './store';
-import type { EvaluateTable } from './types';
+import type { EvaluateTable, UnifiedConfig, ResultLightweightWithLabel } from './types';
 
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;
+  recentEvals: ResultLightweightWithLabel[];
 }
 
 interface ChartProps {
   table: EvaluateTable;
+  evalId?: string | null;
+  config?: Partial<UnifiedConfig>;
+  datasetId?: string | null;
 }
 
 const COLOR_PALETTE = [
@@ -415,14 +420,228 @@ function MetricChart({ table }: ChartProps) {
   return <canvas ref={metricCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
 }
 
-function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
+interface ProgressData {
+  evalId: string;
+  description: string;
+  promptId: string;
+  createdAt: number;
+  label: string;
+  provider: string;
+  metrics: {
+    testPassCount: number;
+    testFailCount: number;
+    score: number;
+  };
+}
+
+function PerformanceOverTimeChart({ evalId }: ChartProps) {
+  const { config } = useStore();
+  const lineCanvasRef = useRef(null);
+  const lineChartInstance = useRef<Chart | null>(null);
+  const [progressData, setProgressData] = useState<ProgressData[]>([]);
+
+  useEffect(() => {
+    const fetchProgressData = async () => {
+      if (!config?.description) {
+        return;
+      }
+
+      try {
+        const res = await callApi(
+          `/progress?description=${encodeURIComponent(config.description)}`,
+        );
+        const data = await res.json();
+        setProgressData(data.data);
+      } catch (error) {
+        console.error('Error fetching progress data:', error);
+      }
+    };
+
+    fetchProgressData();
+  }, [config?.description]);
+
+  useEffect(() => {
+    if (!lineCanvasRef.current || !evalId || progressData.length === 0) {
+      return;
+    }
+
+    if (lineChartInstance.current) {
+      lineChartInstance.current.destroy();
+    }
+
+    // Group evaluations by createdAt and assign evaluation numbers
+    const evaluationGroups = progressData.reduce(
+      (groups, eval_) => {
+        const date = new Date(eval_.createdAt).toISOString();
+        if (!groups[date]) {
+          groups[date] = [];
+        }
+        groups[date].push(eval_);
+        return groups;
+      },
+      {} as Record<string, ProgressData[]>,
+    );
+
+    const evaluations = Object.values(evaluationGroups).flatMap((group, groupIndex) =>
+      group.map((item) => ({
+        ...item,
+        evaluationNumber: groupIndex + 1,
+      })),
+    );
+
+    const datasets = evaluations.reduce(
+      (acc, eval_) => {
+        const passRate =
+          (eval_.metrics.testPassCount /
+            (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
+          100;
+
+        if (!acc[eval_.evaluationNumber]) {
+          acc[eval_.evaluationNumber] = [];
+        }
+        acc[eval_.evaluationNumber].push({
+          x: eval_.evaluationNumber,
+          y: passRate,
+          evalData: eval_,
+        });
+        return acc;
+      },
+      {} as Record<number, { x: number; y: number; evalData: ProgressData }[]>,
+    );
+
+    const chartData = Object.values(datasets).flat();
+
+    // Find the highest pass rate for each evaluation number to connect with a line
+    const highestPassRates = Object.values(datasets).map((group) => {
+      return group.reduce((max, current) => (current.y > max.y ? current : max));
+    });
+
+    const chartOptions = {
+      responsive: true,
+      scales: {
+        x: {
+          type: 'linear' as const,
+          position: 'bottom' as const,
+          title: {
+            display: true,
+            text: 'Evaluation',
+          },
+          ticks: {
+            stepSize: 1,
+          },
+        },
+        y: {
+          title: {
+            display: true,
+            text: 'Pass Rate (%)',
+          },
+        },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            title: (context: any) => {
+              return context[0].raw.evalData.evalId;
+            },
+            label: (context: any) => {
+              const item = context.raw as { x: number; y: number; evalData: ProgressData };
+              const { evalData } = item;
+              const passRate =
+                (evalData.metrics.testPassCount /
+                  (evalData.metrics.testPassCount + evalData.metrics.testFailCount)) *
+                100;
+              return [
+                `Label: ${evalData.label}`,
+                `Provider: ${evalData.provider}`,
+                `Pass Rate: ${passRate.toFixed(2)}%`,
+                `Score: ${evalData.metrics.score.toFixed(2)}`,
+              ];
+            },
+          },
+        },
+      },
+      onClick: (event: any, elements: any) => {
+        if (elements.length > 0) {
+          const index = elements[0].index;
+          window.open(`/eval/?evalId=${chartData[index].evalData.evalId}`, '_blank');
+        }
+      },
+    };
+
+    lineChartInstance.current = new Chart(lineCanvasRef.current, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          {
+            type: 'scatter',
+            data: chartData,
+            pointBackgroundColor: chartData.map((point) =>
+              point.evalData.evalId === evalId ? '#4CAF50' : '#2196F3',
+            ),
+          },
+          {
+            type: 'line',
+            data: highestPassRates,
+            borderColor: '#2196F3AA',
+            borderWidth: 2,
+            pointRadius: 0,
+          },
+        ],
+      },
+      options: chartOptions,
+    });
+  }, [progressData, evalId]);
+
+  return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
+}
+
+function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [showCharts, setShowCharts] = useState(true);
+  const [showPerformanceOverTimeChart, setShowPerformanceOverTimeChart] = useState(false);
 
-  const { table } = useStore();
-  if (!table || !showCharts || table.head.prompts.length < 2) {
+  const { table, evalId, config } = useStore();
+
+  useEffect(() => {
+    if (config?.description && import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL) {
+      const filteredEvals = recentEvals.filter(
+        (evaluation) => evaluation.description === config.description,
+      );
+      if (filteredEvals.length > 1) {
+        setShowPerformanceOverTimeChart(true);
+      }
+    } else {
+      setShowPerformanceOverTimeChart(false);
+    }
+  }, [config?.description, recentEvals]);
+
+  if (
+    !table ||
+    !config ||
+    !showCharts ||
+    (table.head.prompts.length < 2 && !showPerformanceOverTimeChart)
+  ) {
     return null;
+  }
+
+  if (table.head.prompts.length < 2 && showPerformanceOverTimeChart) {
+    return (
+      <ErrorBoundary fallback={null}>
+        <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
+          <IconButton
+            style={{ position: 'absolute', right: 0, top: 0 }}
+            onClick={() => setShowCharts(false)}
+          >
+            <CloseIcon />
+          </IconButton>
+
+          <div style={{ width: '100%' }}>
+            <PerformanceOverTimeChart table={table} evalId={evalId} />
+          </div>
+        </Paper>
+      </ErrorBoundary>
+    );
   }
 
   const scores = table.body.flatMap((row) => row.outputs.map((output) => output.score));
@@ -431,6 +650,8 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
     // All scores are the same, charts not useful.
     return null;
   }
+
+  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 
   return (
     <ErrorBoundary fallback={null}>
@@ -442,10 +663,10 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
           <CloseIcon />
         </IconButton>
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-          <div style={{ width: '33%' }}>
+          <div style={{ width: chartWidth }}>
             <PassRateChart table={table} />
           </div>
-          <div style={{ width: '33%' }}>
+          <div style={{ width: chartWidth }}>
             {scoreSet.size <= 3 &&
             Object.keys(table.head.prompts[0].metrics?.namedScores || {}).length > 1 ? (
               <MetricChart table={table} />
@@ -453,9 +674,14 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
               <HistogramChart table={table} />
             )}
           </div>
-          <div style={{ width: '33%' }}>
+          <div style={{ width: chartWidth }}>
             <ScatterChart table={table} />
           </div>
+          {showPerformanceOverTimeChart && (
+            <div style={{ width: chartWidth }}>
+              <PerformanceOverTimeChart table={table} evalId={evalId} />
+            </div>
+          )}
         </div>
       </Paper>
     </ErrorBoundary>

@@ -3,12 +3,16 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from '../src/cliState';
-import { dereferenceConfig, readConfig, readConfigs, resolveConfigs } from '../src/config';
 import { importModule } from '../src/esm';
-import { readPrompts } from '../src/prompts';
 import { readTests } from '../src/testCases';
-import type { Prompt, UnifiedConfig } from '../src/types';
+import type { UnifiedConfig } from '../src/types';
 import { maybeLoadFromExternalFile } from '../src/util';
+import {
+  dereferenceConfig,
+  readConfig,
+  resolveConfigs,
+  combineConfigs,
+} from '../src/util/config/load';
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
@@ -51,14 +55,9 @@ jest.mock('../src/testCases', () => {
   };
 });
 
-jest.mock('../src/prompts', () => ({
-  ...jest.requireActual('../src/prompts'),
-  readPrompts: jest.fn(),
-}));
-
 jest.mock('../src/logger');
 
-describe('readConfigs', () => {
+describe('combineConfigs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -84,6 +83,7 @@ describe('readConfigs', () => {
       },
       env: { envVar1: 'envValue1' },
       evaluateOptions: { maxConcurrency: 1 },
+      outputPath: [],
       commandLineOptions: { verbose: true },
       sharing: false,
     };
@@ -106,6 +106,7 @@ describe('readConfigs', () => {
       },
       env: { envVar2: 'envValue2' },
       evaluateOptions: { maxConcurrency: 2 },
+      outputPath: [],
       commandLineOptions: { verbose: false },
       sharing: true,
     };
@@ -138,37 +139,12 @@ describe('readConfigs', () => {
       throw new Error('File does not exist');
     });
 
-    jest
-      .mocked(readPrompts)
-      .mockImplementation((prompts) =>
-        Promise.resolve(
-          Array.isArray(prompts)
-            ? prompts.map(
-                (p): Prompt =>
-                  typeof p === 'string'
-                    ? { raw: p, config: undefined, label: p }
-                    : { raw: p.raw || '', config: p.config || {}, label: p.label || '' },
-              )
-            : typeof prompts === 'string'
-              ? [{ raw: prompts, config: {}, label: prompts }]
-              : Object.entries(prompts).map(
-                  ([key, value]): Prompt => ({ raw: value, config: {}, label: key }),
-                ),
-        ),
-      );
-
-    const config1Result = await readConfigs(['config1.json']);
+    const config1Result = await combineConfigs(['config1.json']);
     expect(config1Result).toEqual({
       description: 'test1',
       tags: { tag1: 'value1' },
       providers: ['provider1'],
-      prompts: [
-        {
-          raw: 'prompt1',
-          config: undefined,
-          label: 'prompt1',
-        },
-      ],
+      prompts: ['prompt1'],
       extensions: [],
       tests: ['test1'],
       scenarios: ['scenario1'],
@@ -187,23 +163,18 @@ describe('readConfigs', () => {
       },
       env: { envVar1: 'envValue1' },
       evaluateOptions: { maxConcurrency: 1 },
+      outputPath: [],
       commandLineOptions: { verbose: true },
       metadata: {},
       sharing: false,
     });
 
-    const config2Result = await readConfigs(['config2.json']);
+    const config2Result = await combineConfigs(['config2.json']);
     expect(config2Result).toEqual({
       description: 'test2',
       tags: {},
       providers: ['provider2'],
-      prompts: [
-        {
-          raw: 'prompt2',
-          config: undefined,
-          label: 'prompt2',
-        },
-      ],
+      prompts: ['prompt2'],
       extensions: [],
       tests: ['test2'],
       scenarios: ['scenario2'],
@@ -222,30 +193,20 @@ describe('readConfigs', () => {
       },
       env: { envVar2: 'envValue2' },
       evaluateOptions: { maxConcurrency: 2 },
+      outputPath: [],
       commandLineOptions: { verbose: false },
       metadata: {},
       sharing: true,
     });
 
-    const result = await readConfigs(['config1.json', 'config2.json']);
+    const result = await combineConfigs(['config1.json', 'config2.json']);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(4);
     expect(result).toEqual({
       description: 'test1, test2',
       tags: { tag1: 'value1' },
       providers: ['provider1', 'provider2'],
-      prompts: [
-        {
-          raw: 'prompt1',
-          config: undefined,
-          label: 'prompt1',
-        },
-        {
-          raw: 'prompt2',
-          config: undefined,
-          label: 'prompt2',
-        },
-      ],
+      prompts: ['prompt1', 'prompt2'],
       tests: ['test1', 'test2'],
       extensions: [],
       scenarios: ['scenario1', 'scenario2'],
@@ -267,66 +228,140 @@ describe('readConfigs', () => {
       },
       env: { envVar1: 'envValue1', envVar2: 'envValue2' },
       evaluateOptions: { maxConcurrency: 2 },
+      outputPath: [],
       commandLineOptions: { verbose: false },
       metadata: {},
       sharing: false,
     });
   });
 
-  it('throws error for unsupported configuration file format', async () => {
+  it('combines configs with provider-specific prompts', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-
-    await expect(readConfigs(['config1.unsupported'])).rejects.toThrow(
-      'Unsupported configuration file format: .unsupported',
-    );
-  });
-
-  it('de-duplicates prompts when reading configs', async () => {
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
     jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
-      if (typeof path === 'string' && path === 'config1.json') {
+      if (typeof path === 'string' && path === 'config.json') {
         return JSON.stringify({
-          description: 'test1',
-          prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
-        });
-      } else if (typeof path === 'string' && path === 'config2.json') {
-        return JSON.stringify({
-          description: 'test2',
-          prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
+          prompts: [
+            { id: 'file://prompt1.txt', label: 'My first prompt' },
+            { id: 'file://prompt2.txt', label: 'My second prompt' },
+          ],
+          providers: [
+            {
+              id: 'openai:gpt-4o-mini',
+              prompts: ['My first prompt', 'My second prompt'],
+            },
+            {
+              id: 'openai:gpt-4',
+              prompts: ['My first prompt'],
+            },
+          ],
+          tests: [{ vars: { topic: 'bananas' } }],
         });
       }
       return Buffer.from('');
     });
 
-    jest.mocked(readPrompts).mockImplementation((prompts) =>
-      Promise.resolve(
-        Array.isArray(prompts)
-          ? prompts.map(
-              (p): Prompt =>
-                typeof p === 'string'
-                  ? {
-                      raw: p.startsWith('file://') ? `${p} content` : p,
-                      config: undefined,
-                      label: p.startsWith('file://') ? p.slice(7) : p,
-                    }
-                  : { raw: p.raw || '', config: p.config || {}, label: p.label || '' },
-            )
-          : typeof prompts === 'string'
-            ? [{ raw: prompts, config: {}, label: prompts }]
-            : Object.entries(prompts).map(
-                ([key, value]): Prompt => ({ raw: value, config: {}, label: key }),
-              ),
-      ),
+    const result = await combineConfigs(['config.json']);
+
+    expect(result.prompts).toEqual([
+      {
+        id: `file://${path.resolve(path.dirname('config.json'), 'prompt1.txt')}`,
+        label: 'My first prompt',
+      },
+      {
+        id: `file://${path.resolve(path.dirname('config.json'), 'prompt2.txt')}`,
+        label: 'My second prompt',
+      },
+    ]);
+
+    expect(result.providers).toEqual([
+      {
+        id: 'openai:gpt-4o-mini',
+        prompts: ['My first prompt', 'My second prompt'],
+      },
+      {
+        id: 'openai:gpt-4',
+        prompts: ['My first prompt'],
+      },
+    ]);
+
+    expect(result.tests?.[0]).toEqual({ vars: { topic: 'bananas' } });
+  });
+
+  it('throws error for unsupported configuration file format', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+
+    await expect(combineConfigs(['config1.unsupported'])).rejects.toThrow(
+      'Unsupported configuration file format: .unsupported',
     );
+  });
+
+  it('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest
+      .mocked(fs.readFileSync)
+      .mockImplementation(
+        (
+          path: fs.PathOrFileDescriptor,
+          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+        ): string | Buffer => {
+          if (typeof path === 'string' && path === 'config1.json') {
+            return JSON.stringify({
+              description: 'test1',
+              prompts: ['file://prompt1.txt', 'prompt2'],
+            });
+          } else if (typeof path === 'string' && path === 'config2.json') {
+            return JSON.stringify({
+              description: 'test2',
+              prompts: ['file://prompt3.txt', 'prompt4'],
+            });
+          }
+          return Buffer.from(''); // Return an empty Buffer instead of null
+        },
+      );
 
     const configPaths = ['config1.json', 'config2.json'];
-    const result = await readConfigs(configPaths);
+    const result = await combineConfigs(configPaths);
+
     expect(result.prompts).toEqual([
-      { config: undefined, label: 'prompt1', raw: 'prompt1' },
-      { config: undefined, label: 'prompt2.txt', raw: 'file://prompt2.txt content' },
-      { config: undefined, label: 'prompt3', raw: 'prompt3' },
-      { config: undefined, label: 'prompt4', raw: 'prompt4' },
+      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt1.txt')}`,
+      'prompt2',
+      `file://${path.resolve(path.dirname(configPaths[1]), 'prompt3.txt')}`,
+      'prompt4',
+    ]);
+  });
+
+  it('de-duplicates prompts when reading configs', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest
+      .mocked(fs.readFileSync)
+      .mockImplementation(
+        (
+          path: fs.PathOrFileDescriptor,
+          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+        ): string | Buffer => {
+          if (typeof path === 'string' && path === 'config1.json') {
+            return JSON.stringify({
+              description: 'test1',
+              prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
+            });
+          } else if (typeof path === 'string' && path === 'config2.json') {
+            return JSON.stringify({
+              description: 'test2',
+              prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
+            });
+          }
+          return Buffer.from(''); // Return an empty Buffer instead of null
+        },
+      );
+
+    const configPaths = ['config1.json', 'config2.json'];
+    const result = await combineConfigs(configPaths);
+
+    expect(result.prompts).toEqual([
+      'prompt1',
+      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt2.txt')}`,
+      'prompt3',
+      'prompt4',
     ]);
   });
 
@@ -335,13 +370,11 @@ describe('readConfigs', () => {
       defaultTest: {
         metadata: { key1: 'value1' },
       },
-      prompts: ['prompt1'],
     };
     const config2 = {
       defaultTest: {
         metadata: { key2: 'value2' },
       },
-      prompts: ['prompt2'],
     };
 
     jest
@@ -349,7 +382,7 @@ describe('readConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
-    const result = await readConfigs(['config1.json', 'config2.json']);
+    const result = await combineConfigs(['config1.json', 'config2.json']);
 
     expect(result.defaultTest?.metadata).toEqual({
       key1: 'value1',
@@ -360,11 +393,9 @@ describe('readConfigs', () => {
   it('combines extensions from multiple configs', async () => {
     const config1 = {
       extensions: ['extension1', 'extension2'],
-      prompts: ['prompt1'],
     };
     const config2 = {
       extensions: ['extension3'],
-      prompts: ['prompt2'],
     };
 
     jest
@@ -373,7 +404,7 @@ describe('readConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config2));
     jest.spyOn(console, 'warn').mockImplementation();
 
-    const result = await readConfigs(['config1.json', 'config2.json']);
+    const result = await combineConfigs(['config1.json', 'config2.json']);
 
     expect(result.extensions).toEqual(['extension1', 'extension2', 'extension3']);
   });
@@ -381,11 +412,9 @@ describe('readConfigs', () => {
   it('handles configs without extensions', async () => {
     const config1 = {
       description: 'Config without extensions',
-      prompts: ['prompt1'],
     };
     const config2 = {
       extensions: ['extension1'],
-      prompts: ['prompt2'],
     };
 
     jest
@@ -393,7 +422,7 @@ describe('readConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
-    const result = await readConfigs(['config1.json', 'config2.json']);
+    const result = await combineConfigs(['config1.json', 'config2.json']);
 
     expect(result.extensions).toEqual(['extension1']);
   });
@@ -404,19 +433,17 @@ describe('readConfigs', () => {
       .mockReturnValueOnce(
         JSON.stringify({
           extensions: ['extension1'],
-          prompts: ['prompt1'],
         }),
       )
       .mockReturnValueOnce(
         JSON.stringify({
           extensions: ['extension2'],
-          prompts: ['prompt2'],
         }),
       );
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
-    await readConfigs(['config1.json', 'config2.json']);
+    await combineConfigs(['config1.json', 'config2.json']);
 
     expect(consoleSpy).toHaveBeenCalledWith(
       'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
@@ -431,19 +458,17 @@ describe('readConfigs', () => {
       .mockReturnValueOnce(
         JSON.stringify({
           extensions: ['extension1', 'extension2'],
-          prompts: ['prompt1'],
         }),
       )
       .mockReturnValueOnce(
         JSON.stringify({
           description: 'Config without extensions',
-          prompts: ['prompt2'],
         }),
       );
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
-    await readConfigs(['config1.json', 'config2.json']);
+    await combineConfigs(['config1.json', 'config2.json']);
 
     expect(consoleSpy).toHaveBeenCalledWith(
       'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
@@ -664,26 +689,6 @@ describe('resolveConfigs', () => {
       }),
     );
 
-    // Mock readPrompts to handle string input
-    jest
-      .mocked(readPrompts)
-      .mockImplementation((prompts) =>
-        Promise.resolve(
-          Array.isArray(prompts)
-            ? prompts.map(
-                (p): Prompt =>
-                  typeof p === 'string'
-                    ? { raw: p, config: undefined, label: p }
-                    : { raw: p.raw || '', config: p.config || {}, label: p.label || '' },
-              )
-            : typeof prompts === 'string'
-              ? [{ raw: prompts, config: {}, label: prompts }]
-              : Object.entries(prompts).map(
-                  ([key, value]): Prompt => ({ raw: value, config: {}, label: key }),
-                ),
-        ),
-      );
-
     await resolveConfigs(cmdObj, defaultConfig);
 
     expect(cliState.basePath).toBe(path.dirname('config.json'));
@@ -720,55 +725,38 @@ describe('resolveConfigs', () => {
 
     jest.mocked(globSync).mockReturnValue(['config.json']);
 
-    jest
-      .mocked(readPrompts)
-      .mockImplementation((prompts) =>
-        Promise.resolve(
-          Array.isArray(prompts)
-            ? prompts.map(
-                (p): Prompt =>
-                  typeof p === 'string'
-                    ? { raw: p, config: undefined, label: p }
-                    : { raw: p.raw || '', config: p.config || {}, label: p.label || '' },
-              )
-            : typeof prompts === 'string'
-              ? [{ raw: prompts, config: {}, label: prompts }]
-              : Object.entries(prompts).map(
-                  ([key, value]): Prompt => ({ raw: value, config: {}, label: key }),
-                ),
-        ),
-      );
-
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios.yaml']);
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
-    expect(testSuite).toMatchObject({
-      prompts: [
-        {
-          raw: prompt,
-          label: prompt,
-          config: {},
+    expect(testSuite).toEqual(
+      expect.objectContaining({
+        prompts: [
+          {
+            raw: prompt,
+            label: prompt,
+            config: undefined,
+          },
+        ],
+        providers: expect.arrayContaining([
+          expect.objectContaining({
+            modelName: 'gpt-4',
+          }),
+        ]),
+        scenarios: ['file://scenarios.yaml'],
+        tests: externalTests,
+        defaultTest: {
+          assert: [],
+          metadata: {},
+          options: {},
+          vars: {},
         },
-      ],
-      providers: expect.arrayContaining([
-        expect.objectContaining({
-          modelName: 'gpt-4',
-        }),
-      ]),
-      scenarios: ['file://scenarios.yaml'],
-      tests: externalTests,
-      defaultTest: {
-        assert: [],
-        metadata: {},
-        options: {},
-        vars: {},
-      },
-      derivedMetrics: undefined,
-      extensions: [],
-      nunjucksFilters: {},
-      providerPromptMap: {},
-    });
+        derivedMetrics: undefined,
+        extensions: [],
+        nunjucksFilters: {},
+        providerPromptMap: {},
+      }),
+    );
   });
 });
 

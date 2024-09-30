@@ -1,3 +1,4 @@
+import httpZ from 'http-z';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
@@ -7,6 +8,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
+import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
@@ -14,20 +16,26 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 const nunjucks = getNunjucksEngine();
 
 interface HttpProviderConfig {
-  method: string;
-  headers: Record<string, string>;
-  body: Record<string, any>;
-  responseParser: string | Function;
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: Record<string, any>;
+  queryParams?: Record<string, string>;
+  responseParser?: string | Function;
+  request?: string;
 }
 
-function createResponseParser(parser: any): (data: any) => ProviderResponse {
+function createResponseParser(parser: any): (data: any, text: string) => ProviderResponse {
   if (typeof parser === 'function') {
     return parser;
   }
   if (typeof parser === 'string') {
-    return new Function('json', `return ${parser}`) as (data: any) => ProviderResponse;
+    return new Function('json', 'text', `return ${parser}`) as (
+      data: any,
+      text: string,
+    ) => ProviderResponse;
   }
-  return (data) => ({ output: data });
+  return (data, text) => ({ output: data || text });
 }
 
 export function processBody(
@@ -62,21 +70,47 @@ export function processBody(
   return processedBody;
 }
 
+function parseRawRequest(input: string) {
+  const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+  try {
+    const messageModel = httpZ.parse(adjusted) as httpZ.HttpZRequestModel;
+    return {
+      method: messageModel.method,
+      url: messageModel.target,
+      headers: messageModel.headers.reduce(
+        (acc, header) => {
+          acc[header.name.toLowerCase()] = header.value;
+          return acc;
+        },
+        {} as Record<string, string>,
+      ),
+      body: messageModel.body,
+    };
+  } catch (err) {
+    throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
+  }
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  responseParser: (data: any) => ProviderResponse;
+  responseParser: (data: any, text: string) => ProviderResponse;
 
   constructor(url: string, options: ProviderOptions) {
-    this.url = url;
     this.config = options.config;
+    this.url = this.config.url || url;
     this.responseParser = createResponseParser(this.config.responseParser);
-    invariant(
-      this.config.body,
-      `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
-        this.config,
-      )}`,
-    );
+
+    if (this.config.request) {
+      this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
+    } else {
+      invariant(
+        this.config.body || this.config.method === 'GET',
+        `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
+          this.config,
+        )}`,
+      );
+    }
   }
 
   id(): string {
@@ -92,14 +126,29 @@ export class HttpProvider implements ApiProvider {
       ...(context?.vars || {}),
       prompt,
     };
+
+    if (this.config.request) {
+      return this.callApiWithRawRequest(vars);
+    }
+
     const renderedConfig: Partial<HttpProviderConfig> = {
+      url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
       headers: Object.fromEntries(
-        Object.entries(this.config.headers || { 'content-type': 'application/json' }).map(
-          ([key, value]) => [key, nunjucks.renderString(value, vars)],
-        ),
+        Object.entries(
+          this.config.headers ||
+            (this.config.method === 'GET' ? {} : { 'content-type': 'application/json' }),
+        ).map(([key, value]) => [key, nunjucks.renderString(value, vars)]),
       ),
-      body: processBody(this.config.body, vars),
+      body: processBody(this.config.body || {}, vars),
+      queryParams: this.config.queryParams
+        ? Object.fromEntries(
+            Object.entries(this.config.queryParams).map(([key, value]) => [
+              key,
+              nunjucks.renderString(value, vars),
+            ]),
+          )
+        : undefined,
       responseParser: this.config.responseParser,
     };
 
@@ -108,28 +157,87 @@ export class HttpProvider implements ApiProvider {
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
-    logger.debug(
-      `Calling HTTP provider: ${this.url} with config: ${safeJsonStringify(renderedConfig)}`,
-    );
+    // Construct URL with query parameters for GET requests
+    let url = this.url;
+    if (renderedConfig.queryParams) {
+      const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
+      url = `${url}?${queryString}`;
+    }
+
+    logger.debug(`Calling HTTP provider: ${url} with config: ${safeJsonStringify(renderedConfig)}`);
     let response;
     try {
       response = await fetchWithCache(
-        this.url,
+        url,
         {
           method: renderedConfig.method,
           headers: renderedConfig.headers,
-          body: JSON.stringify(renderedConfig.body),
+          ...(method !== 'GET' && { body: JSON.stringify(renderedConfig.body) }),
         },
         REQUEST_TIMEOUT_MS,
-        'json',
+        'text',
       );
     } catch (err) {
       return {
         error: `HTTP call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tHTTP response: ${JSON.stringify(response.data)}`);
+    logger.debug(`\tHTTP response: ${response.data}`);
 
-    return { output: this.responseParser(response.data) };
+    const rawText = response.data as string;
+    let parsedData;
+    try {
+      parsedData = JSON.parse(rawText);
+    } catch {
+      parsedData = null;
+    }
+
+    return {
+      output: this.responseParser(parsedData, rawText),
+    };
+  }
+
+  private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
+    invariant(this.config.request, 'Expected request to be set in http provider config');
+    const renderedRequest = nunjucks.renderString(this.config.request, vars);
+    const parsedRequest = parseRawRequest(renderedRequest.trim());
+
+    const protocol = this.url.startsWith('https') ? 'https' : 'http';
+    const url = new URL(
+      parsedRequest.url,
+      `${protocol}://${parsedRequest.headers['host']}`,
+    ).toString();
+
+    logger.debug(`Calling HTTP provider with raw request: ${url}`);
+    let response;
+    try {
+      response = await fetchWithCache(
+        url,
+        {
+          method: parsedRequest.method,
+          headers: parsedRequest.headers,
+          ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
+        },
+        REQUEST_TIMEOUT_MS,
+        'text',
+      );
+    } catch (err) {
+      return {
+        error: `HTTP call error: ${String(err)}`,
+      };
+    }
+    logger.debug(`\tHTTP response: ${response.data}`);
+
+    const rawText = response.data as string;
+    let parsedData;
+    try {
+      parsedData = JSON.parse(rawText);
+    } catch {
+      parsedData = null;
+    }
+
+    return {
+      output: this.responseParser(parsedData, rawText),
+    };
   }
 }

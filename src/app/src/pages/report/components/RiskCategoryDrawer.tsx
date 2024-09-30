@@ -1,10 +1,14 @@
 import React from 'react';
+import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Drawer from '@mui/material/Drawer';
+import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import Typography from '@mui/material/Typography';
+import type { GradingResult } from '@promptfoo/types';
+import SuggestionsDialog from './SuggestionsDialog';
 import { categoryAliases, displayNameOverrides } from './constants';
 import './RiskCategoryDrawer.css';
 
@@ -12,7 +16,7 @@ interface RiskCategoryDrawerProps {
   open: boolean;
   onClose: () => void;
   category: string;
-  failures: { prompt: string; output: string }[];
+  failures: { prompt: string; output: string; gradingResult?: GradingResult }[];
   numPassed: number;
   numFailed: number;
   evalId: string;
@@ -33,16 +37,22 @@ function getPromptDisplayString(prompt: string): string {
   return prompt;
 }
 
-function getOutputDisplayString(output: string | object): string {
+function getOutputDisplay(output: string | object) {
   if (typeof output === 'string') {
     return output;
   }
   if (Array.isArray(output)) {
     const items = output.filter((item) => item.type === 'function');
     if (items.length > 0) {
-      return items
-        .map((item) => `${item.function?.name}: (${item.function?.arguments})`)
-        .join('\n');
+      return (
+        <>
+          {items.map((item) => (
+            <div key={item.id}>
+              <strong>Used tool {item.function?.name}</strong>: ({item.function?.arguments})
+            </div>
+          ))}
+        </>
+      );
     }
   }
   return JSON.stringify(output);
@@ -83,6 +93,11 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
       </Drawer>
     );
   }
+
+  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
+  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
+    undefined,
+  );
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
@@ -131,13 +146,28 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
             <List>
               {failures.slice(0, 5).map((failure, index) => (
                 <ListItem key={index} className="failure-item">
-                  <Box>
-                    <Typography variant="subtitle1" className="prompt">
-                      {getPromptDisplayString(failure.prompt)}
-                    </Typography>
-                    <Typography variant="body2" className="output">
-                      {getOutputDisplayString(failure.output)}
-                    </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="subtitle1" className="prompt">
+                        {getPromptDisplayString(failure.prompt)}
+                      </Typography>
+                      <Typography variant="body2" className="output">
+                        {getOutputDisplay(failure.output)}
+                      </Typography>
+                    </Box>
+                    {failure.gradingResult?.componentResults?.some(
+                      (result) => (result.suggestions?.length || 0) > 0,
+                    ) && (
+                      <IconButton
+                        onClick={() => {
+                          setCurrentGradingResult(failure.gradingResult);
+                          setSuggestionsDialogOpen(true);
+                        }}
+                        sx={{ ml: 1 }}
+                      >
+                        <LightbulbOutlinedIcon color="primary" />
+                      </IconButton>
+                    )}
                   </Box>
                 </ListItem>
               ))}
@@ -149,6 +179,11 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           </Box>
         )}
       </Box>
+      <SuggestionsDialog
+        open={suggestionsDialogOpen}
+        onClose={() => setSuggestionsDialogOpen(false)}
+        gradingResult={currentGradingResult}
+      />
     </Drawer>
   );
 };

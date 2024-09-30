@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import type {
+  BedrockAI21GenerationOptions,
   BedrockClaudeMessagesCompletionOptions,
   LlamaMessage,
 } from '../src/providers/bedrock';
@@ -8,6 +9,7 @@ import {
   AwsBedrockGenericProvider,
   BEDROCK_MODEL,
   formatPromptLlama2Chat,
+  formatPromptLlama3Instruct,
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
@@ -167,6 +169,60 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.tool_choice).toEqual({ type: 'tool', name: 'get_current_weather' });
     });
   });
+
+  describe('BEDROCK_MODEL AI21', () => {
+    const modelHandler = BEDROCK_MODEL.AI21;
+
+    it('should include AI21-specific parameters', () => {
+      const config: BedrockAI21GenerationOptions = {
+        region: 'us-east-1',
+        max_tokens: 100,
+        temperature: 0.7,
+        top_p: 0.9,
+        stop: ['END'],
+        frequency_penalty: 0.5,
+        presence_penalty: 0.3,
+      };
+
+      const prompt = 'Write a short story about a robot.';
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.7,
+        top_p: 0.9,
+        stop: ['END'],
+        frequency_penalty: 0.5,
+        presence_penalty: 0.3,
+      });
+    });
+
+    it('should use default values when config is not provided', () => {
+      const config: BedrockAI21GenerationOptions = { region: 'us-east-1' };
+      const prompt = 'Tell me a joke.';
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1024,
+        temperature: 0,
+        top_p: 1.0,
+      });
+    });
+
+    it('should handle output correctly', () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'This is a test response.' } }],
+      };
+      expect(modelHandler.output(mockResponse)).toBe('This is a test response.');
+    });
+
+    it('should throw an error for API errors', () => {
+      const mockErrorResponse = { error: 'API Error' };
+      expect(() => modelHandler.output(mockErrorResponse)).toThrow('AI21 API error: API Error');
+    });
+  });
 });
 
 describe('addConfigParam', () => {
@@ -300,7 +356,7 @@ describe('llama', () => {
         const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
         const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
         expect(handler.params(config, prompt)).toEqual({
-          prompt: `<s>[INST] Describe the purpose of a "hello world" program in one sentence. [/INST]`,
+          prompt: `<s>[INST] Describe the purpose of a \"hello world\" program in one sentence. [/INST]`,
           temperature: 0.5,
           top_p: 0.9,
           max_gen_len: 512,
@@ -398,6 +454,48 @@ describe('llama', () => {
       });
     });
 
+    describe('LLAMA3_1', () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_1);
+
+      it('should generate correct prompt for a single user message', () => {
+        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
+        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+          temperature: 0.5,
+          top_p: 0.9,
+          max_gen_len: 512,
+        });
+      });
+    });
+
+    describe('LLAMA3_2', () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+
+      it('should generate correct prompt for a single user message', () => {
+        const config = { temperature: 0.5, top_p: 0.9, max_new_tokens: 512 };
+        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+          temperature: 0.5,
+          top_p: 0.9,
+          max_new_tokens: 512,
+        });
+      });
+
+      it('should use max_new_tokens instead of max_gen_len', () => {
+        const config = { max_new_tokens: 1000 };
+        const prompt = 'Test prompt';
+        const params = handler.params(config, prompt);
+        expect(params).toHaveProperty('max_new_tokens', 1000);
+        expect(params).not.toHaveProperty('max_gen_len');
+      });
+    });
+
     it('should throw an error for unsupported LLAMA version', () => {
       expect(() => getLlamaModelHandler(1 as LlamaVersion)).toThrow('Unsupported LLAMA version: 1');
     });
@@ -408,6 +506,7 @@ describe('llama', () => {
       expect(handler.output({})).toBeUndefined();
     });
   });
+
   describe('formatPromptLlama2Chat', () => {
     it('should format a single user message correctly', () => {
       const messages: LlamaMessage[] = [
@@ -481,6 +580,48 @@ describe('llama', () => {
 
       `}\n\n`;
       expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
+    });
+  });
+
+  describe('formatPromptLlama3Instruct', () => {
+    it('should format a single user message correctly', () => {
+      const messages: LlamaMessage[] = [{ role: 'user', content: 'Hello, how are you?' }];
+      const expected = dedent`
+        <|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+        Hello, how are you?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
+      expect(formatPromptLlama3Instruct(messages)).toBe(expected);
+    });
+
+    it('should format multiple messages correctly', () => {
+      const messages: LlamaMessage[] = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there! How can I help you?' },
+        { role: 'user', content: "What's the weather like?" },
+      ];
+      const expected = dedent`
+        <|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+        Hello<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+        Hi there! How can I help you?<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+        What's the weather like?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
+      expect(formatPromptLlama3Instruct(messages)).toBe(expected);
+    });
+
+    it('should handle system messages correctly', () => {
+      const messages: LlamaMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Hello' },
+      ];
+      const expected = dedent`
+        <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+        You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+        Hello<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
+      expect(formatPromptLlama3Instruct(messages)).toBe(expected);
     });
   });
 });

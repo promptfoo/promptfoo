@@ -66,7 +66,7 @@ This will create a file `redteam.yaml` with the test cases.
 Run the eval:
 
 ```
-npx promptfoo@latest eval -c redteam.yaml
+npx promptfoo@latest redteam eval
 ```
 
 And view the results:
@@ -168,10 +168,9 @@ If you have a custom RAG or agent flow, you can include them in your project lik
 
 ```yaml
 targets:
-  # JS is natively supported
-  - file:///path/to/js_agent.js
-  # Python requires the `python:` directive
-  - python:/path/to/python_agent.py
+  # JS and Python are natively supported
+  - file://path/to/js_agent.js
+  - file://path/to/python_agent.py
   # Any executable can be run with the `exec:` directive
   - exec:/path/to/shell_agent
   # HTTP requests can be made with the `webhook:` directive
@@ -326,7 +325,7 @@ The adversarial test cases will be written to `promptfooconfig.yaml`.
 Now that all the red team tests are ready, run the eval:
 
 ```
-npx promptfoo@latest eval -c redteam.yaml
+npx promptfoo@latest redteam eval
 ```
 
 This will take a while, usually ~15 minutes or so depending on how many plugins you have chosen.

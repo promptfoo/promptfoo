@@ -245,6 +245,12 @@ export interface EvaluateSummary {
   stats: EvaluateStats;
 }
 
+export interface ResultSuggestion {
+  type: string;
+  action: 'replace-prompt';
+  value: string;
+}
+
 export interface GradingResult {
   // Whether the test passed or failed
   pass: boolean;
@@ -269,6 +275,9 @@ export interface GradingResult {
 
   // User comment
   comment?: string;
+
+  // Actions for the user to take
+  suggestions?: ResultSuggestion[];
 
   // Additional info
   metadata?: {
@@ -369,6 +378,10 @@ export const AssertionSchema = z.object({
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
+
+  // An external mapping of arbitrary strings to values that is passed
+  // to the assertion for custom javascript asserts
+  config: z.record(z.string(), z.any()).optional(),
 
   // The threshold value, only applicable for similarity (cosine distance)
   threshold: z.number().optional(),

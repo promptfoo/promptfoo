@@ -11,7 +11,6 @@ import NodeCache from 'node-cache';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
-import { getAuthor } from '../accounts';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
@@ -26,6 +25,7 @@ import {
 } from '../database/tables';
 import { getEnvBool, getEnvInt } from '../envars';
 import { getDirectory, importModule } from '../esm';
+import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -50,7 +50,7 @@ import {
   isProviderOptions,
   OutputFileExtension,
 } from '../types';
-import { getConfigDirectoryPath } from './config';
+import { getConfigDirectoryPath } from './config/manage';
 import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;
@@ -758,6 +758,7 @@ export async function getTestCasesWithPredicate(
       config: evals.config,
     })
     .from(evals)
+    .orderBy(desc(evals.createdAt))
     .limit(limit)
     .all();
 
@@ -986,9 +987,11 @@ const standaloneEvalCache = new NodeCache({ stdTTL: 60 * 60 * 2 }); // Cache for
 export function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
   tag,
+  description,
 }: {
   limit?: number;
   tag?: { key: string; value: string };
+  description?: string;
 } = {}): StandaloneEval[] {
   const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}`;
   const cachedResult = standaloneEvalCache.get<StandaloneEval[]>(cacheKey);
@@ -1015,7 +1018,12 @@ export function getStandaloneEvals({
     .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
     .leftJoin(evalsToTags, eq(evals.id, evalsToTags.evalId))
     .leftJoin(tags, eq(evalsToTags.tagId, tags.id))
-    .where(tag ? and(eq(tags.name, tag.key), eq(tags.value, tag.value)) : undefined)
+    .where(
+      and(
+        tag ? and(eq(tags.name, tag.key), eq(tags.value, tag.value)) : undefined,
+        description ? eq(evals.description, description) : undefined,
+      ),
+    )
     .orderBy(desc(evals.createdAt))
     .limit(limit)
     .all();

@@ -1,10 +1,13 @@
+import chalk from 'chalk';
 import child_process from 'child_process';
+import dedent from 'dedent';
 import * as fs from 'fs';
 import fetch from 'node-fetch';
 import * as path from 'path';
 import Stream from 'stream';
 import { clearCache, disableCache, enableCache } from '../src/cache';
 import { importModule } from '../src/esm';
+import logger from '../src/logger';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 import {
@@ -37,6 +40,7 @@ import {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
 } from '../src/providers/openai';
+import { PythonProvider } from '../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
@@ -90,7 +94,12 @@ jest.mock('glob', () => ({
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
-jest.mock('../src/logger');
+jest.mock('../src/logger', () => ({
+  error: jest.fn(),
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+}));
 
 const defaultMockResponse = {
   status: 200,
@@ -1343,6 +1352,18 @@ config:
     expect(provider.id()).toBe('replicate:foo/bar:abc123');
   });
 
+  it('loadApiProvider with file://*.py', async () => {
+    const provider = await loadApiProvider('file://script.py:function_name');
+    expect(provider).toBeInstanceOf(PythonProvider);
+    expect(provider.id()).toBe('python:script.py:function_name');
+  });
+
+  it('loadApiProvider with python:*.py', async () => {
+    const provider = await loadApiProvider('python:script.py');
+    expect(provider).toBeInstanceOf(PythonProvider);
+    expect(provider.id()).toBe('python:script.py:default');
+  });
+
   it('loadApiProvider with cloudflare-ai', async () => {
     const supportedModelTypes = [
       { modelType: 'chat', providerKlass: CloudflareAiChatCompletionProvider },
@@ -1507,5 +1528,54 @@ config:
     };
     const provider = await loadApiProvider('echo', { options: providerOptions });
     expect(provider.delay).toBe(500);
+  });
+
+  it('supports templating in provider URL', async () => {
+    process.env.MYHOST = 'api.example.com';
+    process.env.MYPORT = '8080';
+
+    const provider = await loadApiProvider('https://{{ env.MYHOST }}:{{ env.MYPORT }}/query', {
+      options: {
+        config: {
+          body: {},
+        },
+      },
+    });
+    expect(provider.id()).toBe('https://api.example.com:8080/query');
+    delete process.env.MYHOST;
+    delete process.env.MYPORT;
+  });
+
+  it('throws an error for unidentified providers', async () => {
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called');
+    });
+    const unknownProviderPath = 'unknown:provider';
+
+    await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow('process.exit called');
+
+    expect(logger.error).toHaveBeenCalledWith(
+      dedent`
+        Could not identify provider: ${chalk.bold(unknownProviderPath)}. 
+        
+        ${chalk.white(dedent`
+          Please check your configuration and ensure the provider is correctly specified.
+    
+          For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
+      `,
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
+  it('renders label using Nunjucks', async () => {
+    process.env.someVariable = 'foo';
+    const providerOptions = {
+      id: 'openai:chat:gpt-4o',
+      config: {},
+      label: '{{ env.someVariable }}',
+    };
+    const provider = await loadApiProvider('openai:chat:gpt-4o', { options: providerOptions });
+    expect(provider.label).toBe('foo');
   });
 });

@@ -12,7 +12,7 @@ Use it like so in your promptfooconfig.yaml:
 
 ```yaml
 strategies:
-  - iterative:tree
+  - jailbreak:tree
 ```
 
 ## How It Works

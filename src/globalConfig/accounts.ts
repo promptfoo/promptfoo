@@ -1,6 +1,6 @@
-import type { GlobalConfig } from './configTypes';
-import { getEnvString } from './envars';
-import { readGlobalConfig, writeGlobalConfig } from './globalConfig';
+import type { GlobalConfig } from '../configTypes';
+import { getEnvString } from '../envars';
+import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export function getUserEmail(): string | null {
   const globalConfig = readGlobalConfig();
@@ -8,8 +8,8 @@ export function getUserEmail(): string | null {
 }
 
 export function setUserEmail(email: string) {
-  const config: GlobalConfig = { account: { email } };
-  writeGlobalConfig(config);
+  const config: Partial<GlobalConfig> = { account: { email } };
+  writeGlobalConfigPartial(config);
 }
 
 export function getAuthor(): string | null {
