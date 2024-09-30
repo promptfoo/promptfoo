@@ -514,41 +514,59 @@ describe('evaluator', () => {
   it('evaluate with vars transform', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt {{ var1 }} {{ var2 }}')],
+      prompts: [toPrompt('Hello {{ name }}, your age is {{ age }}')],
       tests: [
         {
-          vars: { var1: 'value1', var2: 'value2' },
+          vars: { name: 'Alice', age: 30 },
         },
         {
-          vars: { var1: 'value1', var2: 'value2' },
+          vars: { name: 'Bob', age: 25 },
           options: {
-            transformVars: '{ ...vars, var1: "transformed var1 from individual test" }',
+            transformVars: '{ ...vars, age: vars.age + 5 }',
           },
         },
       ],
       defaultTest: {
         options: {
-          transformVars: '{ ...vars, var1: "transformed var1" }',
+          transformVars: '{ ...vars, name: vars.name.toUpperCase() }',
         },
       },
     };
 
-    const summary = await evaluate(testSuite, {});
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 2,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            prompt: expect.objectContaining({
+              raw: 'Hello ALICE, your age is 30',
+              label: 'Hello {{ name }}, your age is {{ age }}',
+            }),
+            response: expect.objectContaining({
+              output: 'Test output',
+            }),
+          }),
+          expect.objectContaining({
+            // NOTE: test overrides defaultTest transform. Bob not BOB
+            prompt: expect.objectContaining({
+              raw: 'Hello Bob, your age is 30',
+            }),
+            response: expect.objectContaining({
+              output: 'Test output',
+            }),
+            vars: {
+              name: 'Bob',
+              age: 30,
+            },
+          }),
+        ]),
+      }),
+    );
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
-    expect(summary.stats.successes).toBe(2);
-    expect(summary.stats.failures).toBe(0);
-    expect(summary.results[0].prompt.raw).toBe('Test prompt transformed var1 value2');
-    expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
-    expect(summary.results[0].response?.output).toBe('Test output');
-    expect(summary.results[1].response?.output).toBe('Test output');
-    expect(summary.results[1].vars).toEqual({
-      var1: 'transformed var1 from individual test',
-      var2: 'value2',
-    });
-    expect(summary.results[1].prompt.raw).toBe(
-      'Test prompt transformed var1 from individual test value2',
-    );
   });
 
   it('evaluate with provider transform and test transform', async () => {
