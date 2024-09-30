@@ -723,7 +723,7 @@ def get_transform_vars(vars, context):
     }
 ```
 
-Trasform functions can also be specified within individual test cases.
+Transform functions can also be specified within individual test cases.
 
 ```yaml
 tests:
