@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, like, sql } from 'drizzle-orm';
 import invariant from 'tiny-invariant';
 import { getDb } from '../database';
 import {
@@ -9,7 +9,7 @@ import {
   prompts as promptsTable,
   tags as tagsTable,
   evalsToTags,
-  evalResult,
+  testCaseResults,
 } from '../database/tables';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -20,8 +20,8 @@ import type {
   Prompt,
   UnifiedConfig,
 } from '../types';
-import { sha256 } from '../util';
-import EvalResult from './eval_result';
+import { DEFAULT_QUERY_LIMIT, sha256 } from '../util';
+import TestCaseResult from './test_case_result';
 
 function getEvalId(createdAt: Date = new Date()) {
   return `eval-${createdAt.toISOString().slice(0, 19)}`;
@@ -33,9 +33,52 @@ export default class Eval {
   author?: string;
   description?: string;
   config: Partial<UnifiedConfig>;
-  results: EvalResult[];
+  results: TestCaseResult[];
   datasetId?: string;
   prompts: CompletedPrompt[];
+
+  static async summaryResults(
+    limit: number = DEFAULT_QUERY_LIMIT,
+    filterDescription?: string,
+    datasetId?: string,
+  ) {
+    const db = getDb();
+    const startTime = performance.now();
+    const query = db
+      .select({
+        evalId: evals.id,
+        createdAt: evals.createdAt,
+        description: evals.description,
+        numTests: sql`MAX(${testCaseResults.testCaseIdx} + 1)`.as('numTests'),
+        datasetId: evalsToDatasets.datasetId,
+      })
+      .from(evals)
+      .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
+      .leftJoin(testCaseResults, eq(evals.id, testCaseResults.evalId))
+      .where(
+        and(
+          datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
+          filterDescription ? like(evals.description, `%${filterDescription}%`) : undefined,
+        ),
+      )
+      .groupBy(evals.id);
+
+    const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
+
+    const mappedResults = results.map((result) => ({
+      evalId: result.evalId,
+      createdAt: result.createdAt,
+      description: result.description,
+      numTests: result.numTests || 0,
+      datasetId: result.datasetId,
+    }));
+
+    const endTime = performance.now();
+    const executionTime = endTime - startTime;
+    logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
+
+    return mappedResults;
+  }
 
   static async latest() {
     const db = getDb();
@@ -58,7 +101,7 @@ export default class Eval {
 
     const [eval_, results] = await Promise.all([
       db.select().from(evals).where(eq(evals.id, id)),
-      db.select().from(evalResult).where(eq(evalResult.evalId, id)).execute(),
+      db.select().from(testCaseResults).where(eq(testCaseResults.evalId, id)).execute(),
 
       db
         .select({
@@ -83,7 +126,7 @@ export default class Eval {
       prompts: eval_[0].prompts || [],
     });
 
-    evalInstance.results = results.map((r) => new EvalResult(r));
+    evalInstance.results = results.map((r) => new TestCaseResult(r));
 
     return evalInstance;
   }
@@ -106,7 +149,6 @@ export default class Eval {
           author,
           description: config.description,
           config,
-          results: [], // Initialize as an empty array
         })
         .run();
       invariant(
@@ -205,7 +247,7 @@ export default class Eval {
   }
 
   async addResult(result: EvaluateResult, columnIdx: number, rowIdx: number, test: AtomicTestCase) {
-    const newResult = await EvalResult.create(this.id, result, columnIdx, rowIdx, test);
+    const newResult = await TestCaseResult.create(this.id, result, columnIdx, rowIdx, test);
     this.results.push(newResult);
   }
 

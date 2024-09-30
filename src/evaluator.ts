@@ -101,7 +101,7 @@ export function generateVarCombinations(
 }
 
 class Evaluator {
-  resultsFile: Eval;
+  resultsFile: Eval | null;
   testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
@@ -111,7 +111,7 @@ class Evaluator {
   >;
   registers: Record<string, string | object>;
 
-  constructor(testSuite: TestSuite, resultsFile: Eval, options: EvaluateOptions) {
+  constructor(testSuite: TestSuite, resultsFile: Eval | null, options: EvaluateOptions) {
     this.testSuite = testSuite;
     this.resultsFile = resultsFile;
     this.options = options;
@@ -624,7 +624,9 @@ class Evaluator {
       }
       const { rowIndex, colIndex } = evalStep;
       try {
-        await this.resultsFile.addResult(row, colIndex, rowIndex, evalStep.test);
+        if (this.resultsFile) {
+          await this.resultsFile.addResult(row, colIndex, rowIndex, evalStep.test);
+        }
       } catch (error) {
         logger.error(`Error adding result: ${error}`);
         logger.error(row.response);
@@ -725,7 +727,9 @@ class Evaluator {
         (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.cost += row.cost || 0;
 
-      await this.resultsFile.addPrompts(table.head.prompts);
+      if (this.resultsFile) {
+        await this.resultsFile.addPrompts(table.head.prompts);
+      }
 
       await runExtensionHook(testSuite.extensions, 'afterEach', {
         test: evalStep.test,
@@ -918,7 +922,7 @@ class Evaluator {
   }
 }
 
-export function evaluate(testSuite: TestSuite, resultsFile: Eval, options: EvaluateOptions) {
+export function evaluate(testSuite: TestSuite, resultsFile: Eval | null, options: EvaluateOptions) {
   const ev = new Evaluator(testSuite, resultsFile, options);
   return ev.evaluate();
 }

@@ -1,7 +1,7 @@
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
-import { desc, eq, like, and, sql, max } from 'drizzle-orm';
+import { desc, eq, like, and, sql } from 'drizzle-orm';
 import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -21,9 +21,8 @@ import {
   evalsToTags,
   prompts,
   tags,
-  evalResult,
 } from '../database/tables';
-import { getEnvBool, getEnvInt } from '../envars';
+import { getEnvBool } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
@@ -56,7 +55,7 @@ import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
 import { getNunjucksEngine } from './templates';
 
-const DEFAULT_QUERY_LIMIT = 100;
+export const DEFAULT_QUERY_LIMIT = 100;
 
 /**
  * Checks if a file is a JavaScript or TypeScript file based on its extension.
@@ -196,133 +195,129 @@ export async function writeResultsToDatabase(
   config: Partial<UnifiedConfig>,
   createdAt: Date = new Date(),
 ): Promise<string> {
-  const evalId = `eval-${new Date().toISOString().slice(0, 19)}`;
+  createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
+  const evalId = `eval-${createdAt.toISOString().slice(0, 19)}`;
   const db = getDb();
-  db.update(evals).set({ results }).where(eq(evals.id, evalId)).run();
 
-  return 'no op';
-  // const evalId = `eval-${new Date().toISOString().slice(0, 19)}`;
-  // const db = getDb();
+  const promises = [];
+  promises.push(
+    db
+      .insert(evals)
+      .values({
+        id: evalId,
+        createdAt: createdAt.getTime(),
+        author: getAuthor(),
+        description: config.description,
+        config,
+        results,
+      })
+      .onConflictDoNothing()
+      .run(),
+  );
 
-  // const promises = [];
-  // promises.push(
-  //   db
-  //     .insert(evals)
-  //     .values({
-  //       id: evalId,
-  //       createdAt: createdAt.getTime(),
-  //       author: getAuthor(),
-  //       description: config.description,
-  //       config,
-  //       results,
-  //     })
-  //     .onConflictDoNothing()
-  //     .run(),
-  // );
+  logger.debug(`Inserting eval ${evalId}`);
 
-  // logger.debug(`Inserting eval ${evalId}`);
+  // Record prompt relation
+  for (const prompt of results.table.head.prompts) {
+    const label = prompt.label || prompt.display || prompt.raw;
+    const promptId = sha256(label);
 
-  // // Record prompt relation
-  // for (const prompt of results.table.head.prompts) {
-  //   const label = prompt.label || prompt.display || prompt.raw;
-  //   const promptId = sha256(label);
+    promises.push(
+      db
+        .insert(prompts)
+        .values({
+          id: promptId,
+          prompt: label,
+        })
+        .onConflictDoNothing()
+        .run(),
+    );
 
-  //   promises.push(
-  //     db
-  //       .insert(prompts)
-  //       .values({
-  //         id: promptId,
-  //         prompt: label,
-  //       })
-  //       .onConflictDoNothing()
-  //       .run(),
-  //   );
+    promises.push(
+      db
+        .insert(evalsToPrompts)
+        .values({
+          evalId,
+          promptId,
+        })
+        .onConflictDoNothing()
+        .run(),
+    );
 
-  //   promises.push(
-  //     db
-  //       .insert(evalsToPrompts)
-  //       .values({
-  //         evalId,
-  //         promptId,
-  //       })
-  //       .onConflictDoNothing()
-  //       .run(),
-  //   );
+    logger.debug(`Inserting prompt ${promptId}`);
+  }
 
-  //   logger.debug(`Inserting prompt ${promptId}`);
-  // }
+  // Record dataset relation
+  const datasetId = sha256(JSON.stringify(config.tests || []));
+  promises.push(
+    db
+      .insert(datasets)
+      .values({
+        id: datasetId,
+        tests: config.tests,
+      })
+      .onConflictDoNothing()
+      .run(),
+  );
 
-  // // Record dataset relation
-  // const datasetId = sha256(JSON.stringify(config.tests || []));
-  // promises.push(
-  //   db
-  //     .insert(datasets)
-  //     .values({
-  //       id: datasetId,
-  //       tests: config.tests,
-  //     })
-  //     .onConflictDoNothing()
-  //     .run(),
-  // );
+  promises.push(
+    db
+      .insert(evalsToDatasets)
+      .values({
+        evalId,
+        datasetId,
+      })
+      .onConflictDoNothing()
+      .run(),
+  );
 
-  // promises.push(
-  //   db
-  //     .insert(evalsToDatasets)
-  //     .values({
-  //       evalId,
-  //       datasetId,
-  //     })
-  //     .onConflictDoNothing()
-  //     .run(),
-  // );
+  logger.debug(`Inserting dataset ${datasetId}`);
 
-  // logger.debug(`Inserting dataset ${datasetId}`);
+  // Record tags
+  if (config.tags) {
+    for (const [tagKey, tagValue] of Object.entries(config.tags)) {
+      const tagId = sha256(`${tagKey}:${tagValue}`);
 
-  // // Record tags
-  // if (config.tags) {
-  //   for (const [tagKey, tagValue] of Object.entries(config.tags || {})) {
-  //     const tagId = sha256(`${tagKey}:${tagValue}`);
+      promises.push(
+        db
+          .insert(tags)
+          .values({
+            id: tagId,
+            name: tagKey,
+            value: tagValue,
+          })
+          .onConflictDoNothing()
+          .run(),
+      );
 
-  //     promises.push(
-  //       db
-  //         .insert(tags)
-  //         .values({
-  //           id: tagId,
-  //           name: tagKey,
-  //           value: tagValue,
-  //         })
-  //         .onConflictDoNothing()
-  //         .run(),
-  //     );
+      promises.push(
+        db
+          .insert(evalsToTags)
+          .values({
+            evalId,
+            tagId,
+          })
+          .onConflictDoNothing()
+          .run(),
+      );
 
-  //     promises.push(
-  //       db
-  //         .insert(evalsToTags)
-  //         .values({
-  //           evalId,
-  //           tagId,
-  //         })
-  //         .onConflictDoNothing()
-  //         .run(),
-  //     );
+      logger.debug(`Inserting tag ${tagId}`);
+    }
+  }
 
-  //     logger.debug(`Inserting tag ${tagId}`);
-  //   }
-  // }
+  logger.debug(`Awaiting ${promises.length} promises to database...`);
+  await Promise.all(promises);
 
-  // logger.debug(`Awaiting ${promises.length} promises to database...`);
-  // await Promise.all(promises);
+  // "touch" db signal path
+  const filePath = getDbSignalPath();
+  try {
+    const now = new Date();
+    fs.utimesSync(filePath, now, now);
+  } catch {
+    fs.closeSync(fs.openSync(filePath, 'w'));
+  }
 
-  // // "touch" db signal path
-  // const filePath = getDbSignalPath();
-  // try {
-  //   const now = new Date();
-  //   fs.utimesSync(filePath, now, now);
-  // } catch {
-  //   fs.closeSync(fs.openSync(filePath, 'w'));
-  // }
-
-  // return evalId;
+  return evalId;
 }
 
 /**
@@ -342,27 +337,24 @@ export function listPreviousResults(
       evalId: evals.id,
       createdAt: evals.createdAt,
       description: evals.description,
-      numTests: max(evalResult.rowIdx).as('numTests'),
+      numTests: sql<number>`json_array_length(${evals.results}->'table'->'body')`,
       datasetId: evalsToDatasets.datasetId,
     })
     .from(evals)
     .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
-    .leftJoin(evalResult, eq(evals.id, evalResult.evalId))
     .where(
       and(
         datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
         filterDescription ? like(evals.description, `%${filterDescription}%`) : undefined,
       ),
-    )
-    .groupBy(evals.id);
+    );
 
   const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
-
   const mappedResults = results.map((result) => ({
     evalId: result.evalId,
     createdAt: result.createdAt,
     description: result.description,
-    numTests: result.numTests || 0,
+    numTests: result.numTests,
     datasetId: result.datasetId,
   }));
 
@@ -468,75 +460,10 @@ export function readResult_fileSystem(
   }
 }
 
-let attemptedMigration = false;
-
 export async function migrateResultsFromFileSystemToDatabase() {
-  if (attemptedMigration) {
-    // TODO(ian): Record this bit in the database.
-    return;
-  }
-
   // First run db migrations
   logger.debug('Running db migrations...');
   await runDbMigrations();
-
-  const fileNames = listPreviousResultFilenames_fileSystem();
-  if (fileNames.length === 0) {
-    return;
-  }
-
-  logger.info(`🔁 Migrating ${fileNames.length} flat files to local database.`);
-  logger.info('This is a one-time operation and may take a minute...');
-  attemptedMigration = true;
-
-  const outputDir = path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'output');
-  const backupDir = `${outputDir}-backup-${new Date()
-    .toISOString()
-    .slice(0, 10)
-    .replace(/-/g, '')}`;
-  try {
-    fs.cpSync(outputDir, backupDir, { recursive: true });
-    logger.info(`Backup of output directory created at ${backupDir}`);
-  } catch (backupError) {
-    logger.error(`Failed to create backup of output directory: ${backupError}`);
-    return;
-  }
-
-  logger.info('Moving files into database...');
-  const migrationPromises = fileNames.map(async (fileName) => {
-    const fileData = readResult_fileSystem(fileName);
-    if (fileData) {
-      await writeResultsToDatabase(
-        fileData.result.results,
-        fileData.result.config,
-        filenameToDate(fileName),
-      );
-      logger.debug(`Migrated ${fileName} to database.`);
-      try {
-        fs.unlinkSync(path.join(outputDir, fileName));
-      } catch (err) {
-        logger.warn(`Failed to delete ${fileName} after migration: ${err}`);
-      }
-    } else {
-      logger.warn(`Failed to migrate result ${fileName} due to read error.`);
-    }
-  });
-  await Promise.all(migrationPromises);
-  try {
-    fs.unlinkSync(getLatestResultsPath());
-  } catch (err) {
-    logger.warn(`Failed to delete latest.json: ${err}`);
-  }
-  logger.info('Migration complete. Please restart your web server if it is running.');
-}
-
-const RESULT_HISTORY_LENGTH = getEnvInt('RESULT_HISTORY_LENGTH', DEFAULT_QUERY_LIMIT);
-
-export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
-  const sortedFilenames = listPreviousResultFilenames_fileSystem();
-  for (let i = 0; i < sortedFilenames.length - remaining; i++) {
-    fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFilenames[i]));
-  }
 }
 
 export async function readResult(
@@ -557,6 +484,7 @@ export async function readResult(
         results: eval_.results,
         config: eval_.config,
         prompts: eval_.prompts,
+        createdAt: new Date(eval_.createdAt).toISOString(),
       },
       createdAt: new Date(eval_.createdAt),
     };
@@ -614,18 +542,51 @@ export async function updateResult(
 
 export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
   const eval_ = await Eval.latest();
-  if (!eval_) {
+  if (eval_) {
+    return {
+      version: 4,
+      createdAt: new Date(eval_.createdAt).toISOString(),
+      author: eval_.author || null,
+      results: eval_.results,
+      config: eval_.config,
+      prompts: eval_.prompts,
+    };
+  }
+
+  const db = getDb();
+  let latestResults = await db
+    .select({
+      id: evals.id,
+      createdAt: evals.createdAt,
+      author: evals.author,
+      description: evals.description,
+      results: evals.results,
+      config: evals.config,
+      prompts: evals.prompts,
+    })
+    .from(evals)
+    .orderBy(desc(evals.createdAt))
+    .limit(1);
+
+  if (filterDescription) {
+    const regex = new RegExp(filterDescription, 'i');
+    latestResults = latestResults.filter((result) => regex.test(result.description || ''));
+  }
+
+  if (!latestResults.length) {
     return undefined;
   }
 
+  const latestResult = latestResults[0];
+  if (latestResult.results == null) {
+    return undefined;
+  }
   return {
     version: 3,
-    createdAt: new Date(eval_.createdAt).toISOString(),
-    author: eval_.author || null,
-    // @ts-ignore
-    results: eval_.results,
-    config: eval_.config,
-    prompts: eval_.prompts,
+    createdAt: new Date(latestResult.createdAt).toISOString(),
+    author: latestResult.author,
+    results: latestResult.results,
+    config: latestResult.config,
   };
 }
 
@@ -660,7 +621,8 @@ export async function getPromptsWithPredicate(
       config: eval_.config,
     };
     if (predicate(resultWrapper)) {
-      for (const prompt of resultWrapper.results.table.head.prompts) {
+      const results = resultWrapper.results as EvaluateSummary;
+      for (const prompt of results.table.head.prompts) {
         const promptId = sha256(prompt.raw);
         const datasetId = resultWrapper.config.tests
           ? sha256(JSON.stringify(resultWrapper.config.tests))
@@ -752,12 +714,14 @@ export async function getTestCasesWithPredicate(
     if (testCases && predicate(resultWrapper)) {
       const evalId = eval_.id;
       const datasetId = sha256(JSON.stringify(testCases));
+      const results = resultWrapper.results as EvaluateSummary;
+
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(
           Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), eval_.createdAt),
         );
         groupedTestCases[datasetId].count += 1;
-        const newPrompts = resultWrapper.results.table.head.prompts.map((prompt) => ({
+        const newPrompts = results.table.head.prompts.map((prompt) => ({
           id: sha256(prompt.raw),
           prompt,
           evalId,
@@ -770,7 +734,7 @@ export async function getTestCasesWithPredicate(
         }
         groupedTestCases[datasetId].prompts = Object.values(promptsById);
       } else {
-        const newPrompts = resultWrapper.results.table.head.prompts.map((prompt) => ({
+        const newPrompts = results.table.head.prompts.map((prompt) => ({
           id: sha256(prompt.raw),
           prompt,
           evalId,

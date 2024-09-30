@@ -16,7 +16,16 @@ import type {
   ProviderOptions,
   AtomicTestCase,
   CompletedPrompt,
+  EvaluateSummary,
 } from '../types';
+
+// ------------ Providers ------------
+
+export const providers = sqliteTable('providers', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  options: text('options', { mode: 'json' }).$type<ProviderOptions>(),
+});
 
 // ------------ Prompts ------------
 
@@ -60,7 +69,7 @@ export const evals = sqliteTable(
       .default(sql`CURRENT_TIMESTAMP`),
     author: text('author'),
     description: text('description'),
-    results: text('results', { mode: 'json' }).notNull(),
+    results: text('results', { mode: 'json' }).$type<EvaluateSummary>(),
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
   },
@@ -70,23 +79,29 @@ export const evals = sqliteTable(
   }),
 );
 
-export const evalResult = sqliteTable(
-  'eval_result',
+export const testCaseResults = sqliteTable(
+  'test_case_results',
   {
     id: text('id').primaryKey(),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
     evalId: text('eval_id')
       .notNull()
       .references(() => evals.id),
-    columnIdx: integer('column_idx').notNull(),
-    rowIdx: integer('row_idx').notNull(),
+    promptIdx: integer('prompt_idx').notNull(),
+    testCaseIdx: integer('test_case_idx').notNull(),
 
     testCase: text('test_case', { mode: 'json' }).$type<AtomicTestCase>().notNull(),
     prompt: text('prompt', { mode: 'json' }).$type<Prompt>().notNull(),
-    promptId: text('prompt_id'),
+    promptId: text('prompt_id').references(() => prompts.id),
 
     // Provider-related fields
     provider: text('provider', { mode: 'json' }).$type<ProviderOptions>().notNull(),
-    providerId: text('provider_id'),
+    providerId: text('provider_id').references(() => providers.id),
 
     latencyMs: integer('latency_ms'),
     cost: real('cost'),
@@ -161,6 +176,32 @@ export const evalsToTagsRelations = relations(evalsToTags, ({ one }) => ({
   tag: one(tags, {
     fields: [evalsToTags.tagId],
     references: [tags.id],
+  }),
+}));
+
+export const providersToEvals = sqliteTable(
+  'providers_to_evals',
+  {
+    providerId: text('provider_id')
+      .notNull()
+      .references(() => providers.id),
+    evalId: text('eval_id')
+      .notNull()
+      .references(() => evals.id),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.providerId, t.evalId] }),
+  }),
+);
+
+export const providersToEvalsRelations = relations(providersToEvals, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providersToEvals.providerId],
+    references: [providers.id],
+  }),
+  eval: one(evals, {
+    fields: [providersToEvals.evalId],
+    references: [evals.id],
   }),
 }));
 

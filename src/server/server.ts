@@ -15,6 +15,7 @@ import { createPublicUrl } from '../commands/share';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type {
+  EvaluateSummary,
   EvaluateTestSuiteWithEvaluateOptions,
   GradingResult,
   Job,
@@ -26,7 +27,8 @@ import type {
 } from '../index';
 import promptfoo from '../index';
 import logger from '../logger';
-import EvalResult from '../models/eval_result';
+import Eval from '../models/eval';
+import TestCaseResult from '../models/test_case_result';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
   getPrompts,
@@ -97,15 +99,17 @@ export function startServer(
     res.status(200).json({ status: 'OK' });
   });
 
-  app.get('/api/results', (req, res) => {
+  app.get('/api/results', async (req, res) => {
     const datasetId = req.query.datasetId as string | undefined;
     const previousResults = listPreviousResults(
       undefined /* limit */,
       filterDescription,
       datasetId,
     );
+    const evalResults = await Eval.summaryResults(undefined, filterDescription, datasetId);
+    const combinedResults = [...previousResults, ...evalResults];
     res.json({
-      data: previousResults.map((meta) => {
+      data: combinedResults.map((meta) => {
         return {
           ...meta,
           label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
@@ -181,7 +185,7 @@ export function startServer(
   app.post('/api/eval/:id/results/:id/rating', async (req, res) => {
     const { id } = req.params;
     const gradingResult = req.body as GradingResult;
-    const result = await EvalResult.findById(id);
+    const result = await TestCaseResult.findById(id);
     invariant(result, 'Result not found');
     result.gradingResult = gradingResult;
     await result.save();
@@ -192,8 +196,11 @@ export function startServer(
     const { data: payload } = req.body as { data: ResultsFile };
 
     try {
-      const id = await writeResultsToDatabase(payload.results, payload.config);
-      res.json({ id });
+      if (payload.version < 4) {
+        const results = payload.results as EvaluateSummary;
+        const id = await writeResultsToDatabase(results, payload.config);
+        res.json({ id });
+      }
     } catch (error) {
       console.error('Failed to write eval to database', error);
       res.status(500).json({ error: 'Failed to write eval to database' });

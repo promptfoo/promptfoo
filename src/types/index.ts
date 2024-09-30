@@ -1,6 +1,7 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
+import TestCaseResult from '../models/test_case_result';
 import type { RedteamAssertionTypes, RedteamFileConfig } from '../redteam/types';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import {
@@ -704,10 +705,10 @@ export interface SharedResults {
 export interface ResultsFile {
   version: number;
   createdAt: string;
-  results: EvaluateSummary;
+  results: EvaluateSummary | TestCaseResult[];
   config: Partial<UnifiedConfig>;
   author: string | null;
-
+  prompts?: CompletedPrompt[];
   // Included by readResult() in util.
   datasetId?: string | null;
 }

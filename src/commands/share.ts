@@ -7,11 +7,15 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
-import type { ResultsFile } from '../types';
+import type { EvaluateSummary, ResultsFile } from '../types';
 import { getLatestEval, readResult, setupEnv } from '../util';
 
 export async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
-  const url = await createShareableUrl(results.results, results.config, showAuth);
+  const url = await createShareableUrl(
+    results.results as EvaluateSummary,
+    results.config,
+    showAuth,
+  );
   logger.info(`View results: ${chalk.greenBright.bold(url)}`);
   return url;
 }
