@@ -220,7 +220,7 @@ export async function writeResultsToDatabase(
   // Record prompt relation
   for (const prompt of results.table.head.prompts) {
     const label = prompt.label || prompt.display || prompt.raw;
-    const promptId = sha256(label);
+    const promptId = generateIdFromPrompt(prompt);
 
     promises.push(
       db
