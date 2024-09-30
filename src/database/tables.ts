@@ -9,13 +9,11 @@ import {
   real,
 } from 'drizzle-orm/sqlite-core';
 import type {
-  EvaluateSummary,
   Prompt,
   ProviderResponse,
   GradingResult,
   UnifiedConfig,
   ProviderOptions,
-  TestCase,
   AtomicTestCase,
   CompletedPrompt,
 } from '../types';
