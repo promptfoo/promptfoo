@@ -23,18 +23,18 @@ To include the Harmful Content plugin in your LLM red teaming setup:
 
 ```yaml
 redteam:
-plugins:
-  - harmful
+  plugins:
+    - harmful
 ```
 
 You can also specify individual subcategories:
 
 ```yaml
 redteam:
-plugins:
-  - harmful:violent-crime
-  - harmful:hate
-  - harmful:misinformation-disinformation
+  plugins:
+    - harmful:violent-crime
+    - harmful:hate
+    - harmful:misinformation-disinformation
 ```
 
 ## Subcategories
