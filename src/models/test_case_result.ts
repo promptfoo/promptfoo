@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../database';
-import { evalResult } from '../database/tables';
+import { testCaseResults } from '../database/tables';
 import { hashPrompt } from '../prompts/utils';
 import type {
   AtomicTestCase,
@@ -12,7 +12,7 @@ import type {
 } from '../types';
 import { type EvaluateResult } from '../types';
 
-export default class EvalResult {
+export default class TestCaseResult {
   static async create(
     evalId: string,
     result: EvaluateResult,
@@ -46,20 +46,20 @@ export default class EvalResult {
         cost,
       })
       .returning();
-    return new EvalResult(dbResult[0]);
+    return new TestCaseResult(dbResult[0]);
   }
 
   static async findById(id: string) {
     const db = getDb();
-    const result = await db.select().from(evalResult).where(eq(evalResult.id, id));
-    return result.length > 0 ? new EvalResult(result[0]) : null;
+    const result = await db.select().from(testCaseResults).where(eq(testCaseResults.id, id));
+    return result.length > 0 ? new TestCaseResult(result[0]) : null;
   }
 
   id: string;
   evalId: string;
   description?: string | null;
-  columnIdx: number;
-  rowIdx: number;
+  providerIdx: number;
+  testCaseIdx: number;
   testCase: AtomicTestCase;
   prompt: Prompt;
   promptId: string;
@@ -76,8 +76,8 @@ export default class EvalResult {
   constructor(opts: {
     id: string;
     evalId: string;
-    columnIdx: number;
-    rowIdx: number;
+    providerIdx: number;
+    testCaseIdx: number;
     testCase: AtomicTestCase;
     prompt: Prompt;
     promptId?: string | null;
@@ -94,8 +94,8 @@ export default class EvalResult {
     this.id = opts.id;
     this.evalId = opts.evalId;
 
-    this.columnIdx = opts.columnIdx;
-    this.rowIdx = opts.rowIdx;
+    this.providerIdx = opts.providerIdx;
+    this.testCaseIdx = opts.testCaseIdx;
     this.testCase = opts.testCase;
     this.prompt = opts.prompt;
     this.promptId = opts.promptId || hashPrompt(opts.prompt);
@@ -112,6 +112,6 @@ export default class EvalResult {
 
   async save() {
     const db = getDb();
-    await db.update(evalResult).set(this).where(eq(evalResult.id, this.id));
+    await db.update(testCaseResults).set(this).where(eq(testCaseResults.id, this.id));
   }
 }

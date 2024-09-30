@@ -141,7 +141,7 @@ export async function doEval(
       );
     }
 
-    const resultsFile = Eval.create(config, testSuite.prompts);
+    const resultsFile = cmdObj.write ? await Eval.create(config, testSuite.prompts) : null;
     const summary = await evaluate(testSuite, resultsFile, {
       ...options,
       eventSource: 'cli',
@@ -179,10 +179,7 @@ export async function doEval(
       }
     }
 
-    let evalId: string | null = null;
-    if (cmdObj.write) {
-      evalId = await writeResultsToDatabase(summary, config);
-    }
+    const evalId = resultsFile.id;
 
     const { outputPath } = config;
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
