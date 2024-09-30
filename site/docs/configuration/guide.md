@@ -723,6 +723,17 @@ def get_transform_vars(vars, context):
     }
 ```
 
+Trasform functions can also be specified within individual test cases.
+
+```yaml
+tests:
+  - vars:
+      url: 'https://example.com/image.png'
+    options:
+      transformVars: |
+        return { ...vars, image_markdown: `![image](${vars.url})` }
+```
+
 ## Config structure and organization
 
 For detailed information on the config structure, see [Configuration Reference](/docs/configuration/reference).
