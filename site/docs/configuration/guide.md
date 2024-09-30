@@ -633,11 +633,14 @@ transform: file://transform.py:custom_python_transform
 
 ## Transforming input variables
 
-In addition to transforming outputs, you can also transform input variables before they are used in prompts using the `transformVars` option. This feature is useful when you need to preprocess data, load content from external sources, or dynamically generate variables based on complex logic.
+You can also transform input variables before they are used in prompts using the `transformVars` option. This feature is useful when you need to pre-process data or load content from external sources.
 
-The `transformVars` function should return an object with the transformed variable names and values. These transformed variables either override existing keys or get added to the `vars` object. For example:
+The `transformVars` function should return an object with the transformed variable names and values. These transformed variables are added to the `vars` object and can override existing keys. For example:
 
 ```yaml
+prompts:
+  - 'Summarize the following text in {{topic_length}} words: {{file_content}}'
+
 defaultTest:
   options:
     transformVars: |
@@ -646,19 +649,6 @@ defaultTest:
         topic_length: vars.topic.length,
         file_content: fs.readFileSync(vars.file_path, 'utf-8')
       };
-```
-
-In this example, we're creating three new variables:
-
-- `uppercase_topic`: An uppercase version of the original topic
-- `topic_length`: The length of the topic string
-- `file_content`: The content of a file specified by `file_path`
-
-These new variables can be used in your prompts or assertions, allowing for more dynamic and flexible test cases. For instance:
-
-```yaml
-prompts:
-  - 'Summarize the following text in {{topic_length}} words: {{file_content}}'
 
 tests:
   - vars:
@@ -667,6 +657,17 @@ tests:
     assert:
       - type: contains
         value: '{{uppercase_topic}}'
+```
+
+Transform functions can also be specified within individual test cases.
+
+```yaml
+tests:
+  - vars:
+      url: 'https://example.com/image.png'
+    options:
+      transformVars: |
+        return { ...vars, image_markdown: `![image](${vars.url})` }
 ```
 
 ### Input transforms from separate files
@@ -721,17 +722,6 @@ def get_transform_vars(vars, context):
         'file_content': file_content,
         'word_count': len(file_content.split())
     }
-```
-
-Transform functions can also be specified within individual test cases.
-
-```yaml
-tests:
-  - vars:
-      url: 'https://example.com/image.png'
-    options:
-      transformVars: |
-        return { ...vars, image_markdown: `![image](${vars.url})` }
 ```
 
 ## Config structure and organization
