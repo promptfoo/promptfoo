@@ -1,4 +1,3 @@
-import type { CommandLineOptions, RedteamCliGenerateOptions } from '@promptfoo/types';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { createHash } from 'crypto';
@@ -9,6 +8,7 @@ import cliState from '../../cliState';
 import { doEval } from '../../commands/eval';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import type { CommandLineOptions, RedteamCliGenerateOptions } from '../../types';
 import { setupEnv } from '../../util';
 import { loadDefaultConfig } from '../../util/config/default';
 import { doGenerateRedteam } from './generate';
