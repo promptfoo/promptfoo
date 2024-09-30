@@ -8,6 +8,8 @@ import { z } from 'zod';
 import cliState from '../../cliState';
 import { doEval } from '../../commands/eval';
 import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { setupEnv } from '../../util';
 import { loadDefaultConfig } from '../../util/config/default';
 import { doGenerateRedteam } from './generate';
 import { redteamInit } from './init';
@@ -76,6 +78,8 @@ async function doRedteamRun(options: RedteamRunOptions) {
     {
       ...options,
       config: [redteamPath],
+      cache: true, // Enable caching
+      write: true, // Write results to database
     } as Partial<CommandLineOptions & Command>,
     defaultConfig,
     redteamPath,
@@ -88,7 +92,7 @@ async function doRedteamRun(options: RedteamRunOptions) {
   logger.info(chalk.blue('To view the results, run: ') + chalk.bold('promptfoo redteam report'));
 }
 
-export function runRedteamCommand(program: Command) {
+export function redteamRunCommand(program: Command) {
   program
     .command('run')
     .description('Run red teaming process (init, generate, and evaluate)')
@@ -107,6 +111,12 @@ export function runRedteamCommand(program: Command) {
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .action(async (opts: RedteamRunOptions) => {
+      setupEnv(opts.envPath);
+      telemetry.record('command_used', {
+        name: 'redteam run',
+      });
+      await telemetry.send();
+
       try {
         if (opts.remote) {
           cliState.remote = true;

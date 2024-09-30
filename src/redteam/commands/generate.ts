@@ -208,7 +208,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
   await telemetry.send();
 }
 
-export function generateRedteamCommand(
+export function redteamGenerateCommand(
   program: Command,
   command: 'redteam' | 'generate',
   defaultConfig: Partial<UnifiedConfig>,

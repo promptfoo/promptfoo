@@ -50,6 +50,7 @@ export enum BrowserBehavior {
   ASK = 0,
   OPEN = 1,
   SKIP = 2,
+  OPEN_TO_REPORT = 3,
 }
 
 export function startServer(
@@ -276,13 +277,20 @@ export function startServer(
       const openUrl = async () => {
         try {
           logger.info('Press Ctrl+C to stop the server');
-          await opener(url);
+          if (browserBehavior === BrowserBehavior.OPEN_TO_REPORT) {
+            await opener(`${url}/report`);
+          } else {
+            await opener(url);
+          }
         } catch (err) {
           logger.error(`Failed to open browser: ${String(err)}`);
         }
       };
 
-      if (browserBehavior === BrowserBehavior.OPEN) {
+      if (
+        browserBehavior === BrowserBehavior.OPEN ||
+        browserBehavior === BrowserBehavior.OPEN_TO_REPORT
+      ) {
         openUrl();
       } else if (browserBehavior === BrowserBehavior.ASK) {
         const rl = readline.createInterface({
