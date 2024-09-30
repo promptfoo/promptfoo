@@ -17,9 +17,11 @@ import { showCommand } from './commands/show';
 import { versionCommand } from './commands/version';
 import { viewCommand } from './commands/view';
 import { runDbMigrations } from './migrate';
-import { generateRedteamCommand } from './redteam/commands/generate';
+import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
+import { redteamReportCommand } from './redteam/commands/report';
+import { redteamRunCommand } from './redteam/commands/run';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 
@@ -52,12 +54,14 @@ async function main() {
   versionCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
-  generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
+  redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   redteamInitCommand(redteamBaseCommand);
   evalCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
-  generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+  redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamPluginsCommand(redteamBaseCommand);
+  redteamRunCommand(redteamBaseCommand);
+  redteamReportCommand(redteamBaseCommand);
 
   if (!process.argv.slice(2).length) {
     program.outputHelp();
