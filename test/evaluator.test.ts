@@ -500,6 +500,7 @@ describe('evaluator', () => {
           ],
           options: {}, // No test transform, relying on provider's transform
         },
+        1,
       ],
     };
 
@@ -519,6 +520,12 @@ describe('evaluator', () => {
         {
           vars: { var1: 'value1', var2: 'value2' },
         },
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+          options: {
+            transformVars: '{ ...vars, var1: "transformed var1 from individual test" }',
+          },
+        },
       ],
       defaultTest: {
         options: {
@@ -529,12 +536,20 @@ describe('evaluator', () => {
 
     const summary = await evaluate(testSuite, {});
 
-    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
-    expect(summary.stats.successes).toBe(1);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(summary.stats.successes).toBe(2);
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].prompt.raw).toBe('Test prompt transformed var1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
+    expect(summary.results[1].response?.output).toBe('Test output');
+    expect(summary.results[1].vars).toEqual({
+      var1: 'transformed var1 from individual test',
+      var2: 'value2',
+    });
+    expect(summary.results[1].prompt.raw).toBe(
+      'Test prompt transformed var1 from individual test value2',
+    );
   });
 
   it('evaluate with provider transform and test transform', async () => {
