@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
@@ -29,6 +28,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
+import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -51,6 +51,7 @@ import {
   OutputFileExtension,
 } from '../types';
 import { getConfigDirectoryPath } from './config/manage';
+import { sha256 } from './createHash';
 import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;
@@ -169,10 +170,6 @@ export async function writeMultipleOutputs(
   );
 }
 
-export function sha256(str: string) {
-  return createHash('sha256').update(str).digest('hex');
-}
-
 export async function readOutput(outputPath: string): Promise<OutputFile> {
   const ext = path.parse(outputPath).ext.slice(1);
 
@@ -222,7 +219,7 @@ export async function writeResultsToDatabase(
   // Record prompt relation
   for (const prompt of results.table.head.prompts) {
     const label = prompt.label || prompt.display || prompt.raw;
-    const promptId = sha256(label);
+    const promptId = prompt.id || generateIdFromPrompt(prompt);
 
     promises.push(
       db
