@@ -1087,4 +1087,4 @@ export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-
   },
 });
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
-export const DefaultModerationProvider = new OpenAiModerationProvider('text-moderation-latest');
+export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');
