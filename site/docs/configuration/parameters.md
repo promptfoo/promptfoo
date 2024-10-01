@@ -85,6 +85,8 @@ prompts:
   - file:///root/path/to/prompt.js:prompt2
   - file:///root/path/to/prompt.py:prompt1
   - file:///root/path/to/prompt.py:prompt2
+  - file:///root/path/to/prompt.py:PromptClass.prompt1
+  - file:///root/path/to/prompt.py:PromptClass.prompt2
 ```
 
 :::tip
