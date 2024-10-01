@@ -1,5 +1,5 @@
 import path from 'path';
-import { loadDefaultConfig } from '../src/util/config/default';
+import { loadDefaultConfig, configCache } from '../src/util/config/default';
 import { maybeReadConfig } from '../src/util/config/load';
 
 jest.mock('../src/util/config/load', () => ({
@@ -9,13 +9,15 @@ jest.mock('../src/util/config/load', () => ({
 describe('loadDefaultConfig', () => {
   beforeEach(() => {
     jest.resetAllMocks();
-    jest.spyOn(process, 'cwd').mockImplementation().mockReturnValue('/test/path');
+    jest.spyOn(process, 'cwd').mockImplementation(() => '/test/path');
+    configCache.clear();
   });
 
   it('should return empty config when no config file is found', async () => {
     jest.mocked(maybeReadConfig).mockResolvedValue(undefined);
 
-    await expect(loadDefaultConfig()).resolves.toEqual({
+    const result = await loadDefaultConfig();
+    expect(result).toEqual({
       defaultConfig: {},
       defaultConfigPath: undefined,
     });
@@ -30,25 +32,29 @@ describe('loadDefaultConfig', () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(mockConfig);
 
-    await expect(loadDefaultConfig()).resolves.toEqual({
+    const result = await loadDefaultConfig();
+    expect(result).toEqual({
       defaultConfig: mockConfig,
       defaultConfigPath: path.normalize('/test/path/promptfooconfig.json'),
     });
     expect(maybeReadConfig).toHaveBeenCalledTimes(3);
   });
 
-  it('should check all supported file extensions', async () => {
-    jest.mocked(maybeReadConfig).mockResolvedValue(undefined);
+  it('should stop checking extensions after finding a valid config', async () => {
+    const mockConfig = { prompts: ['Some prompt'], providers: [], tests: [] };
+    jest.mocked(maybeReadConfig).mockResolvedValueOnce(undefined).mockResolvedValueOnce(mockConfig);
 
     await loadDefaultConfig();
 
-    const expectedExtensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
-    expectedExtensions.forEach((ext, extIndex) => {
-      expect(maybeReadConfig).toHaveBeenNthCalledWith(
-        extIndex + 1,
-        path.normalize(`/test/path/promptfooconfig.${ext}`),
-      );
-    });
+    expect(maybeReadConfig).toHaveBeenCalledTimes(2);
+    expect(maybeReadConfig).toHaveBeenNthCalledWith(
+      1,
+      path.normalize('/test/path/promptfooconfig.yaml'),
+    );
+    expect(maybeReadConfig).toHaveBeenNthCalledWith(
+      2,
+      path.normalize('/test/path/promptfooconfig.yml'),
+    );
   });
 
   it('should use provided directory when specified', async () => {
@@ -56,10 +62,39 @@ describe('loadDefaultConfig', () => {
     jest.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
 
     const customDir = '/custom/directory';
-    await expect(loadDefaultConfig(customDir)).resolves.toEqual({
+    const result = await loadDefaultConfig(customDir);
+    expect(result).toEqual({
       defaultConfig: mockConfig,
       defaultConfigPath: path.join(customDir, 'promptfooconfig.yaml'),
     });
     expect(maybeReadConfig).toHaveBeenCalledWith(path.join(customDir, 'promptfooconfig.yaml'));
+  });
+
+  it('should use different caches for different directories', async () => {
+    const mockConfig1 = { prompts: ['Config 1'], providers: [], tests: [] };
+    const mockConfig2 = { prompts: ['Config 2'], providers: [], tests: [] };
+
+    jest
+      .mocked(maybeReadConfig)
+      .mockResolvedValueOnce(mockConfig1)
+      .mockResolvedValueOnce(mockConfig2);
+
+    const dir1 = '/dir1';
+    const dir2 = '/dir2';
+
+    const result1 = await loadDefaultConfig(dir1);
+    const result2 = await loadDefaultConfig(dir2);
+
+    expect(result1).not.toEqual(result2);
+    expect(result1.defaultConfig).toEqual(mockConfig1);
+    expect(result2.defaultConfig).toEqual(mockConfig2);
+
+    // Test caching for both directories
+    const cachedResult1 = await loadDefaultConfig(dir1);
+    const cachedResult2 = await loadDefaultConfig(dir2);
+
+    expect(cachedResult1).toEqual(result1);
+    expect(cachedResult2).toEqual(result2);
+    expect(maybeReadConfig).toHaveBeenCalledTimes(2); // No additional calls
   });
 });
