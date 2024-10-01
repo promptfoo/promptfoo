@@ -1,18 +1,11 @@
-import type { VisibilityState } from '@tanstack/table-core';
-import { get, set, del } from 'idb-keyval';
 import invariant from 'tiny-invariant';
-import { create } from 'zustand';
-import type { StateStorage } from 'zustand/middleware';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import type {
   CompletedPrompt,
-  EvaluateSummary,
   EvaluateTable,
   EvaluateTableRow,
   ResultsFile,
   TokenUsage,
-  UnifiedConfig,
-} from './types';
+} from '../types';
 
 class PromptMetrics {
   score: number;
@@ -45,25 +38,7 @@ class PromptMetrics {
   }
 }
 
-const storage: StateStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    return (await get(name)) || null;
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    await set(name, value);
-  },
-  removeItem: async (name: string): Promise<void> => {
-    await del(name);
-  },
-};
-
-interface ColumnState {
-  selectedColumns: string[];
-  columnVisibility: VisibilityState;
-}
-
-function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
-  invariant(eval_.version >= 4, 'Results file version must be 4 or higher');
+export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   invariant(
     eval_.prompts,
     `Prompts are required in this version of the results file, this needs to be results file version >= 4, version: ${eval_.version}`,
@@ -95,7 +70,7 @@ function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
               })
               .flat()
           : [],
-        test: {},
+        test: result.testCase,
       };
       varValuesForRow.set(result.testCaseIdx, result.vars as Record<string, string>);
       row = rows[result.testCaseIdx];
@@ -121,7 +96,7 @@ function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     }
 
     row.outputs[result.promptIdx] = {
-      id: result.id || `${result.testCaseIdx}-${result.promptIdx}`,
+      id: `${result.testCaseIdx}-${result.promptIdx}`,
       ...result,
       text: resultText || '',
       prompt: result.prompt.raw,
@@ -164,9 +139,6 @@ function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
   const sortedVars = [...varsForHeader].sort();
   for (const [rowIdx, row] of rows.entries()) {
-    if (!row) {
-      continue;
-    }
     row.vars = sortedVars.map((varName) => varValuesForRow.get(rowIdx)?.[varName] || '');
   }
   return {
@@ -177,102 +149,3 @@ function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     body: rows,
   };
 }
-
-interface TableState {
-  evalId: string | null;
-  setEvalId: (evalId: string) => void;
-
-  author: string | null;
-  setAuthor: (author: string | null) => void;
-
-  table: EvaluateTable | null;
-  setTable: (table: EvaluateTable | null) => void;
-  setTableFromResultsFile: (resultsFile: ResultsFile) => void;
-
-  config: Partial<UnifiedConfig> | null;
-  setConfig: (config: Partial<UnifiedConfig> | null) => void;
-
-  version: number;
-  setVersion: (version: number) => void;
-
-  maxTextLength: number;
-  setMaxTextLength: (maxTextLength: number) => void;
-  wordBreak: 'break-word' | 'break-all';
-  setWordBreak: (wordBreak: 'break-word' | 'break-all') => void;
-  showInferenceDetails: boolean;
-  setShowInferenceDetails: (showInferenceDetails: boolean) => void;
-  renderMarkdown: boolean;
-  setRenderMarkdown: (renderMarkdown: boolean) => void;
-  prettifyJson: boolean;
-  setPrettifyJson: (prettifyJson: boolean) => void;
-  showPrompts: boolean;
-  setShowPrompts: (showPrompts: boolean) => void;
-  showPassFail: boolean;
-  setShowPassFail: (showPassFail: boolean) => void;
-
-  inComparisonMode: boolean;
-  setInComparisonMode: (inComparisonMode: boolean) => void;
-
-  columnStates: Record<string, ColumnState>;
-  setColumnState: (evalId: string, state: ColumnState) => void;
-}
-
-export const useStore = create<TableState>()(
-  persist(
-    (set, get) => ({
-      evalId: null,
-      setEvalId: (evalId: string) => set(() => ({ evalId })),
-
-      author: null,
-      setAuthor: (author: string | null) => set(() => ({ author })),
-
-      version: 3,
-      setVersion: (version: number) => set(() => ({ version })),
-
-      table: null,
-      setTable: (table: EvaluateTable | null) => set(() => ({ table })),
-      setTableFromResultsFile: (resultsFile: ResultsFile) => {
-        if (resultsFile?.version && resultsFile.version >= 4) {
-          set(() => ({ table: convertResultsToTable(resultsFile), version: resultsFile.version }));
-        } else {
-          const results = resultsFile?.results as EvaluateSummary;
-          set(() => ({ table: results?.table, version: resultsFile?.version || 3 }));
-        }
-      },
-      config: null,
-      setConfig: (config: Partial<UnifiedConfig> | null) => set(() => ({ config })),
-
-      maxTextLength: 250,
-      setMaxTextLength: (maxTextLength: number) => set(() => ({ maxTextLength })),
-      wordBreak: 'break-word',
-      setWordBreak: (wordBreak: 'break-word' | 'break-all') => set(() => ({ wordBreak })),
-      showInferenceDetails: true,
-      setShowInferenceDetails: (showInferenceDetails: boolean) =>
-        set(() => ({ showInferenceDetails })),
-      renderMarkdown: false,
-      setRenderMarkdown: (renderMarkdown: boolean) => set(() => ({ renderMarkdown })),
-      prettifyJson: false,
-      setPrettifyJson: (prettifyJson: boolean) => set(() => ({ prettifyJson })),
-      showPrompts: false,
-      setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
-      showPassFail: true,
-      setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
-
-      inComparisonMode: false,
-      setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
-
-      columnStates: {},
-      setColumnState: (evalId: string, state: ColumnState) =>
-        set((prevState) => ({
-          columnStates: {
-            ...prevState.columnStates,
-            [evalId]: state,
-          },
-        })),
-    }),
-    {
-      name: 'ResultsViewStorage',
-      storage: createJSONStorage(() => storage),
-    },
-  ),
-);

@@ -101,15 +101,10 @@ export function startServer(
 
   app.get('/api/results', async (req, res) => {
     const datasetId = req.query.datasetId as string | undefined;
-    const previousResults = listPreviousResults(
-      undefined /* limit */,
-      filterDescription,
-      datasetId,
-    );
-    const evalResults = await Eval.summaryResults(undefined, filterDescription, datasetId);
-    const combinedResults = [...previousResults, ...evalResults];
+    const results = await listPreviousResults(undefined /* limit */, filterDescription, datasetId);
+
     res.json({
-      data: combinedResults.map((meta) => {
+      data: results.map((meta) => {
         return {
           ...meta,
           label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
@@ -180,13 +175,11 @@ export function startServer(
       return;
     }
 
-    if (!eval_.isVersion1()) {
-      res
-        .status(400)
-        .json({
-          error:
-            'This eval is not compatible with this endpoint. Update the individual results instead.',
-        });
+    if (!eval_.isVersion3() && table) {
+      res.status(400).json({
+        error:
+          'This eval is not compatible with this endpoint. Update the individual results instead.',
+      });
       return;
     }
 
@@ -204,7 +197,9 @@ export function startServer(
     const result = await TestCaseResult.findById(id);
     invariant(result, 'Result not found');
     result.gradingResult = gradingResult;
-    // TODO: Update the eval statistics
+    result.success = gradingResult.pass;
+    result.score = gradingResult.score;
+
     await result.save();
     return res.json(result);
   });
@@ -238,7 +233,7 @@ export function startServer(
     const { id } = req.params;
     const file = await readResult(id);
     if (!file) {
-      res.status(404).send('Result not found');
+      res.status(404).send();
       return;
     }
     res.json({ data: file.result });

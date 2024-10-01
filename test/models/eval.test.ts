@@ -8,10 +8,27 @@ describe('evaluator', () => {
   });
   describe('summaryResults', () => {
     it('should return all evaluations', async () => {
-      await EvalFactory.create();
-      await EvalFactory.create();
+      const eval1 = await EvalFactory.create();
+      const eval2 = await EvalFactory.create();
+      await EvalFactory.createOldResult();
       const evaluations = await Eval.summaryResults();
+
       expect(evaluations).toHaveLength(2);
+      expect(evaluations).toContainEqual(
+        expect.objectContaining({
+          evalId: eval1.id,
+          createdAt: eval1.createdAt,
+          numTests: 1,
+        }),
+      );
+      expect(evaluations).toContainEqual(
+        expect.objectContaining({
+          evalId: eval2.id,
+          createdAt: eval2.createdAt,
+          description: eval2.description || null,
+          numTests: 1,
+        }),
+      );
     });
   });
 });

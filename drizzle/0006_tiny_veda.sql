@@ -28,7 +28,7 @@ CREATE TABLE `test_case_results` (
 	`cost` real,
 	`provider_response` text,
 	`error` text,
-	`pass` integer NOT NULL,
+	`success` integer NOT NULL,
 	`score` real NOT NULL,
 	`grading_result` text,
 	`named_scores` text,

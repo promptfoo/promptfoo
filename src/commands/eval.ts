@@ -150,8 +150,9 @@ export async function doEval(
 
     if (cmdObj.table && getLogLevel() !== 'debug') {
       // Output CLI table
-      const table = generateTable(summary, cmdObj.tableCellMaxLength);
 
+      const table = generateTable(summary, cmdObj.tableCellMaxLength);
+      invariant(summary.table, 'Table is required');
       logger.info('\n' + table.toString());
       if (summary.table.body.length > 25) {
         const rowsLeft = summary.table.body.length - 25;
@@ -171,6 +172,7 @@ export async function doEval(
       const outputPath = config.outputPath;
       config = { outputPath };
       summary.results = [];
+      invariant(summary.table, 'Table is required');
       summary.table.head.vars = [];
       for (const row of summary.table.body) {
         row.vars = [];

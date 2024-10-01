@@ -3,6 +3,7 @@ import { globSync } from 'glob';
 import * as path from 'path';
 import cliState from '../src/cliState';
 import * as googleSheets from '../src/googleSheets';
+import { runDbMigrations } from '../src/migrate';
 import type { ApiProvider, EvaluateResult, EvaluateTable, TestCase } from '../src/types';
 import {
   maybeLoadFromExternalFile,
@@ -15,7 +16,9 @@ import {
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
+  listPreviousResults,
 } from '../src/util';
+import EvalFactory from './factories/evalFactory';
 import { TestGrader } from './utils';
 
 jest.mock('proxy-agent', () => ({
@@ -229,6 +232,10 @@ describe('util', () => {
             var1: 'value1',
             var2: 'value2',
           },
+          promptIdx: 0,
+          testCaseIdx: 0,
+          testCase: {},
+          promptId: 'foo',
         },
       ];
       const table: EvaluateTable = {
@@ -302,6 +309,10 @@ describe('util', () => {
             var1: 'value1',
             var2: 'value2',
           },
+          promptIdx: 0,
+          testCaseIdx: 0,
+          testCase: {},
+          promptId: 'foo',
         },
       ];
       const table: EvaluateTable = {
@@ -375,6 +386,10 @@ describe('util', () => {
             var1: 'value1',
             var2: 'value2',
           },
+          promptIdx: 0,
+          testCaseIdx: 0,
+          testCase: {},
+          promptId: 'foo',
         },
       ];
       const table: EvaluateTable = {
@@ -448,6 +463,10 @@ describe('util', () => {
             var1: 'value1',
             var2: 'value2',
           },
+          promptIdx: 0,
+          testCaseIdx: 0,
+          testCase: {},
+          promptId: 'foo',
         },
       ];
       const table: EvaluateTable = {

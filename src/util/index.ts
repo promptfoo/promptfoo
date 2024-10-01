@@ -1,7 +1,7 @@
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
-import { desc, eq, like, and, sql } from 'drizzle-orm';
+import { desc, eq, like, and, sql, not } from 'drizzle-orm';
 import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -18,9 +18,12 @@ import {
   evals,
   evalsToDatasets,
   evalsToPrompts,
+  evalsToProviders,
   evalsToTags,
   prompts,
+  providers,
   tags,
+  testCaseResults,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { getDirectory, importModule } from '../esm';
@@ -28,7 +31,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { convertResultsToTable } from '../models/eval';
+import Eval from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -98,7 +101,7 @@ export async function writeOutput(
   if (!results.table && evalId) {
     const eval_ = await Eval.findById(evalId);
     invariant(eval_, `Eval with ID ${evalId} not found.`);
-    results.table = convertResultsToTable(await eval_.toResultsFile());
+    results.table = await eval_.getTable();
   }
   invariant(results.table, 'Table is required');
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
@@ -333,11 +336,11 @@ export async function writeResultsToDatabase(
  *
  * @returns Last n evals in descending order.
  */
-export function listPreviousResults(
+export async function listPreviousResults(
   limit: number = DEFAULT_QUERY_LIMIT,
   filterDescription?: string,
   datasetId?: string,
-): ResultLightweight[] {
+): Promise<ResultLightweight[]> {
   const db = getDb();
   const startTime = performance.now();
 
@@ -355,6 +358,7 @@ export function listPreviousResults(
       and(
         datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
         filterDescription ? like(evals.description, `%${filterDescription}%`) : undefined,
+        not(eq(evals.results, {})),
       ),
     );
 
@@ -369,9 +373,10 @@ export function listPreviousResults(
 
   const endTime = performance.now();
   const executionTime = endTime - startTime;
+  const evalResults = await Eval.summaryResults(undefined, filterDescription, datasetId);
   logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
-
-  return mappedResults;
+  const combinedResults = [...evalResults, ...mappedResults];
+  return combinedResults;
 }
 
 /**
@@ -490,47 +495,29 @@ export async function readResult(
     logger.error(`Failed to read result with ID ${id} from database:\n${err}`);
   }
 }
-// @ts-nocheck
+
 export async function updateResult(
   id: string,
   newConfig?: Partial<UnifiedConfig>,
   newTable?: EvaluateTable,
 ): Promise<void> {
-  const db = getDb();
   try {
     // Fetch the existing eval data from the database
-    const existingEval = await db
-      .select({
-        config: evals.config,
-        results: evals.results,
-      })
-      .from(evals)
-      .where(eq(evals.id, id))
-      .limit(1)
-      .all();
+    const existingEval = await Eval.findById(id);
 
-    if (existingEval.length === 0) {
+    if (!existingEval) {
       logger.error(`Eval with ID ${id} not found.`);
       return;
     }
 
-    const evalData = existingEval[0];
     if (newConfig) {
-      evalData.config = newConfig;
+      existingEval.config = newConfig;
     }
-    // if (newTable) {
-    //   evalData.results.table = newTable;
-    // }
+    if (newTable) {
+      existingEval.setTable(newTable);
+    }
 
-    await db
-      .update(evals)
-      .set({
-        description: evalData.config.description,
-        config: evalData.config,
-        results: evalData.results,
-      })
-      .where(eq(evals.id, id))
-      .run();
+    await existingEval.save();
 
     logger.info(`Updated eval with ID ${id}`);
   } catch (err) {
@@ -548,36 +535,15 @@ export async function getPromptsWithPredicate(
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
-  const db = getDb();
-  const evals_ = await db
-    .select({
-      id: evals.id,
-      createdAt: evals.createdAt,
-      author: evals.author,
-      results: evals.results,
-      config: evals.config,
-    })
-    .from(evals)
-    .limit(limit)
-    .all();
+  const evals_ = await Eval.getAll(limit);
 
   const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = {
-      version: 3,
-      createdAt,
-      author: eval_.author,
-      // @ts-ignore
-      results: eval_.results,
-      config: eval_.config,
-    };
+    const resultWrapper: ResultsFile = await eval_.toResultsFile();
     if (predicate(resultWrapper)) {
-      const results = resultWrapper.results as EvaluateSummary;
-      invariant(results.table, 'Table is required');
-
-      for (const prompt of results.table.head.prompts) {
+      for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
         const datasetId = resultWrapper.config.tests
           ? sha256(JSON.stringify(resultWrapper.config.tests))
@@ -639,45 +605,24 @@ export async function getTestCasesWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<TestCasesWithMetadata[]> {
-  const db = getDb();
-  const evals_ = await db
-    .select({
-      id: evals.id,
-      createdAt: evals.createdAt,
-      author: evals.author,
-      results: evals.results,
-      config: evals.config,
-    })
-    .from(evals)
-    .orderBy(desc(evals.createdAt))
-    .limit(limit)
-    .all();
+  const evals_ = await Eval.getAll(limit);
 
   const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = {
-      version: 3,
-      createdAt,
-      author: eval_.author,
-      // @ts-ignore
-      results: eval_.results,
-      config: eval_.config,
-    };
+    const resultWrapper: ResultsFile = await eval_.toResultsFile();
     const testCases = resultWrapper.config.tests;
     if (testCases && predicate(resultWrapper)) {
       const evalId = eval_.id;
       const datasetId = sha256(JSON.stringify(testCases));
-      const results = resultWrapper.results as EvaluateSummary;
 
-      invariant(results.table, 'Table is required');
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(
           Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), eval_.createdAt),
         );
         groupedTestCases[datasetId].count += 1;
-        const newPrompts = results.table.head.prompts.map((prompt) => ({
+        const newPrompts = eval_.getPrompts().map((prompt) => ({
           id: sha256(prompt.raw),
           prompt,
           evalId,
@@ -690,7 +635,7 @@ export async function getTestCasesWithPredicate(
         }
         groupedTestCases[datasetId].prompts = Object.values(promptsById);
       } else {
-        const newPrompts = results.table.head.prompts.map((prompt) => ({
+        const newPrompts = eval_.getPrompts().map((prompt) => ({
           id: sha256(prompt.raw),
           prompt,
           evalId,
@@ -811,7 +756,9 @@ export async function deleteEval(evalId: string) {
     // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
     await db.delete(evalsToPrompts).where(eq(evalsToPrompts.evalId, evalId)).run();
     await db.delete(evalsToDatasets).where(eq(evalsToDatasets.evalId, evalId)).run();
-
+    await db.delete(evalsToTags).where(eq(evalsToTags.evalId, evalId)).run();
+    await db.delete(testCaseResults).where(eq(testCaseResults.evalId, evalId)).run();
+    await db.delete(evalsToProviders).where(eq(evalsToProviders.evalId, evalId)).run();
     // Finally, delete the eval record
     const deletedIds = await db.delete(evals).where(eq(evals.id, evalId)).run();
     if (deletedIds.changes === 0) {
@@ -881,7 +828,7 @@ export type StandaloneEval = CompletedPrompt & {
 
 const standaloneEvalCache = new NodeCache({ stdTTL: 60 * 60 * 2 }); // Cache for 2 hours
 
-export function getStandaloneEvals({
+export async function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
   tag,
   description,
@@ -889,7 +836,7 @@ export function getStandaloneEvals({
   limit?: number;
   tag?: { key: string; value: string };
   description?: string;
-} = {}): StandaloneEval[] {
+} = {}): Promise<StandaloneEval[]> {
   const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}`;
   const cachedResult = standaloneEvalCache.get<StandaloneEval[]>(cacheKey);
 
@@ -925,49 +872,57 @@ export function getStandaloneEvals({
     .limit(limit)
     .all();
 
-  const standaloneEvals = results.flatMap((result) => {
-    const {
-      description,
-      createdAt,
-      evalId,
-      promptId,
-      datasetId,
-      // @ts-ignore
-      results: { table },
-      isRedteam,
-    } = result;
-    // @ts-ignore
-    return table.head.prompts.map((col, index) => {
-      // Compute some stats
-      const pluginCounts = table.body.reduce(
+  const standaloneEvals = (
+    await Promise.all(
+      results.map(async (result) => {
+        const {
+          description,
+          createdAt,
+          evalId,
+          promptId,
+          datasetId,
+          // @ts-ignore
+          isRedteam,
+        } = result;
+        const eval_ = await Eval.findById(evalId);
+        invariant(eval_, `Eval with ID ${evalId} not found`);
+        const table = (await eval_.getTable()) || { body: [] };
         // @ts-ignore
-        (acc, row) => {
-          const pluginId = row.test.metadata?.pluginId;
-          if (pluginId) {
-            const isPass = row.outputs[index].pass;
-            acc.pluginPassCount[pluginId] = (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
-            acc.pluginFailCount[pluginId] = (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
-          }
-          return acc;
-        },
-        { pluginPassCount: {}, pluginFailCount: {} } as {
-          pluginPassCount: Record<string, number>;
-          pluginFailCount: Record<string, number>;
-        },
-      );
+        return eval_.getPrompts().map((col, index) => {
+          // Compute some stats
+          const pluginCounts = table.body.reduce(
+            // @ts-ignore
+            (acc, row) => {
+              const pluginId = row.test.metadata?.pluginId;
+              if (pluginId) {
+                const isPass = row.outputs[index].pass;
+                acc.pluginPassCount[pluginId] =
+                  (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
+                acc.pluginFailCount[pluginId] =
+                  (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
+              }
+              return acc;
+            },
+            { pluginPassCount: {}, pluginFailCount: {} } as {
+              pluginPassCount: Record<string, number>;
+              pluginFailCount: Record<string, number>;
+            },
+          );
 
-      return {
-        evalId,
-        description,
-        promptId,
-        datasetId,
-        createdAt,
-        isRedteam: isRedteam as boolean,
-        ...pluginCounts,
-        ...col,
-      };
-    });
-  });
+          return {
+            evalId,
+            description,
+            promptId,
+            datasetId,
+            createdAt,
+            isRedteam: isRedteam as boolean,
+            ...pluginCounts,
+            ...col,
+          };
+        });
+      }),
+    )
+  ).flat();
 
   standaloneEvalCache.set(cacheKey, standaloneEvals);
   return standaloneEvals;

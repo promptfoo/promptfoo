@@ -29,8 +29,17 @@ export default function Eval({
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
 
-  const { table, setTable, config, setConfig, evalId, setEvalId, setAuthor, setInComparisonMode } =
-    useStore();
+  const {
+    table,
+    setTable,
+    setTableFromResultsFile,
+    config,
+    setConfig,
+    evalId,
+    setEvalId,
+    setAuthor,
+    setInComparisonMode,
+  } = useStore();
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
@@ -51,9 +60,13 @@ export default function Eval({
   const fetchEvalById = React.useCallback(
     async (id: string) => {
       const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
+      if (!resp.ok) {
+        setFailed(true);
+        return;
+      }
       const body = (await resp.json()) as { data: ResultsFile };
 
-      setTable(body.data);
+      setTableFromResultsFile(body.data);
       setConfig(body.data.config);
       setAuthor(body.data.author);
       setEvalId(id);
@@ -86,7 +99,7 @@ export default function Eval({
       run();
     } else if (preloadedData) {
       console.log('Eval init: Using preloaded data');
-      setTable(preloadedData.data);
+      setTableFromResultsFile(preloadedData.data);
       setConfig(preloadedData.data.config);
       setAuthor(preloadedData.data.author || null);
       setLoaded(true);
@@ -98,7 +111,7 @@ export default function Eval({
       socket.on('init', (data) => {
         console.log('Initialized socket connection', data);
         setLoaded(true);
-        setTable(data);
+        setTableFromResultsFile(data);
         setConfig(data?.config);
         setAuthor(data?.author || null);
         fetchRecentFileEvals().then((newRecentEvals) => {

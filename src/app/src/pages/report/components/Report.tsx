@@ -178,7 +178,7 @@ const App: React.FC = () => {
     );
   }
 
-  const prompts = evalData.results.table?.head.prompts || [];
+  const prompts = evalData.prompts || evalData.results.table?.head.prompts || [];
   const selectedPrompt = prompts[selectedPromptIndex];
   const tableData = evalData.results.table?.body || [];
 

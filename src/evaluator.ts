@@ -137,6 +137,8 @@ class Evaluator {
     delay,
     nunjucksFilters: filters,
     evaluateOptions,
+    testIdx,
+    promptIdx,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the label, not renderedPrompt
     const promptLabel = prompt.label;
@@ -330,8 +332,8 @@ class Evaluator {
         score: 0,
         namedScores: {},
         latencyMs,
-        promptIdx: -1,
-        testCaseIdx: -1,
+        promptIdx,
+        testCaseIdx: testIdx,
         testCase: test,
         promptId: prompt.id || '',
       };
@@ -518,7 +520,7 @@ class Evaluator {
 
     // Set up eval cases
     const runEvalOptions: RunEvalOptions[] = [];
-    let rowIndex = 0;
+    let testIdx = 0;
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
@@ -550,7 +552,7 @@ class Evaluator {
       const numRepeat = this.options.repeat || 1;
       for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
         for (const vars of varCombinations) {
-          let colIndex = 0;
+          let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
             for (const prompt of testSuite.prompts) {
@@ -567,15 +569,15 @@ class Evaluator {
                 },
                 test: { ...testCase, vars, options: testCase.options },
                 nunjucksFilters: testSuite.nunjucksFilters,
-                rowIndex,
-                colIndex,
+                testIdx,
+                promptIdx,
                 repeatIndex,
                 evaluateOptions: options,
               });
-              colIndex++;
+              promptIdx++;
             }
           }
-          rowIndex++;
+          testIdx++;
         }
       }
     }
@@ -630,10 +632,10 @@ class Evaluator {
       if (options.progressCallback) {
         options.progressCallback(results.length, runEvalOptions.length, index, evalStep);
       }
-      const { rowIndex, colIndex } = evalStep;
+      const { testIdx, promptIdx } = evalStep;
       try {
         if (this.resultsFile) {
-          await this.resultsFile.addResult(row, colIndex, rowIndex, evalStep.test);
+          await this.resultsFile.addResult(row, promptIdx, testIdx, evalStep.test);
         }
       } catch (error) {
         logger.error(`Error adding result: ${error}`);
@@ -659,8 +661,8 @@ class Evaluator {
         resultText = outputTextDisplay;
       }
 
-      if (!table.body[rowIndex]) {
-        table.body[rowIndex] = {
+      if (!table.body[testIdx]) {
+        table.body[testIdx] = {
           description: evalStep.test.description,
           outputs: [],
           test: evalStep.test,
@@ -675,8 +677,8 @@ class Evaluator {
             .flat(),
         };
       }
-      table.body[rowIndex].outputs[colIndex] = {
-        id: `${rowIndex}-${colIndex}`,
+      table.body[testIdx].outputs[promptIdx] = {
+        id: `${testIdx}-${promptIdx}`,
         pass: row.success,
         score: row.score,
         namedScores: row.namedScores,
@@ -690,7 +692,7 @@ class Evaluator {
         metadata: row.metadata,
       };
 
-      const metrics = table.head.prompts[colIndex].metrics;
+      const metrics = table.head.prompts[promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       metrics.score += row.score;
       for (const [key, value] of Object.entries(row.namedScores)) {

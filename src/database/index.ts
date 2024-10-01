@@ -6,7 +6,6 @@ import { getConfigDirectoryPath } from '../util/config/manage';
 let dbInstance: ReturnType<typeof drizzle> | null = null;
 
 export function getDbPath() {
-  console.log({ configDir: getConfigDirectoryPath(true /* createIfNotExists */) });
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
 }
 
@@ -17,7 +16,7 @@ export function getDbSignalPath() {
 export function getDb() {
   if (!dbInstance) {
     const sqlite = new Database(process.env.IS_TESTING ? ':memory:' : getDbPath());
-    dbInstance = drizzle(sqlite, { logger: false });
+    dbInstance = drizzle(sqlite);
   }
   return dbInstance;
 }
