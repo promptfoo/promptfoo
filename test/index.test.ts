@@ -1,6 +1,9 @@
+import * as cache from '../src/cache';
 import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
+import { evaluate } from '../src/index';
 import { readProviderPromptMap } from '../src/prompts';
+import { writeResultsToDatabase, writeOutput, writeMultipleOutputs } from '../src/util';
 
 jest.mock('../src/telemetry');
 jest.mock('../src/evaluator', () => {
@@ -17,6 +20,8 @@ jest.mock('../src/prompts', () => {
     readProviderPromptMap: jest.fn().mockReturnValue({}),
   };
 });
+jest.mock('../src/util');
+jest.mock('../src/cache');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
@@ -97,6 +102,15 @@ describe('index.ts exports', () => {
       redteam: index.redteam,
     });
   });
+
+  it('should export cache with correct methods', () => {
+    expect(cache).toHaveProperty('getCache');
+    expect(cache).toHaveProperty('fetchWithCache');
+    expect(cache).toHaveProperty('enableCache');
+    expect(cache).toHaveProperty('disableCache');
+    expect(cache).toHaveProperty('clearCache');
+    expect(cache).toHaveProperty('isCacheEnabled');
+  });
 });
 
 describe('evaluate function', () => {
@@ -133,6 +147,128 @@ describe('evaluate function', () => {
       expect.objectContaining({
         eventSource: 'library',
       }),
+    );
+  });
+
+  it('should process different types of prompts correctly', async () => {
+    const testSuite = {
+      prompts: [
+        'string prompt',
+        { raw: 'object prompt' },
+        function functionPrompt() {
+          return 'function prompt';
+        },
+      ],
+      providers: [],
+    };
+    await evaluate(testSuite);
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompts: expect.arrayContaining([
+          expect.any(Object),
+          expect.any(Object),
+          expect.any(Object),
+        ]),
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('should resolve nested providers', async () => {
+    const testSuite = {
+      prompts: ['test prompt'],
+      providers: [],
+      tests: [{ options: { provider: 'test-provider' } }],
+    };
+    await evaluate(testSuite);
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tests: expect.arrayContaining([
+          expect.objectContaining({
+            options: expect.objectContaining({
+              provider: expect.anything(),
+            }),
+          }),
+        ]),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('should disable cache when specified', async () => {
+    await evaluate({ prompts: ['test'], providers: [] }, { cache: false });
+    expect(cache.disableCache).toHaveBeenCalledWith();
+  });
+
+  it('should write results to database when writeLatestResults is true', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+    };
+    await evaluate(testSuite);
+    expect(writeResultsToDatabase).toHaveBeenCalledWith(
+      expect.objectContaining({ results: expect.any(Array) }),
+      expect.objectContaining({
+        prompts: expect.arrayContaining([
+          expect.objectContaining({
+            raw: 'test',
+            label: 'test',
+          }),
+        ]),
+        providers: [],
+        writeLatestResults: true,
+      }),
+    );
+  });
+
+  it('should write output to file when outputPath is set', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: 'test.json',
+    };
+    await evaluate(testSuite);
+    expect(writeOutput).toHaveBeenCalledWith(
+      'test.json',
+      null,
+      expect.objectContaining({ results: expect.any(Array) }),
+      expect.objectContaining({
+        outputPath: 'test.json',
+        prompts: expect.arrayContaining([
+          expect.objectContaining({
+            raw: 'test',
+            label: 'test',
+          }),
+        ]),
+        providers: [],
+      }),
+      null,
+    );
+  });
+
+  it('should write multiple outputs when outputPath is an array', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: ['test1.json', 'test2.json'],
+    };
+    await evaluate(testSuite);
+    expect(writeMultipleOutputs).toHaveBeenCalledWith(
+      ['test1.json', 'test2.json'],
+      null,
+      expect.objectContaining({ results: expect.any(Array) }),
+      expect.objectContaining({
+        outputPath: ['test1.json', 'test2.json'],
+        prompts: expect.arrayContaining([
+          expect.objectContaining({
+            raw: 'test',
+            label: 'test',
+          }),
+        ]),
+        providers: [],
+      }),
+      null,
     );
   });
 });
