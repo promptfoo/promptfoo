@@ -1,6 +1,6 @@
 import React from 'react';
 import { callApi } from '@app/utils/api';
-import WarningIcon from '@mui/icons-material/Warning';
+// import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
@@ -137,7 +137,7 @@ const App: React.FC = () => {
           prompt:
             result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
           output: result.response?.output,
-          gradingResult: result.gradingResult,
+          gradingResult: result.gradingResult || undefined,
         });
       }
     });
@@ -165,7 +165,7 @@ const App: React.FC = () => {
         }}
       >
         <Paper elevation={3} sx={{ padding: 4, maxWidth: 600, textAlign: 'center' }}>
-          <WarningIcon color="warning" sx={{ fontSize: 60, marginBottom: 2 }} />
+          {/* <WarningIcon color="warning" sx={{ fontSize: 60, marginBottom: 2 }} /> */}
           <Typography variant="h4" mb={3}>
             Report unavailable
           </Typography>
@@ -178,9 +178,9 @@ const App: React.FC = () => {
     );
   }
 
-  const prompts = evalData.results.table.head.prompts;
+  const prompts = evalData.results.table?.head.prompts || [];
   const selectedPrompt = prompts[selectedPromptIndex];
-  const tableData = evalData.results.table.body;
+  const tableData = evalData.results.table?.body || [];
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {

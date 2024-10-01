@@ -28,7 +28,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval from '../models/eval';
+import Eval, { convertResultsToTable } from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -55,7 +55,7 @@ import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
 import { getNunjucksEngine } from './templates';
 
-export const DEFAULT_QUERY_LIMIT = 100;
+const DEFAULT_QUERY_LIMIT = 100;
 
 /**
  * Checks if a file is a JavaScript or TypeScript file based on its extension.
@@ -95,8 +95,15 @@ export async function writeOutput(
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
 ) {
+  if (!results.table && evalId) {
+    const eval_ = await Eval.findById(evalId);
+    invariant(eval_, `Eval with ID ${evalId} not found.`);
+    results.table = convertResultsToTable(await eval_.toResultsFile());
+  }
+  invariant(results.table, 'Table is required');
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
     const rows = results.table.body.map((row) => {
+      invariant(results.table, 'Table is required');
       const csvRow: CsvRow = {};
       results.table.head.vars.forEach((varName, index) => {
         csvRow[varName] = row.vars[index];
@@ -218,6 +225,8 @@ export async function writeResultsToDatabase(
   logger.debug(`Inserting eval ${evalId}`);
 
   // Record prompt relation
+  invariant(results.table, 'Table is required');
+
   for (const prompt of results.table.head.prompts) {
     const label = prompt.label || prompt.display || prompt.raw;
     const promptId = generateIdFromPrompt(prompt);
@@ -471,21 +480,10 @@ export async function readResult(
 ): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {
   try {
     const eval_ = await Eval.findById(id);
-    if (!eval_) {
-      return undefined;
-    }
-
+    invariant(eval_, `Eval with ID ${id} not found.`);
     return {
-      id: eval_.id,
-      result: {
-        version: 3,
-        author: eval_.author || null,
-        // @ts-ignore
-        results: eval_.results,
-        config: eval_.config,
-        prompts: eval_.prompts,
-        createdAt: new Date(eval_.createdAt).toISOString(),
-      },
+      id,
+      result: await eval_.toResultsFile(),
       createdAt: new Date(eval_.createdAt),
     };
   } catch (err) {
@@ -542,52 +540,7 @@ export async function updateResult(
 
 export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
   const eval_ = await Eval.latest();
-  if (eval_) {
-    return {
-      version: 4,
-      createdAt: new Date(eval_.createdAt).toISOString(),
-      author: eval_.author || null,
-      results: eval_.results,
-      config: eval_.config,
-      prompts: eval_.prompts,
-    };
-  }
-
-  const db = getDb();
-  let latestResults = await db
-    .select({
-      id: evals.id,
-      createdAt: evals.createdAt,
-      author: evals.author,
-      description: evals.description,
-      results: evals.results,
-      config: evals.config,
-      prompts: evals.prompts,
-    })
-    .from(evals)
-    .orderBy(desc(evals.createdAt))
-    .limit(1);
-
-  if (filterDescription) {
-    const regex = new RegExp(filterDescription, 'i');
-    latestResults = latestResults.filter((result) => regex.test(result.description || ''));
-  }
-
-  if (!latestResults.length) {
-    return undefined;
-  }
-
-  const latestResult = latestResults[0];
-  if (latestResult.results == null) {
-    return undefined;
-  }
-  return {
-    version: 3,
-    createdAt: new Date(latestResult.createdAt).toISOString(),
-    author: latestResult.author,
-    results: latestResult.results,
-    config: latestResult.config,
-  };
+  return eval_?.toResultsFile();
 }
 
 export async function getPromptsWithPredicate(
@@ -622,6 +575,8 @@ export async function getPromptsWithPredicate(
     };
     if (predicate(resultWrapper)) {
       const results = resultWrapper.results as EvaluateSummary;
+      invariant(results.table, 'Table is required');
+
       for (const prompt of results.table.head.prompts) {
         const promptId = sha256(prompt.raw);
         const datasetId = resultWrapper.config.tests
@@ -716,6 +671,7 @@ export async function getTestCasesWithPredicate(
       const datasetId = sha256(JSON.stringify(testCases));
       const results = resultWrapper.results as EvaluateSummary;
 
+      invariant(results.table, 'Table is required');
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(
           Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), eval_.createdAt),

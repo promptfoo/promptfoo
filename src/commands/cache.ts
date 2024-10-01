@@ -3,7 +3,6 @@ import { clearCache } from '../cache';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
-import { cleanupOldFileResults } from '../util';
 
 export function cacheCommand(program: Command) {
   program
@@ -39,7 +38,6 @@ export function cacheCommand(program: Command) {
 
       try {
         await clearCache();
-        cleanupOldFileResults(0);
       } finally {
         clearInterval(interval);
       }

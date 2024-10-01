@@ -102,6 +102,7 @@ export const ApiProviderSchema = z.object({
   label: z.custom<ProviderLabel>().optional(),
   transform: z.string().optional(),
   delay: z.number().optional(),
+  config: z.any().optional(),
 });
 
 export const ProviderResponseSchema = z.object({

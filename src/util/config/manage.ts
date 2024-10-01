@@ -7,7 +7,6 @@ import type { UnifiedConfig } from '../../types';
 import { orderKeys } from '../json';
 
 let configDirectoryPath: string | undefined = getEnvString('PROMPTFOO_CONFIG_DIR');
-
 export function getConfigDirectoryPath(createIfNotExists: boolean = false): string {
   const p = configDirectoryPath || path.join(os.homedir(), '.promptfoo');
   if (createIfNotExists && !fs.existsSync(p)) {

@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
+import invariant from 'tiny-invariant';
 import { TERMINAL_MAX_WIDTH } from './constants';
 import type { EvaluateSummary } from './types';
 
@@ -11,6 +12,7 @@ function ellipsize(str: string, maxLen: number) {
 }
 
 export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250, maxRows = 25) {
+  invariant(summary.table, 'Table is required');
   const head = summary.table.head;
   const headLength = head.prompts.length + head.vars.length;
   const table = new Table({

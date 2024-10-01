@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 import fs from 'fs';
 import yaml from 'js-yaml';
@@ -77,7 +78,12 @@ import type {
   ProviderOptionsMap,
 } from './types/providers';
 import { isJavascriptFile } from './util';
+import { sha256 } from './util/createHash';
 import { getNunjucksEngine } from './util/templates';
+
+function getProviderId(provider: ProviderOptions): string {
+  return sha256(JSON.stringify(provider));
+}
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -452,11 +458,11 @@ export async function loadApiProvider(
     ret = new CustomApiProvider(options);
   } else {
     logger.error(dedent`
-      Could not identify provider: ${chalk.bold(providerPath)}. 
-      
+      Could not identify provider: ${chalk.bold(providerPath)}.
+
       ${chalk.white(dedent`
         Please check your configuration and ensure the provider is correctly specified.
-  
+
         For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
     `);
     process.exit(1);

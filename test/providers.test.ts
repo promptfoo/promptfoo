@@ -1553,14 +1553,13 @@ config:
     const unknownProviderPath = 'unknown:provider';
 
     await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow('process.exit called');
-
     expect(logger.error).toHaveBeenCalledWith(
       dedent`
-        Could not identify provider: ${chalk.bold(unknownProviderPath)}. 
-        
+        Could not identify provider: ${chalk.bold(unknownProviderPath)}.
+
         ${chalk.white(dedent`
           Please check your configuration and ensure the provider is correctly specified.
-    
+
           For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
       `,
     );

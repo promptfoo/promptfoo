@@ -165,12 +165,28 @@ export function startServer(
     }
   });
 
-  app.patch('/api/eval/:id', (req, res) => {
+  app.patch('/api/eval/:id', async (req, res) => {
     const id = req.params.id;
     const { table, config } = req.body;
 
     if (!id) {
       res.status(400).json({ error: 'Missing id' });
+      return;
+    }
+
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    if (!eval_.isVersion1()) {
+      res
+        .status(400)
+        .json({
+          error:
+            'This eval is not compatible with this endpoint. Update the individual results instead.',
+        });
       return;
     }
 
@@ -188,6 +204,7 @@ export function startServer(
     const result = await TestCaseResult.findById(id);
     invariant(result, 'Result not found');
     result.gradingResult = gradingResult;
+    // TODO: Update the eval statistics
     await result.save();
     return res.json(result);
   });

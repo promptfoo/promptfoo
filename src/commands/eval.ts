@@ -12,7 +12,7 @@ import cliState from '../cliState';
 import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
-import Eval from '../models/eval';
+import Eval, { getEvalId } from '../models/eval';
 import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
 import { generateTable } from '../table';
@@ -32,7 +32,6 @@ import {
   printBorder,
   setupEnv,
   writeMultipleOutputs,
-  writeResultsToDatabase,
 } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
@@ -178,7 +177,7 @@ export async function doEval(
       }
     }
 
-    const evalId = resultsFile.id;
+    const evalId = resultsFile?.id || getEvalId();
 
     const { outputPath } = config;
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(

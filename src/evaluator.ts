@@ -13,6 +13,7 @@ import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
+import Provider from './models/provider';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -248,6 +249,10 @@ class Evaluator {
         latencyMs,
         cost: response.cost,
         metadata: response.metadata,
+        promptIdx: -1,
+        testCaseIdx: -1,
+        testCase: test,
+        promptId: prompt.id || '',
       };
       if (response.error) {
         ret.error = response.error;
@@ -325,6 +330,10 @@ class Evaluator {
         score: 0,
         namedScores: {},
         latencyMs,
+        promptIdx: -1,
+        testCaseIdx: -1,
+        testCase: test,
+        promptId: prompt.id || '',
       };
     }
   }
@@ -545,7 +554,6 @@ class Evaluator {
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
             for (const prompt of testSuite.prompts) {
-              console.log(`inside loop`, colIndex);
               const providerKey = provider.label || provider.id();
               if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
                 continue;
@@ -727,10 +735,6 @@ class Evaluator {
         (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.cost += row.cost || 0;
 
-      if (this.resultsFile) {
-        await this.resultsFile.addPrompts(table.head.prompts);
-      }
-
       await runExtensionHook(testSuite.extensions, 'afterEach', {
         test: evalStep.test,
         result: row,
@@ -882,6 +886,12 @@ class Evaluator {
       }
     }
 
+    if (this.resultsFile) {
+      await this.resultsFile.addPrompts(table.head.prompts);
+      const providers = await Provider.createMultiple(testSuite.providers);
+      await this.resultsFile.addProviders(providers);
+    }
+
     // Finish up
     if (multibar) {
       multibar.stop();
@@ -918,7 +928,7 @@ class Evaluator {
       isRedteam: Boolean(testSuite.redteam),
     });
 
-    return { version: 2, timestamp: new Date().toISOString(), results, stats: this.stats, table };
+    return { timestamp: new Date().toISOString(), results, stats: this.stats, table };
   }
 }
 

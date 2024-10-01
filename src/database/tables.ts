@@ -23,8 +23,8 @@ import type {
 
 export const providers = sqliteTable('providers', {
   id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  options: text('options', { mode: 'json' }).$type<ProviderOptions>(),
+  provider_id: text('provider_id').notNull(),
+  config: text('options', { mode: 'json' }).$type<Record<string, any>>().notNull(),
 });
 
 // ------------ Prompts ------------
@@ -69,7 +69,7 @@ export const evals = sqliteTable(
       .default(sql`CURRENT_TIMESTAMP`),
     author: text('author'),
     description: text('description'),
-    results: text('results', { mode: 'json' }).$type<EvaluateSummary>(),
+    results: text('results', { mode: 'json' }).$type<EvaluateSummary | object>().notNull(),
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
   },
@@ -179,8 +179,8 @@ export const evalsToTagsRelations = relations(evalsToTags, ({ one }) => ({
   }),
 }));
 
-export const providersToEvals = sqliteTable(
-  'providers_to_evals',
+export const evalsToProviders = sqliteTable(
+  'evals_to_providers',
   {
     providerId: text('provider_id')
       .notNull()
@@ -194,13 +194,13 @@ export const providersToEvals = sqliteTable(
   }),
 );
 
-export const providersToEvalsRelations = relations(providersToEvals, ({ one }) => ({
+export const evalsToProvidersRelations = relations(evalsToProviders, ({ one }) => ({
   provider: one(providers, {
-    fields: [providersToEvals.providerId],
+    fields: [evalsToProviders.providerId],
     references: [providers.id],
   }),
   eval: one(evals, {
-    fields: [providersToEvals.evalId],
+    fields: [evalsToProviders.evalId],
     references: [evals.id],
   }),
 }));

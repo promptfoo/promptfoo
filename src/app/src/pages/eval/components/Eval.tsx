@@ -6,13 +6,7 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import CircularProgress from '@mui/material/CircularProgress';
-import type {
-  SharedResults,
-  ResultLightweightWithLabel,
-  ResultsFile,
-  EvaluateSummary,
-} from '@promptfoo/types';
-import type { EvaluateTable } from '@promptfoo/types';
+import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';

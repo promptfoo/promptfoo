@@ -12,12 +12,22 @@ import type {
 } from '../types';
 import { type EvaluateResult } from '../types';
 
+export interface TestCaseResultJSON extends EvaluateResult {
+  promptIdx: number;
+  testCaseIdx: number;
+  testCase: AtomicTestCase;
+  prompt: Prompt;
+  promptId: string;
+  error?: string | null;
+  pass: boolean;
+}
+
 export default class TestCaseResult {
   static async create(
     evalId: string,
     result: EvaluateResult,
-    columnIdx: number,
-    rowIdx: number,
+    promptIdx: number,
+    testCaseIdx: number,
     testCase: AtomicTestCase,
   ) {
     const db = getDb();
@@ -26,13 +36,13 @@ export default class TestCaseResult {
       result;
 
     const dbResult = await db
-      .insert(evalResult)
+      .insert(testCaseResults)
       .values({
         id: randomUUID(),
         evalId,
         testCase,
-        columnIdx,
-        rowIdx,
+        promptIdx,
+        testCaseIdx,
         prompt,
         promptId: hashPrompt(prompt),
         error: error?.toString(),
@@ -55,16 +65,26 @@ export default class TestCaseResult {
     return result.length > 0 ? new TestCaseResult(result[0]) : null;
   }
 
+  static async findManyByEvalId(evalId: string) {
+    const db = getDb();
+    const results = await db
+      .select()
+      .from(testCaseResults)
+      .where(eq(testCaseResults.evalId, evalId));
+    return results.map((result) => new TestCaseResult(result));
+  }
+
   id: string;
   evalId: string;
   description?: string | null;
-  providerIdx: number;
+  promptIdx: number;
   testCaseIdx: number;
   testCase: AtomicTestCase;
   prompt: Prompt;
   promptId: string;
   error?: string | null;
   pass: boolean;
+  success: boolean;
   score: number;
   providerResponse: ProviderResponse | null;
   gradingResult: GradingResult | null;
@@ -76,7 +96,7 @@ export default class TestCaseResult {
   constructor(opts: {
     id: string;
     evalId: string;
-    providerIdx: number;
+    promptIdx: number;
     testCaseIdx: number;
     testCase: AtomicTestCase;
     prompt: Prompt;
@@ -94,7 +114,7 @@ export default class TestCaseResult {
     this.id = opts.id;
     this.evalId = opts.evalId;
 
-    this.providerIdx = opts.providerIdx;
+    this.promptIdx = opts.promptIdx;
     this.testCaseIdx = opts.testCaseIdx;
     this.testCase = opts.testCase;
     this.prompt = opts.prompt;
@@ -102,6 +122,7 @@ export default class TestCaseResult {
     this.error = opts.error;
     this.pass = opts.pass;
     this.score = opts.score;
+    this.success = opts.pass;
     this.providerResponse = opts.providerResponse;
     this.gradingResult = opts.gradingResult;
     this.namedScores = opts.namedScores || {};
@@ -113,5 +134,14 @@ export default class TestCaseResult {
   async save() {
     const db = getDb();
     await db.update(testCaseResults).set(this).where(eq(testCaseResults.id, this.id));
+  }
+
+  toEvaluateResult(): EvaluateResult {
+    return {
+      ...this,
+      success: this.pass,
+      vars: this.testCase.vars || {},
+      description: this.description || undefined,
+    };
   }
 }
