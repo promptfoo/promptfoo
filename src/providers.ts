@@ -150,7 +150,7 @@ export async function loadApiProvider(
     } else if (modelType === 'completion') {
       ret = new OpenAiCompletionProvider(modelName || 'gpt-3.5-turbo-instruct', providerOptions);
     } else if (modelType === 'moderation') {
-      ret = new OpenAiModerationProvider(modelName || 'text-moderation-latest', providerOptions);
+      ret = new OpenAiModerationProvider(modelName || 'omni-moderation-latest', providerOptions);
     } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
       ret = new OpenAiChatCompletionProvider(modelType, providerOptions);
     } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
