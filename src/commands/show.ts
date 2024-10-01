@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
+import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { generateTable, wrapTable } from '../table';
 import telemetry from '../telemetry';
@@ -69,7 +70,7 @@ async function handleEval(id: string) {
     logger.error(`No evaluation found with ID ${id}`);
     return;
   }
-
+  invariant(evl.results.table, 'Table is required');
   const { prompts, vars } = evl.results.table.head;
   logger.info(generateTable(evl.results, 100, 25));
   if (evl.results.table.body.length > 25) {

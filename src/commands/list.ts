@@ -25,8 +25,9 @@ export function listCommand(program: Command) {
       const tableData = evals.map((evl) => ({
         'Eval ID': evl.id,
         Description: evl.description || '',
-        Prompts: evl.results.table.head.prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', '),
-        Vars: evl.results.table.head.vars.map((v) => v).join(', '),
+        Prompts:
+          evl.results?.table?.head.prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', ') || '',
+        Vars: evl.results?.table?.head.vars.map((v) => v).join(', ') || '',
       }));
 
       logger.info(wrapTable(tableData));

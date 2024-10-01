@@ -121,8 +121,8 @@ export interface RunEvalOptions {
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions: EvaluateOptions;
 
-  rowIndex: number;
-  colIndex: number;
+  testIdx: number;
+  promptIdx: number;
   repeatIndex: number;
 }
 
@@ -190,6 +190,7 @@ export interface PromptWithMetadata {
 }
 
 export interface EvaluateResult {
+  id?: string; // on the new version 2, this is stored per-result
   description?: string; // on the new version 2, this is stored per-result
   promptIdx: number; // on the new version 2, this is stored per-result
   testCaseIdx: number; // on the new version 2, this is stored per-result

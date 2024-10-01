@@ -46,7 +46,7 @@ export default class TestCaseResult {
         prompt,
         promptId: hashPrompt(prompt),
         error: error?.toString(),
-        pass: success,
+        success,
         score,
         providerResponse: result.response,
         gradingResult,
@@ -83,7 +83,6 @@ export default class TestCaseResult {
   prompt: Prompt;
   promptId: string;
   error?: string | null;
-  pass: boolean;
   success: boolean;
   score: number;
   providerResponse: ProviderResponse | null;
@@ -102,7 +101,7 @@ export default class TestCaseResult {
     prompt: Prompt;
     promptId?: string | null;
     error?: string | null;
-    pass: boolean;
+    success: boolean;
     score: number;
     providerResponse: ProviderResponse | null;
     gradingResult: GradingResult | null;
@@ -120,9 +119,8 @@ export default class TestCaseResult {
     this.prompt = opts.prompt;
     this.promptId = opts.promptId || hashPrompt(opts.prompt);
     this.error = opts.error;
-    this.pass = opts.pass;
     this.score = opts.score;
-    this.success = opts.pass;
+    this.success = opts.success;
     this.providerResponse = opts.providerResponse;
     this.gradingResult = opts.gradingResult;
     this.namedScores = opts.namedScores || {};
@@ -133,15 +131,29 @@ export default class TestCaseResult {
 
   async save() {
     const db = getDb();
+    console.log('saving', this);
     await db.update(testCaseResults).set(this).where(eq(testCaseResults.id, this.id));
   }
 
   toEvaluateResult(): EvaluateResult {
     return {
-      ...this,
-      success: this.pass,
+      id: this.id,
+      promptIdx: this.promptIdx,
+      testCaseIdx: this.testCaseIdx,
+      testCase: this.testCase,
+      prompt: this.prompt,
+      promptId: this.promptId,
+      error: this.error || undefined,
+      score: this.score,
+      response: this.providerResponse || undefined,
+      success: this.success,
       vars: this.testCase.vars || {},
       description: this.description || undefined,
+      provider: this.provider,
+      latencyMs: this.latencyMs,
+      namedScores: this.namedScores,
+      cost: this.cost,
+      gradingResult: this.gradingResult,
     };
   }
 }

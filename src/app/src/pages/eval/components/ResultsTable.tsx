@@ -135,7 +135,7 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, config, inComparisonMode } = useMainStore();
+  const { evalId, table, setTable, config, inComparisonMode, version } = useMainStore();
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
@@ -197,18 +197,29 @@ function ResultsTable({
         body: updatedData,
       };
 
-      // setTable({ results: { table: newTable }, timestamp: Date.now() });
+      setTable(newTable);
       if (inComparisonMode) {
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
         try {
-          const response = await callApi(`/eval/${evalId}/results/${resultId}/rating`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ ...gradingResult }),
-          });
+          let response;
+          if (version >= 4) {
+            response = await callApi(`/eval/${evalId}/results/${resultId}/rating`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ ...gradingResult }),
+            });
+          } else {
+            response = await callApi(`/eval/${evalId}`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ table: newTable }),
+            });
+          }
           if (!response.ok) {
             throw new Error('Network response was not ok');
           }

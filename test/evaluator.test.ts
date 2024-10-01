@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import glob from 'glob';
+import invariant from 'tiny-invariant';
 import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
 import { runDbMigrations } from '../src/migrate';
@@ -892,7 +893,7 @@ describe('evaluator', () => {
         }),
       ]),
     });
-
+    invariant(result.table, 'Table is required');
     expect(result.table.body[0].test.metadata).toEqual({
       defaultKey: 'defaultValue',
       configKey: 'configValue',

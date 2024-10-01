@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { getDb } from '../../src/database';
 import { evals as evalsTable } from '../../src/database/tables';
 import Eval from '../../src/models/eval';
+import { oldStyleEval } from './data/eval/database_records';
 
 export default class EvalFactory {
   static async create() {
@@ -74,7 +75,7 @@ export default class EvalFactory {
       {
         description: 'test-description',
         promptIdx: 0,
-        testCaseIdx: 0,
+        testCaseIdx: 1,
         testCase: {
           vars: { state: 'california' },
           assert: [{ type: 'contains', value: 'Sacramento' }],
@@ -129,33 +130,6 @@ export default class EvalFactory {
 
   static async createOldResult() {
     const db = getDb();
-    await db.insert(evalsTable).values({
-      id: randomUUID(),
-      createdAt: Date.now(),
-      config: {},
-      results: {
-        version: 2,
-        timestamp: '2024-09-30T20:02:51.036Z',
-        results: [],
-        stats: {
-          successes: 18,
-          failures: 18,
-          tokenUsage: {
-            total: 1200,
-            prompt: 0,
-            completion: 0,
-            cached: 1200,
-          },
-        },
-        table: {
-          head: {
-            prompts: [],
-            vars: [],
-          },
-          body: [],
-        },
-      },
-      prompts: [],
-    });
+    return (await db.insert(evalsTable).values(oldStyleEval()).returning())[0];
   }
 }

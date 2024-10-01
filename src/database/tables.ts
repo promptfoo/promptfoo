@@ -111,7 +111,7 @@ export const testCaseResults = sqliteTable(
     error: text('error'),
 
     // Result-related fields
-    pass: integer('pass', { mode: 'boolean' }).notNull(),
+    success: integer('success', { mode: 'boolean' }).notNull(),
     score: real('score').notNull(),
     gradingResult: text('grading_result', { mode: 'json' }).$type<GradingResult>(),
     namedScores: text('named_scores', { mode: 'json' }).$type<Record<string, number>>(),
@@ -129,9 +129,7 @@ export const evalsToPrompts = sqliteTable(
   {
     evalId: text('eval_id')
       .notNull()
-      .references(() => evals.id),
-    // Drizzle doesn't support this migration for sqlite, so we remove foreign keys manually.
-    //.references(() => evals.id, { onDelete: 'cascade' }),
+      .references(() => evals.id, { onDelete: 'cascade' }),
     promptId: text('prompt_id')
       .notNull()
       .references(() => prompts.id),
