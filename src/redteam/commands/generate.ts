@@ -35,41 +35,17 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
   }
   const configPath = options.config || options.defaultConfigPath;
   if (typeof configPath !== 'string') {
-    logger.info("Can't generate without configuration");
+    throw new Error("Can't generate without configuration");
   }
-  if (configPath) {
-    const resolved = await resolveConfigs(
-      {
-        config: [configPath],
-      },
-      options.defaultConfig || {},
-    );
-    testSuite = resolved.testSuite;
-    redteamConfig = resolved.config.redteam;
-  } else if (options.purpose) {
-    // There is a purpose, so we can just have a dummy test suite for standalone invocation
-    testSuite = {
-      prompts: [],
-      providers: [],
-      tests: [],
-    };
-  } else {
-    logger.info(
-      chalk.red(
-        `\nCan't generate without configuration - run ${chalk.yellow.bold('promptfoo redteam init')} first`,
-      ),
-    );
-    return;
-  }
-  const redteamOutputPath = path.join(path.dirname(configPath), options.output || 'redteam.yaml');
 
   const resolved = await resolveConfigs(
     {
       config: [configPath],
     },
-    options.defaultConfig,
+    options.defaultConfig || {},
   );
 
+  const redteamOutputPath = path.join(path.dirname(configPath), options.output || 'redteam.yaml');
   const testSuite: TestSuite = resolved.testSuite;
   const redteamConfig: RedteamFileConfig | undefined = resolved.config.redteam;
 
