@@ -31,7 +31,7 @@ async function main() {
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
-  const program = new Command();
+  const program = new Command('promptfoo');
   program.version(version);
 
   // Main commands
@@ -59,9 +59,9 @@ async function main() {
   redteamInitCommand(redteamBaseCommand);
   evalCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
-  redteamPluginsCommand(redteamBaseCommand);
   redteamRunCommand(redteamBaseCommand);
   redteamReportCommand(redteamBaseCommand);
+  redteamPluginsCommand(redteamBaseCommand);
 
   program.parse();
 }
