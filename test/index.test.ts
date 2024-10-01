@@ -56,6 +56,10 @@ describe('index.ts exports', () => {
 
   it('redteam should have expected properties', () => {
     expect(index.redteam).toEqual({
+      Base: {
+        Grader: expect.any(Function),
+        Plugin: expect.any(Function),
+      },
       Extractors: {
         extractEntities: expect.any(Function),
         extractSystemPurpose: expect.any(Function),
@@ -63,10 +67,6 @@ describe('index.ts exports', () => {
       Graders: expect.any(Object),
       Plugins: expect.any(Object),
       Strategies: expect.any(Object),
-      Base: {
-        Plugin: expect.any(Function),
-        Grader: expect.any(Function),
-      },
     });
   });
 
