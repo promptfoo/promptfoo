@@ -313,7 +313,7 @@ function ResultsTable({
   const numGoodTests = React.useMemo(
     () =>
       head.prompts.map((_, idx) =>
-        body.reduce((acc, row) => acc + (row.outputs[idx].pass ? 1 : 0), 0),
+        body.reduce((acc, row) => acc + (row.outputs[idx]?.pass ? 1 : 0), 0),
       ),
     [head.prompts, body],
   );
@@ -322,7 +322,7 @@ function ResultsTable({
     () =>
       head.prompts.map((_, idx) =>
         body.reduce(
-          (acc, row) => acc + (row.outputs[idx].gradingResult?.componentResults?.length || 0),
+          (acc, row) => acc + (row.outputs[idx]?.gradingResult?.componentResults?.length || 0),
           0,
         ),
       ),

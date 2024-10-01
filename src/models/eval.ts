@@ -110,18 +110,16 @@ export default class Eval {
   static async findById(id: string) {
     const db = getDb();
 
-    const [evals, results] = await Promise.all([
+    const [evals, results, datasetResults] = await Promise.all([
       db.select().from(evalsTable).where(eq(evalsTable.id, id)),
       db.select().from(testCaseResults).where(eq(testCaseResults.evalId, id)).execute(),
-
       db
         .select({
-          id: promptsTable.id,
-          prompt: promptsTable.prompt,
+          datasetId: evalsToDatasets.datasetId,
         })
-        .from(evalsToPrompts)
-        .leftJoin(promptsTable, eq(evalsToPrompts.promptId, promptsTable.id))
-        .where(eq(evalsToPrompts.evalId, id))
+        .from(evalsToDatasets)
+        .where(eq(evalsToDatasets.evalId, id))
+        .limit(1)
         .execute(),
     ]);
 
@@ -130,12 +128,15 @@ export default class Eval {
     }
     const eval_ = evals[0];
 
+    const datasetId = datasetResults[0]?.datasetId;
+
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
       author: eval_.author || undefined,
       description: eval_.description || undefined,
       prompts: eval_.prompts || [],
+      datasetId,
     });
     if (results.length > 0) {
       evalInstance.results = results.map((r) => new TestCaseResult(r));
@@ -270,6 +271,7 @@ export default class Eval {
       author?: string;
       description?: string;
       prompts?: CompletedPrompt[];
+      datasetId?: string;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -279,6 +281,7 @@ export default class Eval {
     this.config = config;
     this.results = [];
     this.prompts = opts?.prompts || [];
+    this.datasetId = opts?.datasetId;
   }
 
   isVersion3() {
