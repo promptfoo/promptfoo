@@ -190,8 +190,8 @@ export function startServer(
       res.status(500).json({ error: 'Failed to update eval table' });
     }
   });
-
-  app.post('/api/eval/:id/results/:id/rating', async (req, res) => {
+  // @ts-ignore
+  app.post('/api/eval/:evalId/results/:id/rating', async (req, res) => {
     const { id } = req.params;
     const gradingResult = req.body as GradingResult;
     const result = await TestCaseResult.findById(id);

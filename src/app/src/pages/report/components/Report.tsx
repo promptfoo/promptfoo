@@ -1,6 +1,6 @@
 import React from 'react';
 import { callApi } from '@app/utils/api';
-// import WarningIcon from '@mui/icons-material/Warning';
+import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
@@ -19,6 +19,7 @@ import type {
   GradingResult,
   ResultLightweightWithLabel,
 } from '@promptfoo/types';
+import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
@@ -165,7 +166,7 @@ const App: React.FC = () => {
         }}
       >
         <Paper elevation={3} sx={{ padding: 4, maxWidth: 600, textAlign: 'center' }}>
-          {/* <WarningIcon color="warning" sx={{ fontSize: 60, marginBottom: 2 }} /> */}
+          <WarningIcon color="warning" sx={{ fontSize: 60, marginBottom: 2 }} />
           <Typography variant="h4" mb={3}>
             Report unavailable
           </Typography>
@@ -180,7 +181,9 @@ const App: React.FC = () => {
 
   const prompts = evalData.prompts || evalData.results.table?.head.prompts || [];
   const selectedPrompt = prompts[selectedPromptIndex];
-  const tableData = evalData.results.table?.body || [];
+  const tableData =
+    (evalData.version >= 4 ? convertResultsToTable(evalData).body : evalData.results.table?.body) ||
+    [];
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {

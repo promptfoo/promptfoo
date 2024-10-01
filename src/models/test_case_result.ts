@@ -131,7 +131,6 @@ export default class TestCaseResult {
 
   async save() {
     const db = getDb();
-    console.log('saving', this);
     await db.update(testCaseResults).set(this).where(eq(testCaseResults.id, this.id));
   }
 
