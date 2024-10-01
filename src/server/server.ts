@@ -256,11 +256,8 @@ export function startServer(
       tests: req.body.tests as TestCase[],
       providers: [],
     };
-
     const results = await synthesizeFromTestSuite(testSuite, {});
-    return {
-      results,
-    };
+    res.json({ results });
   });
 
   // Must come after the above routes (particularly /api/config) so it doesn't
