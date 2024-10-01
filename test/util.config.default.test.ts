@@ -22,6 +22,10 @@ describe('loadDefaultConfig', () => {
       defaultConfigPath: undefined,
     });
     expect(maybeReadConfig).toHaveBeenCalledTimes(9); // Once for each extension
+    expect(maybeReadConfig).toHaveBeenNthCalledWith(
+      1,
+      path.normalize('/test/path/promptfooconfig.yaml'),
+    );
   });
 
   it('should return the first valid config file found', async () => {
@@ -68,6 +72,43 @@ describe('loadDefaultConfig', () => {
       defaultConfigPath: path.join(customDir, 'promptfooconfig.yaml'),
     });
     expect(maybeReadConfig).toHaveBeenCalledWith(path.join(customDir, 'promptfooconfig.yaml'));
+  });
+
+  it('should use custom config name when provided', async () => {
+    const mockConfig = { prompts: ['Custom config'], providers: [], tests: [] };
+    jest.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
+
+    const result = await loadDefaultConfig(undefined, 'redteam');
+    expect(result).toEqual({
+      defaultConfig: mockConfig,
+      defaultConfigPath: path.normalize('/test/path/redteam.yaml'),
+    });
+    expect(maybeReadConfig).toHaveBeenCalledWith(path.normalize('/test/path/redteam.yaml'));
+  });
+
+  it('should use different caches for different config names', async () => {
+    const mockConfig1 = { prompts: ['Config 1'], providers: [], tests: [] };
+    const mockConfig2 = { prompts: ['Config 2'], providers: [], tests: [] };
+
+    jest
+      .mocked(maybeReadConfig)
+      .mockResolvedValueOnce(mockConfig1)
+      .mockResolvedValueOnce(mockConfig2);
+
+    const result1 = await loadDefaultConfig(undefined, 'promptfooconfig');
+    const result2 = await loadDefaultConfig(undefined, 'redteam');
+
+    expect(result1).not.toEqual(result2);
+    expect(result1.defaultConfig).toEqual(mockConfig1);
+    expect(result2.defaultConfig).toEqual(mockConfig2);
+
+    // Test caching for both config names
+    const cachedResult1 = await loadDefaultConfig(undefined, 'promptfooconfig');
+    const cachedResult2 = await loadDefaultConfig(undefined, 'redteam');
+
+    expect(cachedResult1).toEqual(result1);
+    expect(cachedResult2).toEqual(result2);
+    expect(maybeReadConfig).toHaveBeenCalledTimes(2); // No additional calls
   });
 
   it('should use different caches for different directories', async () => {

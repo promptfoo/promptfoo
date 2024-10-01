@@ -14,18 +14,23 @@ export const configCache = new Map<
  * Loads the default configuration file from the specified directory.
  *
  * @param dir - The directory to search for configuration files. Defaults to the current working directory.
+ * @param configName - The name of the configuration file to load. Defaults to 'promptfooconfig'.
  * @returns A promise that resolves to an object containing the default configuration and its file path.
  * The default configuration is partial, and the file path may be undefined if no configuration is found.
  */
-export async function loadDefaultConfig(dir?: string): Promise<{
+export async function loadDefaultConfig(
+  dir?: string,
+  configName: string = 'promptfooconfig',
+): Promise<{
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
 }> {
   dir = dir || process.cwd();
 
   // Check if the result is already cached
-  if (configCache.has(dir)) {
-    return configCache.get(dir)!;
+  const cacheKey = `${dir}:${configName}`;
+  if (configCache.has(cacheKey)) {
+    return configCache.get(cacheKey)!;
   }
 
   let defaultConfig: Partial<UnifiedConfig> = {};
@@ -35,7 +40,7 @@ export async function loadDefaultConfig(dir?: string): Promise<{
   const extensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
 
   for (const ext of extensions) {
-    const configPath = path.join(dir, `promptfooconfig.${ext}`);
+    const configPath = path.join(dir, `${configName}.${ext}`);
     const maybeConfig = await maybeReadConfig(configPath);
     if (maybeConfig) {
       defaultConfig = maybeConfig;
@@ -45,6 +50,6 @@ export async function loadDefaultConfig(dir?: string): Promise<{
   }
 
   const result = { defaultConfig, defaultConfigPath };
-  configCache.set(dir, result);
+  configCache.set(cacheKey, result);
   return result;
 }
