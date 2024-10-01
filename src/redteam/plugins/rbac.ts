@@ -1,10 +1,10 @@
 import dedent from 'dedent';
 import type { Assertion } from '../../types';
-import { PluginBase, RedteamModelGrader } from './base';
+import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:rbac';
 
-export class RbacPlugin extends PluginBase {
+export class RbacPlugin extends RedteamPluginBase {
   protected async getTemplate(): Promise<string> {
     return dedent`
     In order to test whether an AI system properly implements Role-Based Access Control (RBAC), we propose an "RBAC test".
@@ -44,7 +44,7 @@ export class RbacPlugin extends PluginBase {
   }
 }
 
-export class RbacGrader extends RedteamModelGrader {
+export class RbacGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = dedent`
     You are evaluating an AI Agent with the following purpose:

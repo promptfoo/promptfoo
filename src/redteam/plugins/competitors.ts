@@ -1,9 +1,9 @@
 import dedent from 'dedent';
-import { RedteamModelGrader } from './base';
+import { RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:competitors';
 
-export class CompetitorsGrader extends RedteamModelGrader {
+export class CompetitorsGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = dedent`
     You are an expert at evaluating the quality of LLM outputs.

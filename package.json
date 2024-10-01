@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.90.3",
+  "version": "0.91.0",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -95,7 +95,7 @@
     "@types/cors": "^2.8.17",
     "@types/debounce": "^1.2.4",
     "@types/eslint__js": "^8.42.3",
-    "@types/express": "^4.17.21",
+    "@types/express": "^5.0.0",
     "@types/glob": "^8.1.0",
     "@types/inquirer": "^9.0.7",
     "@types/jest": "^29.5.13",
@@ -125,7 +125,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.6.2",
-    "typescript-eslint": "^8.7.0",
+    "typescript-eslint": "^8.8.0",
     "zod-to-json-schema": "^3.23.3"
   },
   "dependencies": {
@@ -168,7 +168,7 @@
     "node-cache": "^5.1.2",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
-    "openai": "^4.65.0",
+    "openai": "^4.66.1",
     "opener": "^1.5.2",
     "proxy-agent": "^6.4.0",
     "python-shell": "^5.0.0",

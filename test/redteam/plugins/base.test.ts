@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { matchesLlmRubric } from '../../../src/matchers';
-import { PluginBase } from '../../../src/redteam/plugins/base';
-import { RedteamModelGrader } from '../../../src/redteam/plugins/base';
+import { RedteamPluginBase } from '../../../src/redteam/plugins/base';
+import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import type { ApiProvider, Assertion } from '../../../src/types';
 import type { AtomicTestCase, GradingResult } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
@@ -14,7 +14,7 @@ jest.mock('../../../src/util', () => ({
   maybeLoadFromExternalFile: jest.fn(),
 }));
 
-class TestPlugin extends PluginBase {
+class TestPlugin extends RedteamPluginBase {
   protected async getTemplate(): Promise<string> {
     return 'Test template with {{ purpose }} for {{ n }} prompts';
   }
@@ -23,9 +23,9 @@ class TestPlugin extends PluginBase {
   }
 }
 
-describe('PluginBase', () => {
+describe('RedteamPluginBase', () => {
   let provider: ApiProvider;
-  let plugin: PluginBase;
+  let plugin: RedteamPluginBase;
 
   beforeEach(() => {
     provider = {
@@ -357,12 +357,12 @@ describe('PluginBase', () => {
   });
 });
 
-class TestGrader extends RedteamModelGrader {
+class TestGrader extends RedteamGraderBase {
   id = 'test-grader';
   rubric = 'Test rubric for {{ purpose }} with harm category {{ harmCategory }}';
 }
 
-describe('RedteamModelGrader', () => {
+describe('RedteamGraderBase', () => {
   let grader: TestGrader;
   let mockTest: AtomicTestCase;
 
@@ -426,7 +426,7 @@ describe('RedteamModelGrader', () => {
     });
   });
 
-  describe('RedteamModelGrader with tools', () => {
+  describe('RedteamGraderBase with tools', () => {
     let toolProvider: any;
     let maybeLoadFromExternalFileSpy: jest.SpyInstance;
     let ToolGrader: any;
@@ -447,7 +447,7 @@ describe('RedteamModelGrader', () => {
           return input;
         });
 
-      ToolGrader = class extends RedteamModelGrader {
+      ToolGrader = class extends RedteamGraderBase {
         id = 'test-tool-grader';
         rubric = 'Test rubric for {{ tools | dump }}';
       };

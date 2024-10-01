@@ -6,7 +6,7 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginConfig, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS, REMOTE_GENERATION_URL } from '../constants';
 import { shouldGenerateRemote } from '../util';
-import { type PluginBase } from './base';
+import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { DebugAccessPlugin } from './debugAccess';
@@ -41,7 +41,7 @@ type PluginClass<T extends PluginConfig> = new (
   purpose: string,
   injectVar: string,
   config: T,
-) => PluginBase;
+) => RedteamPluginBase;
 
 async function fetchRemoteTestCases(
   key: string,

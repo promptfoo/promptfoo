@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import { z } from 'zod';
+import packageJson from '../../../package.json';
 import cliState from '../../cliState';
 import { doEval } from '../../commands/eval';
 import logger from '../../logger';
@@ -26,7 +27,8 @@ interface RedteamRunOptions {
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
-  return createHash('md5').update(content).digest('hex');
+  const version = packageJson.version;
+  return createHash('md5').update(`${version}:${content}`).digest('hex');
 }
 
 async function doRedteamRun(options: RedteamRunOptions) {
