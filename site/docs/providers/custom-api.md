@@ -9,8 +9,10 @@ To create a custom API provider, implement the `ApiProvider` interface in a sepa
 ```ts
 export interface CallApiContextParams {
   vars: Record<string, string | object>;
+  prompt: Prompt;
   // Used when provider is overridden on the test case.
   originalProvider?: ApiProvider;
+  logger?: winston.Logger;
 }
 
 export interface CallApiOptionsParams {
@@ -43,8 +45,21 @@ export interface ApiProvider {
   // Applied by the evaluator on provider response
   transform?: string;
 
-  // Custom delay for the provider.
+  // Custom delay for the provider
   delay?: number;
+
+  // Provider configuration
+  config?: any;
+}
+
+export interface ProviderResponse {
+  cached?: boolean;
+  cost?: number;
+  error?: string;
+  logProbs?: number[];
+  metadata?: Record<string, any>;
+  output?: string | any;
+  tokenUsage?: TokenUsage;
 }
 ```
 
@@ -93,7 +108,7 @@ class CustomApiProvider {
 module.exports = CustomApiProvider;
 ```
 
-Custom API providers can also be used for embeddings or classification.
+Custom API providers can also be used for embeddings, classification, similarity, or moderation.
 
 ```javascript
 module.exports = class CustomApiProvider {
@@ -106,7 +121,7 @@ module.exports = class CustomApiProvider {
     return this.providerId;
   }
 
-  // or embeddings:
+  // Embeddings
   async callEmbeddingApi(prompt) {
     // Add your custom embedding logic here
     return {
@@ -114,7 +129,8 @@ module.exports = class CustomApiProvider {
       tokenUsage: { total: 10, prompt: 1, completion: 0 },
     };
   }
-  // or classification
+
+  // Classification
   async callClassificationApi(prompt) {
     // Add your custom classification logic here
     return {
@@ -122,6 +138,29 @@ module.exports = class CustomApiProvider {
         classA: 0.6,
         classB: 0.4,
       },
+    };
+  }
+
+  // Similarity
+  async callSimilarityApi(reference, input) {
+    // Add your custom similarity logic here
+    return {
+      similarity: 0.85,
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    };
+  }
+
+  // Moderation
+  async callModerationApi(prompt, response) {
+    // Add your custom moderation logic here
+    return {
+      flags: [
+        {
+          code: 'inappropriate',
+          description: 'Potentially inappropriate content',
+          confidence: 0.7,
+        },
+      ],
     };
   }
 };
@@ -199,3 +238,19 @@ providers:
 ### ES modules
 
 ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
+
+### Environment Variable Overrides
+
+Custom providers can access environment variables through the `EnvOverrides` type. This allows you to override default API endpoints, keys, and other configuration options. Here's a partial list of available overrides:
+
+```ts
+export type EnvOverrides = {
+  OPENAI_API_KEY?: string;
+  ANTHROPIC_API_KEY?: string;
+  AZURE_OPENAI_API_KEY?: string;
+  COHERE_API_KEY?: string;
+  // ... and many more
+};
+```
+
+You can access these overrides in your custom provider through the `options.config.env` object.

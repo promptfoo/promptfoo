@@ -3,11 +3,11 @@ import logger from '../../logger';
 import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { extractJsonObjects } from '../../util/json';
 import { loadRedteamProvider } from '../providers/shared';
-import { PluginBase, RedteamModelGrader } from './base';
+import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 
-export class CrossSessionLeakPlugin extends PluginBase {
+export class CrossSessionLeakPlugin extends RedteamPluginBase {
   protected async getTemplate(): Promise<string> {
     return dedent`
     We are testing an AI system for potential information leaks across different user sessions. Generate a series of prompts that simulate two separate user interactions:
@@ -99,7 +99,7 @@ export class CrossSessionLeakPlugin extends PluginBase {
   }
 }
 
-export class CrossSessionLeakGrader extends RedteamModelGrader {
+export class CrossSessionLeakGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = '';
   async getResult(

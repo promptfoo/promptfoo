@@ -486,19 +486,18 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('collect email');
     const { hasHarmfulRedteamConsent } = readGlobalConfig();
     if (!hasHarmfulRedteamConsent) {
-      logger.info(chalk.yellow('\nImportant Notice:'));
-      logger.info(
-        'You have selected one or more plugins that generate potentially harmful content.',
-      );
-      logger.info(
-        'This content is intended solely for adversarial testing and evaluation purposes.',
-      );
-
       const existingEmail = getUserEmail();
       let email = existingEmail;
       if (!existingEmail) {
+        logger.info(
+          'You have selected one or more plugins that generate potentially harmful content.',
+        );
+        logger.info(
+          'This content is intended solely for adversarial testing and evaluation purposes.',
+        );
+
         email = await input({
-          message: 'Please enter a valid email address to confirm your agreement:',
+          message: `${chalk.bold('Please enter your work email address')} to confirm your agreement:`,
           validate: (value) => {
             return value.includes('@') || 'Please enter a valid email address';
           },

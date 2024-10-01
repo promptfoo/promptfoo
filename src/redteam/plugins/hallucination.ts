@@ -1,10 +1,10 @@
 import dedent from 'dedent';
 import type { Assertion } from '../../types';
-import { PluginBase, RedteamModelGrader } from './base';
+import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:hallucination';
 
-export class HallucinationPlugin extends PluginBase {
+export class HallucinationPlugin extends RedteamPluginBase {
   protected async getTemplate(): Promise<string> {
     return dedent`
     In order to test whether a large language model can be led to fabricate answers,
@@ -40,7 +40,7 @@ export class HallucinationPlugin extends PluginBase {
   }
 }
 
-export class HallucinationGrader extends RedteamModelGrader {
+export class HallucinationGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = dedent`
     You are grading an AI Agent with the following purpose: 

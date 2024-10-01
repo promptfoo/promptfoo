@@ -27,7 +27,7 @@ import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
 import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
 import { shouldGenerateRemote } from '../util';
 
-export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
+export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptions>) {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
@@ -36,6 +36,29 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
   const configPath = options.config || options.defaultConfigPath;
   if (typeof configPath !== 'string') {
     logger.info("Can't generate without configuration");
+  }
+  if (configPath) {
+    const resolved = await resolveConfigs(
+      {
+        config: [configPath],
+      },
+      options.defaultConfig || {},
+    );
+    testSuite = resolved.testSuite;
+    redteamConfig = resolved.config.redteam;
+  } else if (options.purpose) {
+    // There is a purpose, so we can just have a dummy test suite for standalone invocation
+    testSuite = {
+      prompts: [],
+      providers: [],
+      tests: [],
+    };
+  } else {
+    logger.info(
+      chalk.red(
+        `\nCan't generate without configuration - run ${chalk.yellow.bold('promptfoo redteam init')} first`,
+      ),
+    );
     return;
   }
   const redteamOutputPath = path.join(path.dirname(configPath), options.output || 'redteam.yaml');
@@ -174,7 +197,7 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
   await telemetry.send();
 }
 
-export function generateRedteamCommand(
+export function redteamGenerateCommand(
   program: Command,
   command: 'redteam' | 'generate',
   defaultConfig: Partial<UnifiedConfig>,

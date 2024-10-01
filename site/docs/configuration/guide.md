@@ -631,6 +631,99 @@ If no function name is specified for Python files, it defaults to `get_transform
 transform: file://transform.py:custom_python_transform
 ```
 
+## Transforming input variables
+
+You can also transform input variables before they are used in prompts using the `transformVars` option. This feature is useful when you need to pre-process data or load content from external sources.
+
+The `transformVars` function should return an object with the transformed variable names and values. These transformed variables are added to the `vars` object and can override existing keys. For example:
+
+```yaml
+prompts:
+  - 'Summarize the following text in {{topic_length}} words: {{file_content}}'
+
+defaultTest:
+  options:
+    transformVars: |
+      return {
+        uppercase_topic: vars.topic.toUpperCase(),
+        topic_length: vars.topic.length,
+        file_content: fs.readFileSync(vars.file_path, 'utf-8')
+      };
+
+tests:
+  - vars:
+      topic: 'climate change'
+      file_path: './data/climate_article.txt'
+    assert:
+      - type: contains
+        value: '{{uppercase_topic}}'
+```
+
+Transform functions can also be specified within individual test cases.
+
+```yaml
+tests:
+  - vars:
+      url: 'https://example.com/image.png'
+    options:
+      transformVars: |
+        return { ...vars, image_markdown: `![image](${vars.url})` }
+```
+
+### Input transforms from separate files
+
+For more complex transformations, you can use external files for `transformVars`:
+
+```yaml
+defaultTest:
+  options:
+    transformVars: file://transformVars.js:customTransformVars
+```
+
+```js
+const fs = require('fs');
+
+module.exports = {
+  customTransformVars: (vars, context) => {
+    try {
+      return {
+        uppercase_topic: vars.topic.toUpperCase(),
+        topic_length: vars.topic.length,
+        file_content: fs.readFileSync(vars.file_path, 'utf-8'),
+      };
+    } catch (error) {
+      console.error('Error in transformVars:', error);
+      return {
+        error: 'Failed to transform variables',
+      };
+    }
+  },
+};
+```
+
+You can also define transforms in python.
+
+```yaml
+defaultTest:
+  options:
+    transformVars: file://transform_vars.py
+```
+
+```python
+import os
+
+def get_transform_vars(vars, context):
+    with open(vars['file_path'], 'r') as file:
+        file_content = file.read()
+
+    return {
+        'uppercase_topic': vars['topic'].upper(),
+        'topic_length': len(vars['topic']),
+        'file_content': file_content,
+        'word_count': len(file_content.split())
+    }
+```
+
 ## Config structure and organization
 
 For detailed information on the config structure, see [Configuration Reference](/docs/configuration/reference).

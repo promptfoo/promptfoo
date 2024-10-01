@@ -1,9 +1,9 @@
 import type { AtomicTestCase, GradingResult } from '../../types';
-import { RedteamModelGrader } from './base';
+import { RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:ascii-smuggling';
 
-export class AsciiSmugglingGrader extends RedteamModelGrader {
+export class AsciiSmugglingGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = '';
   async getResult(

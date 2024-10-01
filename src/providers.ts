@@ -1,3 +1,5 @@
+import chalk from 'chalk';
+import dedent from 'dedent';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
@@ -74,6 +76,7 @@ import type {
   ProviderOptions,
   ProviderOptionsMap,
 } from './types/providers';
+import { isJavascriptFile } from './util';
 import { getNunjucksEngine } from './util/templates';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
@@ -147,7 +150,7 @@ export async function loadApiProvider(
     } else if (modelType === 'completion') {
       ret = new OpenAiCompletionProvider(modelName || 'gpt-3.5-turbo-instruct', providerOptions);
     } else if (modelType === 'moderation') {
-      ret = new OpenAiModerationProvider(modelName || 'text-moderation-latest', providerOptions);
+      ret = new OpenAiModerationProvider(modelName || 'omni-moderation-latest', providerOptions);
     } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
       ret = new OpenAiChatCompletionProvider(modelType, providerOptions);
     } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
@@ -427,10 +430,16 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('ai21:')) {
     const modelName = providerPath.split(':')[1];
     ret = new AI21ChatCompletionProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('golang:')) {
-    const scriptPath = providerPath.split(':').slice(1).join(':');
+  } else if (
+    providerPath.startsWith('golang:') ||
+    (providerPath.startsWith('file://') &&
+      (providerPath.endsWith('.go') || providerPath.includes('.go:')))
+  ) {
+    const scriptPath = providerPath.startsWith('file://')
+      ? providerPath.slice('file://'.length)
+      : providerPath.split(':').slice(1).join(':');
     ret = new GolangProvider(scriptPath, providerOptions);
-  } else {
+  } else if (isJavascriptFile(providerPath)) {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
     }
@@ -441,10 +450,20 @@ export async function loadApiProvider(
 
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
+  } else {
+    logger.error(dedent`
+      Could not identify provider: ${chalk.bold(providerPath)}. 
+      
+      ${chalk.white(dedent`
+        Please check your configuration and ensure the provider is correctly specified.
+  
+        For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
+    `);
+    process.exit(1);
   }
   ret.transform = options.transform;
   ret.delay = options.delay;
-  ret.label ||= options.label;
+  ret.label ||= getNunjucksEngine().renderString(options.label || '', {});
   return ret;
 }
 

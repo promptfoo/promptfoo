@@ -1,9 +1,9 @@
 import dedent from 'dedent';
-import { RedteamModelGrader } from './base';
+import { RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:hijacking';
 
-export class HijackingGrader extends RedteamModelGrader {
+export class HijackingGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = dedent`
     <UserQuery>

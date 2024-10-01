@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -14,12 +15,13 @@ import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
-import { versionCommand } from './commands/version';
 import { viewCommand } from './commands/view';
 import { runDbMigrations } from './migrate';
-import { generateRedteamCommand } from './redteam/commands/generate';
+import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
+import { redteamReportCommand } from './redteam/commands/report';
+import { redteamRunCommand } from './redteam/commands/run';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 
@@ -29,7 +31,8 @@ async function main() {
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
-  const program = new Command();
+  const program = new Command('promptfoo');
+  program.version(version);
 
   // Main commands
   evalCommand(program, defaultConfig, defaultConfigPath);
@@ -49,20 +52,17 @@ async function main() {
   importCommand(program);
   listCommand(program);
   showCommand(program);
-  versionCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
-  generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
+  redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   redteamInitCommand(redteamBaseCommand);
   evalCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
-  generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+  redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+  redteamRunCommand(redteamBaseCommand);
+  redteamReportCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
 
-  if (!process.argv.slice(2).length) {
-    program.outputHelp();
-    process.exit(0);
-  }
   program.parse();
 }
 

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { callApi } from '@app/utils/api';
+import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
@@ -10,9 +11,16 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Modal from '@mui/material/Modal';
+import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import type { EvaluateResult, ResultsFile, SharedResults, GradingResult } from '@promptfoo/types';
+import type {
+  EvaluateResult,
+  ResultsFile,
+  SharedResults,
+  GradingResult,
+  ResultLightweightWithLabel,
+} from '@promptfoo/types';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
@@ -69,6 +77,48 @@ const App: React.FC = () => {
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
 
+  React.useEffect(() => {
+    const fetchEvalById = async (id: string) => {
+      const resp = await callApi(`/results/${id}`, {
+        cache: 'no-store',
+      });
+      const body = (await resp.json()) as SharedResults;
+      setEvalData(body.data);
+    };
+
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams) {
+      const evalId = searchParams.get('evalId');
+      if (evalId) {
+        setEvalId(evalId);
+        fetchEvalById(evalId);
+      } else {
+        // Need to fetch the latest evalId from the server
+        const fetchLatestEvalId = async () => {
+          try {
+            const resp = await callApi('/results', { cache: 'no-store' });
+            if (!resp.ok) {
+              console.error('Failed to fetch recent evals');
+              return;
+            }
+            const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
+            if (body.data && body.data.length > 0) {
+              const latestEvalId = body.data[0].evalId;
+              setEvalId(latestEvalId);
+              fetchEvalById(latestEvalId);
+            } else {
+              console.log('No recent evals found');
+            }
+          } catch (error) {
+            console.error('Error fetching latest eval:', error);
+          }
+        };
+
+        fetchLatestEvalId();
+      }
+    }
+  }, []);
+
   const failuresByPlugin = React.useMemo(() => {
     const failures: Record<
       string,
@@ -97,31 +147,37 @@ const App: React.FC = () => {
   }, [evalData]);
 
   React.useEffect(() => {
-    const fetchEvalById = async (id: string) => {
-      const resp = await callApi(`/results/${id}`, {
-        cache: 'no-store',
-      });
-      const body = (await resp.json()) as SharedResults;
-      setEvalData(body.data);
-    };
-
-    const searchParams = new URLSearchParams(window.location.search);
-    if (!searchParams) {
-      return;
-    }
-    const evalId = searchParams.get('evalId');
-    if (evalId) {
-      setEvalId(evalId);
-      fetchEvalById(evalId);
-    }
-  }, []);
-
-  React.useEffect(() => {
     document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
   }, [evalData, evalId]);
 
   if (!evalData || !evalId) {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
+  }
+
+  if (!evalData.config.redteam) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          padding: 3,
+        }}
+      >
+        <Paper elevation={3} sx={{ padding: 4, maxWidth: 600, textAlign: 'center' }}>
+          <WarningIcon color="warning" sx={{ fontSize: 60, marginBottom: 2 }} />
+          <Typography variant="h4" mb={3}>
+            Report unavailable
+          </Typography>
+          <Typography variant="body1">
+            The latest evaluation results are not displayable in report format.
+          </Typography>
+          <Typography variant="body1">Please run a red team and try again.</Typography>
+        </Paper>
+      </Box>
+    );
   }
 
   const prompts = evalData.results.table.head.prompts;

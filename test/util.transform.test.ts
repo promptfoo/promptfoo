@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { runPython } from '../src/python/pythonUtils';
-import { transform } from '../src/util/transform';
+import { transform, TransformInputType } from '../src/util/transform';
 
 jest.mock('../src/esm');
 
@@ -42,6 +42,20 @@ describe('util', () => {
       expect(transformedOutput).toBe('ORIGINAL OUTPUT');
     });
 
+    it('transforms vars using a direct function', async () => {
+      const vars = { key: 'value' };
+      const context = { vars: {}, prompt: { id: '123' } };
+      const transformFunction = 'JSON.stringify(vars)';
+      const transformedOutput = await transform(
+        transformFunction,
+        vars,
+        context,
+        true,
+        TransformInputType.VARS,
+      );
+      expect(transformedOutput).toBe('{"key":"value"}');
+    });
+
     it('transforms output using an imported function from a file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
@@ -51,6 +65,27 @@ describe('util', () => {
       const transformFunctionPath = 'file://transform.js';
       const transformedOutput = await transform(transformFunctionPath, output, context);
       expect(transformedOutput).toBe('HELLO');
+    });
+
+    it('transforms vars using a direct function from a file', async () => {
+      const vars = { key: 'value' };
+      const context = { vars: {}, prompt: {} };
+      jest.doMock(
+        path.resolve('transform.js'),
+        () => (vars: any) => ({ ...vars, key: 'transformed' }),
+        {
+          virtual: true,
+        },
+      );
+      const transformFunctionPath = 'file://transform.js';
+      const transformedOutput = await transform(
+        transformFunctionPath,
+        vars,
+        context,
+        true,
+        TransformInputType.VARS,
+      );
+      expect(transformedOutput).toEqual({ key: 'transformed' });
     });
 
     it('throws error if transform function does not return a value', async () => {
