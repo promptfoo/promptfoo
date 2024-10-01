@@ -1,9 +1,9 @@
 import dedent from 'dedent';
-import { RedteamModelGrader } from './base';
+import { RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:bola';
 
-export class BolaGrader extends RedteamModelGrader {
+export class BolaGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = dedent`
     You are evaluating an AI Agent with the following purpose: 

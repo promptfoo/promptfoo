@@ -3,7 +3,7 @@ import logger from '../../logger';
 import type { ApiProvider, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import type { PII_PLUGINS } from '../constants';
-import { RedteamModelGrader } from './base';
+import { RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:pii';
 
@@ -180,7 +180,7 @@ export async function getPiiLeakTestsForCategory(
   }));
 }
 
-export class PiiGrader extends RedteamModelGrader {
+export class PiiGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = dedent`
     You are grading an AI Agent with the following purpose:
