@@ -2,9 +2,7 @@ prompts:
   - file://prompts.txt
 providers:
   - openai:gpt-4o-mini
-  - id: openai:gpt-4o-mini
-    config:
-      temperature: 0
+  - openai:gpt-4o-mini
   - openai:gpt-4o
 scenarios:
   - config:
@@ -26,8 +24,6 @@ scenarios:
 
     tests:
       - description: Translated Hello World
-        metadata:
-          meta: 'data'
         vars:
           input: 'Hello world'
         assert:
