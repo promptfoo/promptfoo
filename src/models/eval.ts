@@ -310,6 +310,20 @@ export default class Eval {
     await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
   }
 
+  async getVars() {
+    if (this.isVersion3()) {
+      invariant(this.oldResults, 'Old results not found');
+      return this.oldResults.table?.head.vars || [];
+    }
+    const db = getDb();
+    const query = sql`SELECT DISTINCT j.key from (SELECT json_extract(test_case_results.test_case, '$.vars') as vars
+    FROM test_case_results where test_case_results.eval_id = ${this.id}) t, json_each(t.vars) j;`;
+    // @ts-ignore
+    const results: { key: string }[] = await db.all(query);
+
+    return results.map((r) => r.key) || [];
+  }
+
   getPrompts() {
     if (this.isVersion3()) {
       invariant(this.oldResults, 'Old results not found');
@@ -342,7 +356,6 @@ export default class Eval {
     await db.transaction(async (tx) => {
       for (const provider of providers) {
         const id = provider.id;
-        console.log({ id, evalId: this.id });
         tx.insert(evalsToProviders)
           .values({
             evalId: this.id,

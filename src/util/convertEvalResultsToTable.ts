@@ -7,7 +7,7 @@ import type {
   TokenUsage,
 } from '../types';
 
-class PromptMetrics {
+export class PromptMetrics {
   score: number;
   testPassCount: number;
   testFailCount: number;

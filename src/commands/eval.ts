@@ -132,9 +132,7 @@ export async function doEval(
       logger.warn(
         chalk.yellow(dedent`
       TestSuite Schema Validation Error:
-
         ${JSON.stringify(testSuiteSchema.error.format())}
-
       Please review your promptfooconfig.yaml configuration.`),
       );
     }
