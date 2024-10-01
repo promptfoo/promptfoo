@@ -1,7 +1,7 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import TestCaseResult from '../models/test_case_result';
+import type TestCaseResult from '../models/test_case_result';
 import type { RedteamAssertionTypes, RedteamFileConfig } from '../redteam/types';
 import { isJavascriptFile } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
@@ -190,15 +190,20 @@ export interface PromptWithMetadata {
 }
 
 export interface EvaluateResult {
+  description?: string; // on the new version 2, this is stored per-result
+  promptIdx: number; // on the new version 2, this is stored per-result
+  testCaseIdx: number; // on the new version 2, this is stored per-result
+  testCase: AtomicTestCase; // on the new version 2, this is stored per-result
+  promptId: string; // on the new version 2, this is stored per-result
   provider: Pick<ProviderOptions, 'id' | 'label'>;
   prompt: Prompt;
   vars: Record<string, string | object>;
   response?: ProviderResponse;
-  error?: string;
+  error?: string | null;
   success: boolean;
   score: number;
   latencyMs: number;
-  gradingResult?: GradingResult;
+  gradingResult?: GradingResult | null;
   namedScores: Record<string, number>;
   cost?: number;
   metadata?: Record<string, any>;
@@ -241,10 +246,9 @@ export interface EvaluateStats {
 }
 
 export interface EvaluateSummary {
-  version: number;
   timestamp: string;
   results: EvaluateResult[];
-  table: EvaluateTable;
+  table?: EvaluateTable;
   stats: EvaluateStats;
 }
 
@@ -736,7 +740,7 @@ export interface SharedResults {
 export interface ResultsFile {
   version: number;
   createdAt: string;
-  results: EvaluateSummary | TestCaseResult[];
+  results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
   author: string | null;
   prompts?: CompletedPrompt[];

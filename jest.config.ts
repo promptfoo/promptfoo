@@ -20,14 +20,6 @@ const config: Config = {
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
   },
-
-  moduleNameMapper: {
-    '^@promptfoo/(.*)$': '<rootDir>/src/$1',
-    '^@server/(.*)$': '<rootDir>/src/server/$1',
-    '^@app/(.*)$': '<rootDir>/src/app/$1',
-  },
-
-  resolver: 'ts-jest-resolver',
 };
 
 export default config;

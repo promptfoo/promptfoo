@@ -196,7 +196,8 @@ function ResultsTable({
         head,
         body: updatedData,
       };
-      setTable(newTable);
+
+      // setTable({ results: { table: newTable }, timestamp: Date.now() });
       if (inComparisonMode) {
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {

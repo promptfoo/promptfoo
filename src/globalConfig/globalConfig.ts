@@ -10,6 +10,7 @@ import { getConfigDirectoryPath } from '../util/config/manage';
 
 export function readGlobalConfig(): GlobalConfig {
   const configDir = getConfigDirectoryPath();
+  console.log('configDir', configDir);
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
   let globalConfig: GlobalConfig = {};
   if (fs.existsSync(configFilePath)) {

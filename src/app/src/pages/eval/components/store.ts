@@ -1,4 +1,3 @@
-import type EvalResult from '@promptfoo/models/eval_result';
 import type { VisibilityState } from '@tanstack/table-core';
 import { get, set, del } from 'idb-keyval';
 import invariant from 'tiny-invariant';
@@ -75,20 +74,20 @@ function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   const completedPrompts: Record<string, CompletedPrompt> = {};
   const varsForHeader = new Set<string>();
   const varValuesForRow = new Map<number, Record<string, string>>();
-  for (const result of results as EvalResult[]) {
+  for (const result of results.results) {
     // vars
-    for (const varName of Object.keys(result.testCase.vars || {})) {
+    for (const varName of Object.keys(result.vars || {})) {
       varsForHeader.add(varName);
     }
-    let row = rows[result.rowIdx];
+    let row = rows[result.testCaseIdx];
     if (!row) {
-      rows[result.rowIdx] = {
+      rows[result.testCaseIdx] = {
         description: result.description || undefined,
         outputs: [],
-        vars: result.testCase.vars
+        vars: result.vars
           ? Object.values(varsForHeader)
               .map((varName) => {
-                const varValue = result.testCase.vars?.[varName] || '';
+                const varValue = result.vars?.[varName] || '';
                 if (typeof varValue === 'string') {
                   return varValue;
                 }
@@ -98,19 +97,19 @@ function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
           : [],
         test: {},
       };
-      varValuesForRow.set(result.rowIdx, result.testCase.vars as Record<string, string>);
-      row = rows[result.rowIdx];
+      varValuesForRow.set(result.testCaseIdx, result.vars as Record<string, string>);
+      row = rows[result.testCaseIdx];
     }
 
     // format text
     let resultText: string | undefined;
     const outputTextDisplay = (
-      typeof result.providerResponse?.output === 'object'
-        ? JSON.stringify(result.providerResponse.output)
-        : result.providerResponse?.output || result.error || ''
+      typeof result.response?.output === 'object'
+        ? JSON.stringify(result.response.output)
+        : result.response?.output || result.error || ''
     ) as string;
     if (result.testCase.assert) {
-      if (result.pass) {
+      if (result.success) {
         resultText = `${outputTextDisplay || result.error || ''}`;
       } else {
         resultText = `${result.error}\n---\n${outputTextDisplay}`;
@@ -121,11 +120,14 @@ function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       resultText = outputTextDisplay;
     }
 
-    row.outputs[result.columnIdx] = {
+    row.outputs[result.promptIdx] = {
+      id: `${result.testCaseIdx}-${result.promptIdx}`,
       ...result,
       text: resultText || '',
       prompt: result.prompt.raw,
       provider: result.provider?.label || result.provider?.id || 'unknown provider',
+      pass: result.success,
+      cost: result.cost || 0,
     };
     invariant(result.promptId, 'Prompt ID is required');
     const completedPromptId = `${result.promptId}-${JSON.stringify(result.provider)}`;
@@ -139,8 +141,8 @@ function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     const prompt = completedPrompts[completedPromptId];
     invariant(prompt.metrics, 'Prompt metrics are required');
     prompt.metrics.score += result.score;
-    prompt.metrics.testPassCount += result.pass ? 1 : 0;
-    prompt.metrics.testFailCount += result.pass ? 0 : 1;
+    prompt.metrics.testPassCount += result.success ? 1 : 0;
+    prompt.metrics.testFailCount += result.success ? 0 : 1;
     prompt.metrics.assertPassCount +=
       result.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
     prompt.metrics.assertFailCount +=
@@ -155,9 +157,9 @@ function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     // @ts-expect-error
     prompt.metrics.tokenUsage.total += result.providerResponse?.tokenUsage?.total || 0;
     prompt.metrics.cost += result.cost || 0;
-    prompt.metrics.namedScores = eval_.prompts[result.columnIdx]?.metrics?.namedScores || {};
+    prompt.metrics.namedScores = eval_.prompts[result.promptIdx]?.metrics?.namedScores || {};
     prompt.metrics.namedScoresCount =
-      eval_.prompts[result.columnIdx]?.metrics?.namedScoresCount || {};
+      eval_.prompts[result.promptIdx]?.metrics?.namedScoresCount || {};
   }
 
   const sortedVars = [...varsForHeader].sort();

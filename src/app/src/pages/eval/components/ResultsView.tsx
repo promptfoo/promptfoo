@@ -188,9 +188,9 @@ export default function ResultsView({
           outputs: [...row.outputs, ...(comparisonTable.body[index]?.outputs || [])],
         })),
       };
-
+      body.data.results.table = combinedTable;
       // Update the state with the combined table
-      setTable(combinedTable);
+      setTable(body.data.results);
 
       // Update other relevant state if needed
       setConfig({
