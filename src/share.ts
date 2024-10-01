@@ -1,8 +1,11 @@
+import input from '@inquirer/input';
+import chalk from 'chalk';
 import type { Response } from 'node-fetch';
 import { URL } from 'url';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { fetchWithProxy } from './fetch';
 import { getAuthor } from './globalConfig/accounts';
+import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
@@ -35,10 +38,20 @@ export async function createShareableUrl(
   config: Partial<UnifiedConfig>,
   showAuth: boolean = false,
 ): Promise<string | null> {
+  let email = getUserEmail();
+  if (!email) {
+    email = await input({
+      message: `${chalk.bold('Please enter your work email address')} (for managing shared URLs):`,
+      validate: (value) => {
+        return value.includes('@') || 'Please enter a valid email address';
+      },
+    });
+    setUserEmail(email);
+  }
+
   const sharedResults: SharedResults = {
     data: {
       version: 3,
-      // TODO(ian): Take date from results, if applicable.
       createdAt: new Date().toISOString(),
       author: getAuthor(),
       results,
