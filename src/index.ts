@@ -2,7 +2,7 @@ import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
-import { readPrompts } from './prompts';
+import { readPrompts, readProviderPromptMap } from './prompts';
 import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
@@ -51,7 +51,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
           if (typeof promptInput === 'function') {
             return {
               raw: promptInput.toString(),
-              label: promptInput.toString(),
+              label: promptInput?.name ?? promptInput.toString(),
               function: promptInput as PromptFunction,
             };
           } else if (typeof promptInput === 'string') {
@@ -98,11 +98,19 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     cache.disableCache();
   }
 
+  const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
+
   // Run the eval!
-  const ret = await doEvaluate(constructedTestSuite, {
-    eventSource: 'library',
-    ...options,
-  });
+  const ret = await doEvaluate(
+    {
+      ...constructedTestSuite,
+      providerPromptMap: parsedProviderPromptMap,
+    },
+    {
+      eventSource: 'library',
+      ...options,
+    },
+  );
 
   const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
   let evalId: string | null = null;
