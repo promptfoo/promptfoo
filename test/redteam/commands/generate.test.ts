@@ -1,5 +1,4 @@
 import fs from 'fs';
-import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
