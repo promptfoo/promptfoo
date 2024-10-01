@@ -9,6 +9,7 @@ import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
+import { RedteamPluginBase, RedteamGraderBase } from './redteam/plugins/base';
 import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
 import { readTests } from './testCases';
@@ -130,6 +131,10 @@ const redteam = {
   Graders: GRADERS,
   Plugins,
   Strategies,
+  Base: {
+    Plugin: RedteamPluginBase,
+    Grader: RedteamGraderBase,
+  },
 };
 
 export { assertions, cache, evaluate, providers, redteam };

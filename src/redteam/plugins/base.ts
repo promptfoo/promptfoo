@@ -21,9 +21,9 @@ import { removePrefix } from '../util';
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
-export abstract class PluginBase {
+export abstract class RedteamPluginBase {
   /**
-   * Creates an instance of PluginBase.
+   * Creates an instance of RedteamPluginBase.
    * @param provider - The API provider used for generating prompts.
    * @param purpose - The purpose of the plugin.
    * @param injectVar - The variable name to inject the generated prompt into.
@@ -35,7 +35,7 @@ export abstract class PluginBase {
     protected injectVar: string,
     protected config: PluginConfig = {},
   ) {
-    logger.debug(`PluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
+    logger.debug(`RedteamPluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }
 
   /**
@@ -196,7 +196,7 @@ export abstract class PluginBase {
  *
  * But if you'd like, you can override the `getResult` method to use a different grading method.
  */
-export abstract class RedteamModelGrader {
+export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
 
