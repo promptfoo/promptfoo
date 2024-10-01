@@ -160,10 +160,8 @@ describe('doGenerateRedteam', () => {
       output: 'redteam.yaml',
     };
 
-    await doGenerateRedteam(options);
-
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("Can't generate without configuration"),
+    await expect(doGenerateRedteam(options)).rejects.toThrow(
+      "Can't generate without configuration",
     );
   });
 });
