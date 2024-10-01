@@ -98,10 +98,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     cache.disableCache();
   }
 
-  const parsedProviderPromptMap = readProviderPromptMap(
-    testSuite as never,
-    constructedTestSuite.prompts,
-  );
+  const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
 
   // Run the eval!
   const ret = await doEvaluate(
