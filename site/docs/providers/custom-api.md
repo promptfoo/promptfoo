@@ -16,6 +16,7 @@ export interface CallApiContextParams {
 }
 
 export interface CallApiOptionsParams {
+  // Whether to include logprobs in API response (used with OpenAI providers)
   includeLogProbs?: boolean;
 }
 
@@ -56,10 +57,7 @@ export interface ProviderResponse {
   cost?: number;
   error?: string;
   logProbs?: number[];
-  metadata?: {
-    redteamFinalPrompt?: string;
-    [key: string]: any;
-  };
+  metadata?: Record<string, any>;
   output?: string | any;
   tokenUsage?: TokenUsage;
 }
