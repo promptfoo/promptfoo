@@ -482,9 +482,8 @@ describe('HttpProvider', () => {
     });
 
     it('should throw error for unsupported file type', async () => {
-      const expectedPath = path.normalize('/mock/base/path/unsupported.txt');
       await expect(createResponseParser('file://unsupported.txt')).rejects.toThrow(
-        `Unsupported file type for response parser: ${expectedPath}`,
+        /Unsupported file type for response parser: .*mock[/\\]base[/\\]path[/\\]unsupported\.txt$/,
       );
     });
 
