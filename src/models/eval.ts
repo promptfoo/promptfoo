@@ -35,8 +35,6 @@ export function getEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
-export interface EvalV4 extends Omit<Eval, 'oldResults'> {}
-
 export default class Eval {
   id: string;
   createdAt: number;
