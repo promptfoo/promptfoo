@@ -124,12 +124,12 @@ function parseRawRequest(input: string) {
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  private responseParserPromise: Promise<(data: any, text: string) => ProviderResponse>;
+  private responseParser: Promise<(data: any, text: string) => ProviderResponse>;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config;
     this.url = this.config.url || url;
-    this.responseParserPromise = createResponseParser(this.config.responseParser);
+    this.responseParser = createResponseParser(this.config.responseParser);
 
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
@@ -222,8 +222,7 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    const responseParser = await this.responseParserPromise;
-    const parsedOutput = responseParser(parsedData, rawText);
+    const parsedOutput = (await this.responseParser)(parsedData, rawText);
     return {
       output: parsedOutput.output || parsedOutput,
     };
@@ -268,8 +267,7 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    const responseParser = await this.responseParserPromise;
-    const parsedOutput = responseParser(parsedData, rawText);
+    const parsedOutput = (await this.responseParser)(parsedData, rawText);
     return {
       output: parsedOutput.output || parsedOutput,
     };
