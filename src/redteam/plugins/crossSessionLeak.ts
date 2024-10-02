@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { extractJsonObjects } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
 import { loadRedteamProvider } from '../providers/shared';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
@@ -53,13 +54,17 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
-    const template = await this.getTemplate();
+    const nunjucks = getNunjucksEngine();
+    const renderedTemplate = nunjucks.renderString(await this.getTemplate(), {
+      purpose: this.purpose,
+      n,
+    });
     const provider = await loadRedteamProvider({
       provider: this.provider,
       jsonOnly: true,
     });
 
-    const { output, error } = await provider.callApi(template);
+    const { output, error } = await provider.callApi(renderedTemplate);
     if (error) {
       logger.error(`Error generating cross-session leak prompts: ${error}`);
       return [];
