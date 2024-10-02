@@ -1,3 +1,3 @@
-module.exports = (data) => {
-  return data.choices[0].message.content;
+module.exports = (json, text) => {
+  return json.choices[0].message.content;
 };
