@@ -22,6 +22,9 @@ jest.mock('../src/prompts', () => {
 });
 jest.mock('../src/util');
 jest.mock('../src/cache');
+jest.mock('../src/database', () => ({
+  getDb: jest.fn().mockReturnValue({ transaction: jest.fn() }),
+}));
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
@@ -144,6 +147,7 @@ describe('evaluate function', () => {
         ],
         providerPromptMap: {},
       }),
+      expect.anything(),
       expect.objectContaining({
         eventSource: 'library',
       }),
@@ -170,6 +174,7 @@ describe('evaluate function', () => {
           expect.any(Object),
         ]),
       }),
+      expect.anything(),
       expect.any(Object),
     );
   });
@@ -191,6 +196,7 @@ describe('evaluate function', () => {
           }),
         ]),
       }),
+      expect.anything(),
       expect.anything(),
     );
   });

@@ -15,18 +15,6 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  promises: {
-    readFile: jest.fn(),
-  },
-}));
-
 jest.mock('../src/esm');
 jest.mock('../src/logger');
 jest.mock('../src/evaluatorHelpers', () => ({
