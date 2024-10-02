@@ -811,14 +811,14 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
               logger.warn(`Error parsing function arguments: ${error}`);
             }
             
-            const mergedArguments = {
+            functionArguments = {
               ...functionArguments,
               thread_id: threadId
             };
             
             const result = await this.assistantConfig.functionToolCallbacks![
               toolCall.function.name
-            ](JSON.stringify(mergedArguments));
+            ](JSON.stringify(functionArguments));
             return {
               tool_call_id: toolCall.id,
               output: result,
