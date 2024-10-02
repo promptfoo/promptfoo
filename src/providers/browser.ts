@@ -7,6 +7,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
+import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 
@@ -206,8 +207,40 @@ export class BrowserProvider implements ApiProvider {
           renderedArgs.timeout,
         );
         break;
+      case 'setCookie':
+        invariant(
+          renderedArgs.cookieString || (renderedArgs.name && renderedArgs.value),
+          `Expected headless action to have either a cookieString or a name and value when using 'setCookie'`,
+        );
+        logger.debug(`Setting cookie`);
+        await this.setCookie(page, renderedArgs);
+        break;
       default:
         throw new Error(`Unknown action type: ${actionType}`);
+    }
+  }
+
+  private async setCookie(
+    page: Page,
+    cookieData: { cookieString?: string; name?: string; value?: string; url?: string },
+  ): Promise<void> {
+    if (cookieData.cookieString) {
+      const finalCookie = maybeLoadFromExternalFile(cookieData.cookieString);
+      logger.debug(`Setting cookie: ${cookieData.cookieString} => ${finalCookie}`);
+      await page.evaluate((cookieStr) => {
+        document.cookie = cookieStr;
+      }, finalCookie);
+    } else if (cookieData.name && cookieData.value) {
+      const { name, value, ...options } = cookieData;
+      logger.debug(`Setting cookie: ${name}=${value}`);
+      await page.context().addCookies([
+        {
+          name,
+          value,
+          url: options.url || (await page.url()),
+          ...options,
+        },
+      ]);
     }
   }
 

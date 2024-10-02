@@ -65,6 +65,22 @@ The Headless Browser Provider supports the following actions:
 
 - `selector`: The CSS selector of the element to click
 
+#### extract
+
+- `selector`: The CSS selector of the element to extract text from
+
+#### screenshot
+
+- `filename`: The filename to save the screenshot to
+
+#### setCookie
+
+- `cookieString`: The cookie string to set
+- `name`: The name of the cookie
+- `value`: The value of the cookie
+
+You must set either `cookieString` or both `name` and `value`.
+
 #### type
 
 - `selector`: The CSS selector of the input element
@@ -75,14 +91,6 @@ Special characters can be sent using the following placeholders:
 - `<enter>`
 - `<tab>`
 - `<escape>`
-
-#### screenshot
-
-- `filename`: The filename to save the screenshot to
-
-#### extract
-
-- `selector`: The CSS selector of the element to extract text from
 
 #### wait
 
@@ -163,15 +171,16 @@ Note: All string values in the config support Nunjucks templating. This means yo
 
 The `steps` array in the configuration can include the following actions:
 
-| Action             | Description                                          | Required Args                      | Optional Args                      |
-| ------------------ | ---------------------------------------------------- | ---------------------------------- | ---------------------------------- |
-| navigate           | Navigate to a specified URL                          | `url`: string                      |                                    |
-| click              | Click on an element                                  | `selector`: string                 |                                    |
-| type               | Type text into an input field                        | `selector`: string, `text`: string |                                    |
-| screenshot         | Take a screenshot of the page                        | `path`: string                     | `fullPage`: boolean                |
-| extract            | Extract text content from an element                 | `selector`: string, `name`: string |                                    |
-| wait               | Wait for a specified amount of time                  | `ms`: number                       |                                    |
-| waitForNewChildren | Wait for new child elements to appear under a parent | `parentSelector`: string           | `delay`: number, `timeout`: number |
+| Action             | Description                                          | Required Args                                           | Optional Args                      |
+| ------------------ | ---------------------------------------------------- | ------------------------------------------------------- | ---------------------------------- |
+| navigate           | Navigate to a specified URL                          | `url`: string                                           |                                    |
+| click              | Click on an element                                  | `selector`: string                                      |                                    |
+| extract            | Extract text content from an element                 | `selector`: string, `name`: string                      |                                    |
+| screenshot         | Take a screenshot of the page                        | `path`: string                                          | `fullPage`: boolean                |
+| setCookie          | Set a cookie                                         | `cookieString`: string, `name`: string, `value`: string |                                    |
+| type               | Type text into an input field                        | `selector`: string, `text`: string                      |                                    |
+| wait               | Wait for a specified amount of time                  | `ms`: number                                            |                                    |
+| waitForNewChildren | Wait for new child elements to appear under a parent | `parentSelector`: string                                | `delay`: number, `timeout`: number |
 
 Each action in the `steps` array should be an object with the following structure:
 
