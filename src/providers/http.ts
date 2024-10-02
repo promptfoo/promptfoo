@@ -29,9 +29,12 @@ interface HttpProviderConfig {
   request?: string;
 }
 
-async function createResponseParser(
-  parser: any,
+export async function createResponseParser(
+  parser: string | Function | undefined,
 ): Promise<(data: any, text: string) => ProviderResponse> {
+  if (!parser) {
+    return (data, text) => ({ output: data || text });
+  }
   if (typeof parser === 'function') {
     return (data, text) => ({ output: parser(data, text) });
   }
@@ -60,7 +63,9 @@ async function createResponseParser(
       });
     }
   }
-  return (data, text) => ({ output: data || text });
+  throw new Error(
+    `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://', or a string containing a JavaScript expression.`,
+  );
 }
 
 export function processBody(

@@ -12,7 +12,6 @@ jest.mock('../src/cache', () => ({
 jest.mock('../src/util', () => ({
   ...jest.requireActual('../src/util'),
   maybeLoadFromExternalFile: jest.fn((input) => input),
-  isJavascriptFile: jest.fn().mockReturnValue(true),
 }));
 
 jest.mock('../src/esm', () => ({
@@ -483,9 +482,30 @@ describe('HttpProvider', () => {
     });
 
     it('should throw error for unsupported file type', async () => {
-      await expect(async () => {
-        await createResponseParser('file://unsupported.txt');
-      }).rejects.toThrow(expect.any(Error));
+      await expect(createResponseParser('file://unsupported.txt')).rejects.toThrow(
+        'Unsupported file type for response parser: /mock/base/path/unsupported.txt',
+      );
+    });
+
+    it('should throw error for unsupported parser type', async () => {
+      await expect(createResponseParser(123 as any)).rejects.toThrow(
+        "Unsupported response parser type: number. Expected a function, a string starting with 'file://', or a string containing a JavaScript expression.",
+      );
+    });
+
+    it('should handle string parser', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          body: { key: 'value' },
+          responseParser: 'json.result',
+        },
+      });
+
+      const mockResponse = { data: JSON.stringify({ result: 'parsed' }), cached: false };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe('parsed');
     });
   });
 
