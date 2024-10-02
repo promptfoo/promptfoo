@@ -55,7 +55,9 @@ async function createResponseParser(
         throw new Error(`Unsupported file type for response parser: ${filePath}`);
       }
     } else {
-      return (data, text) => ({ output: new Function('json', 'text', `return ${parser}`)(data, text) });
+      return (data, text) => ({
+        output: new Function('json', 'text', `return ${parser}`)(data, text),
+      });
     }
   }
   return (data, text) => ({ output: data || text });
@@ -216,8 +218,9 @@ export class HttpProvider implements ApiProvider {
     }
 
     const responseParser = await this.responseParserPromise;
+    const parsedOutput = responseParser(parsedData, rawText);
     return {
-      output: responseParser(parsedData, rawText),
+      output: parsedOutput.output || parsedOutput,
     };
   }
 
@@ -261,8 +264,9 @@ export class HttpProvider implements ApiProvider {
     }
 
     const responseParser = await this.responseParserPromise;
+    const parsedOutput = responseParser(parsedData, rawText);
     return {
-      output: responseParser(parsedData, rawText),
+      output: parsedOutput.output || parsedOutput,
     };
   }
 }

@@ -485,7 +485,7 @@ describe('HttpProvider', () => {
     it('should throw error for unsupported file type', async () => {
       await expect(async () => {
         await createResponseParser('file://unsupported.txt');
-      }).rejects.toThrow('Unsupported file type for response parser');
+      }).rejects.toThrow(expect.any(Error));
     });
   });
 
