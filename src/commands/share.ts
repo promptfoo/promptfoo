@@ -5,10 +5,11 @@ import { URL } from 'url';
 import { getEnvString } from '../envars';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import Eval from '../models/eval';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import type { EvaluateSummary, ResultsFile } from '../types';
-import { getLatestEval, readResult, setupEnv } from '../util';
+import { readResult, setupEnv } from '../util';
 
 export async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
   const url = await createShareableUrl(
@@ -50,11 +51,13 @@ export function shareCommand(program: Command) {
             process.exit(1);
           }
         } else {
-          results = await getLatestEval();
-          if (!results) {
+          const eval_ = await Eval.latest();
+
+          if (!eval_) {
             logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
             process.exit(1);
           }
+          results = await eval_.toResultsFile(true);
         }
 
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {

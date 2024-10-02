@@ -12,6 +12,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { createPublicUrl } from '../commands/share';
+import { VERSION } from '../constants';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type {
@@ -96,7 +97,7 @@ export function startServer(
   });
 
   app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK' });
+    res.status(200).json({ status: 'OK', version: VERSION });
   });
 
   app.get('/api/results', async (req, res) => {
@@ -175,7 +176,7 @@ export function startServer(
       return;
     }
 
-    if (!eval_.isVersion3() && table) {
+    if (!eval_.useOldResults() && table) {
       res.status(400).json({
         error:
           'This eval is not compatible with this endpoint. Update the individual results instead.',
@@ -212,6 +213,14 @@ export function startServer(
         const results = payload.results as EvaluateSummary;
         const id = await writeResultsToDatabase(results, payload.config);
         res.json({ id });
+      } else {
+        const incEval = payload as unknown as Eval;
+        const eval_ = await Eval.create(incEval.config, incEval.prompts, {
+          id: incEval.id,
+          createdAt: new Date(incEval.createdAt),
+          author: incEval.author,
+        });
+        res.json({ id: eval_.id });
       }
     } catch (error) {
       console.error('Failed to write eval to database', error);
