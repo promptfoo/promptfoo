@@ -70,7 +70,8 @@ export async function doEval(
       setLogLevel('debug');
     }
     const iterations = cmdObj.repeat ?? Number.NaN;
-    const repeat = !Number.isNaN(iterations) && iterations > 0 ? iterations : 1;
+    const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;
+
     if (!cmdObj.cache || repeat > 1) {
       logger.info('Cache is disabled.');
       disableCache();
