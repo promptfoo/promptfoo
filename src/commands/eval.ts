@@ -79,7 +79,7 @@ export async function doEval(
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
-    let maxConcurrency = cmdObj.maxConcurrency ?? Number.NaN;
+    let maxConcurrency = cmdObj.maxConcurrency;
     const delay = cmdObj.delay ?? 0;
 
     if (delay > 0) {
@@ -99,8 +99,7 @@ export async function doEval(
 
     const options: EvaluateOptions = {
       showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
-      maxConcurrency:
-        !Number.isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
+      maxConcurrency,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       ...evaluateOptions,

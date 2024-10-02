@@ -29,7 +29,7 @@ export const CommandLineOptionsSchema = z.object({
   // Shared with EvaluateOptions
   maxConcurrency: z.coerce.number().int().positive().optional(),
   repeat: z.coerce.number().int().positive().optional(),
-  delay: z.coerce.number().int().nonnegative().optional(),
+  delay: z.coerce.number().int().nonnegative().default(0),
 
   // Command line only
   vars: z.string().optional(),
