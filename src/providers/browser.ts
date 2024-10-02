@@ -1,4 +1,6 @@
-import { chromium, type Page, type ElementHandle, devices } from 'playwright';
+import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
+import { chromium } from 'playwright-extra';
+import stealth from 'puppeteer-extra-plugin-stealth';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
@@ -24,6 +26,14 @@ interface BrowserProviderConfig {
   responseParser?: string | Function;
   timeoutMs?: number;
   headless?: boolean;
+  cookies?:
+    | Array<{
+        name: string;
+        value: string;
+        domain?: string;
+        path?: string;
+      }>
+    | string;
 }
 
 function createResponseParser(
@@ -74,18 +84,25 @@ export class BrowserProvider implements ApiProvider {
       prompt,
     };
 
+    chromium.use(stealth());
+
     const browser = await chromium.launch({
       headless: this.headless,
       args: ['--ignore-certificate-errors'],
     });
     const browserContext = await browser.newContext({
       ignoreHTTPSErrors: true,
-      ...devices['Desktop Chrome'],
     });
+
+    if (this.config.cookies) {
+      await this.setCookies(browserContext);
+    }
+
     const page = await browserContext.newPage();
     const extracted: Record<string, any> = {};
 
     try {
+      // Execute all actions
       for (const step of this.config.steps) {
         await this.executeAction(page, step, vars, extracted);
       }
@@ -101,6 +118,22 @@ export class BrowserProvider implements ApiProvider {
     const ret = this.responseParser(extracted, finalHtml);
     logger.debug(`Browser response parser output: ${ret}`);
     return { output: ret };
+  }
+
+  private async setCookies(browserContext: BrowserContext): Promise<void> {
+    if (typeof this.config.cookies === 'string') {
+      // Handle big blob string of cookies
+      const cookieString = maybeLoadFromExternalFile(this.config.cookies) as string;
+      const cookiePairs = cookieString.split(';').map((pair) => pair.trim());
+      const cookies = cookiePairs.map((pair) => {
+        const [name, value] = pair.split('=');
+        return { name, value };
+      });
+      await browserContext.addCookies(cookies);
+    } else if (Array.isArray(this.config.cookies)) {
+      // Handle array of cookie objects
+      await browserContext.addCookies(this.config.cookies);
+    }
   }
 
   private async executeAction(
@@ -211,40 +244,8 @@ export class BrowserProvider implements ApiProvider {
           renderedArgs.timeout,
         );
         break;
-      case 'setCookie':
-        invariant(
-          renderedArgs.cookieString || (renderedArgs.name && renderedArgs.value),
-          `Expected headless action to have either a cookieString or a name and value when using 'setCookie'`,
-        );
-        logger.debug(`Setting cookie`);
-        await this.setCookie(page, renderedArgs);
-        break;
       default:
         throw new Error(`Unknown action type: ${actionType}`);
-    }
-  }
-
-  private async setCookie(
-    page: Page,
-    cookieData: { cookieString?: string; name?: string; value?: string; url?: string },
-  ): Promise<void> {
-    if (cookieData.cookieString) {
-      const finalCookie = maybeLoadFromExternalFile(cookieData.cookieString);
-      logger.debug(`Setting cookie: ${cookieData.cookieString} => ${finalCookie}`);
-      await page.evaluate((cookieStr) => {
-        document.cookie = cookieStr;
-      }, finalCookie);
-    } else if (cookieData.name && cookieData.value) {
-      const { name, value, ...options } = cookieData;
-      logger.debug(`Setting cookie: ${name}=${value}`);
-      await page.context().addCookies([
-        {
-          name,
-          value,
-          url: options.url || (await page.url()),
-          ...options,
-        },
-      ]);
     }
   }
 
