@@ -165,44 +165,6 @@ export function createApp() {
     return res.json(result);
   });
 
-  app.post('/api/eval/:evalId/results', async (req, res) => {
-    const results = req.body as EvalResult[];
-    const failedItems: { index: number; error: string; data: EvalResult }[] = [];
-    const eval_ = await Eval.findById(req.params.evalId);
-    if (!eval_) {
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
-
-    console.log('saving results', { numResults: results.length, evalId: eval_.id });
-
-    const savePromises = results.map((result, index) => {
-      invariant(result.evalId === eval_.id, 'Eval ID mismatch');
-      try {
-        return new EvalResult(result).save();
-      } catch (error) {
-        failedItems.push({ index, error: (error as Error).message, data: result });
-        return null;
-      }
-    });
-
-    await Promise.all(savePromises);
-
-    if (failedItems.length > 0) {
-      res.status(207).json({
-        message: 'Some results failed to save',
-        failedItems,
-        successCount: results.length - failedItems.length,
-      });
-    } else {
-      res.json({
-        message: 'All results added successfully',
-        successCount: results.length,
-        failedItems: [],
-      });
-    }
-  });
-
   // @ts-ignore
   app.post('/api/eval', async (req, res) => {
     const body = req.body;

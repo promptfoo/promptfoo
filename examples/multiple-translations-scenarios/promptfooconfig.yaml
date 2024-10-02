@@ -2,7 +2,6 @@ prompts:
   - file://prompts.txt
 providers:
   - openai:gpt-4o-mini
-  - openai:gpt-4o-mini
   - openai:gpt-4o
 scenarios:
   - config:

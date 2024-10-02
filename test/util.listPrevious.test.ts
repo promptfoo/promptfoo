@@ -11,7 +11,6 @@ describe('listPreviousResults', () => {
     const eval1 = await EvalFactory.create();
     const eval2 = await EvalFactory.create();
     const evalOld: any = await EvalFactory.createOldResult();
-    console.log(evalOld);
     const results = await listPreviousResults();
     expect(results).toHaveLength(3);
     expect(results).toContainEqual(
