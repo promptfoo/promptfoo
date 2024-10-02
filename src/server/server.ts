@@ -58,11 +58,7 @@ export enum BrowserBehavior {
   OPEN_TO_REPORT = 3,
 }
 
-export function startServer(
-  port = 15500,
-  browserBehavior = BrowserBehavior.ASK,
-  filterDescription?: string,
-) {
+export function createApp() {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'app');
@@ -71,38 +67,17 @@ export function startServer(
   app.use(compression());
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
-
-  const httpServer = http.createServer(app);
-  const io = new SocketIOServer(httpServer, {
-    cors: {
-      origin: '*',
-    },
-  });
-
-  migrateResultsFromFileSystemToDatabase().then(() => {
-    logger.info('Migrated results from file system to database');
-  });
-
-  const watchFilePath = getDbSignalPath();
-  const watcher = debounce(async (curr: Stats, prev: Stats) => {
-    if (curr.mtime !== prev.mtime) {
-      io.emit('update', await getLatestEval(filterDescription));
-      allPrompts = null;
-    }
-  }, 250);
-  fs.watchFile(watchFilePath, watcher);
-
-  io.on('connection', async (socket) => {
-    socket.emit('init', await getLatestEval(filterDescription));
-  });
-
   app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', version: VERSION });
   });
 
   app.get('/api/results', async (req, res) => {
     const datasetId = req.query.datasetId as string | undefined;
-    const results = await listPreviousResults(undefined /* limit */, filterDescription, datasetId);
+    const results = await listPreviousResults(
+      undefined /* limit */,
+      undefined /* filterDescription */,
+      datasetId,
+    );
 
     res.json({
       data: results.map((meta) => {
@@ -307,6 +282,38 @@ export function startServer(
   // Handle client routing, return all requests to the app
   app.get('*', (_req, res) => {
     res.sendFile(path.join(staticDir, 'index.html'));
+  });
+  return app;
+}
+
+export function startServer(
+  port = 15500,
+  browserBehavior = BrowserBehavior.ASK,
+  filterDescription?: string,
+) {
+  const app = createApp();
+  const httpServer = http.createServer(app);
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: '*',
+    },
+  });
+
+  migrateResultsFromFileSystemToDatabase().then(() => {
+    logger.info('Migrated results from file system to database');
+  });
+
+  const watchFilePath = getDbSignalPath();
+  const watcher = debounce(async (curr: Stats, prev: Stats) => {
+    if (curr.mtime !== prev.mtime) {
+      io.emit('update', await getLatestEval(filterDescription));
+      allPrompts = null;
+    }
+  }, 250);
+  fs.watchFile(watchFilePath, watcher);
+
+  io.on('connection', async (socket) => {
+    socket.emit('init', await getLatestEval(filterDescription));
   });
 
   httpServer
