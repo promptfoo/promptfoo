@@ -69,8 +69,6 @@ export async function createShareableUrl(
   if (cloudConfig.isEnabled()) {
     apiBaseUrl = cloudConfig.getApiHost();
 
-    console.log(JSON.stringify(sharedResults));
-
     response = await fetchWithProxy(`${apiBaseUrl}/results`, {
       method: 'POST',
       headers: {
