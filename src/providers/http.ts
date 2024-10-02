@@ -1,6 +1,9 @@
 import httpZ from 'http-z';
+import path from 'path';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
+import cliState from '../cliState';
+import { importModule } from '../esm';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -9,6 +12,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
+import { isJavascriptFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
@@ -25,15 +29,34 @@ interface HttpProviderConfig {
   request?: string;
 }
 
-function createResponseParser(parser: any): (data: any, text: string) => ProviderResponse {
+async function createResponseParser(
+  parser: any,
+): Promise<(data: any, text: string) => ProviderResponse> {
   if (typeof parser === 'function') {
-    return parser;
+    return (data, text) => ({ output: parser(data, text) });
   }
   if (typeof parser === 'string') {
-    return new Function('json', 'text', `return ${parser}`) as (
-      data: any,
-      text: string,
-    ) => ProviderResponse;
+    if (parser.startsWith('file://')) {
+      const basePath = cliState.basePath || '';
+      const filePath = path.resolve(basePath, parser.slice('file://'.length));
+
+      if (isJavascriptFile(filePath)) {
+        const requiredModule = await importModule(filePath);
+        if (typeof requiredModule === 'function') {
+          return requiredModule;
+        } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+          return requiredModule.default;
+        } else {
+          throw new Error(
+            `Response parser malformed: ${filePath} must export a function or have a default export as a function`,
+          );
+        }
+      } else {
+        throw new Error(`Unsupported file type for response parser: ${filePath}`);
+      }
+    } else {
+      return (data, text) => ({ output: new Function('json', 'text', `return ${parser}`)(data, text) });
+    }
   }
   return (data, text) => ({ output: data || text });
 }
@@ -94,12 +117,12 @@ function parseRawRequest(input: string) {
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  responseParser: (data: any, text: string) => ProviderResponse;
+  private responseParserPromise: Promise<(data: any, text: string) => ProviderResponse>;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config;
     this.url = this.config.url || url;
-    this.responseParser = createResponseParser(this.config.responseParser);
+    this.responseParserPromise = createResponseParser(this.config.responseParser);
 
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
@@ -192,8 +215,9 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
+    const responseParser = await this.responseParserPromise;
     return {
-      output: this.responseParser(parsedData, rawText),
+      output: responseParser(parsedData, rawText),
     };
   }
 
@@ -236,8 +260,9 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
+    const responseParser = await this.responseParserPromise;
     return {
-      output: this.responseParser(parsedData, rawText),
+      output: responseParser(parsedData, rawText),
     };
   }
 }
