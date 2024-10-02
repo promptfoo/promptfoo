@@ -180,7 +180,8 @@
     "uuid": "^10.0.0",
     "winston": "^3.14.2",
     "ws": "^8.18.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "zod-validation-error": "^3.4.0"
   },
   "madge": {
     "detectiveOptions": {
