@@ -18,7 +18,7 @@ providers:
         'Content-Type': 'application/json'
       body:
         myPrompt: '{{prompt}}'
-      responseParser: 'json.output'
+      responseParser: 'json.output' # extract the "output" field from the response
 ```
 
 The placeholder variable `{{prompt}}` will be replaced by the final prompt for the test case. You can also reference test variables as you construct the request:
@@ -61,7 +61,7 @@ providers:
           "prompt": "{{prompt}}",
           "max_tokens": 100
         }
-      responseParser: 'json.text'
+      responseParser: 'json.content' # extract the "content" field from the response
 ```
 
 In this example:
@@ -124,7 +124,7 @@ Note that any valid JSON string within `body` will be converted to a JSON object
 
 ## Parsing a JSON response
 
-If your API responds with a JSON object and you want to pick out a specific value, use the `responseParser` property to set a Javascript snippet that manipulates the provided `json` object.
+By default, the entire response is returned as the output. If your API responds with a JSON object and you want to pick out a specific value, use the `responseParser` property to set a Javascript snippet that manipulates the provided `json` object.
 
 For example, this `responseParser` configuration:
 

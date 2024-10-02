@@ -253,7 +253,6 @@ export async function redteamInit(directory: string | undefined) {
             body: {
               myPrompt: '{{prompt}}',
             },
-            responseParser: 'json.output',
           },
         },
       ];
