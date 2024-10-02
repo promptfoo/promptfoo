@@ -13,7 +13,7 @@ import type {
 import { type EvaluateResult } from '../types';
 
 export default class EvalResult {
-  static async create(
+  static async createFromEvaluateResult(
     evalId: string,
     result: EvaluateResult,
     promptIdx: number,
@@ -121,7 +121,17 @@ export default class EvalResult {
 
   async save() {
     const db = getDb();
-    await db.update(evalResultsTable).set(this).where(eq(evalResultsTable.id, this.id));
+    //check if this exists in the db
+    const existing = await db
+      .select({ id: evalResultsTable.id })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.id, this.id));
+    if (existing.length > 0) {
+      await db.update(evalResultsTable).set(this).where(eq(evalResultsTable.id, this.id));
+    } else {
+      const result = await db.insert(evalResultsTable).values(this).returning();
+      this.id = result[0].id;
+    }
   }
 
   toEvaluateResult(): EvaluateResult {

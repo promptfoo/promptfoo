@@ -12,6 +12,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { createPublicUrl } from '../commands/share';
+import { VERSION } from '../constants';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type {
@@ -66,7 +67,7 @@ export function createApp() {
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
   app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK' });
+    res.status(200).json({ status: 'OK', version: VERSION });
   });
 
   app.get('/api/results', async (req, res) => {
@@ -164,16 +165,26 @@ export function createApp() {
     return res.json(result);
   });
 
-  app.post('/api/eval:evalId/results', async (req, res) => {
+  app.post('/api/eval/:evalId/results', async (req, res) => {
     const results = req.body as EvalResult[];
     const failedItems: { index: number; error: string; data: EvalResult }[] = [];
+    const eval_ = await Eval.findById(req.params.evalId);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
 
-    const savePromises = results.map((result, index) =>
-      new EvalResult(result).save().catch((error) => {
-        failedItems.push({ index, error: error.message, data: result });
+    console.log('saving results', { numResults: results.length, evalId: eval_.id });
+
+    const savePromises = results.map((result, index) => {
+      invariant(result.evalId === eval_.id, 'Eval ID mismatch');
+      try {
+        return new EvalResult(result).save();
+      } catch (error) {
+        failedItems.push({ index, error: (error as Error).message, data: result });
         return null;
-      }),
-    );
+      }
+    });
 
     await Promise.all(savePromises);
 
@@ -194,20 +205,52 @@ export function createApp() {
 
   // @ts-ignore
   app.post('/api/eval', async (req, res) => {
-    const { data: payload } = req.body as { data: ResultsFile };
+    const body = req.body;
 
     try {
-      if (payload.version === 3) {
+      if (body.data) {
+        logger.debug('[POST /api/eval] Saving eval results (v3) to database');
+        const { data: payload } = req.body as { data: ResultsFile };
         const id = await writeResultsToDatabase(payload.results, payload.config);
         res.json({ id });
       } else {
-        const oldEval = payload as unknown as EvalV4;
-        const eval_ = await Eval.create(oldEval.config, oldEval.prompts || [], {
-          id: oldEval.id,
-          createdAt: new Date(oldEval.createdAt),
-          author: oldEval.author,
+        const incEval = body as unknown as EvalV4;
+        logger.debug('[POST /api/eval] Saving eval results (v4) to database');
+        const eval_ = await Eval.create(incEval.config, incEval.prompts || [], {
+          author: incEval.author,
         });
-        res.json({ id: eval_.id });
+        logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
+        const failedItems: { index: number; error: string; data: EvalResult }[] = [];
+        await Promise.all(
+          incEval.results.map(async (result, index) => {
+            result.evalId = eval_.id;
+            result.id = uuidv4();
+            try {
+              await new EvalResult(result).save();
+              logger.debug(`[POST /api/eval] Saved result ${result.id} to eval ${eval_.id}`);
+            } catch (error) {
+              logger.error(
+                `[POST /api/eval] Failed to save result ${result.id} to eval ${eval_.id}: ${error}`,
+              );
+              failedItems.push({ index, error: (error as Error).message, data: result });
+              return null;
+            }
+          }),
+        );
+        logger.debug(
+          `[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`,
+        );
+
+        if (failedItems.length > 0) {
+          res.status(207).json({
+            id: eval_.id,
+            message: `Eval created, but some results failed to save. ${incEval.results.length - failedItems.length} created, ${failedItems.length} failed.`,
+            failedItems,
+            successCount: incEval.results.length - failedItems.length,
+          });
+        } else {
+          res.json({ id: eval_.id });
+        }
       }
     } catch (error) {
       console.error('Failed to write eval to database', error);
@@ -274,7 +317,9 @@ export function createApp() {
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
-    const url = await createPublicUrl(result.result, true);
+    const eval_ = await Eval.findById(id);
+    invariant(eval_, 'Eval not found');
+    const url = await createPublicUrl(result.result, true, eval_);
     res.json({ url });
   });
 

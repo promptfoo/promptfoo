@@ -27,12 +27,12 @@ import type {
   UnifiedConfig,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
-import { randomSequence, sha256 } from '../util/createHash';
+import { sha256 } from '../util/createHash';
 import EvalResult from './evalResult';
 import type Provider from './provider';
 
 export function getEvalId(createdAt: Date = new Date()) {
-  return `eval-${createdAt.toISOString().slice(0, 19)}-${randomSequence(3)}`;
+  return `eval-${createdAt.toISOString().slice(0, 19)}`;
 }
 
 export interface EvalV4 extends Omit<Eval, 'oldResults'> {}
@@ -350,7 +350,13 @@ export default class Eval {
   }
 
   async addResult(result: EvaluateResult, columnIdx: number, rowIdx: number, test: AtomicTestCase) {
-    const newResult = await EvalResult.create(this.id, result, columnIdx, rowIdx, test);
+    const newResult = await EvalResult.createFromEvaluateResult(
+      this.id,
+      result,
+      columnIdx,
+      rowIdx,
+      test,
+    );
     this.results.push(newResult);
   }
 
@@ -380,6 +386,14 @@ export default class Eval {
     this.results = await EvalResult.findManyByEvalId(this.id);
   }
 
+  async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
+    if (this.useOldResults()) {
+      invariant(this.oldResults, 'Old results not found');
+      return this.oldResults.results;
+    }
+    await this.loadResults();
+    return this.results;
+  }
   async toEvaluateSummary(): Promise<EvaluateSummary> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
@@ -427,7 +441,7 @@ export default class Eval {
       datasetId: this.datasetId || null,
     };
 
-    if (this.useOldResults() && generateTable) {
+    if (!this.useOldResults() && generateTable) {
       results.results.table = await this.getTable();
     }
     return results;
