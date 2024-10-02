@@ -12,13 +12,10 @@ import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { createPublicUrl } from '../commands/share';
-import { VERSION } from '../constants';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type {
-  EvaluateSummary,
   EvaluateTestSuiteWithEvaluateOptions,
-  GradingResult,
   Job,
   Prompt,
   PromptWithMetadata,
@@ -28,8 +25,6 @@ import type {
 } from '../index';
 import promptfoo from '../index';
 import logger from '../logger';
-import Eval from '../models/eval';
-import TestCaseResult from '../models/test_case_result';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
   getPrompts,
@@ -68,19 +63,18 @@ export function createApp() {
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
   app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', version: VERSION });
+    res.status(200).json({ status: 'OK' });
   });
 
   app.get('/api/results', async (req, res) => {
     const datasetId = req.query.datasetId as string | undefined;
-    const results = await listPreviousResults(
+    const previousResults = await listPreviousResults(
       undefined /* limit */,
-      undefined /* filterDescription */,
+      undefined /* offset */,
       datasetId,
     );
-
     res.json({
-      data: results.map((meta) => {
+      data: previousResults.map((meta) => {
         return {
           ...meta,
           label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
@@ -136,26 +130,12 @@ export function createApp() {
     }
   });
 
-  app.patch('/api/eval/:id', async (req, res) => {
+  app.patch('/api/eval/:id', (req, res) => {
     const id = req.params.id;
     const { table, config } = req.body;
 
     if (!id) {
       res.status(400).json({ error: 'Missing id' });
-      return;
-    }
-
-    const eval_ = await Eval.findById(id);
-    if (!eval_) {
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
-
-    if (!eval_.useOldResults() && table) {
-      res.status(400).json({
-        error:
-          'This eval is not compatible with this endpoint. Update the individual results instead.',
-      });
       return;
     }
 
@@ -166,37 +146,13 @@ export function createApp() {
       res.status(500).json({ error: 'Failed to update eval table' });
     }
   });
-  // @ts-ignore
-  app.post('/api/eval/:evalId/results/:id/rating', async (req, res) => {
-    const { id } = req.params;
-    const gradingResult = req.body as GradingResult;
-    const result = await TestCaseResult.findById(id);
-    invariant(result, 'Result not found');
-    result.gradingResult = gradingResult;
-    result.success = gradingResult.pass;
-    result.score = gradingResult.score;
-
-    await result.save();
-    return res.json(result);
-  });
 
   app.post('/api/eval', async (req, res) => {
     const { data: payload } = req.body as { data: ResultsFile };
 
     try {
-      if (payload.version < 4) {
-        const results = payload.results as EvaluateSummary;
-        const id = await writeResultsToDatabase(results, payload.config);
-        res.json({ id });
-      } else {
-        const incEval = payload as unknown as Eval;
-        const eval_ = await Eval.create(incEval.config, incEval.prompts, {
-          id: incEval.id,
-          createdAt: new Date(incEval.createdAt),
-          author: incEval.author,
-        });
-        res.json({ id: eval_.id });
-      }
+      const id = await writeResultsToDatabase(payload.results, payload.config);
+      res.json({ id });
     } catch (error) {
       console.error('Failed to write eval to database', error);
       res.status(500).json({ error: 'Failed to write eval to database' });
@@ -217,7 +173,7 @@ export function createApp() {
     const { id } = req.params;
     const file = await readResult(id);
     if (!file) {
-      res.status(404).send();
+      res.status(404).send('Result not found');
       return;
     }
     res.json({ data: file.result });
@@ -292,6 +248,7 @@ export function startServer(
   filterDescription?: string,
 ) {
   const app = createApp();
+
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
     cors: {
