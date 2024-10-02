@@ -140,14 +140,17 @@ export async function doEval(
       );
     }
 
-    const resultsFile = cmdObj.write ? await Eval.create(config, testSuite.prompts) : null;
-    const summary = await evaluate(testSuite, resultsFile, {
+    // We're going to write everything to the database and then delete it later so we can eventually(tm) remove the results array and table from the evaluate function. Nothing should be held in memory.
+    const eval_ = await Eval.create(config, testSuite.prompts);
+    const summary = await evaluate(testSuite, eval_, {
       ...options,
       eventSource: 'cli',
     });
 
     const shareableUrl =
-      cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
+      cmdObj.share && config.sharing
+        ? await createShareableUrl(summary, config, false, eval_)
+        : null;
 
     if (cmdObj.table && getLogLevel() !== 'debug') {
       // Output CLI table
@@ -180,7 +183,7 @@ export async function doEval(
       }
     }
 
-    const evalId = resultsFile?.id || getEvalId();
+    const evalId = eval_?.id || getEvalId();
 
     const { outputPath } = config;
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
@@ -208,6 +211,7 @@ export async function doEval(
         );
       }
     } else {
+      await eval_.delete();
       logger.info(`${chalk.green('✔')} Evaluation complete`);
     }
     printBorder();

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../database';
-import { testCaseResults } from '../database/tables';
+import { evalResultsTable } from '../database/tables';
 import { hashPrompt } from '../prompts/utils';
 import type {
   AtomicTestCase,
@@ -12,17 +12,7 @@ import type {
 } from '../types';
 import { type EvaluateResult } from '../types';
 
-export interface TestCaseResultJSON extends EvaluateResult {
-  promptIdx: number;
-  testCaseIdx: number;
-  testCase: AtomicTestCase;
-  prompt: Prompt;
-  promptId: string;
-  error?: string | null;
-  pass: boolean;
-}
-
-export default class TestCaseResult {
+export default class EvalResult {
   static async create(
     evalId: string,
     result: EvaluateResult,
@@ -36,7 +26,7 @@ export default class TestCaseResult {
       result;
 
     const dbResult = await db
-      .insert(testCaseResults)
+      .insert(evalResultsTable)
       .values({
         id: randomUUID(),
         evalId,
@@ -56,22 +46,22 @@ export default class TestCaseResult {
         cost,
       })
       .returning();
-    return new TestCaseResult(dbResult[0]);
+    return new EvalResult(dbResult[0]);
   }
 
   static async findById(id: string) {
     const db = getDb();
-    const result = await db.select().from(testCaseResults).where(eq(testCaseResults.id, id));
-    return result.length > 0 ? new TestCaseResult(result[0]) : null;
+    const result = await db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id));
+    return result.length > 0 ? new EvalResult(result[0]) : null;
   }
 
   static async findManyByEvalId(evalId: string) {
     const db = getDb();
     const results = await db
       .select()
-      .from(testCaseResults)
-      .where(eq(testCaseResults.evalId, evalId));
-    return results.map((result) => new TestCaseResult(result));
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, evalId));
+    return results.map((result) => new EvalResult(result));
   }
 
   id: string;
@@ -131,7 +121,7 @@ export default class TestCaseResult {
 
   async save() {
     const db = getDb();
-    await db.update(testCaseResults).set(this).where(eq(testCaseResults.id, this.id));
+    await db.update(evalResultsTable).set(this).where(eq(evalResultsTable.id, this.id));
   }
 
   toEvaluateResult(): EvaluateResult {

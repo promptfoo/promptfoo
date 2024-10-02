@@ -16,6 +16,7 @@ import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type {
   EvaluateTestSuiteWithEvaluateOptions,
+  GradingResult,
   Job,
   Prompt,
   PromptWithMetadata,
@@ -25,6 +26,8 @@ import type {
 } from '../index';
 import promptfoo from '../index';
 import logger from '../logger';
+import Eval, { type EvalV4 } from '../models/eval';
+import EvalResult from '../models/evalResult';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
   getPrompts,
@@ -147,12 +150,65 @@ export function createApp() {
     }
   });
 
+  // @ts-ignore
+  app.post('/api/eval/:evalId/results/:id/rating', async (req, res) => {
+    const { id } = req.params;
+    const gradingResult = req.body as GradingResult;
+    const result = await EvalResult.findById(id);
+    invariant(result, 'Result not found');
+    result.gradingResult = gradingResult;
+    result.success = gradingResult.pass;
+    result.score = gradingResult.score;
+
+    await result.save();
+    return res.json(result);
+  });
+
+  app.post('/api/eval:evalId/results', async (req, res) => {
+    const results = req.body as EvalResult[];
+    const failedItems: { index: number; error: string; data: EvalResult }[] = [];
+
+    const savePromises = results.map((result, index) =>
+      new EvalResult(result).save().catch((error) => {
+        failedItems.push({ index, error: error.message, data: result });
+        return null;
+      }),
+    );
+
+    await Promise.all(savePromises);
+
+    if (failedItems.length > 0) {
+      res.status(207).json({
+        message: 'Some results failed to save',
+        failedItems,
+        successCount: results.length - failedItems.length,
+      });
+    } else {
+      res.json({
+        message: 'All results added successfully',
+        successCount: results.length,
+        failedItems: [],
+      });
+    }
+  });
+
+  // @ts-ignore
   app.post('/api/eval', async (req, res) => {
     const { data: payload } = req.body as { data: ResultsFile };
 
     try {
-      const id = await writeResultsToDatabase(payload.results, payload.config);
-      res.json({ id });
+      if (payload.version === 3) {
+        const id = await writeResultsToDatabase(payload.results, payload.config);
+        res.json({ id });
+      } else {
+        const oldEval = payload as unknown as EvalV4;
+        const eval_ = await Eval.create(oldEval.config, oldEval.prompts || [], {
+          id: oldEval.id,
+          createdAt: new Date(oldEval.createdAt),
+          author: oldEval.author,
+        });
+        res.json({ id: eval_.id });
+      }
     } catch (error) {
       console.error('Failed to write eval to database', error);
       res.status(500).json({ error: 'Failed to write eval to database' });
@@ -209,6 +265,7 @@ export function createApp() {
     res.json({ data: await getTestCases() });
   });
 
+  // This is used by ResultsView.tsx to share an eval with another promptfoo instance
   app.post('/api/results/share', async (req, res) => {
     const { id } = req.body;
 

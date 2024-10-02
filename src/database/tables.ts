@@ -79,8 +79,8 @@ export const evals = sqliteTable(
   }),
 );
 
-export const testCaseResults = sqliteTable(
-  'test_case_results',
+export const evalResultsTable = sqliteTable(
+  'eval_results',
   {
     id: text('id').primaryKey(),
     createdAt: integer('created_at')

@@ -10,7 +10,7 @@ import {
   prompts as promptsTable,
   tags as tagsTable,
   evalsToTags,
-  testCaseResults,
+  evalResultsTable,
   evalsToProviders,
 } from '../database/tables';
 import logger from '../logger';
@@ -28,12 +28,14 @@ import type {
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import EvalResult from './evalResult';
 import type Provider from './provider';
-import TestCaseResult from './test_case_result';
 
 export function getEvalId(createdAt: Date = new Date()) {
   return `eval-${createdAt.toISOString().slice(0, 19)}-${randomSequence(3)}`;
 }
+
+export interface EvalV4 extends Omit<Eval, 'oldResults'> {}
 
 export default class Eval {
   id: string;
@@ -41,7 +43,7 @@ export default class Eval {
   author?: string;
   description?: string;
   config: Partial<UnifiedConfig>;
-  results: TestCaseResult[];
+  results: EvalResult[];
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummary;
@@ -58,12 +60,12 @@ export default class Eval {
         evalId: evalsTable.id,
         createdAt: evalsTable.createdAt,
         description: evalsTable.description,
-        numTests: sql`MAX(${testCaseResults.testCaseIdx} + 1)`.as('numTests'),
+        numTests: sql`MAX(${evalResultsTable.testCaseIdx} + 1)`.as('numTests'),
         datasetId: evalsToDatasets.datasetId,
       })
       .from(evalsTable)
       .leftJoin(evalsToDatasets, eq(evalsTable.id, evalsToDatasets.evalId))
-      .leftJoin(testCaseResults, eq(evalsTable.id, testCaseResults.evalId))
+      .leftJoin(evalResultsTable, eq(evalsTable.id, evalResultsTable.evalId))
       .where(
         and(
           datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
@@ -112,7 +114,7 @@ export default class Eval {
 
     const [evals, results, datasetResults] = await Promise.all([
       db.select().from(evalsTable).where(eq(evalsTable.id, id)),
-      db.select().from(testCaseResults).where(eq(testCaseResults.evalId, id)).execute(),
+      db.select().from(evalResultsTable).where(eq(evalResultsTable.evalId, id)).execute(),
       db
         .select({
           datasetId: evalsToDatasets.datasetId,
@@ -139,7 +141,7 @@ export default class Eval {
       datasetId,
     });
     if (results.length > 0) {
-      evalInstance.results = results.map((r) => new TestCaseResult(r));
+      evalInstance.results = results.map((r) => new EvalResult(r));
     } else {
       evalInstance.oldResults = eval_.results as EvaluateSummary;
     }
@@ -348,7 +350,7 @@ export default class Eval {
   }
 
   async addResult(result: EvaluateResult, columnIdx: number, rowIdx: number, test: AtomicTestCase) {
-    const newResult = await TestCaseResult.create(this.id, result, columnIdx, rowIdx, test);
+    const newResult = await EvalResult.create(this.id, result, columnIdx, rowIdx, test);
     this.results.push(newResult);
   }
 
@@ -375,7 +377,7 @@ export default class Eval {
   }
 
   async loadResults() {
-    this.results = await TestCaseResult.findManyByEvalId(this.id);
+    this.results = await EvalResult.findManyByEvalId(this.id);
   }
 
   async toEvaluateSummary(): Promise<EvaluateSummary> {
@@ -429,5 +431,17 @@ export default class Eval {
       results.results.table = await this.getTable();
     }
     return results;
+  }
+
+  async delete() {
+    const db = getDb();
+    await db.transaction(() => {
+      db.delete(evalsToDatasets).where(eq(evalsToDatasets.evalId, this.id)).run();
+      db.delete(evalsToPrompts).where(eq(evalsToPrompts.evalId, this.id)).run();
+      db.delete(evalsToTags).where(eq(evalsToTags.evalId, this.id)).run();
+      db.delete(evalsToProviders).where(eq(evalsToProviders.evalId, this.id)).run();
+      db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
+      db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
+    });
   }
 }

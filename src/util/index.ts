@@ -22,7 +22,7 @@ import {
   evalsToTags,
   prompts,
   tags,
-  testCaseResults,
+  evalResultsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { getDirectory, importModule } from '../esm';
@@ -747,7 +747,7 @@ export async function deleteEval(evalId: string) {
     await db.delete(evalsToPrompts).where(eq(evalsToPrompts.evalId, evalId)).run();
     await db.delete(evalsToDatasets).where(eq(evalsToDatasets.evalId, evalId)).run();
     await db.delete(evalsToTags).where(eq(evalsToTags.evalId, evalId)).run();
-    await db.delete(testCaseResults).where(eq(testCaseResults.evalId, evalId)).run();
+    await db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
     await db.delete(evalsToProviders).where(eq(evalsToProviders.evalId, evalId)).run();
     // Finally, delete the eval record
     const deletedIds = await db.delete(evals).where(eq(evals.id, evalId)).run();

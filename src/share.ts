@@ -9,6 +9,7 @@ import { getAuthor } from './globalConfig/accounts';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
+import Eval from './models/eval';
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
 
 /**
@@ -38,6 +39,7 @@ export async function createShareableUrl(
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
   showAuth: boolean = false,
+  databaseRecord: Eval | null = null,
 ): Promise<string | null> {
   if (process.stdout.isTTY && !isCI() && !getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
     let email = getUserEmail();
@@ -66,6 +68,7 @@ export async function createShareableUrl(
   let apiBaseUrl =
     typeof config.sharing === 'object' ? config.sharing.apiBaseUrl : SHARE_API_BASE_URL;
   // check if we're using the cloud
+
   if (cloudConfig.isEnabled()) {
     apiBaseUrl = cloudConfig.getApiHost();
 

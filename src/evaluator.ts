@@ -102,7 +102,7 @@ export function generateVarCombinations(
 }
 
 class Evaluator {
-  resultsFile: Eval | null;
+  dbRecord: Eval;
   testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
@@ -112,9 +112,9 @@ class Evaluator {
   >;
   registers: Record<string, string | object>;
 
-  constructor(testSuite: TestSuite, resultsFile: Eval | null, options: EvaluateOptions) {
+  constructor(testSuite: TestSuite, dbRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
-    this.resultsFile = resultsFile;
+    this.dbRecord = dbRecord;
     this.options = options;
     this.stats = {
       successes: 0,
@@ -634,9 +634,7 @@ class Evaluator {
       }
       const { testIdx, promptIdx } = evalStep;
       try {
-        if (this.resultsFile) {
-          await this.resultsFile.addResult(row, promptIdx, testIdx, evalStep.test);
-        }
+        await this.dbRecord.addResult(row, promptIdx, testIdx, evalStep.test);
       } catch (error) {
         logger.error(`Error adding result: ${error}`);
         logger.error(row.response);
@@ -888,10 +886,10 @@ class Evaluator {
       }
     }
 
-    if (this.resultsFile) {
-      await this.resultsFile.addPrompts(table.head.prompts);
+    if (this.dbRecord) {
+      await this.dbRecord.addPrompts(table.head.prompts);
       const providers = await Provider.createMultiple(testSuite.providers);
-      await this.resultsFile.addProviders(providers);
+      await this.dbRecord.addProviders(providers);
     }
 
     // Finish up
@@ -934,7 +932,7 @@ class Evaluator {
   }
 }
 
-export function evaluate(testSuite: TestSuite, resultsFile: Eval | null, options: EvaluateOptions) {
-  const ev = new Evaluator(testSuite, resultsFile, options);
+export function evaluate(testSuite: TestSuite, dbRecord: Eval, options: EvaluateOptions) {
+  const ev = new Evaluator(testSuite, dbRecord, options);
   return ev.evaluate();
 }
