@@ -429,7 +429,7 @@ export default class Eval {
     };
   }
 
-  async toResultsFile(generateTable: boolean = false): Promise<ResultsFile> {
+  async toResultsFile(): Promise<ResultsFile> {
     const summary = await this.toEvaluateSummary();
     const results: ResultsFile = {
       version: this.version(),
@@ -441,9 +441,6 @@ export default class Eval {
       datasetId: this.datasetId || null,
     };
 
-    if (!this.useOldResults() && generateTable) {
-      results.results.table = await this.getTable();
-    }
     return results;
   }
 
