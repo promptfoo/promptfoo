@@ -9,13 +9,18 @@ import Eval from '../models/eval';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import type { EvaluateSummary, ResultsFile } from '../types';
-import { readResult, setupEnv } from '../util';
+import { setupEnv } from '../util';
 
-export async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
+export async function createPublicUrl(
+  results: ResultsFile,
+  showAuth: boolean,
+  databaseRecord: Eval | null,
+) {
   const url = await createShareableUrl(
     results.results as EvaluateSummary,
     results.config,
     showAuth,
+    databaseRecord,
   );
   logger.info(`View results: ${chalk.greenBright.bold(url)}`);
   return url;
@@ -44,24 +49,26 @@ export function shareCommand(program: Command) {
         await telemetry.send();
 
         let results;
+        let eval_: Eval | undefined | null = null;
         if (evalId) {
-          results = (await readResult(evalId))?.result;
+          const eval_ = await Eval.findById(evalId);
+          results = await eval_?.toResultsFile();
           if (!results) {
             logger.error(`Could not load results for eval ID ${evalId}.`);
             process.exit(1);
           }
         } else {
-          const eval_ = await Eval.latest();
+          eval_ = await Eval.latest();
 
           if (!eval_) {
             logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
             process.exit(1);
           }
-          results = await eval_.toResultsFile(true);
+          results = await eval_.toResultsFile();
         }
 
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
-          await createPublicUrl(results, cmdObj.showAuth);
+          await createPublicUrl(results, cmdObj.showAuth, eval_);
         } else {
           const reader = readline.createInterface({
             input: process.stdin,
@@ -72,7 +79,7 @@ export function shareCommand(program: Command) {
           const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
           if (cloudConfig.isEnabled()) {
             logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
-            await createPublicUrl(results, cmdObj.showAuth);
+            await createPublicUrl(results, cmdObj.showAuth, eval_);
             process.exit(0);
           } else {
             reader.question(
@@ -88,7 +95,7 @@ export function shareCommand(program: Command) {
                 }
                 reader.close();
 
-                await createPublicUrl(results, cmdObj.showAuth);
+                await createPublicUrl(results, cmdObj.showAuth, eval_);
               },
             );
           }

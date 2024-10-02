@@ -39,4 +39,4 @@ CREATE TABLE `providers` (
 );
 --> statement-breakpoint
 ALTER TABLE `evals` ADD `prompts` text;--> statement-breakpoint
-CREATE INDEX `eval_result_eval_id_idx` ON `eval_results` (`eval_id`);--> statement-breakpoint
+CREATE INDEX `eval_result_eval_id_idx` ON `eval_results` (`eval_id`);
