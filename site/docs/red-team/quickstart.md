@@ -68,7 +68,6 @@ targets:
         'Content-Type': 'application/json'
       body:
         myPrompt: '{{prompt}}'
-      responseParser: 'json.output'
 
 purpose: 'Budget travel agent'
 ```
