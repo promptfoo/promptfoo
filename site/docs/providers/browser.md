@@ -195,6 +195,39 @@ Steps are executed sequentially, enabling complex web interactions.
 
 All string values in `args` support Nunjucks templating, allowing use of variables like `{{prompt}}`.
 
+## Testing Streamlit applications
+
+Streamlit applications follow a common pattern where `data-testid` attributes are used to identify elements.
+
+Here's an example configuration:
+
+```yaml
+providers:
+  - id: browser
+    config:
+      headless: true # set to false to see the browser
+      steps:
+        # Load the page - make sure you get the full URL if it's in an iframe!
+        - action: navigate
+          args:
+            url: 'https://doc-chat-llm.streamlit.app/~/+/'
+        # Enter the message and press enter
+        - action: type
+          args:
+            selector: 'textarea'
+            text: '{{prompt}} <enter>'
+        # Wait for the response
+        - action: wait
+          args:
+            ms: 5000
+        # Read the response
+        - action: extract
+          args:
+            selector: 'div.stChatMessage:last-of-type'
+          name: response
+      responseParser: 'extracted.response'
+```
+
 ## Troubleshooting
 
 ### Iframes
