@@ -1,4 +1,4 @@
-import { chromium, type Page, type ElementHandle } from 'playwright';
+import { chromium, type Page, type ElementHandle, devices } from 'playwright';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
@@ -78,7 +78,11 @@ export class BrowserProvider implements ApiProvider {
       headless: this.headless,
       args: ['--ignore-certificate-errors'],
     });
-    const page = await browser.newPage();
+    const browserContext = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      ...devices['Desktop Chrome'],
+    });
+    const page = await browserContext.newPage();
     const extracted: Record<string, any> = {};
 
     try {
