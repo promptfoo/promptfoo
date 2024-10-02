@@ -23,13 +23,13 @@ async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
     return false;
   }
   const responseJson = await response.json();
-  console.log({ responseJson });
   return 'version' in responseJson;
 }
 
 async function sendEvalResults(dbRecord: Eval, apiHost: string) {
   await dbRecord.loadResults();
   logger.debug(`Sending eval results (v4) to ${apiHost}`);
+  console.log(JSON.stringify(dbRecord));
   const response = await fetchWithProxy(`${apiHost}/api/eval`, {
     method: 'POST',
     headers: {

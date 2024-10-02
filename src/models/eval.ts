@@ -27,12 +27,12 @@ import type {
   UnifiedConfig,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
-import { sha256 } from '../util/createHash';
+import { randomSequence, sha256 } from '../util/createHash';
 import EvalResult from './evalResult';
 import type Provider from './provider';
 
 export function getEvalId(createdAt: Date = new Date()) {
-  return `eval-${createdAt.toISOString().slice(0, 19)}`;
+  return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
 export interface EvalV4 extends Omit<Eval, 'oldResults'> {}
