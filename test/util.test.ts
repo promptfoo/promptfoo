@@ -3,7 +3,6 @@ import { globSync } from 'glob';
 import * as path from 'path';
 import cliState from '../src/cliState';
 import * as googleSheets from '../src/googleSheets';
-import { runDbMigrations } from '../src/migrate';
 import type { ApiProvider, EvaluateResult, EvaluateTable, TestCase } from '../src/types';
 import {
   maybeLoadFromExternalFile,
@@ -16,9 +15,7 @@ import {
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
-  listPreviousResults,
 } from '../src/util';
-import EvalFactory from './factories/evalFactory';
 import { TestGrader } from './utils';
 
 jest.mock('proxy-agent', () => ({

@@ -27,7 +27,7 @@ import type {
 } from '../index';
 import promptfoo from '../index';
 import logger from '../logger';
-import Eval, { type EvalV4 } from '../models/eval';
+import Eval from '../models/eval';
 import EvalResult from '../models/evalResult';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
@@ -176,7 +176,7 @@ export function createApp() {
         const id = await writeResultsToDatabase(payload.results, payload.config);
         res.json({ id });
       } else {
-        const incEval = body as unknown as EvalV4;
+        const incEval = body as unknown as Eval;
         logger.debug('[POST /api/eval] Saving eval results (v4) to database');
         const eval_ = await Eval.create(incEval.config, incEval.prompts || [], {
           author: incEval.author,

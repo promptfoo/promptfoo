@@ -1,7 +1,6 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import type EvalResult from '../models/evalResult';
 import type { RedteamAssertionTypes, RedteamFileConfig } from '../redteam/types';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import {

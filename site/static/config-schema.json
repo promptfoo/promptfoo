@@ -320,7 +320,8 @@
                               },
                               "delay": {
                                 "type": "number"
-                              }
+                              },
+                              "config": {}
                             },
                             "additionalProperties": false
                           }
