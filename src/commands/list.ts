@@ -25,10 +25,8 @@ export function listCommand(program: Command) {
       const evals = await Eval.getAll(Number(cmdObj.n) || undefined);
 
       const tableDataPromises = evals.map(async (evl) => {
-        const prompts = evl.isVersion3() ? evl.oldResults?.table?.head.prompts || [] : evl.prompts;
-        const vars = evl.isVersion3()
-          ? evl.oldResults?.table?.head.vars || []
-          : (await evl.getVars()) || [];
+        const prompts = evl.getPrompts();
+        const vars = await evl.getVars();
         return {
           'Eval ID': evl.id,
           Description: evl.description || '',

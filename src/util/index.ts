@@ -21,7 +21,6 @@ import {
   evalsToProviders,
   evalsToTags,
   prompts,
-  providers,
   tags,
   testCaseResults,
 } from '../database/tables';
