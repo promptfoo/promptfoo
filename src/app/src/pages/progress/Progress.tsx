@@ -1,5 +1,3 @@
-'use client';
-
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { callApi } from '@app/utils/api';

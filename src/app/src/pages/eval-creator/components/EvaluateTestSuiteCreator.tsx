@@ -1,5 +1,3 @@
-'use client';
-
 import React, { useState, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import type { ProviderOptions, TestCase, TestSuiteConfig } from '@app/pages/eval/components/types';
