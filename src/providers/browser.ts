@@ -1,6 +1,4 @@
 import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
-import { chromium } from 'playwright-extra';
-import stealth from 'puppeteer-extra-plugin-stealth';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
@@ -83,6 +81,16 @@ export class BrowserProvider implements ApiProvider {
       ...(context?.vars || {}),
       prompt,
     };
+
+    let chromium, stealth;
+    try {
+      ({ chromium } = await import('playwright-extra'));
+      ({ default: stealth } = await import('puppeteer-extra-plugin-stealth'));
+    } catch (error) {
+      return {
+        error: `Failed to import required modules. Please ensure the following packages are installed:\n\tplaywright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
 
     chromium.use(stealth());
 
