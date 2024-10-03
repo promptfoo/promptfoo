@@ -140,7 +140,7 @@ export async function doEval(
       );
     }
 
-    // We're going to write everything to the database and then delete it later so we can eventually(tm) remove the results array and table from the evaluate function. Nothing should be held in memory.
+    // TODO(steve): We're going to write everything to the database and then delete it later so we can eventually(tm) remove the results array and table from the evaluate function. Nothing should be held in memory.
     const eval_ = await Eval.create(config, testSuite.prompts);
     const summary = await evaluate(testSuite, eval_, {
       ...options,

@@ -34,7 +34,7 @@ const TopFailingCategories: React.FC<TopFailingCategoriesProps> = ({ evals }) =>
           const failPercentage =
             data.currentTotalCount === 0
               ? 0
-              : (data.currentFailCount / data.currentTotalCount) * 100;
+              : ((data.currentFailCount / data.currentTotalCount) * 100).toFixed(1);
 
           return (
             <ListItem key={index}>

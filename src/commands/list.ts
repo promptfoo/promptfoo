@@ -35,7 +35,6 @@ export function listCommand(program: Command) {
         };
       });
       const tableData = await Promise.all(tableDataPromises);
-      // @ts-ignore
       logger.info(wrapTable(tableData));
       printBorder();
 

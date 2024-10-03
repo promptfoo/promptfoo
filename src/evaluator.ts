@@ -636,8 +636,7 @@ class Evaluator {
       try {
         await this.dbRecord.addResult(row, promptIdx, testIdx, evalStep.test);
       } catch (error) {
-        logger.error(`Error adding result: ${error}`);
-        logger.error(row.response);
+        logger.error(`Error adding result: ${error} ${JSON.stringify(row.response)}`);
       }
 
       // Bookkeeping for table

@@ -203,7 +203,7 @@ function ResultsTable({
       } else {
         try {
           let response;
-          if (version >= 4) {
+          if (version && version >= 4) {
             response = await callApi(`/eval/${evalId}/results/${resultId}/rating`, {
               method: 'POST',
               headers: {

@@ -136,23 +136,23 @@ export default class EvalResult {
 
   toEvaluateResult(): EvaluateResult {
     return {
-      id: this.id,
-      promptIdx: this.promptIdx,
-      testCaseIdx: this.testCaseIdx,
-      testCase: this.testCase,
-      prompt: this.prompt,
-      promptId: this.promptId,
-      error: this.error || undefined,
-      score: this.score,
-      response: this.providerResponse || undefined,
-      success: this.success,
-      vars: this.testCase.vars || {},
+      cost: this.cost,
       description: this.description || undefined,
-      provider: this.provider,
+      error: this.error || undefined,
+      gradingResult: this.gradingResult,
+      id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
-      cost: this.cost,
-      gradingResult: this.gradingResult,
+      prompt: this.prompt,
+      promptId: this.promptId,
+      promptIdx: this.promptIdx,
+      provider: this.provider,
+      response: this.providerResponse || undefined,
+      score: this.score,
+      success: this.success,
+      testCase: this.testCase,
+      testCaseIdx: this.testCaseIdx,
+      vars: this.testCase.vars || {},
     };
   }
 }
