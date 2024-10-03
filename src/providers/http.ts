@@ -39,7 +39,7 @@ export async function createResponseParser(
     return (data, text) => ({ output: parser(data, text) });
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = path.resolve(cliState.basePath || '', parser.slice('file://'.length));
+    let filename = parser.slice('file://'.length);
     let functionName: string | undefined;
     if (filename.includes(':')) {
       const splits = filename.split(':');
@@ -47,7 +47,10 @@ export async function createResponseParser(
         [filename, functionName] = splits;
       }
     }
-    const requiredModule = await importModule(filename, functionName);
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
     if (typeof requiredModule === 'function') {
       return requiredModule;
     }
