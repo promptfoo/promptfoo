@@ -45,6 +45,7 @@ export default class Eval {
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummary;
+  persisted: boolean;
 
   static async summaryResults(
     limit: number = DEFAULT_QUERY_LIMIT,
@@ -137,9 +138,10 @@ export default class Eval {
       description: eval_.description || undefined,
       prompts: eval_.prompts || [],
       datasetId,
+      persisted: true,
     });
     if (results.length > 0) {
-      evalInstance.results = results.map((r) => new EvalResult(r));
+      evalInstance.results = results.map((r) => new EvalResult({ ...r, persisted: true }));
     } else {
       evalInstance.oldResults = eval_.results as EvaluateSummary;
     }
@@ -163,6 +165,7 @@ export default class Eval {
           author: e.author || undefined,
           description: e.description || undefined,
           prompts: e.prompts || [],
+          persisted: true,
         }),
     );
   }
@@ -260,7 +263,7 @@ export default class Eval {
         }
       }
     });
-    return new Eval(config, { id: evalId, author: opts?.author, createdAt });
+    return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
   }
 
   constructor(
@@ -272,6 +275,7 @@ export default class Eval {
       description?: string;
       prompts?: CompletedPrompt[];
       datasetId?: string;
+      persisted?: boolean;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -282,6 +286,7 @@ export default class Eval {
     this.results = [];
     this.prompts = opts?.prompts || [];
     this.datasetId = opts?.datasetId;
+    this.persisted = opts?.persisted || false;
   }
 
   version() {
@@ -316,6 +321,7 @@ export default class Eval {
       updateObj.results = this.oldResults;
     }
     await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    this.persisted = true;
   }
 
   async getVars() {
@@ -354,6 +360,7 @@ export default class Eval {
       columnIdx,
       rowIdx,
       test,
+      { persist: this.persisted },
     );
     this.results.push(newResult);
   }
