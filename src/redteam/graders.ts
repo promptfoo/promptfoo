@@ -21,6 +21,7 @@ import { RbacGrader } from './plugins/rbac';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import { MathPromptGrader } from './plugins/mathPrompt'; // Import the MathPromptGrader
 
 export const GRADERS = {
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
@@ -73,6 +74,7 @@ export const GRADERS = {
   'promptfoo:redteam:pii:social': new PiiGrader(),
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
+  'promptfoo:redteam:mathprompt': new MathPromptGrader(), // Add the MathPromptGrader here
 };
 
 export function getGraderById(id: string): RedteamModelGrader | undefined {

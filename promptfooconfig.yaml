@@ -1,0 +1,14 @@
+providers:
+  - id: openai:chat:gpt-4o
+purpose: 'Budget travel agent'
+
+
+targets:
+  - openai:gpt-4o-mini
+
+redteam:
+  plugins:
+    - id: 'mathprompt'
+      numTests: 10
+
+

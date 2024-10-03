@@ -104,6 +104,7 @@ export const ADDITIONAL_PLUGINS = [
   'sql-injection',
   'indirect-prompt-injection',
   'ascii-smuggling',
+  'mathprompt', // Added mathprompt to Additional Plugins
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -443,4 +444,5 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
   'indirect-prompt-injection':
     'Tests if the prompt is vulnerable to instructions injected into variables in the prompt',
+  mathprompt: 'Attempts to bypass security measures using mathematical problem encoding', // Added description for mathprompt
 };

@@ -11,6 +11,7 @@ import { type PluginBase } from './base';
 import { BflaPlugin } from './bfla';
 import { BolaPlugin } from './bola';
 import { CompetitorPlugin } from './competitors';
+import { MathPromptPlugin } from './mathPrompt'; // Added MathPromptPlugin import
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { DebugAccessPlugin } from './debugAccess';
@@ -127,6 +128,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(BolaPlugin, 'bola'),
   createPluginFactory(BflaPlugin, 'bfla'),
   createPluginFactory(SsrfPlugin, 'ssrf'),
+  createPluginFactory(MathPromptPlugin, 'mathprompt'), // Added MathPromptPlugin factory
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
   ),
