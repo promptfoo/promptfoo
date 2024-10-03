@@ -120,7 +120,7 @@ export interface RunEvalOptions {
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions: EvaluateOptions;
 
-  testIdx: number;
+  testCaseIdx: number;
   promptIdx: number;
   repeatIndex: number;
 }

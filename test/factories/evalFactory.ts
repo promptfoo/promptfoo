@@ -67,8 +67,6 @@ export default class EvalFactory {
         cost: 0.007,
         metadata: {},
       },
-      0,
-      0,
       { vars: { state: 'colorado' }, assert: [{ type: 'contains', value: 'Denver' }] },
     );
     await eval_.addResult(
@@ -120,8 +118,6 @@ export default class EvalFactory {
         cost: 0.007,
         metadata: {},
       },
-      0,
-      0,
       { vars: { state: 'california' }, assert: [{ type: 'contains', value: 'Sacramento' }] },
     );
 

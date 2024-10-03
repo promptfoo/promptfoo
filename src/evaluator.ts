@@ -137,7 +137,7 @@ class Evaluator {
     delay,
     nunjucksFilters: filters,
     evaluateOptions,
-    testIdx,
+    testCaseIdx,
     promptIdx,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the label, not renderedPrompt
@@ -251,8 +251,8 @@ class Evaluator {
         latencyMs,
         cost: response.cost,
         metadata: response.metadata,
-        promptIdx: -1,
-        testCaseIdx: -1,
+        promptIdx,
+        testCaseIdx,
         testCase: test,
         promptId: prompt.id || '',
       };
@@ -333,7 +333,7 @@ class Evaluator {
         namedScores: {},
         latencyMs,
         promptIdx,
-        testCaseIdx: testIdx,
+        testCaseIdx,
         testCase: test,
         promptId: prompt.id || '',
       };
@@ -569,7 +569,7 @@ class Evaluator {
                 },
                 test: { ...testCase, vars, options: testCase.options },
                 nunjucksFilters: testSuite.nunjucksFilters,
-                testIdx,
+                testCaseIdx: testIdx,
                 promptIdx,
                 repeatIndex,
                 evaluateOptions: options,
@@ -632,9 +632,9 @@ class Evaluator {
       if (options.progressCallback) {
         options.progressCallback(results.length, runEvalOptions.length, index, evalStep);
       }
-      const { testIdx, promptIdx } = evalStep;
+      const { testCaseIdx, promptIdx } = row;
       try {
-        await this.dbRecord.addResult(row, promptIdx, testIdx, evalStep.test);
+        await this.dbRecord.addResult(row, evalStep.test);
       } catch (error) {
         logger.error(`Error adding result: ${error} ${JSON.stringify(row.response)}`);
       }
@@ -658,8 +658,8 @@ class Evaluator {
         resultText = outputTextDisplay;
       }
 
-      if (!table.body[testIdx]) {
-        table.body[testIdx] = {
+      if (!table.body[testCaseIdx]) {
+        table.body[testCaseIdx] = {
           description: evalStep.test.description,
           outputs: [],
           test: evalStep.test,
@@ -674,8 +674,8 @@ class Evaluator {
             .flat(),
         };
       }
-      table.body[testIdx].outputs[promptIdx] = {
-        id: `${testIdx}-${promptIdx}`,
+      table.body[testCaseIdx].outputs[promptIdx] = {
+        id: `${testCaseIdx}-${promptIdx}`,
         pass: row.success,
         score: row.score,
         namedScores: row.namedScores,
