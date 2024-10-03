@@ -101,7 +101,7 @@ export class AssertionsResult {
       return this.result;
     }
 
-    const score = this.totalScore / this.totalWeight;
+    const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
     let pass = !this.failedReason;
 
     let reason = this.failedReason ? this.failedReason : 'All assertions passed';
