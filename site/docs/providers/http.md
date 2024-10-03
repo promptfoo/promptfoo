@@ -18,7 +18,7 @@ providers:
         'Content-Type': 'application/json'
       body:
         myPrompt: '{{prompt}}'
-      responseParser: 'json.output'
+      responseParser: 'json.output' # extract the "output" field from the response
 ```
 
 The placeholder variable `{{prompt}}` will be replaced by the final prompt for the test case. You can also reference test variables as you construct the request:
@@ -61,7 +61,7 @@ providers:
           "prompt": "{{prompt}}",
           "max_tokens": 100
         }
-      responseParser: 'json.text'
+      responseParser: 'json.content' # extract the "content" field from the response
 ```
 
 In this example:
@@ -124,7 +124,7 @@ Note that any valid JSON string within `body` will be converted to a JSON object
 
 ## Parsing a JSON response
 
-If your API responds with a JSON object and you want to pick out a specific value, use the `responseParser` property to set a Javascript snippet that manipulates the provided `json` object.
+By default, the entire response is returned as the output. If your API responds with a JSON object and you want to pick out a specific value, use the `responseParser` property to set a Javascript snippet that manipulates the provided `json` object.
 
 For example, this `responseParser` configuration:
 
@@ -224,19 +224,101 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 }
 ```
 
+## Response parser
+
+The `responseParser` option allows you to extract and transform the API response. If no `responseParser` is specified, the provider will attempt to parse the response as JSON. If JSON parsing fails, it will return the raw text response.
+
+You can override this behavior by specifying a `responseParser` in the provider config. The `responseParser` can be one of the following:
+
+1. A string containing a JavaScript expression
+2. A function
+3. A file path (prefixed with `file://`) to a JavaScript module
+
+### String parser
+
+You can use a string containing a JavaScript expression to extract data from the response:
+
+```yaml
+providers:
+  - id: 'https://example.com/api'
+    config:
+      responseParser: 'json.choices[0].message.content'
+```
+
+This expression will be evaluated with two variables available:
+
+- `json`: The parsed JSON response (if the response is valid JSON)
+- `text`: The raw text response
+
+### Function parser
+
+When using promptfoo as a Node.js library, you can provide a function as the response parser:
+
+```javascript
+{
+  providers: [{
+    id: 'https://example.com/generate',
+    config: {
+      responseParser: (json, text) => {
+        // Custom parsing logic
+        return json.choices[0].message.content;
+      },
+    }
+  }],
+}
+```
+
+### File-based parser
+
+You can use a JavaScript file as a response parser by specifying the file path with the `file://` prefix. The file path is resolved relative to the directory containing the promptfoo configuration file.
+
+```yaml
+providers:
+  - id: 'https://example.com/api'
+    config:
+      responseParser: 'file://path/to/parser.js'
+```
+
+The parser file should export a function that takes two arguments (`json` and `text`) and returns the parsed output. For example:
+
+```javascript
+module.exports = (json, text) => {
+  return json.choices[0].message.content;
+};
+```
+
+You can also use a default export:
+
+```javascript
+export default (json, text) => {
+  return json.choices[0].message.content;
+};
+```
+
+You can also specify a function name to be imported from a file:
+
+```yaml
+providers:
+  - id: 'https://example.com/api'
+    config:
+      responseParser: 'file://path/to/parser.js:parseResponse'
+```
+
+This will import the function `parseResponse` from the file `path/to/parser.js`.
+
 ## Reference
 
 Supported config options:
 
-| Option         | Type                     | Description                                                                                                                                   |
-| -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| url            | string                   | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                       |
-| request        | string                   | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                             |
-| method         | string                   | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                                                   |
-| headers        | Record\<string, string\> | Key-value pairs of HTTP headers to include in the request.                                                                                    |
-| body           | Record\<string, any\>    | The request body. For POST requests, this will be sent as JSON.                                                                               |
-| queryParams    | Record\<string, string\> | Key-value pairs of query parameters to append to the URL.                                                                                     |
-| responseParser | string \| Function       | A function or string representation of a function to parse the response. If not provided, the entire response will be returned as the output. |
+| Option         | Type                     | Description                                                                                                                                                                             |
+| -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| url            | string                   | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                                 |
+| request        | string                   | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                       |
+| method         | string                   | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                                                                                             |
+| headers        | Record\<string, string\> | Key-value pairs of HTTP headers to include in the request.                                                                                                                              |
+| body           | Record\<string, any\>    | The request body. For POST requests, this will be sent as JSON.                                                                                                                         |
+| queryParams    | Record\<string, string\> | Key-value pairs of query parameters to append to the URL.                                                                                                                               |
+| responseParser | string \| Function       | A function, a string representation of a function, or a file path (prefixed with `file://`) to parse the response. If not provided, the entire response will be returned as the output. |
 
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 

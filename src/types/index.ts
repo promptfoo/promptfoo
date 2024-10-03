@@ -27,9 +27,9 @@ export const CommandLineOptionsSchema = z.object({
   output: z.array(z.string()),
 
   // Shared with EvaluateOptions
-  maxConcurrency: z.string(),
-  repeat: z.string(),
-  delay: z.string(),
+  maxConcurrency: z.coerce.number().int().positive().optional(),
+  repeat: z.coerce.number().int().positive().optional(),
+  delay: z.coerce.number().int().nonnegative().default(0),
 
   // Command line only
   vars: z.string().optional(),
@@ -39,7 +39,7 @@ export const CommandLineOptionsSchema = z.object({
   modelOutputs: z.string().optional(),
   verbose: z.boolean().optional(),
   grader: z.string().optional(),
-  tableCellMaxLength: z.string().optional(),
+  tableCellMaxLength: z.coerce.number().int().positive().optional(),
   write: z.boolean().optional(),
   cache: z.boolean().optional(),
   table: z.boolean().optional(),
@@ -47,7 +47,7 @@ export const CommandLineOptionsSchema = z.object({
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
   filterFailing: z.string().optional(),
-  filterFirstN: z.string().optional(),
+  filterFirstN: z.coerce.number().int().positive().optional(),
   filterPattern: z.string().optional(),
   filterProviders: z.string().optional(),
   var: z.record(z.string()).optional(),

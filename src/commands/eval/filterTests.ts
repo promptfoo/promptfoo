@@ -2,7 +2,7 @@ import type { TestSuite } from '../../types';
 import { filterFailingTests } from './filterFailingTests';
 
 interface Args {
-  firstN?: string;
+  firstN?: string | number;
   pattern?: string;
   failing?: string;
 }
@@ -34,7 +34,7 @@ export async function filterTests(testSuite: TestSuite, args: Args): Promise<Tes
   }
 
   if (firstN) {
-    const count = Number.parseInt(firstN);
+    const count = typeof firstN === 'number' ? firstN : Number.parseInt(firstN);
 
     if (Number.isNaN(count)) {
       throw new Error(`firstN must be a number, got: ${firstN}`);

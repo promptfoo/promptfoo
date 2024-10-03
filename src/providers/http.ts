@@ -1,6 +1,9 @@
 import httpZ from 'http-z';
+import path from 'path';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
+import cliState from '../cliState';
+import { importModule } from '../esm';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -9,6 +12,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
+import { isJavascriptFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
@@ -25,17 +29,42 @@ interface HttpProviderConfig {
   request?: string;
 }
 
-function createResponseParser(parser: any): (data: any, text: string) => ProviderResponse {
+export async function createResponseParser(
+  parser: string | Function | undefined,
+): Promise<(data: any, text: string) => ProviderResponse> {
+  if (!parser) {
+    return (data, text) => ({ output: data || text });
+  }
   if (typeof parser === 'function') {
-    return parser;
+    return (data, text) => ({ output: parser(data, text) });
   }
-  if (typeof parser === 'string') {
-    return new Function('json', 'text', `return ${parser}`) as (
-      data: any,
-      text: string,
-    ) => ProviderResponse;
+  if (typeof parser === 'string' && parser.startsWith('file://')) {
+    let filename = parser.slice('file://'.length);
+    let functionName: string | undefined;
+    if (filename.includes(':')) {
+      const splits = filename.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filename, functionName] = splits;
+      }
+    }
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
+    if (typeof requiredModule === 'function') {
+      return requiredModule;
+    }
+    throw new Error(
+      `Response parser malformed: ${filename} must export a function or have a default export as a function`,
+    );
+  } else if (typeof parser === 'string') {
+    return (data, text) => ({
+      output: new Function('json', 'text', `return ${parser}`)(data, text),
+    });
   }
-  return (data, text) => ({ output: data || text });
+  throw new Error(
+    `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+  );
 }
 
 export function processBody(
@@ -94,7 +123,7 @@ function parseRawRequest(input: string) {
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  responseParser: (data: any, text: string) => ProviderResponse;
+  private responseParser: Promise<(data: any, text: string) => ProviderResponse>;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config;
@@ -192,8 +221,9 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
+    const parsedOutput = (await this.responseParser)(parsedData, rawText);
     return {
-      output: this.responseParser(parsedData, rawText),
+      output: parsedOutput.output || parsedOutput,
     };
   }
 
@@ -236,8 +266,9 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
+    const parsedOutput = (await this.responseParser)(parsedData, rawText);
     return {
-      output: this.responseParser(parsedData, rawText),
+      output: parsedOutput.output || parsedOutput,
     };
   }
 }

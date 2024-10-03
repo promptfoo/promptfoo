@@ -80,7 +80,7 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.658.1",
+    "@aws-sdk/client-bedrock-runtime": "^3.663.0",
     "@azure/identity": "^4.4.1",
     "@eslint/js": "^9.11.1",
     "@libsql/client": "^0.14.0",
@@ -136,7 +136,7 @@
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
     "@googleapis/sheets": "^9.3.1",
-    "@mui/material": "^6.1.1",
+    "@mui/material": "^6.1.2",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
@@ -166,15 +166,15 @@
     "inquirer": "^10.2.2",
     "js-rouge": "3.0.0",
     "js-yaml": "^4.1.0",
-    "mathjs": "^13.1.1",
+    "mathjs": "^13.2.0",
     "node-cache": "^5.1.2",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
-    "openai": "^4.66.1",
+    "openai": "^4.67.1",
     "opener": "^1.5.2",
     "proxy-agent": "^6.4.0",
     "python-shell": "^5.0.0",
-    "replicate": "^0.34.0",
+    "replicate": "^0.34.1",
     "rfdc": "^1.4.1",
     "semver": "^7.6.3",
     "socket.io": "^4.8.0",
@@ -182,7 +182,8 @@
     "uuid": "^10.0.0",
     "winston": "^3.14.2",
     "ws": "^8.18.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "zod-validation-error": "^3.4.0"
   },
   "madge": {
     "detectiveOptions": {

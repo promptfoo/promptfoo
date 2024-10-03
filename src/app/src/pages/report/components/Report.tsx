@@ -1,5 +1,3 @@
-'use client';
-
 import React from 'react';
 import { callApi } from '@app/utils/api';
 import WarningIcon from '@mui/icons-material/Warning';

@@ -1,5 +1,3 @@
-'use client';
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Navigation from '@app/components/Navigation';
