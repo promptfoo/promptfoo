@@ -366,25 +366,31 @@ export default class Eval {
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {
-    this.prompts = prompts;
-    const db = getDb();
-    await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+    if (this.persisted) {
+      this.prompts = prompts;
+      const db = getDb();
+      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+    } else {
+      this.prompts = prompts;
+    }
   }
 
   async addProviders(providers: Provider[]) {
-    const db = getDb();
-    await db.transaction(async (tx) => {
-      for (const provider of providers) {
-        const id = provider.id;
-        tx.insert(evalsToProviders)
-          .values({
-            evalId: this.id,
-            providerId: id,
-          })
-          .onConflictDoNothing()
-          .run();
-      }
-    });
+    if (this.persisted) {
+      const db = getDb();
+      await db.transaction(async (tx) => {
+        for (const provider of providers) {
+          const id = provider.id;
+          tx.insert(evalsToProviders)
+            .values({
+              evalId: this.id,
+              providerId: id,
+            })
+            .onConflictDoNothing()
+            .run();
+        }
+      });
+    }
   }
 
   async loadResults() {
