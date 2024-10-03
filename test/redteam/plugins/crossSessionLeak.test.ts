@@ -1,9 +1,8 @@
-import { matchesLlmRubric } from '../../../src/matchers';
 import {
   CrossSessionLeakGrader,
   CrossSessionLeakPlugin,
 } from '../../../src/redteam/plugins/crossSessionLeak';
-import type { AtomicTestCase, ApiProvider, TestCase } from '../../../src/types';
+import type { AtomicTestCase, ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
