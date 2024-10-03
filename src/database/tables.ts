@@ -93,7 +93,7 @@ export const evalResultsTable = sqliteTable(
       .notNull()
       .references(() => evals.id),
     promptIdx: integer('prompt_idx').notNull(),
-    testCaseIdx: integer('test_case_idx').notNull(),
+    testIdx: integer('test_idx').notNull(),
 
     testCase: text('test_case', { mode: 'json' }).$type<AtomicTestCase>().notNull(),
     prompt: text('prompt', { mode: 'json' }).$type<Prompt>().notNull(),

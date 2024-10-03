@@ -50,6 +50,13 @@
       "when": 1727893035888,
       "tag": "0006_harsh_caretaker",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1727991120763,
+      "tag": "0007_cloudy_wong",
+      "breakpoints": true
     }
   ]
 }

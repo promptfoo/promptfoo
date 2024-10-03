@@ -59,7 +59,7 @@ export default class Eval {
         evalId: evalsTable.id,
         createdAt: evalsTable.createdAt,
         description: evalsTable.description,
-        numTests: sql`MAX(${evalResultsTable.testCaseIdx} + 1)`.as('numTests'),
+        numTests: sql`MAX(${evalResultsTable.testIdx} + 1)`.as('numTests'),
         datasetId: evalsToDatasets.datasetId,
       })
       .from(evalsTable)

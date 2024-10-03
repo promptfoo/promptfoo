@@ -27,7 +27,7 @@ export default class EvalResult {
       evalId,
       testCase,
       promptIdx: result.promptIdx,
-      testCaseIdx: result.testCaseIdx,
+      testIdx: result.testIdx,
       prompt,
       promptId: hashPrompt(prompt),
       error: error?.toString(),
@@ -68,7 +68,7 @@ export default class EvalResult {
   evalId: string;
   description?: string | null;
   promptIdx: number;
-  testCaseIdx: number;
+  testIdx: number;
   testCase: AtomicTestCase;
   prompt: Prompt;
   promptId: string;
@@ -87,7 +87,7 @@ export default class EvalResult {
     id: string;
     evalId: string;
     promptIdx: number;
-    testCaseIdx: number;
+    testIdx: number;
     testCase: AtomicTestCase;
     prompt: Prompt;
     promptId?: string | null;
@@ -106,7 +106,7 @@ export default class EvalResult {
     this.evalId = opts.evalId;
 
     this.promptIdx = opts.promptIdx;
-    this.testCaseIdx = opts.testCaseIdx;
+    this.testIdx = opts.testIdx;
     this.testCase = opts.testCase;
     this.prompt = opts.prompt;
     this.promptId = opts.promptId || hashPrompt(opts.prompt);
@@ -151,7 +151,7 @@ export default class EvalResult {
       score: this.score,
       success: this.success,
       testCase: this.testCase,
-      testCaseIdx: this.testCaseIdx,
+      testIdx: this.testIdx,
       vars: this.testCase.vars || {},
     };
   }

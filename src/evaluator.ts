@@ -137,7 +137,7 @@ class Evaluator {
     delay,
     nunjucksFilters: filters,
     evaluateOptions,
-    testCaseIdx,
+    testIdx,
     promptIdx,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the label, not renderedPrompt
@@ -252,7 +252,7 @@ class Evaluator {
         cost: response.cost,
         metadata: response.metadata,
         promptIdx,
-        testCaseIdx,
+        testIdx,
         testCase: test,
         promptId: prompt.id || '',
       };
@@ -333,7 +333,7 @@ class Evaluator {
         namedScores: {},
         latencyMs,
         promptIdx,
-        testCaseIdx,
+        testIdx,
         testCase: test,
         promptId: prompt.id || '',
       };
@@ -569,7 +569,7 @@ class Evaluator {
                 },
                 test: { ...testCase, vars, options: testCase.options },
                 nunjucksFilters: testSuite.nunjucksFilters,
-                testCaseIdx: testIdx,
+                testIdx,
                 promptIdx,
                 repeatIndex,
                 evaluateOptions: options,
@@ -632,7 +632,7 @@ class Evaluator {
       if (options.progressCallback) {
         options.progressCallback(results.length, runEvalOptions.length, index, evalStep);
       }
-      const { testCaseIdx, promptIdx } = row;
+      const { testIdx, promptIdx } = row;
       try {
         await this.dbRecord.addResult(row, evalStep.test);
       } catch (error) {
@@ -658,8 +658,8 @@ class Evaluator {
         resultText = outputTextDisplay;
       }
 
-      if (!table.body[testCaseIdx]) {
-        table.body[testCaseIdx] = {
+      if (!table.body[testIdx]) {
+        table.body[testIdx] = {
           description: evalStep.test.description,
           outputs: [],
           test: evalStep.test,
@@ -674,8 +674,8 @@ class Evaluator {
             .flat(),
         };
       }
-      table.body[testCaseIdx].outputs[promptIdx] = {
-        id: `${testCaseIdx}-${promptIdx}`,
+      table.body[testIdx].outputs[promptIdx] = {
+        id: `${testIdx}-${promptIdx}`,
         pass: row.success,
         score: row.score,
         namedScores: row.namedScores,

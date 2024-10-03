@@ -18,7 +18,7 @@ describe('evaluator', () => {
         expect.objectContaining({
           evalId: eval1.id,
           createdAt: eval1.createdAt,
-          numTests: 1,
+          numTests: 2,
         }),
       );
       expect(evaluations).toContainEqual(
@@ -26,7 +26,7 @@ describe('evaluator', () => {
           evalId: eval2.id,
           createdAt: eval2.createdAt,
           description: eval2.description || null,
-          numTests: 1,
+          numTests: 2,
         }),
       );
     });
