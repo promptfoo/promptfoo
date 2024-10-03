@@ -179,7 +179,10 @@ const App: React.FC = () => {
     );
   }
 
-  const prompts = evalData.prompts || evalData.results.table?.head.prompts || [];
+  const prompts =
+    evalData.prompts && evalData.prompts.length > 0
+      ? evalData.prompts
+      : evalData.results.table?.head.prompts || [];
   const selectedPrompt = prompts[selectedPromptIndex];
   const tableData =
     (evalData.version >= 4 ? convertResultsToTable(evalData).body : evalData.results.table?.body) ||
@@ -304,7 +307,7 @@ const App: React.FC = () => {
               size="small"
               label={
                 <>
-                  <strong>Model:</strong> {selectedPrompt.provider}
+                  <strong>Model:</strong> {selectedPrompt?.provider}
                 </>
               }
               onClick={handlePromptChipClick}
@@ -323,9 +326,9 @@ const App: React.FC = () => {
               label={
                 <>
                   <strong>Prompt:</strong> &quot;
-                  {selectedPrompt.raw.length > 40
-                    ? `${selectedPrompt.raw.substring(0, 40)}...`
-                    : selectedPrompt.raw}
+                  {selectedPrompt?.raw.length > 40
+                    ? `${selectedPrompt?.raw.substring(0, 40)}...`
+                    : selectedPrompt?.raw}
                   &quot;
                 </>
               }
