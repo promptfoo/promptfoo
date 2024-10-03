@@ -19,7 +19,7 @@ export default class EvalResult {
     testCase: AtomicTestCase,
     opts?: { persist: boolean },
   ) {
-    const persist = opts?.persist ?? true;
+    const persist = opts?.persist == null ? true : opts.persist;
     const { prompt, error, score, latencyMs, success, provider, gradingResult, namedScores, cost } =
       result;
     const args = {
