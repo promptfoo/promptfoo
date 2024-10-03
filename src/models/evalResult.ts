@@ -19,40 +19,42 @@ export default class EvalResult {
     promptIdx: number,
     testCaseIdx: number,
     testCase: AtomicTestCase,
+    opts?: { persist: boolean },
   ) {
-    const db = getDb();
-
+    const persist = opts?.persist ?? true;
     const { prompt, error, score, latencyMs, success, provider, gradingResult, namedScores, cost } =
       result;
+    const args = {
+      id: randomUUID(),
+      evalId,
+      testCase,
+      promptIdx,
+      testCaseIdx,
+      prompt,
+      promptId: hashPrompt(prompt),
+      error: error?.toString(),
+      success,
+      score,
+      providerResponse: result.response || null,
+      gradingResult: gradingResult || null,
+      namedScores,
+      provider,
+      latencyMs,
+      cost,
+    };
+    if (persist) {
+      const db = getDb();
 
-    const dbResult = await db
-      .insert(evalResultsTable)
-      .values({
-        id: randomUUID(),
-        evalId,
-        testCase,
-        promptIdx,
-        testCaseIdx,
-        prompt,
-        promptId: hashPrompt(prompt),
-        error: error?.toString(),
-        success,
-        score,
-        providerResponse: result.response,
-        gradingResult,
-        namedScores,
-        provider,
-        latencyMs,
-        cost,
-      })
-      .returning();
-    return new EvalResult(dbResult[0]);
+      const dbResult = await db.insert(evalResultsTable).values(args).returning();
+      return new EvalResult({ ...dbResult[0], persisted: true });
+    }
+    return new EvalResult(args);
   }
 
   static async findById(id: string) {
     const db = getDb();
     const result = await db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id));
-    return result.length > 0 ? new EvalResult(result[0]) : null;
+    return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
   }
 
   static async findManyByEvalId(evalId: string) {
@@ -61,7 +63,7 @@ export default class EvalResult {
       .select()
       .from(evalResultsTable)
       .where(eq(evalResultsTable.evalId, evalId));
-    return results.map((result) => new EvalResult(result));
+    return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 
   id: string;
@@ -81,6 +83,7 @@ export default class EvalResult {
   provider: ProviderOptions;
   latencyMs: number;
   cost: number;
+  persisted: boolean;
 
   constructor(opts: {
     id: string;
@@ -99,6 +102,7 @@ export default class EvalResult {
     provider: ProviderOptions;
     latencyMs?: number | null;
     cost?: number | null;
+    persisted?: boolean;
   }) {
     this.id = opts.id;
     this.evalId = opts.evalId;
@@ -117,20 +121,18 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
+    this.persisted = opts.persisted || false;
   }
 
   async save() {
     const db = getDb();
     //check if this exists in the db
-    const existing = await db
-      .select({ id: evalResultsTable.id })
-      .from(evalResultsTable)
-      .where(eq(evalResultsTable.id, this.id));
-    if (existing.length > 0) {
+    if (this.persisted) {
       await db.update(evalResultsTable).set(this).where(eq(evalResultsTable.id, this.id));
     } else {
       const result = await db.insert(evalResultsTable).values(this).returning();
       this.id = result[0].id;
+      this.persisted = true;
     }
   }
 
