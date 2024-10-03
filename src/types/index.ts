@@ -246,6 +246,7 @@ export interface EvaluateStats {
 }
 
 export interface EvaluateSummary {
+  version: number;
   timestamp: string;
   results: EvaluateResult[];
   table?: EvaluateTable;
