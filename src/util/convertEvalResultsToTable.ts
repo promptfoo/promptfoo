@@ -54,9 +54,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     for (const varName of Object.keys(result.vars || {})) {
       varsForHeader.add(varName);
     }
-    let row = rows[result.testCaseIdx];
+    let row = rows[result.testIdx];
     if (!row) {
-      rows[result.testCaseIdx] = {
+      rows[result.testIdx] = {
         description: result.description || undefined,
         outputs: [],
         vars: result.vars
@@ -72,8 +72,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
           : [],
         test: result.testCase,
       };
-      varValuesForRow.set(result.testCaseIdx, result.vars as Record<string, string>);
-      row = rows[result.testCaseIdx];
+      varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
+      row = rows[result.testIdx];
     }
 
     // format text
@@ -96,7 +96,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     }
 
     row.outputs[result.promptIdx] = {
-      id: `${result.testCaseIdx}-${result.promptIdx}`,
+      id: `${result.testIdx}-${result.promptIdx}`,
       ...result,
       text: resultText || '',
       prompt: result.prompt.raw,

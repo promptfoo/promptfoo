@@ -25,7 +25,7 @@ export default class EvalFactory {
       {
         description: 'test-description',
         promptIdx: 0,
-        testCaseIdx: 0,
+        testIdx: 0,
         testCase: { vars: { state: 'colorado' }, assert: [{ type: 'contains', value: 'Denver' }] },
         promptId: 'test-prompt',
         provider: { id: 'test-provider', label: 'test-label' },
@@ -73,7 +73,7 @@ export default class EvalFactory {
       {
         description: 'test-description',
         promptIdx: 0,
-        testCaseIdx: 1,
+        testIdx: 1,
         testCase: {
           vars: { state: 'california' },
           assert: [{ type: 'contains', value: 'Sacramento' }],

@@ -120,7 +120,7 @@ export interface RunEvalOptions {
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions: EvaluateOptions;
 
-  testCaseIdx: number;
+  testIdx: number;
   promptIdx: number;
   repeatIndex: number;
 }
@@ -192,7 +192,7 @@ export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
   description?: string; // on the new version 2, this is stored per-result
   promptIdx: number; // on the new version 2, this is stored per-result
-  testCaseIdx: number; // on the new version 2, this is stored per-result
+  testIdx: number; // on the new version 2, this is stored per-result
   testCase: AtomicTestCase; // on the new version 2, this is stored per-result
   promptId: string; // on the new version 2, this is stored per-result
   provider: Pick<ProviderOptions, 'id' | 'label'>;
