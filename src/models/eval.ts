@@ -421,6 +421,7 @@ export default class Eval {
     }
 
     return {
+      version: 2,
       timestamp: new Date(this.createdAt).toISOString(),
       results: this.results.map((r) => r.toEvaluateResult()),
       stats,

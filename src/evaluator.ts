@@ -928,7 +928,7 @@ class Evaluator {
       isRedteam: Boolean(testSuite.redteam),
     });
 
-    return { timestamp: new Date().toISOString(), results, stats: this.stats, table };
+    return { version: 2, timestamp: new Date().toISOString(), results, stats: this.stats, table };
   }
 }
 
