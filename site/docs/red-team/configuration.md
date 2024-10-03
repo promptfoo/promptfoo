@@ -5,7 +5,7 @@ sidebar_label: 'Configuration'
 
 # Redteam Configuration
 
-The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
+The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
 
 The most important components of your redteam configuration are:
 
@@ -16,11 +16,13 @@ The most important components of your redteam configuration are:
 
 ## Getting Started
 
-To initialize a basic redteam configuration, run:
+Red teams happen in three steps:
 
-```bash
-npx promptfoo@latest redteam init
-```
+- `promptfoo redteam init` to initialize a basic redteam configuration
+- `promptfoo redteam run` to generate adversarial test cases and run them against the target
+- `promptfoo redteam report` to view the results
+
+`promptfoo redteam run` is a shortcut that combines `redteam generate` and `redteam eval` steps, ensuring that your generated test cases are always synced with the latest configuration.
 
 ## Configuration Structure
 
@@ -327,7 +329,7 @@ policy: >
 To see a complete list of available plugins, run:
 
 ```bash
-promptfoo redteam generate --help
+promptfoo redteam plugins
 ```
 
 ### Custom Plugins
