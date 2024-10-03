@@ -38,33 +38,28 @@ export async function createResponseParser(
   if (typeof parser === 'function') {
     return (data, text) => ({ output: parser(data, text) });
   }
-  if (typeof parser === 'string') {
-    if (parser.startsWith('file://')) {
-      const basePath = cliState.basePath || '';
-      let filePath = path.resolve(basePath, parser.slice('file://'.length));
-      const splitFilePath = filePath.split(':');
-      filePath = splitFilePath.length > 1 ? splitFilePath.slice(0, -1).join(':') : filePath;
+  if (typeof parser === 'string' && parser.startsWith('file://')) {
+    let filePath = path.resolve(cliState.basePath || '', parser.slice('file://'.length));
+    const splitFilePath = filePath.split(':');
+    filePath = splitFilePath.length > 1 ? splitFilePath.slice(0, -1).join(':') : filePath;
+    if (isJavascriptFile(filePath)) {
       const functionName =
         splitFilePath.length > 1 ? splitFilePath[splitFilePath.length - 1] : undefined;
-      if (isJavascriptFile(filePath)) {
-        const requiredModule = await importModule(filePath, functionName);
-        if (typeof requiredModule === 'function') {
-          return requiredModule;
-        }
-        throw new Error(
-          `Response parser malformed: ${filePath} must export a function or have a default export as a function`,
-        );
-      } else {
-        throw new Error(`Unsupported file type for response parser: ${filePath}`);
+      const requiredModule = await importModule(filePath, functionName);
+      if (typeof requiredModule === 'function') {
+        return requiredModule;
       }
-    } else {
-      return (data, text) => ({
-        output: new Function('json', 'text', `return ${parser}`)(data, text),
-      });
+      throw new Error(
+        `Response parser malformed: ${filePath} must export a function or have a default export as a function`,
+      );
     }
+  } else if (typeof parser === 'string') {
+    return (data, text) => ({
+      output: new Function('json', 'text', `return ${parser}`)(data, text),
+    });
   }
   throw new Error(
-    `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://', or a string containing a JavaScript expression.`,
+    `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
   );
 }
 

@@ -461,15 +461,9 @@ describe('HttpProvider', () => {
       expect(result).toBe('PARSED');
     });
 
-    it('should throw error for unsupported file type', async () => {
-      await expect(createResponseParser('file://unsupported.txt')).rejects.toThrow(
-        /Unsupported file type for response parser: .*mock[/\\]base[/\\]path[/\\]unsupported\.txt$/,
-      );
-    });
-
     it('should throw error for unsupported parser type', async () => {
       await expect(createResponseParser(123 as any)).rejects.toThrow(
-        "Unsupported response parser type: number. Expected a function, a string starting with 'file://', or a string containing a JavaScript expression.",
+        "Unsupported response parser type: number. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.",
       );
     });
 
