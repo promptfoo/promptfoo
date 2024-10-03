@@ -5,6 +5,8 @@ import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
+import { z } from 'zod';
+import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
@@ -22,6 +24,7 @@ import type {
   UnifiedConfig,
 } from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
+import { CommandLineOptionsSchema } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
 import {
   migrateResultsFromFileSystemToDatabase,
@@ -34,6 +37,14 @@ import { loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
+
+const EvalCommandSchema = CommandLineOptionsSchema.extend({
+  help: z.boolean().optional(),
+  interactiveProviders: z.boolean().optional(),
+  remote: z.boolean().optional(),
+}).partial();
+
+type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
@@ -58,8 +69,9 @@ export async function doEval(
     if (cmdObj.verbose) {
       setLogLevel('debug');
     }
-    const iterations = Number.parseInt(cmdObj.repeat || '', 10);
-    const repeat = !Number.isNaN(iterations) && iterations > 0 ? iterations : 1;
+    const iterations = cmdObj.repeat ?? Number.NaN;
+    const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;
+
     if (!cmdObj.cache || repeat > 1) {
       logger.info('Cache is disabled.');
       disableCache();
@@ -67,8 +79,8 @@ export async function doEval(
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
-    let maxConcurrency = Number.parseInt(cmdObj.maxConcurrency || '', 10);
-    const delay = Number.parseInt(cmdObj.delay || '', 0);
+    let maxConcurrency = cmdObj.maxConcurrency;
+    const delay = cmdObj.delay ?? 0;
 
     if (delay > 0) {
       maxConcurrency = 1;
@@ -87,8 +99,7 @@ export async function doEval(
 
     const options: EvaluateOptions = {
       showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
-      maxConcurrency:
-        !Number.isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
+      maxConcurrency,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       ...evaluateOptions,
@@ -138,7 +149,7 @@ export async function doEval(
 
     if (cmdObj.table && getLogLevel() !== 'debug') {
       // Output CLI table
-      const table = generateTable(summary, Number.parseInt(cmdObj.tableCellMaxLength || '', 10));
+      const table = generateTable(summary, cmdObj.tableCellMaxLength);
 
       logger.info('\n' + table.toString());
       if (summary.table.body.length > 25) {
@@ -436,13 +447,26 @@ export function evalCommand(
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
 
-    .action(async (opts) => {
-      if (opts.help) {
+    .action(async (opts: EvalCommandOptions) => {
+      let validatedOpts: z.infer<typeof EvalCommandSchema>;
+      try {
+        validatedOpts = EvalCommandSchema.parse(opts);
+      } catch (err) {
+        const validationError = fromError(err);
+        logger.error(dedent`
+        Invalid command options:
+        ${validationError.toString()}
+        `);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (validatedOpts.help) {
         evalCmd.help();
         return;
       }
 
-      if (opts.interactiveProviders) {
+      if (validatedOpts.interactiveProviders) {
         logger.warn(
           chalk.yellow(dedent`
           Warning: The --interactive-providers option has been removed.
@@ -454,11 +478,11 @@ export function evalCommand(
         process.exit(2);
       }
 
-      if (opts.remote) {
+      if (validatedOpts.remote) {
         cliState.remote = true;
       }
 
-      for (const maybeFilePath of opts.output ?? []) {
+      for (const maybeFilePath of validatedOpts.output ?? []) {
         const { data: extension } = OutputFileExtension.safeParse(
           maybeFilePath.split('.').pop()?.toLowerCase(),
         );
@@ -468,15 +492,19 @@ export function evalCommand(
         );
       }
 
-      if (opts.config !== undefined) {
-        const configPaths: string[] = Array.isArray(opts.config) ? opts.config : [opts.config];
+      if (validatedOpts.config !== undefined) {
+        const configPaths: string[] = Array.isArray(validatedOpts.config)
+          ? validatedOpts.config
+          : [validatedOpts.config];
         for (const configPath of configPaths) {
           if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
             const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
               await loadDefaultConfig(configPath);
             if (newConfigPath) {
-              opts.config = opts.config.filter((path: string) => path !== configPath);
-              opts.config.push(newConfigPath);
+              validatedOpts.config = validatedOpts.config.filter(
+                (path: string) => path !== configPath,
+              );
+              validatedOpts.config.push(newConfigPath);
               defaultConfig = { ...defaultConfig, ...dirConfig };
             } else {
               logger.warn(`No configuration file found in directory: ${configPath}`);
@@ -485,7 +513,12 @@ export function evalCommand(
         }
       }
 
-      doEval(opts, defaultConfig, defaultConfigPath, evaluateOptions);
+      doEval(
+        validatedOpts as Partial<CommandLineOptions & Command>,
+        defaultConfig,
+        defaultConfigPath,
+        evaluateOptions,
+      );
     });
 
   return evalCmd;
