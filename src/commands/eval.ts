@@ -152,11 +152,13 @@ export async function doEval(
     if (cmdObj.table && getLogLevel() !== 'debug') {
       // Output CLI table
 
-      const table = generateTable(summary, cmdObj.tableCellMaxLength);
-      invariant(summary.table, 'Table is required');
+      const summaryWithTable = await eval_.toEvaluateSummary(true);
+      invariant(summaryWithTable.table, 'Table is required');
+      const table = generateTable(summaryWithTable);
+
       logger.info('\n' + table.toString());
-      if (summary.table.body.length > 25) {
-        const rowsLeft = summary.table.body.length - 25;
+      if (summaryWithTable.table.body.length > 25) {
+        const rowsLeft = summaryWithTable.table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
       }
     } else if (summary.stats.failures !== 0) {

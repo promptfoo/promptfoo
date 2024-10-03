@@ -343,6 +343,7 @@ class Evaluator {
   async evaluate(): Promise<EvaluateSummary> {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
+    const rowsWithSelectBestAssertion = new Set<number>();
 
     await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
 
@@ -624,8 +625,12 @@ class Evaluator {
       await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
+
       const row = await this.runEval(evalStep);
 
+      if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
+        rowsWithSelectBestAssertion.add(row.testIdx);
+      }
       results.push(row);
 
       numComplete++;
@@ -636,7 +641,7 @@ class Evaluator {
       try {
         await this.dbRecord.addResult(row, evalStep.test);
       } catch (error) {
-        logger.error(`Error adding result: ${error} ${JSON.stringify(row.response)}`);
+        logger.error(`Error adding result: ${error}`);
       }
 
       // Bookkeeping for table
@@ -816,12 +821,9 @@ class Evaluator {
 
     // Then run concurrent evaluations
     await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, processEvalStep);
-
+    console.error('test: ' + rowsWithSelectBestAssertion);
     // Do we have to run comparisons between row outputs?
-    const compareRowsCount = table.body.reduce(
-      (count, row) => count + (row.test.assert?.some((a) => a.type === 'select-best') ? 1 : 0),
-      0,
-    );
+    const compareRowsCount = rowsWithSelectBestAssertion.size;
 
     let progressBar;
     if (compareRowsCount > 0 && multibar) {
@@ -831,7 +833,61 @@ class Evaluator {
         vars: '',
       });
     }
+    for (const testIdx of rowsWithSelectBestAssertion) {
+      const resultsToCompare = results.filter((r) => r.testIdx === testIdx);
+      if (resultsToCompare.length === 0) {
+        logger.warn(`Expected results to be found for test index ${testIdx}`);
+        continue;
+      }
 
+      const compareAssertion = resultsToCompare[0].testCase.assert?.find(
+        (a) => a.type === 'select-best',
+      ) as Assertion;
+      if (compareAssertion) {
+        const outputs = resultsToCompare.map((r) => r.response?.output || '');
+        const gradingResults = await runCompareAssertion(
+          resultsToCompare[0].testCase,
+          compareAssertion,
+          outputs,
+        );
+        resultsToCompare.forEach((result, index) => {
+          const gradingResult = gradingResults[index];
+          if (result.gradingResult) {
+            result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+            };
+            result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+            };
+            result.gradingResult.tokensUsed.total =
+              (result.gradingResult.tokensUsed.total || 0) + (gradingResult.tokensUsed?.total || 0);
+            result.gradingResult.tokensUsed.prompt =
+              (result.gradingResult.tokensUsed.prompt || 0) +
+              (gradingResult.tokensUsed?.prompt || 0);
+            result.gradingResult.tokensUsed.completion =
+              (result.gradingResult.tokensUsed.completion || 0) +
+              (gradingResult.tokensUsed?.completion || 0);
+            result.success = result.gradingResult.pass =
+              result.gradingResult.pass && gradingResult.pass;
+            if (!gradingResult.pass) {
+              // Failure overrides the reason and the score
+              result.gradingResult.reason = gradingResult.reason;
+              result.score = result.gradingResult.score = gradingResult.score;
+            }
+            if (!result.gradingResult.componentResults) {
+              result.gradingResult.componentResults = [];
+            }
+            result.gradingResult.componentResults.push(gradingResult);
+          } else {
+            result.gradingResult = gradingResult;
+          }
+        });
+      }
+    }
     for (let index = 0; index < table.body.length; index++) {
       const row = table.body[index];
       const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best') as Assertion;
@@ -926,7 +982,7 @@ class Evaluator {
       hasAnyPass: results.some((r) => r.success),
       isRedteam: Boolean(testSuite.redteam),
     });
-
+    logger.error(`rowsWithSelectBestAssertion: ${JSON.stringify(rowsWithSelectBestAssertion)}`);
     return { version: 2, timestamp: new Date().toISOString(), results, stats: this.stats, table };
   }
 }
