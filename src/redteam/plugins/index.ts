@@ -14,6 +14,7 @@ import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { getHarmfulTests } from './harmful';
 import { ImitationPlugin } from './imitation';
+import { MathPromptPlugin } from './mathPrompt';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PolicyPlugin } from './policy';
@@ -22,7 +23,8 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
-import { MathPromptPlugin } from './mathPrompt'; // Added MathPromptPlugin import
+
+// Added MathPromptPlugin import
 
 export interface PluginFactory {
   key: string;

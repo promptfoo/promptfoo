@@ -12,6 +12,7 @@ import { HarmfulGrader, HarmfulPrivacyGrader } from './plugins/harmful';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
+import { MathPromptGrader } from './plugins/mathPrompt';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
 import { PolicyViolationGrader } from './plugins/policy';
@@ -21,7 +22,8 @@ import { RbacGrader } from './plugins/rbac';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
-import { MathPromptGrader } from './plugins/mathPrompt'; // Import the MathPromptGrader
+
+// Import the MathPromptGrader
 
 export const GRADERS = {
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
