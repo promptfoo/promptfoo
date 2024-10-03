@@ -39,20 +39,21 @@ export async function createResponseParser(
     return (data, text) => ({ output: parser(data, text) });
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filePath = path.resolve(cliState.basePath || '', parser.slice('file://'.length));
-    const splitFilePath = filePath.split(':');
-    filePath = splitFilePath.length > 1 ? splitFilePath.slice(0, -1).join(':') : filePath;
-    if (isJavascriptFile(filePath)) {
-      const functionName =
-        splitFilePath.length > 1 ? splitFilePath[splitFilePath.length - 1] : undefined;
-      const requiredModule = await importModule(filePath, functionName);
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
+    let filename = path.resolve(cliState.basePath || '', parser.slice('file://'.length));
+    let functionName: string | undefined;
+    if (filename.includes(':')) {
+      const splits = filename.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filename, functionName] = splits;
       }
-      throw new Error(
-        `Response parser malformed: ${filePath} must export a function or have a default export as a function`,
-      );
     }
+    const requiredModule = await importModule(filename, functionName);
+    if (typeof requiredModule === 'function') {
+      return requiredModule;
+    }
+    throw new Error(
+      `Response parser malformed: ${filename} must export a function or have a default export as a function`,
+    );
   } else if (typeof parser === 'string') {
     return (data, text) => ({
       output: new Function('json', 'text', `return ${parser}`)(data, text),
