@@ -47,3 +47,9 @@ Once you have access, you can log in to Promptfoo Cloud and start sharing your e
 4.  **View your evals**
 
     View your organization's evals at [https://www.promptfoo.app](https://www.promptfoo.app)
+
+## Adding users
+
+To add users to your organization, open the menu in the top right corner of the page and click your Organization name. Then invite the user using the form at the bottom of the page.
+
+![Invite a user](/img/docs/cloud/invite-user.png)

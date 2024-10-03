@@ -494,7 +494,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // NOTE: Special handling for o1 models which do not support max_tokens and temperature
     const isO1Model = this.modelName.startsWith('o1-');
     const maxCompletionTokens = isO1Model
-      ? (this.config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS', 1024))
+      ? (this.config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
     const maxTokens = isO1Model
       ? undefined
@@ -1087,4 +1087,4 @@ export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-
   },
 });
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
-export const DefaultModerationProvider = new OpenAiModerationProvider('text-moderation-latest');
+export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');

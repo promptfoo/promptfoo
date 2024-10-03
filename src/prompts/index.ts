@@ -28,7 +28,7 @@ export * from './grading';
  * @returns A map of provider IDs to their respective prompts.
  */
 export function readProviderPromptMap(
-  config: Partial<UnifiedConfig>,
+  config: Pick<Partial<UnifiedConfig>, 'providers'>,
   parsedPrompts: Prompt[],
 ): TestSuite['providerPromptMap'] {
   const ret: Record<string, string[]> = {};

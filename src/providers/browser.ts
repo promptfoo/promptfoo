@@ -1,4 +1,6 @@
-import { chromium, type Page, type ElementHandle } from 'playwright';
+import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
+import { chromium } from 'playwright-extra';
+import stealth from 'puppeteer-extra-plugin-stealth';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
@@ -7,6 +9,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
+import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 
@@ -23,6 +26,14 @@ interface BrowserProviderConfig {
   responseParser?: string | Function;
   timeoutMs?: number;
   headless?: boolean;
+  cookies?:
+    | Array<{
+        name: string;
+        value: string;
+        domain?: string;
+        path?: string;
+      }>
+    | string;
 }
 
 function createResponseParser(
@@ -73,13 +84,25 @@ export class BrowserProvider implements ApiProvider {
       prompt,
     };
 
+    chromium.use(stealth());
+
     const browser = await chromium.launch({
       headless: this.headless,
+      args: ['--ignore-certificate-errors'],
     });
-    const page = await browser.newPage();
+    const browserContext = await browser.newContext({
+      ignoreHTTPSErrors: true,
+    });
+
+    if (this.config.cookies) {
+      await this.setCookies(browserContext);
+    }
+
+    const page = await browserContext.newPage();
     const extracted: Record<string, any> = {};
 
     try {
+      // Execute all actions
       for (const step of this.config.steps) {
         await this.executeAction(page, step, vars, extracted);
       }
@@ -95,6 +118,22 @@ export class BrowserProvider implements ApiProvider {
     const ret = this.responseParser(extracted, finalHtml);
     logger.debug(`Browser response parser output: ${ret}`);
     return { output: ret };
+  }
+
+  private async setCookies(browserContext: BrowserContext): Promise<void> {
+    if (typeof this.config.cookies === 'string') {
+      // Handle big blob string of cookies
+      const cookieString = maybeLoadFromExternalFile(this.config.cookies) as string;
+      const cookiePairs = cookieString.split(';').map((pair) => pair.trim());
+      const cookies = cookiePairs.map((pair) => {
+        const [name, value] = pair.split('=');
+        return { name, value };
+      });
+      await browserContext.addCookies(cookies);
+    } else if (Array.isArray(this.config.cookies)) {
+      // Handle array of cookie objects
+      await browserContext.addCookies(this.config.cookies);
+    }
   }
 
   private async executeAction(
@@ -131,7 +170,33 @@ export class BrowserProvider implements ApiProvider {
         );
         logger.debug(`Waiting for and typing into ${renderedArgs.selector}: ${renderedArgs.text}`);
         await this.waitForSelector(page, renderedArgs.selector);
-        //await page.type(renderedArgs.selector, renderedArgs.text);
+
+        if (typeof renderedArgs.text === 'string') {
+          // Handle special characters
+          const specialKeys = {
+            '<enter>': 'Enter',
+            '<tab>': 'Tab',
+            '<escape>': 'Escape',
+          };
+
+          for (const [placeholder, key] of Object.entries(specialKeys)) {
+            const lowerText = renderedArgs.text.toLowerCase();
+            if (lowerText.includes(placeholder)) {
+              const parts = lowerText.split(placeholder);
+              for (let i = 0; i < parts.length; i++) {
+                if (parts[i]) {
+                  await page.fill(renderedArgs.selector, parts[i]);
+                }
+                if (i < parts.length - 1) {
+                  await page.press(renderedArgs.selector, key);
+                }
+              }
+              return;
+            }
+          }
+        }
+
+        // If no special characters, use the original fill method
         await page.fill(renderedArgs.selector, renderedArgs.text);
         break;
       case 'screenshot':

@@ -356,6 +356,10 @@
                                     "properties": {
                                       "type": {},
                                       "value": {},
+                                      "config": {
+                                        "type": "object",
+                                        "additionalProperties": {}
+                                      },
                                       "threshold": {
                                         "type": "number"
                                       },
@@ -416,6 +420,9 @@
                                 "type": "string"
                               },
                               "transform": {
+                                "type": "string"
+                              },
+                              "transformVars": {
                                 "type": "string"
                               },
                               "storeOutputAs": {
@@ -759,13 +766,17 @@
               }
             },
             "maxConcurrency": {
-              "type": "string"
+              "type": "integer",
+              "exclusiveMinimum": 0
             },
             "repeat": {
-              "type": "string"
+              "type": "integer",
+              "exclusiveMinimum": 0
             },
             "delay": {
-              "type": "string"
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
             },
             "vars": {
               "type": "string"
@@ -792,7 +803,8 @@
               "type": "string"
             },
             "tableCellMaxLength": {
-              "type": "string"
+              "type": "integer",
+              "exclusiveMinimum": 0
             },
             "write": {
               "type": "boolean"
@@ -816,7 +828,8 @@
               "type": "string"
             },
             "filterFirstN": {
-              "type": "string"
+              "type": "integer",
+              "exclusiveMinimum": 0
             },
             "filterPattern": {
               "type": "string"

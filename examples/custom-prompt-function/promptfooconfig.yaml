@@ -53,8 +53,12 @@ prompts:
     label: prompt_python with prompt1
   - file://prompt_python.py:prompt1
 
+  - id: file://prompt_python.py:Prompt.prompt
+    label: prompt_python_class
+  - file://prompt_python.py:Prompt.prompt_with_cot
+
 providers:
-  - openai:gpt-4o-mini
+  - echo
 
 tests:
   - vars:

@@ -3,10 +3,17 @@ prompts:
   - 'Translate to {{language}}: {{input}}'
 
 providers:
-  - id: bedrock:meta.llama3-8b-instruct-v1:0
-    label: llama3 instruct
-  - id: bedrock:meta.llama2-13b-chat-v1
-    label: llama2 chat
+  - id: bedrock:us.meta.llama3-2-1b-instruct-v1:0
+    label: llama3.2 1b
+  - id: bedrock:us.meta.llama3-2-3b-instruct-v1:0
+    label: llama3.2 3b
+  - id: bedrock:us.meta.llama3-2-11b-instruct-v1:0
+    label: llama3.2 11b
+  - id: bedrock:us.meta.llama3-2-90b-instruct-v1:0
+    label: llama3.2 90b
+    config:
+      options:
+        max_new_tokens: 100
 
 tests:
   - vars:

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import path from 'path';
+import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -15,38 +15,15 @@ import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
-import { versionCommand } from './commands/version';
 import { viewCommand } from './commands/view';
-import { maybeReadConfig } from './config';
 import { runDbMigrations } from './migrate';
-import { generateRedteamCommand } from './redteam/commands/generate';
+import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
-import { type UnifiedConfig } from './types';
+import { redteamReportCommand } from './redteam/commands/report';
+import { redteamRunCommand } from './redteam/commands/run';
 import { checkForUpdates } from './updates';
-
-export async function loadDefaultConfig(): Promise<{
-  defaultConfig: Partial<UnifiedConfig>;
-  defaultConfigPath: string | undefined;
-}> {
-  const pwd = process.cwd();
-  let defaultConfig: Partial<UnifiedConfig> = {};
-  let defaultConfigPath: string | undefined;
-
-  // NOTE: sorted by frequency of use
-  const extensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
-  for (const ext of extensions) {
-    const configPath = path.join(pwd, `promptfooconfig.${ext}`);
-    const maybeConfig = await maybeReadConfig(configPath);
-    if (maybeConfig) {
-      defaultConfig = maybeConfig;
-      defaultConfigPath = configPath;
-      break;
-    }
-  }
-
-  return { defaultConfig, defaultConfigPath };
-}
+import { loadDefaultConfig } from './util/config/default';
 
 async function main() {
   await checkForUpdates();
@@ -54,37 +31,46 @@ async function main() {
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
-  const program = new Command();
+  const program = new Command('promptfoo');
+  program.version(version);
 
+  // Main commands
+  evalCommand(program, defaultConfig, defaultConfigPath);
+  initCommand(program);
+  viewCommand(program);
+  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
+  shareCommand(program);
+
+  // Alphabetical order
+  authCommand(program);
   cacheCommand(program);
   configCommand(program);
   deleteCommand(program);
-  evalCommand(program, defaultConfig, defaultConfigPath);
   exportCommand(program);
   feedbackCommand(program);
-  importCommand(program);
-  initCommand(program);
-  listCommand(program);
-  shareCommand(program);
-  showCommand(program);
-  versionCommand(program);
-  viewCommand(program);
-  authCommand(program);
-
   const generateCommand = program.command('generate').description('Generate synthetic data');
+  importCommand(program);
+  listCommand(program);
+  showCommand(program);
+
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
-  generateRedteamCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
+  redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
-  const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
+  const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
+    await loadDefaultConfig(undefined, 'redteam');
+
   redteamInitCommand(redteamBaseCommand);
+  evalCommand(
+    redteamBaseCommand,
+    redteamConfig ?? defaultConfig,
+    redteamConfigPath ?? defaultConfigPath,
+  );
+  redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+  redteamRunCommand(redteamBaseCommand);
+  redteamReportCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
-  generateRedteamCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
 
-  if (!process.argv.slice(2).length) {
-    program.outputHelp();
-    process.exit(0);
-  }
-  program.parse(process.argv);
+  program.parse();
 }
 
 if (require.main === module) {

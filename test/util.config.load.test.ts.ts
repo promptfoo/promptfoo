@@ -3,11 +3,16 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from '../src/cliState';
-import { dereferenceConfig, readConfig, readConfigs, resolveConfigs } from '../src/config';
 import { importModule } from '../src/esm';
 import { readTests } from '../src/testCases';
 import type { UnifiedConfig } from '../src/types';
 import { maybeLoadFromExternalFile } from '../src/util';
+import {
+  dereferenceConfig,
+  readConfig,
+  resolveConfigs,
+  combineConfigs,
+} from '../src/util/config/load';
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
@@ -52,7 +57,7 @@ jest.mock('../src/testCases', () => {
 
 jest.mock('../src/logger');
 
-describe('readConfigs', () => {
+describe('combineConfigs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -134,7 +139,7 @@ describe('readConfigs', () => {
       throw new Error('File does not exist');
     });
 
-    const config1Result = await readConfigs(['config1.json']);
+    const config1Result = await combineConfigs(['config1.json']);
     expect(config1Result).toEqual({
       description: 'test1',
       tags: { tag1: 'value1' },
@@ -164,7 +169,7 @@ describe('readConfigs', () => {
       sharing: false,
     });
 
-    const config2Result = await readConfigs(['config2.json']);
+    const config2Result = await combineConfigs(['config2.json']);
     expect(config2Result).toEqual({
       description: 'test2',
       tags: {},
@@ -194,7 +199,7 @@ describe('readConfigs', () => {
       sharing: true,
     });
 
-    const result = await readConfigs(['config1.json', 'config2.json']);
+    const result = await combineConfigs(['config1.json', 'config2.json']);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(4);
     expect(result).toEqual({
@@ -230,10 +235,62 @@ describe('readConfigs', () => {
     });
   });
 
+  it('combines configs with provider-specific prompts', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
+      if (typeof path === 'string' && path === 'config.json') {
+        return JSON.stringify({
+          prompts: [
+            { id: 'file://prompt1.txt', label: 'My first prompt' },
+            { id: 'file://prompt2.txt', label: 'My second prompt' },
+          ],
+          providers: [
+            {
+              id: 'openai:gpt-4o-mini',
+              prompts: ['My first prompt', 'My second prompt'],
+            },
+            {
+              id: 'openai:gpt-4',
+              prompts: ['My first prompt'],
+            },
+          ],
+          tests: [{ vars: { topic: 'bananas' } }],
+        });
+      }
+      return Buffer.from('');
+    });
+
+    const result = await combineConfigs(['config.json']);
+
+    expect(result.prompts).toEqual([
+      {
+        id: `file://${path.resolve(path.dirname('config.json'), 'prompt1.txt')}`,
+        label: 'My first prompt',
+      },
+      {
+        id: `file://${path.resolve(path.dirname('config.json'), 'prompt2.txt')}`,
+        label: 'My second prompt',
+      },
+    ]);
+
+    expect(result.providers).toEqual([
+      {
+        id: 'openai:gpt-4o-mini',
+        prompts: ['My first prompt', 'My second prompt'],
+      },
+      {
+        id: 'openai:gpt-4',
+        prompts: ['My first prompt'],
+      },
+    ]);
+
+    expect(result.tests?.[0]).toEqual({ vars: { topic: 'bananas' } });
+  });
+
   it('throws error for unsupported configuration file format', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
 
-    await expect(readConfigs(['config1.unsupported'])).rejects.toThrow(
+    await expect(combineConfigs(['config1.unsupported'])).rejects.toThrow(
       'Unsupported configuration file format: .unsupported',
     );
   });
@@ -263,7 +320,7 @@ describe('readConfigs', () => {
       );
 
     const configPaths = ['config1.json', 'config2.json'];
-    const result = await readConfigs(configPaths);
+    const result = await combineConfigs(configPaths);
 
     expect(result.prompts).toEqual([
       `file://${path.resolve(path.dirname(configPaths[0]), 'prompt1.txt')}`,
@@ -298,7 +355,7 @@ describe('readConfigs', () => {
       );
 
     const configPaths = ['config1.json', 'config2.json'];
-    const result = await readConfigs(configPaths);
+    const result = await combineConfigs(configPaths);
 
     expect(result.prompts).toEqual([
       'prompt1',
@@ -325,7 +382,7 @@ describe('readConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
-    const result = await readConfigs(['config1.json', 'config2.json']);
+    const result = await combineConfigs(['config1.json', 'config2.json']);
 
     expect(result.defaultTest?.metadata).toEqual({
       key1: 'value1',
@@ -347,7 +404,7 @@ describe('readConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config2));
     jest.spyOn(console, 'warn').mockImplementation();
 
-    const result = await readConfigs(['config1.json', 'config2.json']);
+    const result = await combineConfigs(['config1.json', 'config2.json']);
 
     expect(result.extensions).toEqual(['extension1', 'extension2', 'extension3']);
   });
@@ -365,7 +422,7 @@ describe('readConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
-    const result = await readConfigs(['config1.json', 'config2.json']);
+    const result = await combineConfigs(['config1.json', 'config2.json']);
 
     expect(result.extensions).toEqual(['extension1']);
   });
@@ -386,7 +443,7 @@ describe('readConfigs', () => {
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
-    await readConfigs(['config1.json', 'config2.json']);
+    await combineConfigs(['config1.json', 'config2.json']);
 
     expect(consoleSpy).toHaveBeenCalledWith(
       'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
@@ -411,7 +468,7 @@ describe('readConfigs', () => {
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
-    await readConfigs(['config1.json', 'config2.json']);
+    await combineConfigs(['config1.json', 'config2.json']);
 
     expect(consoleSpy).toHaveBeenCalledWith(
       'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',

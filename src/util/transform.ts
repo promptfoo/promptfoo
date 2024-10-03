@@ -1,14 +1,19 @@
 import path from 'path';
-import { isJavascriptFile } from '.';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import { runPython } from '../python/pythonUtils';
 import type { Prompt, Vars } from '../types';
+import { isJavascriptFile } from './';
 
 export type TransformContext = {
   vars?: Vars;
   prompt: Partial<Prompt>;
 };
+
+export enum TransformInputType {
+  OUTPUT = 'output',
+  VARS = 'vars',
+}
 
 /**
  * Parses a file path string to extract the file path and function name.
@@ -84,8 +89,8 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
  * @param code - The JavaScript code to convert into a function.
  * @returns A Function created from the provided code.
  */
-function getInlineTransformFunction(code: string): Function {
-  return new Function('output', 'context', code.includes('\n') ? code : `return ${code}`);
+function getInlineTransformFunction(code: string, inputType: TransformInputType): Function {
+  return new Function(inputType, 'context', code.includes('\n') ? code : `return ${code}`);
 }
 
 /**
@@ -93,11 +98,14 @@ function getInlineTransformFunction(code: string): Function {
  * @param codeOrFilepath - Either inline code or a file path starting with 'file://'.
  * @returns A Promise resolving to the appropriate transform function.
  */
-async function getTransformFunction(codeOrFilepath: string): Promise<Function> {
+async function getTransformFunction(
+  codeOrFilepath: string,
+  inputType: TransformInputType,
+): Promise<Function> {
   if (codeOrFilepath.startsWith('file://')) {
     return getFileTransformFunction(codeOrFilepath);
   }
-  return getInlineTransformFunction(codeOrFilepath);
+  return getInlineTransformFunction(codeOrFilepath, inputType);
 }
 
 /**
@@ -120,8 +128,10 @@ export async function transform(
   transformInput: string | object | undefined,
   context: TransformContext,
   validateReturn: boolean = true,
+  inputType: TransformInputType = TransformInputType.OUTPUT,
 ): Promise<string | object | undefined> {
-  const postprocessFn = await getTransformFunction(codeOrFilepath);
+  const postprocessFn = await getTransformFunction(codeOrFilepath, inputType);
+
   const ret = await Promise.resolve(postprocessFn(transformInput, context));
 
   if (validateReturn && ret == null) {

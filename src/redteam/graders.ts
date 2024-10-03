@@ -1,5 +1,5 @@
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
-import type { RedteamModelGrader } from './plugins/base';
+import type { RedteamGraderBase } from './plugins/base';
 import { BflaGrader } from './plugins/bfla';
 import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
@@ -77,6 +77,6 @@ export const GRADERS = {
   'promptfoo:redteam:mathprompt': new MathPromptGrader(), // Add the MathPromptGrader here
 };
 
-export function getGraderById(id: string): RedteamModelGrader | undefined {
+export function getGraderById(id: string): RedteamGraderBase | undefined {
   return GRADERS[id as keyof typeof GRADERS];
 }

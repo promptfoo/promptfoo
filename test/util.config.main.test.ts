@@ -7,7 +7,7 @@ import {
   getConfigDirectoryPath,
   setConfigDirectoryPath,
   writePromptfooConfig,
-} from '../src/util/config';
+} from '../src/util/config/manage';
 
 jest.mock('os');
 jest.mock('fs');

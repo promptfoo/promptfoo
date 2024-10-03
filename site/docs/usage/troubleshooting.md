@@ -36,3 +36,13 @@ defaultTest:
         config:
           apiHost: xxx.openai.azure.com
 ```
+
+## Timeout errors
+
+When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. These timeouts can manifest as generic errors or as a lack of useful error messages.
+
+To resolve timeout issues, try limiting concurrency by using the `-j 1` flag when running `promptfoo eval`. This reduces the number of simultaneous requests:
+
+```
+promptfoo eval -j 1
+```

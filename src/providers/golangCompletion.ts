@@ -13,7 +13,8 @@ import type {
   ProviderEmbeddingResponse,
   ProviderClassificationResponse,
 } from '../types/providers';
-import { parsePathOrGlob, sha256 } from '../util';
+import { parsePathOrGlob } from '../util';
+import { sha256 } from '../util/createHash';
 import { safeJsonStringify } from '../util/json';
 
 const execAsync = util.promisify(exec);

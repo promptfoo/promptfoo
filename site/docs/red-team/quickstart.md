@@ -68,7 +68,6 @@ targets:
         'Content-Type': 'application/json'
       body:
         myPrompt: '{{prompt}}'
-      responseParser: 'json.output'
 
 purpose: 'Budget travel agent'
 ```
@@ -102,30 +101,6 @@ Promptfoo can hook directly into your existing LLM app to attack targets via Pyt
 - [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
 - [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
 
-## Generate adversarial test cases
-
-The `init` step will do this for you automatically, but in case you'd like to manually re-generate your adversarial inputs:
-
-<Tabs groupId="installation-method">
-  <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest redteam generate
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo redteam generate
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo redteam generate
-    </CodeBlock>
-  </TabItem>
-</Tabs>
-
-This will generate several hundred adversarial inputs across many categories of potential harm and save them in `redteam.yaml`.
-
 ## Run the eval
 
 Now that we've generated the test cases, we're ready to run the adversarial evaluation.
@@ -133,52 +108,54 @@ Now that we've generated the test cases, we're ready to run the adversarial eval
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest eval -c redteam.yaml
+      npx promptfoo@latest redteam run
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo eval -c redteam.yaml
+      promptfoo redteam run
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo eval -c redteam.yaml
+      promptfoo redteam run
     </CodeBlock>
   </TabItem>
 </Tabs>
+
+This command will generate several hundred adversarial inputs across many categories of potential harm and save them in `redteam.yaml`. Then, it will run the test cases against the target.
 
 ## View the results
 
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest view
+      npx promptfoo@latest redteam report
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo view
+      promptfoo redteam report
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo view
+      promptfoo redteam report
     </CodeBlock>
   </TabItem>
 </Tabs>
 
-Promptfoo provides a detailed eval view that lets you dig into specific red team failure cases:
-
-![llm red team evals](/img/docs/redteam-results.png)
-
-Click "Vulnerability Report" in the top right corner to see the report view:
+Promptfoo provides a report view that lets you dig into specific red team failure cases:
 
 ![llm red team report](/img/riskreport-1@2x.png)
 
 That view includes a breakdown of specific test types that are connected to the eval view:
 
 ![llm red team remediations](/img/riskreport-2.png)
+
+Clicking into a specific test case to view logs will display the raw inputs and outputs:
+
+![llm red team evals](/img/docs/redteam-results.png)
 
 ### Understanding the report view
 

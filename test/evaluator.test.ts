@@ -1,7 +1,7 @@
 import glob from 'glob';
 import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
-import type { ApiProvider, TestSuite, Prompt } from '../src/types';
+import type { ApiProvider, Prompt, TestSuite } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
@@ -509,6 +509,64 @@ describe('evaluator', () => {
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe('Transformed: Original output');
+  });
+
+  it('evaluate with vars transform', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Hello {{ name }}, your age is {{ age }}')],
+      tests: [
+        {
+          vars: { name: 'Alice', age: 30 },
+        },
+        {
+          vars: { name: 'Bob', age: 25 },
+          options: {
+            transformVars: '{ ...vars, age: vars.age + 5 }',
+          },
+        },
+      ],
+      defaultTest: {
+        options: {
+          transformVars: '{ ...vars, name: vars.name.toUpperCase() }',
+        },
+      },
+    };
+
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 2,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            prompt: expect.objectContaining({
+              raw: 'Hello ALICE, your age is 30',
+              label: 'Hello {{ name }}, your age is {{ age }}',
+            }),
+            response: expect.objectContaining({
+              output: 'Test output',
+            }),
+          }),
+          expect.objectContaining({
+            // NOTE: test overrides defaultTest transform. Bob not BOB
+            prompt: expect.objectContaining({
+              raw: 'Hello Bob, your age is 30',
+            }),
+            response: expect.objectContaining({
+              output: 'Test output',
+            }),
+            vars: {
+              name: 'Bob',
+              age: 30,
+            },
+          }),
+        ]),
+      }),
+    );
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
   it('evaluate with provider transform and test transform', async () => {

@@ -290,7 +290,7 @@ export default function ResultsView({
     if (newDescription !== null && newDescription !== config.description) {
       const newConfig = { ...config, description: newDescription };
       try {
-        const response = await callApi(`/api/eval/${evalId}`, {
+        const response = await callApi(`/eval/${evalId}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -569,7 +569,10 @@ export default function ResultsView({
           </ResponsiveStack>
         </Box>
       </ResponsiveStack>
-      <ResultsCharts columnVisibility={currentColumnState.columnVisibility} />
+      <ResultsCharts
+        columnVisibility={currentColumnState.columnVisibility}
+        recentEvals={recentEvals}
+      />
       <ResultsTable
         maxTextLength={maxTextLength}
         columnVisibility={currentColumnState.columnVisibility}
