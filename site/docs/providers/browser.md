@@ -14,7 +14,7 @@ This provider uses Playwright to control a headless Chrome browser, enabling you
 Playwright is a peer dependency of promptfoo, so you will need to install it separately:
 
 ```bash
-npm install playwright @playwright/browser-chromium
+npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
 ```
 
 ## Configuration
@@ -65,6 +65,14 @@ The Headless Browser Provider supports the following actions:
 
 - `selector`: The CSS selector of the element to click
 
+#### extract
+
+- `selector`: The CSS selector of the element to extract text from
+
+#### screenshot
+
+- `filename`: The filename to save the screenshot to
+
 #### type
 
 - `selector`: The CSS selector of the input element
@@ -75,14 +83,6 @@ Special characters can be sent using the following placeholders:
 - `<enter>`
 - `<tab>`
 - `<escape>`
-
-#### screenshot
-
-- `filename`: The filename to save the screenshot to
-
-#### extract
-
-- `selector`: The CSS selector of the element to extract text from
 
 #### wait
 
@@ -150,12 +150,13 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 
 Supported config options:
 
-| Option         | Type               | Description                                                                                                                                                                  |
-| -------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| headless       | boolean            | Whether to run the browser in headless mode. Defaults to `true`.                                                                                                             |
-| responseParser | string \| Function | A function or string representation of a function to parse the response. Receives an object with `extracted` and `finalHtml` parameters and should return a ProviderResponse |
-| steps          | BrowserAction[]    | An array of actions to perform in the browser                                                                                                                                |
-| timeoutMs      | number             | The maximum time in milliseconds to wait for the browser operations to complete                                                                                              |
+| Option         | Type                                                                             | Description                                                                                                                                                                  |
+| -------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| headless       | `boolean`                                                                        | Whether to run the browser in headless mode. Defaults to `true`.                                                                                                             |
+| cookies        | `string` \| `{ name: string; value: string; domain?: string; path?: string; }[]` | A string or array of cookies to set on the browser                                                                                                                           |
+| responseParser | `string` \| `Function`                                                           | A function or string representation of a function to parse the response. Receives an object with `extracted` and `finalHtml` parameters and should return a ProviderResponse |
+| steps          | `BrowserAction[]`                                                                | An array of actions to perform in the browser                                                                                                                                |
+| timeoutMs      | `number`                                                                         | The maximum time in milliseconds to wait for the browser operations to complete                                                                                              |
 
 Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
@@ -167,9 +168,9 @@ The `steps` array in the configuration can include the following actions:
 | ------------------ | ---------------------------------------------------- | ---------------------------------- | ---------------------------------- |
 | navigate           | Navigate to a specified URL                          | `url`: string                      |                                    |
 | click              | Click on an element                                  | `selector`: string                 |                                    |
-| type               | Type text into an input field                        | `selector`: string, `text`: string |                                    |
-| screenshot         | Take a screenshot of the page                        | `path`: string                     | `fullPage`: boolean                |
 | extract            | Extract text content from an element                 | `selector`: string, `name`: string |                                    |
+| screenshot         | Take a screenshot of the page                        | `path`: string                     | `fullPage`: boolean                |
+| type               | Type text into an input field                        | `selector`: string, `text`: string |                                    |
 | wait               | Wait for a specified amount of time                  | `ms`: number                       |                                    |
 | waitForNewChildren | Wait for new child elements to appear under a parent | `parentSelector`: string           | `delay`: number, `timeout`: number |
 

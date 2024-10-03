@@ -75,7 +75,9 @@
     "google-auth-library": "^9.7.0",
     "langfuse": "^3.7.0",
     "node-sql-parser": "^5.2.0",
-    "playwright": "^1.47.2"
+    "playwright": "^1.47.2",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.663.0",
