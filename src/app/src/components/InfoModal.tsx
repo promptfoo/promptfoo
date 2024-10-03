@@ -38,7 +38,7 @@ const links: { icon: React.ReactNode; text: string; href: string }[] = [
   {
     icon: <CalendarTodayIcon fontSize="small" />,
     text: 'Book a Meeting',
-    href: 'https://cal.com/team/promptfoo/intro',
+    href: 'https://cal.com/team/promptfoo/intro2',
   },
 ];
 
