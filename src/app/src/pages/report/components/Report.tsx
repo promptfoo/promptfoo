@@ -303,16 +303,18 @@ const App: React.FC = () => {
             })}
           </Typography>
           <Box className="report-details">
-            <Chip
-              size="small"
-              label={
-                <>
-                  <strong>Model:</strong> {selectedPrompt?.provider}
-                </>
-              }
-              onClick={handlePromptChipClick}
-              style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
-            />
+            {selectedPrompt && (
+              <Chip
+                size="small"
+                label={
+                  <>
+                    <strong>Model:</strong> {selectedPrompt.provider}
+                  </>
+                }
+                onClick={handlePromptChipClick}
+                style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
+              />
+            )}
             <Chip
               size="small"
               label={
@@ -321,20 +323,22 @@ const App: React.FC = () => {
                 </>
               }
             />
-            <Chip
-              size="small"
-              label={
-                <>
-                  <strong>Prompt:</strong> &quot;
-                  {selectedPrompt?.raw.length > 40
-                    ? `${selectedPrompt?.raw.substring(0, 40)}...`
-                    : selectedPrompt?.raw}
-                  &quot;
-                </>
-              }
-              onClick={handlePromptChipClick}
-              style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
-            />
+            {selectedPrompt && (
+              <Chip
+                size="small"
+                label={
+                  <>
+                    <strong>Prompt:</strong> &quot;
+                    {selectedPrompt.raw.length > 40
+                      ? `${selectedPrompt.raw.substring(0, 40)}...`
+                      : selectedPrompt.raw}
+                    &quot;
+                  </>
+                }
+                onClick={handlePromptChipClick}
+                style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
+              />
+            )}
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} />

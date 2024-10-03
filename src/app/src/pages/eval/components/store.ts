@@ -37,7 +37,7 @@ interface TableState {
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
 
-  version: number;
+  version: number | null;
   setVersion: (version: number) => void;
 
   maxTextLength: number;
@@ -71,7 +71,7 @@ export const useStore = create<TableState>()(
       author: null,
       setAuthor: (author: string | null) => set(() => ({ author })),
 
-      version: 3,
+      version: null,
       setVersion: (version: number) => set(() => ({ version })),
 
       table: null,
