@@ -15,7 +15,16 @@ jest.mock('../src/util', () => ({
 }));
 
 jest.mock('../src/esm', () => ({
-  importModule: jest.fn().mockResolvedValue(() => {}),
+  importModule: jest.fn(async (modulePath: string, functionName?: string) => {
+    const mockModule = {
+      default: jest.fn((data) => data.defaultField),
+      parseResponse: jest.fn((data) => data.specificField),
+    };
+    if (functionName) {
+      return mockModule[functionName as keyof typeof mockModule];
+    }
+    return mockModule;
+  }),
 }));
 
 jest.mock('../src/cliState', () => ({
@@ -440,45 +449,16 @@ describe('HttpProvider', () => {
     });
 
     it('should handle file:// parser with JavaScript file', async () => {
-      const mockParser = jest.fn((data) => data.customField);
+      const mockParser = jest.fn((data, text) => text.toUpperCase());
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          body: { key: 'value' },
-          responseParser: 'file://custom-parser.js',
-        },
-      });
-
-      const mockResponse = { data: JSON.stringify({ customField: 'parsed' }), cached: false };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-      const result = await provider.callApi('test prompt');
-      expect(result.output).toBe('parsed');
+      const parser = await createResponseParser('file://custom-parser.js');
+      const result = parser({ customField: 'parsed' }, 'parsed');
       expect(importModule).toHaveBeenCalledWith(
         path.resolve('/mock/base/path', 'custom-parser.js'),
+        undefined,
       );
-    });
-
-    it('should handle file:// parser with default export', async () => {
-      const mockParser = jest.fn((data) => data.defaultField);
-      jest.mocked(importModule).mockResolvedValueOnce({ default: mockParser });
-
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          body: { key: 'value' },
-          responseParser: 'file://default-export-parser.js',
-        },
-      });
-
-      const mockResponse = {
-        data: JSON.stringify({ defaultField: 'default parsed' }),
-        cached: false,
-      };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-      const result = await provider.callApi('test prompt');
-      expect(result.output).toBe('default parsed');
+      expect(result).toBe('PARSED');
     });
 
     it('should throw error for unsupported file type', async () => {
@@ -507,6 +487,47 @@ describe('HttpProvider', () => {
       const result = await provider.callApi('test prompt');
       expect(result.output).toBe('parsed');
     });
+
+    it('should handle file:// parser with specific function name', async () => {
+      const mockParser = jest.fn((data, text) => data.specificField);
+      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+      const parser = await createResponseParser('file://custom-parser.js:parseResponse');
+      const result = parser({ specificField: 'parsed' }, '');
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'custom-parser.js'),
+        'parseResponse',
+      );
+      expect(result).toBe('parsed');
+    });
+
+    it('should throw error for malformed file:// parser', async () => {
+      jest.mocked(importModule).mockResolvedValueOnce({});
+
+      await expect(createResponseParser('file://invalid-parser.js')).rejects.toThrow(
+        /Response parser malformed: .*invalid-parser\.js must export a function or have a default export as a function/,
+      );
+    });
+
+    it('should return default parser when no parser is provided', async () => {
+      const parser = await createResponseParser(undefined);
+      const result = parser({ key: 'value' }, 'raw text');
+      expect(result.output).toEqual({ key: 'value' });
+    });
+
+    it('should handle response parser file with default export', async () => {
+      const mockParser = jest.fn((data) => data.defaultField);
+      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+      const parser = await createResponseParser('file://default-parser.js');
+      const result = parser({ defaultField: 'parsed' }, '');
+
+      expect(result).toBe('parsed');
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'default-parser.js'),
+        undefined,
+      );
+    });
   });
 
   it('should use default parser when no parser is provided', async () => {
@@ -523,5 +544,20 @@ describe('HttpProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toEqual({ key: 'value' });
+  });
+
+  it('should handle response parser returning an object', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        body: { key: 'value' },
+        responseParser: (json: any, text: string) => ({ custom: json.result }),
+      },
+    });
+
+    const mockResponse = { data: JSON.stringify({ result: 'success' }), cached: false };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test prompt');
+    expect(result.output).toEqual({ custom: 'success' });
   });
 });

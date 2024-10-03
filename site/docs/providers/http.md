@@ -295,6 +295,17 @@ export default (json, text) => {
 };
 ```
 
+You can also specify a function name to be imported from a file:
+
+```yaml
+providers:
+  - id: 'https://example.com/api'
+    config:
+      responseParser: 'file://path/to/parser.js:parseResponse'
+```
+
+This will import the function `parseResponse` from the file `path/to/parser.js`.
+
 ## Reference
 
 Supported config options:

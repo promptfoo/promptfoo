@@ -41,19 +41,19 @@ export async function createResponseParser(
   if (typeof parser === 'string') {
     if (parser.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const filePath = path.resolve(basePath, parser.slice('file://'.length));
-
+      let filePath = path.resolve(basePath, parser.slice('file://'.length));
+      const splitFilePath = filePath.split(':');
+      filePath = splitFilePath.length > 1 ? splitFilePath.slice(0, -1).join(':') : filePath;
+      const functionName =
+        splitFilePath.length > 1 ? splitFilePath[splitFilePath.length - 1] : undefined;
       if (isJavascriptFile(filePath)) {
-        const requiredModule = await importModule(filePath);
+        const requiredModule = await importModule(filePath, functionName);
         if (typeof requiredModule === 'function') {
           return requiredModule;
-        } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-          return requiredModule.default;
-        } else {
-          throw new Error(
-            `Response parser malformed: ${filePath} must export a function or have a default export as a function`,
-          );
         }
+        throw new Error(
+          `Response parser malformed: ${filePath} must export a function or have a default export as a function`,
+        );
       } else {
         throw new Error(`Unsupported file type for response parser: ${filePath}`);
       }
