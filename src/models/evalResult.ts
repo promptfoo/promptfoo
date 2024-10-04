@@ -11,6 +11,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import { type EvaluateResult } from '../types';
+import { getCurrentTimestamp } from '../util';
 
 export default class EvalResult {
   static async createFromEvaluateResult(
@@ -153,7 +154,10 @@ export default class EvalResult {
     const db = getDb();
     //check if this exists in the db
     if (this.persisted) {
-      await db.update(evalResultsTable).set(this).where(eq(evalResultsTable.id, this.id));
+      await db
+        .update(evalResultsTable)
+        .set({ ...this, updatedAt: getCurrentTimestamp() })
+        .where(eq(evalResultsTable.id, this.id));
     } else {
       const result = await db.insert(evalResultsTable).values(this).returning();
       this.id = result[0].id;

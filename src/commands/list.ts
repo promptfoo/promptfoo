@@ -24,7 +24,7 @@ export function listCommand(program: Command) {
 
       const evals = await Eval.getAll(Number(cmdObj.n) || undefined);
 
-      const vars = await EvalQueries.getVarsFromEvals(evals.map((e) => e.id));
+      const vars = await EvalQueries.getVarsFromEvals(evals);
 
       const tableData = evals.map((evl) => {
         const prompts = evl.getPrompts();

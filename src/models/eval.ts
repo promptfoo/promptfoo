@@ -27,6 +27,7 @@ import type {
   ResultsFile,
   UnifiedConfig,
 } from '../types';
+import { getCurrentTimestamp } from '../util';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import EvalResult from './evalResult';
@@ -37,11 +38,11 @@ export function getEvalId(createdAt: Date = new Date()) {
 }
 
 export class EvalQueries {
-  static async getVarsFromEvals(ids: string[]) {
+  static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
     const query = sql.raw(
       `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
-FROM eval_results where eval_id IN (${ids.map((id) => `'${id}'`).join(',')})) t, json_each(t.vars) j;`,
+FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
     );
     // @ts-ignore
     const results: { key: string; eval_id: string }[] = await db.all(query);
@@ -333,6 +334,7 @@ export default class Eval {
       prompts: this.prompts,
       description: this.config.description,
       author: this.author,
+      updatedAt: getCurrentTimestamp(),
     };
 
     if (this.useOldResults()) {
