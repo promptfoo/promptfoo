@@ -382,12 +382,10 @@ export default class Eval {
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {
+    this.prompts = prompts;
     if (this.persisted) {
-      this.prompts = prompts;
       const db = getDb();
       await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
-    } else {
-      this.prompts = prompts;
     }
   }
 
