@@ -146,7 +146,7 @@ export default class EvalResult {
       prompt: this.prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
-      provider: this.provider,
+      provider: { id: this.provider.id, label: this.provider.label },
       response: this.providerResponse || undefined,
       score: this.score,
       success: this.success,
