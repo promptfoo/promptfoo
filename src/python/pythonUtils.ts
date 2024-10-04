@@ -87,9 +87,9 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
 export async function runPython(
   scriptPath: string,
   method: string,
-  args: (string | object | undefined)[],
+  args: (string | number | object | undefined)[],
   options: { pythonExecutable?: string } = {},
-): Promise<string | object> {
+): Promise<any> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
     os.tmpdir(),
@@ -105,10 +105,11 @@ export async function runPython(
   await validatePythonPath(pythonPath, typeof customPath === 'string');
 
   const pythonOptions: PythonShellOptions = {
+    args: [absPath, method, tempJsonPath, outputPath],
+    env: process.env,
     mode: 'binary',
     pythonPath,
     scriptPath: __dirname,
-    args: [absPath, method, tempJsonPath, outputPath],
   };
 
   try {
