@@ -155,8 +155,6 @@ export async function doEval(
     const table = await evalRecord.getTable();
     if (cmdObj.table && getLogLevel() !== 'debug') {
       // Output CLI table
-
-      const table = await evalRecord.getTable();
       const outputTable = generateTable(table);
 
       logger.info('\n' + outputTable.toString());
