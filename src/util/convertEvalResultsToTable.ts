@@ -96,7 +96,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     }
 
     row.outputs[result.promptIdx] = {
-      id: `${result.testIdx}-${result.promptIdx}`,
+      id: result.id || `${result.testIdx}-${result.promptIdx}`,
       ...result,
       text: resultText || '',
       prompt: result.prompt.raw,
