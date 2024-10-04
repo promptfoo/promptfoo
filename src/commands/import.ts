@@ -23,7 +23,7 @@ export function importCommand(program: Command) {
             createdAt: evalData.createdAt,
             author: evalData.author || 'Unknown',
           });
-          await EvalResult.createMany(evalData.results.results, evalRecord.id);
+          await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
           evalId = evalRecord.id;
         } else {
           logger.debug('Importing v2 eval');
