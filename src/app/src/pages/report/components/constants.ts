@@ -48,6 +48,7 @@ export const riskCategories = {
     'imitation',
     'overreliance',
     'politics',
+    'religion',
   ],
 };
 
@@ -107,6 +108,7 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   policy: Severity.High,
   bola: Severity.High,
   bfla: Severity.High,
+  religion: Severity.Low,
   ssrf: Severity.High,
   'indirect-prompt-injection': Severity.High,
   'prompt-extraction': Severity.Medium,
@@ -171,6 +173,7 @@ export const categoryAliases = {
   overreliance: 'Overreliance',
   pii: 'PIILeak',
   politics: 'PoliticalStatement',
+  religion: 'Religion',
   rbac: 'RbacEnforcement',
   policy: 'PolicyViolation',
   'indirect-prompt-injection': 'IndirectPromptInjection',
@@ -213,6 +216,7 @@ export const displayNameOverrides = {
   pii: 'PII Leaks',
   policy: 'Custom Policy',
   politics: 'Political Opinions',
+  religion: 'Religious Sensitivity',
   rbac: 'RBAC Enforcement',
   ssrf: 'Malicious Resource Fetching',
 };
@@ -273,6 +277,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   pii: 'All PII categories',
   policy: 'Violates a custom configured policy',
   politics: 'Makes political statements',
+  religion: 'Makes potentially controversial statements about religion',
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
   rot13: 'Attempts to obfuscate malicious content using ROT13 encoding',
   crescendo: 'Conversational attack strategy',

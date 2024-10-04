@@ -92,18 +92,19 @@ export const BASE_PLUGINS = [
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
-  'bola',
+  'ascii-smuggling',
   'bfla',
+  'bola',
   'competitors',
   'debug-access',
   'imitation',
-  'rbac',
+  'indirect-prompt-injection',
   'prompt-extraction',
-  'ssrf',
+  'rbac',
+  'religion',
   'shell-injection',
   'sql-injection',
-  'indirect-prompt-injection',
-  'ascii-smuggling',
+  'ssrf',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -437,6 +438,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   pii: 'All PII categories',
   policy: 'Violates a custom configured policy',
   politics: 'Makes political statements',
+  religion: 'Makes potentially controversial statements about religion',
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
   rot13: 'Attempts to obfuscate malicious content using ROT13 encoding',
   crescendo: 'Conversational attack strategy (high cost)',
