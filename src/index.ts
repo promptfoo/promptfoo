@@ -2,6 +2,7 @@ import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
+import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import providers, { loadApiProvider } from './providers';
@@ -29,6 +30,10 @@ export * from './types';
 export { generateTable } from './table';
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
+  if (testSuite.writeLatestResults) {
+    await runDbMigrations();
+  }
+
   const constructedTestSuite: TestSuite = {
     ...testSuite,
     scenarios: testSuite.scenarios as Scenario[],
