@@ -181,14 +181,14 @@ const App: React.FC = () => {
   }
 
   const prompts =
-    evalData.prompts && evalData.prompts.length > 0
+    (evalData.version >= 4
       ? evalData.prompts
-      : (evalData.results as EvaluateSummaryV2).table?.head.prompts || [];
+      : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
   const selectedPrompt = prompts[selectedPromptIndex];
   const tableData =
     (evalData.version >= 4
       ? convertResultsToTable(evalData).body
-      : (evalData.results as EvaluateSummaryV2).table?.body) || [];
+      : (evalData.results as EvaluateSummaryV2).table.body) || [];
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {

@@ -333,7 +333,7 @@ function ResultsTable({
     () =>
       head.prompts.map((_, idx) =>
         body.reduce((acc, row) => {
-          const componentResults = row.outputs[idx].gradingResult?.componentResults;
+          const componentResults = row.outputs[idx]?.gradingResult?.componentResults;
           return acc + (componentResults ? componentResults.filter((r) => r?.pass).length : 0);
         }, 0),
       ),
@@ -545,7 +545,7 @@ function ResultsTable({
             },
             cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => {
               const output = getOutput(info.row.index, idx);
-              return (
+              return output ? (
                 <EvalOutputCell
                   output={output}
                   maxTextLength={maxTextLength}
@@ -562,6 +562,8 @@ function ResultsTable({
                   searchText={searchText}
                   showStats={showStats}
                 />
+              ) : (
+                <div style={{ padding: '20px' }}>'Test still in progress...'</div>
               );
             },
           }),
