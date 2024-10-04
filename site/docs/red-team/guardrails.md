@@ -5,7 +5,7 @@ sidebar_position: 99
 
 # Guardrails API
 
-The Guardrails API helps detect potential security risks in user inputs to language models and identify personally identifiable information (PII).
+The Guardrails API helps detect potential security risks in user inputs to language models, identify personally identifiable information (PII), and assess potential harm in content.
 
 ## Base URL
 
@@ -141,6 +141,102 @@ Content-Type: application/json
 - `flagged`: True if any PII was detected.
 - `payload.pii`: Array of detected PII entities with their types and positions in the text.
 
+### Harm Detection
+
+Analyzes input text to detect potential harmful content across various categories.
+
+#### Request
+
+```
+POST /v1/harm
+```
+
+#### Headers
+
+```
+Content-Type: application/json
+```
+
+#### Body
+
+```json
+{
+  "input": "String containing the text to analyze for potential harm"
+}
+```
+
+#### Response
+
+```json
+{
+  "model": "promptfoo-harm",
+  "results": [
+    {
+      "categories": {
+        "violent_crimes": boolean,
+        "non_violent_crimes": boolean,
+        "sex_related_crimes": boolean,
+        "child_sexual_exploitation": boolean,
+        "defamation": boolean,
+        "specialized_advice": boolean,
+        "privacy": boolean,
+        "intellectual_property": boolean,
+        "indiscriminate_weapons": boolean,
+        "hate": boolean,
+        "suicide_and_self_harm": boolean,
+        "sexual_content": boolean,
+        "elections": boolean,
+        "code_interpreter_abuse": boolean
+      },
+      "category_scores": {
+        "violent_crimes": number,
+        "non_violent_crimes": number,
+        "sex_related_crimes": number,
+        "child_sexual_exploitation": number,
+        "defamation": number,
+        "specialized_advice": number,
+        "privacy": number,
+        "intellectual_property": number,
+        "indiscriminate_weapons": number,
+        "hate": number,
+        "suicide_and_self_harm": number,
+        "sexual_content": number,
+        "elections": number,
+        "code_interpreter_abuse": number
+      },
+      "flagged": boolean
+    }
+  ]
+}
+```
+
+- Each category in `categories` indicates whether the input contains content related to that harm category.
+- `category_scores` provides a numerical score (between 0 and 1) for each harm category.
+- `flagged`: True if any harm category is detected in the input.
+
+### Supported Categories
+
+The harm detection API supports the following categories from ML Commons taxonomy:
+
+| Category                  | Description                                                   |
+| ------------------------- | ------------------------------------------------------------- |
+| violent_crimes            | Content related to violent criminal activities                |
+| non_violent_crimes        | Content related to non-violent criminal activities            |
+| sex_related_crimes        | Content related to sex crimes                                 |
+| child_sexual_exploitation | Content involving the sexual exploitation of minors           |
+| defamation                | Content that could be considered defamatory                   |
+| specialized_advice        | Potentially harmful specialized advice (e.g., medical, legal) |
+| privacy                   | Content that may violate privacy                              |
+| intellectual_property     | Content that may infringe on intellectual property rights     |
+| indiscriminate_weapons    | Content related to weapons of mass destruction                |
+| hate                      | Hate speech or content promoting discrimination               |
+| suicide_and_self_harm     | Content related to suicide or self-harm                       |
+| sexual_content            | Explicit sexual content                                       |
+| elections                 | Content that may interfere with elections                     |
+| code_interpreter_abuse    | Potential abuse of code interpretation features               |
+
+Each category is assigned a boolean value indicating its presence and a numerical score between 0 and 1 representing the confidence level of the detection.
+
 ## Examples
 
 ### Guard Classification Example
@@ -218,6 +314,36 @@ curl https://api.promptfoo.dev/v1/pii \
   ]
 }
 ```
+
+### Harm Detection Example
+
+```bash
+curl https://api.promptfoo.dev/v1/harm \
+  -X POST \
+  -d '{"input": "How to make homemade explosives"}' \
+  -H 'Content-Type: application/json'
+```
+
+#### Response
+
+```json
+{
+  "model": "promptfoo-harm",
+  "results": [
+    {
+      "categories": {
+        "indiscriminate_weapons": true
+      },
+      "category_scores": {
+        "indiscriminate_weapons": 1
+      },
+      "flagged": true
+    }
+  ]
+}
+```
+
+This example shows the detection of potentially harmful content related to indiscriminate weapons.
 
 ## More
 
