@@ -65,18 +65,6 @@ export default class EvalResult {
     return returnResults;
   }
 
-  static async createMany(results: EvalResult[], evalId: string) {
-    const db = getDb();
-    await db.transaction(async (tx) => {
-      for (const result of results) {
-        await tx
-          .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
-          .returning();
-      }
-    });
-  }
-
   static async findById(id: string) {
     const db = getDb();
     const result = await db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id));
