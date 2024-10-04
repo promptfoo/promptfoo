@@ -45,36 +45,35 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   );
   // first we need to get our prompts, we can get that from any of the results in each column
   const results = eval_.results;
-  let rows: EvaluateTableRow[] = [];
   const completedPrompts: Record<string, CompletedPrompt> = {};
   const varsForHeader = new Set<string>();
   const varValuesForRow = new Map<number, Record<string, string>>();
+
+  const rowMap: Record<number, EvaluateTableRow> = {};
   for (const result of results.results) {
     // vars
     for (const varName of Object.keys(result.vars || {})) {
       varsForHeader.add(varName);
     }
-    let row = rows[result.testIdx];
-    if (row == null) {
-      row = {
-        description: result.description || undefined,
-        outputs: [],
-        vars: result.vars
-          ? Object.values(varsForHeader)
-              .map((varName) => {
-                const varValue = result.vars?.[varName] || '';
-                if (typeof varValue === 'string') {
-                  return varValue;
-                }
-                return JSON.stringify(varValue);
-              })
-              .flat()
-          : [],
-        test: result.testCase,
-      };
-      varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
-      rows[result.testIdx] = row;
-    }
+
+    const row = rowMap[result.testIdx] || {
+      description: result.description || undefined,
+      outputs: [],
+      vars: result.vars
+        ? Object.values(varsForHeader)
+            .map((varName) => {
+              const varValue = result.vars?.[varName] || '';
+              if (typeof varValue === 'string') {
+                return varValue;
+              }
+              return JSON.stringify(varValue);
+            })
+            .flat()
+        : [],
+      test: result.testCase,
+    };
+    varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
+    rowMap[result.testIdx] = row;
 
     // format text
     let resultText: string | undefined;
@@ -140,8 +139,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     prompt.metrics.namedScoresCount =
       eval_.prompts[result.promptIdx]?.metrics?.namedScoresCount || {};
   }
-  // I have no idea why but for some reason the loop is creating one extra row that is null
-  rows = rows.filter((row) => row != null);
+  const rows = Object.values(rowMap);
   const sortedVars = [...varsForHeader].sort();
   for (const [rowIdx, row] of rows.entries()) {
     row.vars = sortedVars.map((varName) => varValuesForRow.get(rowIdx)?.[varName] || '');
