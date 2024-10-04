@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
+import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
 
 jest.mock('../../src/logger');
@@ -151,5 +152,20 @@ describe('pythonUtils Integration Tests', () => {
     );
     expect((result as any).env).toBe('test_value');
     delete process.env.TEST_ENV;
+  });
+
+  it('should log debug messages', async () => {
+    jest.clearAllMocks();
+
+    const result = await runPython(path.join(scriptsDir, 'simple.py'), 'main', ['Debug Test']);
+
+    expect(result).toEqual({
+      message: 'Debug Test',
+      success: true,
+    });
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Running Python wrapper with args'),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Python script'));
   });
 });
