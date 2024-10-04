@@ -239,7 +239,9 @@ export default function Dashboard() {
 
   const { severityCounts, totalIssues } = calculateSeveritySummary();
 
-  const autoCompleteOptions = Array.from(new Set(evals.map((eval_) => eval_.description))).sort();
+  const autoCompleteOptions = Array.from(new Set(evals.map((eval_) => eval_.description)))
+    .filter((description): description is string => description !== null)
+    .sort();
 
   return (
     <Box
