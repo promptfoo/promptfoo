@@ -61,55 +61,12 @@ export default class Eval {
   author?: string;
   description?: string;
   config: Partial<UnifiedConfig>;
+  // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
   results: EvalResult[];
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
-
-  static async summaryResults(
-    limit: number = DEFAULT_QUERY_LIMIT,
-    filterDescription?: string,
-    datasetId?: string,
-  ) {
-    const db = getDb();
-    const startTime = performance.now();
-    const query = db
-      .select({
-        evalId: evalsTable.id,
-        createdAt: evalsTable.createdAt,
-        description: evalsTable.description,
-        numTests: sql`MAX(${evalResultsTable.testIdx} + 1)`.as('numTests'),
-        datasetId: evalsToDatasets.datasetId,
-      })
-      .from(evalsTable)
-      .leftJoin(evalsToDatasets, eq(evalsTable.id, evalsToDatasets.evalId))
-      .leftJoin(evalResultsTable, eq(evalsTable.id, evalResultsTable.evalId))
-      .where(
-        and(
-          datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
-          filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
-          eq(evalsTable.results, {}),
-        ),
-      )
-      .groupBy(evalsTable.id);
-
-    const results = query.orderBy(desc(evalsTable.createdAt)).limit(limit).all();
-
-    const mappedResults = results.map((result) => ({
-      evalId: result.evalId,
-      createdAt: result.createdAt,
-      description: result.description,
-      numTests: (result.numTests as number) || 0,
-      datasetId: result.datasetId,
-    }));
-
-    const endTime = performance.now();
-    const executionTime = endTime - startTime;
-    logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
-
-    return mappedResults;
-  }
 
   static async latest() {
     const db = getDb();
@@ -131,18 +88,18 @@ export default class Eval {
   static async findById(id: string) {
     const db = getDb();
 
-    const [evals, results, datasetResults] = await Promise.all([
-      db.select().from(evalsTable).where(eq(evalsTable.id, id)),
-      db.select().from(evalResultsTable).where(eq(evalResultsTable.evalId, id)).execute(),
-      db
+    const { evals, datasetResults } = await db.transaction(async (tx) => {
+      const evals = await tx.select().from(evalsTable).where(eq(evalsTable.id, id));
+      const datasetResults = await tx
         .select({
           datasetId: evalsToDatasets.datasetId,
         })
         .from(evalsToDatasets)
         .where(eq(evalsToDatasets.evalId, id))
-        .limit(1)
-        .execute(),
-    ]);
+        .limit(1);
+
+      return { evals, datasetResults };
+    });
 
     if (evals.length === 0) {
       return undefined;
@@ -160,16 +117,14 @@ export default class Eval {
       datasetId,
       persisted: true,
     });
-    if (results.length > 0) {
-      evalInstance.results = results.map((r) => new EvalResult({ ...r, persisted: true }));
-    } else {
+    if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
     }
 
     return evalInstance;
   }
 
-  static async getAll(limit: number = DEFAULT_QUERY_LIMIT) {
+  static async getMany(limit: number = DEFAULT_QUERY_LIMIT) {
     const db = getDb();
     const evals = await db
       .select()
@@ -487,4 +442,48 @@ export default class Eval {
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
+}
+
+export async function getSummaryofLatestEvals(
+  limit: number = DEFAULT_QUERY_LIMIT,
+  filterDescription?: string,
+  datasetId?: string,
+) {
+  const db = getDb();
+  const startTime = performance.now();
+  const query = db
+    .select({
+      evalId: evalsTable.id,
+      createdAt: evalsTable.createdAt,
+      description: evalsTable.description,
+      numTests: sql`MAX(${evalResultsTable.testIdx} + 1)`.as('numTests'),
+      datasetId: evalsToDatasets.datasetId,
+    })
+    .from(evalsTable)
+    .leftJoin(evalsToDatasets, eq(evalsTable.id, evalsToDatasets.evalId))
+    .leftJoin(evalResultsTable, eq(evalsTable.id, evalResultsTable.evalId))
+    .where(
+      and(
+        datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
+        filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
+        eq(evalsTable.results, {}),
+      ),
+    )
+    .groupBy(evalsTable.id);
+
+  const results = query.orderBy(desc(evalsTable.createdAt)).limit(limit).all();
+
+  const mappedResults = results.map((result) => ({
+    evalId: result.evalId,
+    createdAt: result.createdAt,
+    description: result.description,
+    numTests: (result.numTests as number) || 0,
+    datasetId: result.datasetId,
+  }));
+
+  const endTime = performance.now();
+  const executionTime = endTime - startTime;
+  logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
+
+  return mappedResults;
 }

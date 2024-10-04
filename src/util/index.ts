@@ -30,7 +30,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { getEvalId } from '../models/eval';
+import Eval, { getEvalId, getSummaryofLatestEvals } from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -375,7 +375,7 @@ export async function listPreviousResults(
 
   const endTime = performance.now();
   const executionTime = endTime - startTime;
-  const evalResults = await Eval.summaryResults(undefined, filterDescription, datasetId);
+  const evalResults = await getSummaryofLatestEvals(undefined, filterDescription, datasetId);
   logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
   const combinedResults = [...evalResults, ...mappedResults];
   return combinedResults;
@@ -537,7 +537,7 @@ export async function getPromptsWithPredicate(
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
-  const evals_ = await Eval.getAll(limit);
+  const evals_ = await Eval.getMany(limit);
 
   const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
 
@@ -607,7 +607,7 @@ export async function getTestCasesWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<TestCasesWithMetadata[]> {
-  const evals_ = await Eval.getAll(limit);
+  const evals_ = await Eval.getMany(limit);
 
   const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
 

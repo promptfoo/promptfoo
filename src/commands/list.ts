@@ -22,7 +22,7 @@ export function listCommand(program: Command) {
       });
       await telemetry.send();
 
-      const evals = await Eval.getAll(Number(cmdObj.n) || undefined);
+      const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
 
       const vars = await EvalQueries.getVarsFromEvals(evals);
 
