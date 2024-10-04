@@ -169,7 +169,6 @@ export function createApp() {
   // @ts-ignore
   app.post('/api/eval', async (req, res) => {
     const body = req.body;
-
     try {
       if (body.data) {
         logger.debug('[POST /api/eval] Saving eval results (v3) to database');
@@ -187,22 +186,8 @@ export function createApp() {
         });
         logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
         const failedItems: { index: number; error: string; data: EvalResult }[] = [];
-        await Promise.all(
-          incEval.results.map(async (result, index) => {
-            result.evalId = eval_.id;
-            result.id = uuidv4();
-            try {
-              await new EvalResult(result).save();
-              logger.debug(`[POST /api/eval] Saved result ${result.id} to eval ${eval_.id}`);
-            } catch (error) {
-              logger.error(
-                `[POST /api/eval] Failed to save result ${result.id} to eval ${eval_.id}: ${error}`,
-              );
-              failedItems.push({ index, error: (error as Error).message, data: result });
-              return null;
-            }
-          }),
-        );
+        await EvalResult.createMany(incEval.results, eval_.id);
+
         logger.debug(
           `[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`,
         );

@@ -419,14 +419,14 @@ export default class Eval {
     await this.loadResults();
     return this.results;
   }
-  async toEvaluateSummary(): Promise<EvaluateSummaryV3> {
+  async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       return {
-        version: 3,
+        version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
         results: this.oldResults.results,
-        prompts: this.prompts,
+        table: this.oldResults.table,
         stats: this.oldResults.stats,
       };
     }
@@ -463,14 +463,13 @@ export default class Eval {
   }
 
   async toResultsFile(): Promise<ResultsFile> {
-    const summary = await this.toEvaluateSummary();
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
-      results: summary,
+      results: await this.toEvaluateSummary(),
       config: this.config,
       author: this.author || null,
-      prompts: this.prompts,
+      prompts: this.getPrompts(),
       datasetId: this.datasetId || null,
     };
 

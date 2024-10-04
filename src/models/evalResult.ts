@@ -49,7 +49,7 @@ export default class EvalResult {
     return new EvalResult(args);
   }
 
-  static async createMany(results: EvaluateResult[], evalId: string) {
+  static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
     await db.transaction(async (tx) => {
@@ -62,6 +62,18 @@ export default class EvalResult {
       }
     });
     return returnResults;
+  }
+
+  static async createMany(results: EvalResult[], evalId: string) {
+    const db = getDb();
+    await db.transaction(async (tx) => {
+      for (const result of results) {
+        await tx
+          .insert(evalResultsTable)
+          .values({ ...result, evalId, id: randomUUID() })
+          .returning();
+      }
+    });
   }
 
   static async findById(id: string) {
