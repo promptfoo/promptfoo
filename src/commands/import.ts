@@ -3,7 +3,7 @@ import fs from 'fs';
 import { getDb } from '../database';
 import { evals } from '../database/tables';
 import logger from '../logger';
-import Eval from '../models/eval';
+import Eval, { getEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
 
@@ -27,10 +27,11 @@ export function importCommand(program: Command) {
           evalId = evalRecord.id;
         } else {
           logger.debug('Importing v2 eval');
+          evalId = evalData.id || getEvalId(evalData.createdAt);
           await db
             .insert(evals)
             .values({
-              id: evalData.id,
+              id: evalId,
               createdAt: evalData.createdAt,
               author: evalData.author || 'Unknown',
               description: evalData.description,
@@ -38,7 +39,6 @@ export function importCommand(program: Command) {
               config: evalData.config,
             })
             .run();
-          evalId = evalData.id;
         }
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
