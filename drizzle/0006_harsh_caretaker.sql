@@ -12,7 +12,7 @@ CREATE TABLE `eval_results` (
 	`provider_id` text,
 	`latency_ms` integer,
 	`cost` real,
-	`provider_response` text,
+	`response` text,
 	`error` text,
 	`success` integer NOT NULL,
 	`score` real NOT NULL,

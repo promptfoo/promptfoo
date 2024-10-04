@@ -139,8 +139,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "provider_response": {
-          "name": "provider_response",
+        "response": {
+          "name": "response",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

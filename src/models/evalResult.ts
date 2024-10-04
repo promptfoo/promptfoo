@@ -33,7 +33,7 @@ export default class EvalResult {
       error: error?.toString(),
       success,
       score: score == null ? 0 : score,
-      providerResponse: result.response || null,
+      response: result.response || null,
       gradingResult: gradingResult || null,
       namedScores,
       provider,
@@ -47,6 +47,21 @@ export default class EvalResult {
       return new EvalResult({ ...dbResult[0], persisted: true });
     }
     return new EvalResult(args);
+  }
+
+  static async createMany(results: EvaluateResult[], evalId: string) {
+    const db = getDb();
+    const returnResults: EvalResult[] = [];
+    await db.transaction(async (tx) => {
+      for (const result of results) {
+        const dbResult = await tx
+          .insert(evalResultsTable)
+          .values({ ...result, evalId, id: randomUUID() })
+          .returning();
+        returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
+      }
+    });
+    return returnResults;
   }
 
   static async findById(id: string) {
@@ -75,7 +90,7 @@ export default class EvalResult {
   error?: string | null;
   success: boolean;
   score: number;
-  providerResponse: ProviderResponse | null;
+  response: ProviderResponse | null;
   gradingResult: GradingResult | null;
   namedScores: Record<string, number>;
   provider: ProviderOptions;
@@ -94,7 +109,7 @@ export default class EvalResult {
     error?: string | null;
     success: boolean;
     score: number;
-    providerResponse: ProviderResponse | null;
+    response: ProviderResponse | null;
     gradingResult: GradingResult | null;
     namedScores?: Record<string, number> | null;
     provider: ProviderOptions;
@@ -113,7 +128,7 @@ export default class EvalResult {
     this.error = opts.error;
     this.score = opts.score;
     this.success = opts.success;
-    this.providerResponse = opts.providerResponse;
+    this.response = opts.response;
     this.gradingResult = opts.gradingResult;
     this.namedScores = opts.namedScores || {};
     this.provider = opts.provider;
@@ -147,7 +162,7 @@ export default class EvalResult {
       promptId: this.promptId,
       promptIdx: this.promptIdx,
       provider: { id: this.provider.id, label: this.provider.label },
-      response: this.providerResponse || undefined,
+      response: this.response || undefined,
       score: this.score,
       success: this.success,
       testCase: this.testCase,

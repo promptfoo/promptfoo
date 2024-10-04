@@ -107,7 +107,7 @@ export const evalResultsTable = sqliteTable(
     cost: real('cost'),
 
     // Output-related fields
-    providerResponse: text('provider_response', { mode: 'json' }).$type<ProviderResponse>(),
+    response: text('response', { mode: 'json' }).$type<ProviderResponse>(),
     error: text('error'),
 
     // Result-related fields

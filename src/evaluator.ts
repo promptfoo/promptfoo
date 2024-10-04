@@ -783,7 +783,7 @@ class Evaluator {
         (a) => a.type === 'select-best',
       ) as Assertion;
       if (compareAssertion) {
-        const outputs = resultsToCompare.map((r) => r.providerResponse?.output || '');
+        const outputs = resultsToCompare.map((r) => r.response?.output || '');
         const gradingResults = await runCompareAssertion(
           resultsToCompare[0].testCase,
           compareAssertion,

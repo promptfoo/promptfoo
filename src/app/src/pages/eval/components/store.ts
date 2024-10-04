@@ -4,7 +4,7 @@ import { get, set, del } from 'idb-keyval';
 import { create } from 'zustand';
 import type { StateStorage } from 'zustand/middleware';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { EvaluateSummary, EvaluateTable, ResultsFile, UnifiedConfig } from './types';
+import type { EvaluateSummaryV2, EvaluateTable, ResultsFile, UnifiedConfig } from './types';
 
 const storage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
@@ -80,7 +80,7 @@ export const useStore = create<TableState>()(
         if (resultsFile?.version && resultsFile.version >= 4) {
           set(() => ({ table: convertResultsToTable(resultsFile), version: resultsFile.version }));
         } else {
-          const results = resultsFile?.results as EvaluateSummary;
+          const results = resultsFile?.results as EvaluateSummaryV2;
           set(() => ({ table: results?.table, version: resultsFile?.version || 3 }));
         }
       },

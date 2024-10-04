@@ -18,6 +18,7 @@ import type {
   SharedResults,
   GradingResult,
   ResultLightweightWithLabel,
+  EvaluateSummaryV2,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import FrameworkCompliance from './FrameworkCompliance';
@@ -182,11 +183,12 @@ const App: React.FC = () => {
   const prompts =
     evalData.prompts && evalData.prompts.length > 0
       ? evalData.prompts
-      : evalData.results.table?.head.prompts || [];
+      : (evalData.results as EvaluateSummaryV2).table?.head.prompts || [];
   const selectedPrompt = prompts[selectedPromptIndex];
   const tableData =
-    (evalData.version >= 4 ? convertResultsToTable(evalData).body : evalData.results.table?.body) ||
-    [];
+    (evalData.version >= 4
+      ? convertResultsToTable(evalData).body
+      : (evalData.results as EvaluateSummaryV2).table?.body) || [];
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {
