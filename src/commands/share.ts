@@ -40,15 +40,9 @@ export function shareCommand(program: Command) {
         });
         await telemetry.send();
 
-        let results;
         let eval_: Eval | undefined | null = null;
         if (evalId) {
-          const eval_ = await Eval.findById(evalId);
-          results = await eval_?.toResultsFile();
-          if (!results) {
-            logger.error(`Could not load results for eval ID ${evalId}.`);
-            process.exit(1);
-          }
+          eval_ = await Eval.findById(evalId);
         } else {
           eval_ = await Eval.latest();
 
@@ -56,7 +50,6 @@ export function shareCommand(program: Command) {
             logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
             process.exit(1);
           }
-          results = await eval_.toResultsFile();
         }
         invariant(eval_, 'No eval found');
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
