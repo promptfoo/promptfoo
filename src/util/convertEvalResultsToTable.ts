@@ -45,18 +45,20 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   );
   // first we need to get our prompts, we can get that from any of the results in each column
   const results = eval_.results;
-  const rows: EvaluateTableRow[] = [];
+  let rows: EvaluateTableRow[] = [];
   const completedPrompts: Record<string, CompletedPrompt> = {};
   const varsForHeader = new Set<string>();
   const varValuesForRow = new Map<number, Record<string, string>>();
+  let highestTestIdx = -1;
   for (const result of results.results) {
+    highestTestIdx = Math.max(highestTestIdx, result.testIdx);
     // vars
     for (const varName of Object.keys(result.vars || {})) {
       varsForHeader.add(varName);
     }
     let row = rows[result.testIdx];
-    if (!row) {
-      rows[result.testIdx] = {
+    if (row == null) {
+      row = {
         description: result.description || undefined,
         outputs: [],
         vars: result.vars
@@ -73,7 +75,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         test: result.testCase,
       };
       varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
-      row = rows[result.testIdx];
+      rows[result.testIdx] = row;
     }
 
     // format text
@@ -140,14 +142,13 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     prompt.metrics.namedScoresCount =
       eval_.prompts[result.promptIdx]?.metrics?.namedScoresCount || {};
   }
-
+  // I have no idea why but for some reason the loop is creating one extra row that is null
+  rows = rows.filter((row) => row != null);
   const sortedVars = [...varsForHeader].sort();
   for (const [rowIdx, row] of rows.entries()) {
-    if (!row) {
-      continue;
-    }
     row.vars = sortedVars.map((varName) => varValuesForRow.get(rowIdx)?.[varName] || '');
   }
+
   return {
     head: {
       prompts: Object.values(completedPrompts),

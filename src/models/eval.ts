@@ -34,7 +34,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import EvalResult from './evalResult';
 import type Provider from './provider';
 
-export function getEvalId(createdAt: Date = new Date()) {
+export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
@@ -153,11 +153,12 @@ export default class Eval {
       id?: string;
       createdAt?: Date;
       author?: string;
+      // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
-    const evalId = opts?.id || getEvalId(createdAt);
+    const evalId = opts?.id || createEvalId(createdAt);
     const db = getDb();
     await db.transaction((tx) => {
       tx.insert(evalsTable)
@@ -170,10 +171,12 @@ export default class Eval {
           results: {},
         })
         .run();
-      for (const result of opts?.results || []) {
-        tx.insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
-          .returning();
+      if (opts?.results) {
+        const res = tx
+          .insert(evalResultsTable)
+          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
+          .run();
+        logger.debug(`Inserted ${res.changes} eval results`);
       }
 
       for (const prompt of renderedPrompts) {
@@ -262,7 +265,7 @@ export default class Eval {
   ) {
     const createdAt = opts?.createdAt || new Date();
     this.createdAt = createdAt.getTime();
-    this.id = opts?.id || getEvalId(createdAt);
+    this.id = opts?.id || createEvalId(createdAt);
     this.author = opts?.author;
     this.config = config;
     this.results = [];
