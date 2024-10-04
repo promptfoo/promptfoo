@@ -168,6 +168,7 @@ const remotePlugins: PluginFactory[] = [
   'bola',
   'competitors',
   'hijacking',
+  'religion',
   'ssrf',
 ].map((key) => createRemotePlugin(key));
 remotePlugins.push(
