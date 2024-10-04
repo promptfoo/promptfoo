@@ -35,6 +35,24 @@ export function getEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
+export class EvalQueries {
+  static async getVarsFromEvals(ids: string[]) {
+    const db = getDb();
+    const query = sql.raw(
+      `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
+FROM eval_results where eval_id IN (${ids.map((id) => `'${id}'`).join(',')})) t, json_each(t.vars) j;`,
+    );
+    // @ts-ignore
+    const results: { key: string; eval_id: string }[] = await db.all(query);
+    const vars = results.reduce((acc: Record<string, string[]>, r) => {
+      acc[r.eval_id] = acc[r.eval_id] || [];
+      acc[r.eval_id].push(r.key);
+      return acc;
+    }, {});
+    return vars;
+  }
+}
+
 export default class Eval {
   id: string;
   createdAt: number;

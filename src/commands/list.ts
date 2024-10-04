@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import logger from '../logger';
-import Eval from '../models/eval';
+import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
 import telemetry from '../telemetry';
 import { getPrompts, getTestCases, printBorder, setupEnv } from '../util';
@@ -24,17 +24,18 @@ export function listCommand(program: Command) {
 
       const evals = await Eval.getAll(Number(cmdObj.n) || undefined);
 
-      const tableDataPromises = evals.map(async (evl) => {
+      const vars = await EvalQueries.getVarsFromEvals(evals.map((e) => e.id));
+
+      const tableData = evals.map((evl) => {
         const prompts = evl.getPrompts();
-        const vars = await evl.getVars();
         return {
           'Eval ID': evl.id,
           Description: evl.description || '',
           Prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', ') || '',
-          Vars: vars.map((v) => v).join(', ') || '',
+          Vars: vars[evl.id]?.join(', ') || '',
         };
       });
-      const tableData = await Promise.all(tableDataPromises);
+
       logger.info(wrapTable(tableData));
       printBorder();
 
