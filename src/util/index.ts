@@ -87,7 +87,7 @@ export async function writeOutput(
   shareableUrl: string | null,
 ) {
   const table = await evalRecord.getTable();
-  console.log('table', table);
+
   invariant(table, 'Table is required');
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
     const rows = table.body.map((row) => {
