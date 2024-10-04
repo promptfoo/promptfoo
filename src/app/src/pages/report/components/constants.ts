@@ -14,6 +14,7 @@ export const riskCategories = {
     'ssrf',
     'indirect-prompt-injection',
     'cross-session-leak',
+    'mathprompt', // Added mathprompt to Security Risk
   ],
   'Legal Risk': [
     'contracts',
@@ -110,6 +111,7 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   ssrf: Severity.High,
   'indirect-prompt-injection': Severity.High,
   'prompt-extraction': Severity.Medium,
+  mathprompt: Severity.High, // Added mathprompt with severity level
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
@@ -175,6 +177,7 @@ export const categoryAliases = {
   policy: 'PolicyViolation',
   'indirect-prompt-injection': 'IndirectPromptInjection',
   'prompt-extraction': 'PromptExtraction',
+  mathprompt: 'MathPrompt Harm', // Added mathprompt alias
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -215,6 +218,7 @@ export const displayNameOverrides = {
   politics: 'Political Opinions',
   rbac: 'RBAC Enforcement',
   ssrf: 'Malicious Resource Fetching',
+  mathprompt: 'Mathematical Prompt Harm', // Added display name for mathprompt
 };
 
 // Duplicated in src/redteam/constants.ts for backend
@@ -279,6 +283,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
   'indirect-prompt-injection':
     'Evaluates how susceptible the prompt is to harmful instructions injected into the prompt',
+  mathprompt: 'Attempts to bypass security measures using mathematical problem encoding', // Added description for mathprompt
 };
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<

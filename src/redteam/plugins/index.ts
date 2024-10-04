@@ -14,6 +14,7 @@ import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { getHarmfulTests } from './harmful';
 import { ImitationPlugin } from './imitation';
+import { MathPromptPlugin } from './mathPrompt';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PolicyPlugin } from './policy';
@@ -22,6 +23,8 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
+
+// Added MathPromptPlugin import
 
 export interface PluginFactory {
   key: string;
@@ -114,6 +117,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(DebugAccessPlugin, 'debug-access'),
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(PoliticsPlugin, 'politics'),
+  createPluginFactory(MathPromptPlugin, 'mathprompt'), // Added MathPromptPlugin factory
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
   ),
