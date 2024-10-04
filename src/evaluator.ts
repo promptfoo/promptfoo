@@ -100,7 +100,7 @@ export function generateVarCombinations(
 }
 
 class Evaluator {
-  dbRecord: Eval;
+  evalRecord: Eval;
   testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
@@ -110,9 +110,9 @@ class Evaluator {
   >;
   registers: Record<string, string | object>;
 
-  constructor(testSuite: TestSuite, dbRecord: Eval, options: EvaluateOptions) {
+  constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
-    this.dbRecord = dbRecord;
+    this.evalRecord = evalRecord;
     this.options = options;
     this.stats = {
       successes: 0,
@@ -617,7 +617,7 @@ class Evaluator {
       numComplete++;
       if (options.progressCallback) {
         options.progressCallback(
-          this.dbRecord.results.length,
+          this.evalRecord.results.length,
           runEvalOptions.length,
           index,
           evalStep,
@@ -625,9 +625,9 @@ class Evaluator {
       }
 
       try {
-        await this.dbRecord.addResult(row, evalStep.test);
+        await this.evalRecord.addResult(row, evalStep.test);
       } catch (error) {
-        logger.error(`Error adding result: ${error}`);
+        logger.error(`Error saving result: ${error} ${JSON.stringify(row)}`);
       }
       const { promptIdx } = row;
       const metrics = prompts[promptIdx].metrics;
@@ -773,7 +773,7 @@ class Evaluator {
     for (const testIdx of rowsWithSelectBestAssertion) {
       compareCount++;
 
-      const resultsToCompare = this.dbRecord.results.filter((r) => r.testIdx === testIdx);
+      const resultsToCompare = this.evalRecord.results.filter((r) => r.testIdx === testIdx);
       if (resultsToCompare.length === 0) {
         logger.warn(`Expected results to be found for test index ${testIdx}`);
         continue;
@@ -825,7 +825,7 @@ class Evaluator {
           } else {
             result.gradingResult = gradingResult;
           }
-          if (this.dbRecord.persisted) {
+          if (this.evalRecord.persisted) {
             await result.save();
           }
         }
@@ -839,11 +839,9 @@ class Evaluator {
       }
     }
 
-    if (this.dbRecord) {
-      await this.dbRecord.addPrompts(prompts);
-      const providers = await Provider.createMultiple(testSuite.providers);
-      await this.dbRecord.addProviders(providers);
-    }
+    await this.evalRecord.addPrompts(prompts);
+    const providers = await Provider.createMultiple(testSuite.providers);
+    await this.evalRecord.addProviders(providers);
 
     // Finish up
     if (multibar) {
@@ -854,7 +852,7 @@ class Evaluator {
     }
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
-      results: this.dbRecord.results.map((r) => r.toEvaluateResult()),
+      results: this.evalRecord.results.map((r) => r.toEvaluateResult()),
       suite: testSuite,
     });
 
@@ -877,14 +875,14 @@ class Evaluator {
       ).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
-      hasAnyPass: this.dbRecord.results.some((r) => r.success),
+      hasAnyPass: this.evalRecord.results.some((r) => r.success),
       isRedteam: Boolean(testSuite.redteam),
     });
-    return this.dbRecord;
+    return this.evalRecord;
   }
 }
 
-export function evaluate(testSuite: TestSuite, dbRecord: Eval, options: EvaluateOptions) {
-  const ev = new Evaluator(testSuite, dbRecord, options);
+export function evaluate(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
+  const ev = new Evaluator(testSuite, evalRecord, options);
   return ev.evaluate();
 }
