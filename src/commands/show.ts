@@ -73,9 +73,8 @@ async function handleEval(id: string) {
   const table = await eval_.getTable();
   invariant(table, 'Could not generate table');
   const { prompts, vars } = table.head;
-  const summary = await eval_.toEvaluateSummary();
-  summary.table = table;
-  logger.info(generateTable(summary, 100, 25));
+
+  logger.info(generateTable(table, 100, 25));
   if (table.body.length > 25) {
     const rowsLeft = table.body.length - 25;
     logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);

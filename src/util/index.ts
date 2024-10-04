@@ -35,7 +35,6 @@ import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
-  type EvaluateSummary,
   type EvaluateTable,
   type EvaluateTableOutput,
   type NunjucksFilterMap,
@@ -52,6 +51,7 @@ import {
   isApiProvider,
   isProviderOptions,
   OutputFileExtension,
+  type EvaluateSummaryV2,
 } from '../types';
 import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
@@ -83,25 +83,19 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
 
 export async function writeOutput(
   outputPath: string,
-  evalId: string | null,
-  results: EvaluateSummary,
-  config: Partial<UnifiedConfig>,
+  evalRecord: Eval,
   shareableUrl: string | null,
 ) {
-  if (!results.table && evalId) {
-    const eval_ = await Eval.findById(evalId);
-    invariant(eval_, `Eval with ID ${evalId} not found.`);
-    results.table = await eval_.getTable();
-  }
-  invariant(results.table, 'Table is required');
+  const table = await evalRecord.getTable();
+  console.log('table', table);
+  invariant(table, 'Table is required');
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
-    const rows = results.table.body.map((row) => {
-      invariant(results.table, 'Table is required');
+    const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
-      results.table.head.vars.forEach((varName, index) => {
+      table.head.vars.forEach((varName, index) => {
         csvRow[varName] = row.vars[index];
       });
-      results.table.head.prompts.forEach((prompt, index) => {
+      table.head.prompts.forEach((prompt, index) => {
         csvRow[prompt.label] = outputToSimpleString(row.outputs[index]);
       });
       return csvRow;
@@ -128,32 +122,52 @@ export async function writeOutput(
   if (outputExtension === 'csv') {
     const csvOutput = stringify([
       [
-        ...results.table.head.vars,
-        ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+        ...table.head.vars,
+        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
       ],
-      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+      ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
     ]);
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
+    const summary = await evalRecord.toEvaluateSummary();
     fs.writeFileSync(
       outputPath,
-      JSON.stringify({ evalId, results, config, shareableUrl } satisfies OutputFile, null, 2),
+      JSON.stringify(
+        {
+          evalId: evalRecord.id,
+          results: summary,
+          config: evalRecord.config,
+          shareableUrl,
+        } satisfies OutputFile,
+        null,
+        2,
+      ),
     );
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
-    fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl } as OutputFile));
+    const summary = await evalRecord.toEvaluateSummary();
+    fs.writeFileSync(
+      outputPath,
+      yaml.dump({
+        evalId: evalRecord.id,
+        results: summary,
+        config: evalRecord.config,
+        shareableUrl,
+      } as OutputFile),
+    );
   } else if (outputExtension === 'html') {
+    const summary = await evalRecord.toEvaluateSummary();
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
-    const table = [
+    const htmlTable = [
       [
-        ...results.table.head.vars,
-        ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+        ...table.head.vars,
+        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
       ],
-      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+      ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
     ];
     const htmlOutput = getNunjucksEngine().renderString(template, {
-      config,
-      table,
-      results: results.results,
+      config: evalRecord.config,
+      table: htmlTable,
+      results: summary,
     });
     fs.writeFileSync(outputPath, htmlOutput);
   }
@@ -161,13 +175,11 @@ export async function writeOutput(
 
 export async function writeMultipleOutputs(
   outputPaths: string[],
-  evalId: string | null,
-  results: EvaluateSummary,
-  config: Partial<UnifiedConfig>,
+  evalRecord: Eval,
   shareableUrl: string | null,
 ) {
   await Promise.all(
-    outputPaths.map((outputPath) => writeOutput(outputPath, evalId, results, config, shareableUrl)),
+    outputPaths.map((outputPath) => writeOutput(outputPath, evalRecord, shareableUrl)),
   );
 }
 
@@ -191,7 +203,7 @@ export function getLatestResultsPath(): string {
 }
 
 export async function writeResultsToDatabase(
-  results: EvaluateSummary,
+  results: EvaluateSummaryV2,
   config: Partial<UnifiedConfig>,
   createdAt: Date = new Date(),
 ): Promise<string> {

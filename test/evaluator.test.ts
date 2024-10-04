@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import glob from 'glob';
-import invariant from 'tiny-invariant';
 import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
 import { runDbMigrations } from '../src/migrate';
@@ -81,8 +80,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -103,8 +103,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -125,8 +126,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -147,8 +149,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -169,8 +172,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
     expect(summary.stats.successes).toBe(4);
@@ -191,8 +195,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
@@ -208,8 +213,9 @@ describe('evaluator', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -225,8 +231,9 @@ describe('evaluator', () => {
       providers: [mockApiProvider, mockApiProvider, mockApiProvider],
       prompts: [toPrompt('Test prompt')],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
     expect(summary.stats.successes).toBe(3);
@@ -252,8 +259,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -277,8 +285,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -302,8 +311,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -327,8 +337,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -357,8 +368,9 @@ describe('evaluator', () => {
         },
       },
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -387,8 +399,9 @@ describe('evaluator', () => {
         },
       },
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -407,8 +420,9 @@ describe('evaluator', () => {
         },
       },
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -434,8 +448,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -469,8 +484,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiJsonProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -503,8 +519,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -533,8 +550,9 @@ describe('evaluator', () => {
         },
       },
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
     expect(summary).toEqual(
       expect.objectContaining({
         stats: expect.objectContaining({
@@ -604,8 +622,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary).toEqual(
       expect.objectContaining({
@@ -639,8 +658,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -676,8 +696,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary).toMatchObject({
@@ -736,8 +757,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
@@ -794,8 +816,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
     expect(summary.stats.successes).toBe(4);
@@ -856,10 +879,10 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const result = await evaluate(testSuite, resultsFile, {});
-
-    expect(result).toMatchObject({
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary).toMatchObject({
       stats: {
         successes: 2,
         failures: 0,
@@ -881,8 +904,8 @@ describe('evaluator', () => {
         }),
       ]),
     });
-    invariant(result.table, 'Table is required');
-    expect(result.table.body[0].test.metadata).toEqual({
+
+    expect(summary.results[0].testCase.metadata).toEqual({
       defaultKey: 'defaultValue',
       configKey: 'configValue',
       testKey: 'testValue',
@@ -904,10 +927,10 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
 
-    expect(summary?.table?.body[0].test.metadata).toEqual({
+    expect(evalRecord.results[0].testCase.metadata).toEqual({
       defaultKey: 'defaultValue',
       testKey: 'testValue',
     });
@@ -936,8 +959,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
@@ -981,46 +1005,44 @@ describe('evaluator', () => {
         'unlabeled-provider-id': ['prompt2'],
       },
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await expect(evaluate(testSuite, resultsFile, {})).resolves.toEqual(
-      expect.objectContaining({
-        stats: expect.objectContaining({
-          successes: 2,
-          failures: 0,
-        }),
-        results: [
-          expect.objectContaining({
-            provider: expect.objectContaining({
-              id: 'labeled-provider-id',
-              label: 'Labeled Provider',
-            }),
-            response: expect.objectContaining({
-              output: 'Labeled Provider Output',
-            }),
-          }),
-          expect.objectContaining({
-            provider: expect.objectContaining({
-              id: 'unlabeled-provider-id',
-              label: undefined,
-            }),
-            response: expect.objectContaining({
-              output: 'Unlabeled Provider Output',
-            }),
-          }),
-        ],
-        table: expect.objectContaining({
-          head: expect.objectContaining({
-            prompts: [
-              expect.objectContaining({
-                provider: 'Labeled Provider',
-              }),
-              expect.objectContaining({
-                provider: 'unlabeled-provider-id',
-              }),
-            ],
-          }),
-        }),
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary).toMatchObject({
+      stats: expect.objectContaining({
+        successes: 2,
+        failures: 0,
       }),
+      results: [
+        expect.objectContaining({
+          provider: expect.objectContaining({
+            id: 'labeled-provider-id',
+            label: 'Labeled Provider',
+          }),
+          response: expect.objectContaining({
+            output: 'Labeled Provider Output',
+          }),
+        }),
+        expect.objectContaining({
+          provider: expect.objectContaining({
+            id: 'unlabeled-provider-id',
+            label: undefined,
+          }),
+          response: expect.objectContaining({
+            output: 'Unlabeled Provider Output',
+          }),
+        }),
+      ],
+    });
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: 'Labeled Provider',
+        }),
+        expect.objectContaining({
+          provider: 'unlabeled-provider-id',
+        }),
+      ]),
     );
 
     expect(mockLabeledProvider.callApi).toHaveBeenCalledTimes(1);
@@ -1040,8 +1062,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -1076,8 +1099,9 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -1112,22 +1136,17 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await expect(evaluate(testSuite, resultsFile, {})).resolves.toEqual(
-      expect.objectContaining({
-        stats: expect.objectContaining({
-          successes: 1,
-          failures: 0,
-        }),
-        results: expect.arrayContaining([
-          expect.objectContaining({
-            response: expect.objectContaining({
-              output: 'Postprocess: Provider: Original output',
-            }),
-          }),
-        ]),
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary).toMatchObject({
+      stats: expect.objectContaining({
+        successes: 1,
+        failures: 0,
       }),
-    );
+    });
+    expect(summary.results[0].response?.output).toBe('Postprocess: Provider: Original output');
+
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
   });
 
@@ -1159,22 +1178,22 @@ describe('evaluator', () => {
         },
       ],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await expect(evaluate(testSuite, resultsFile, {})).resolves.toEqual(
-      expect.objectContaining({
-        stats: expect.objectContaining({
-          successes: 1,
-          failures: 0,
-        }),
-        results: expect.arrayContaining([
-          expect.objectContaining({
-            response: expect.objectContaining({
-              output: 'Transform: Provider: Original output',
-            }),
-          }),
-        ]),
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary).toMatchObject({
+      stats: expect.objectContaining({
+        successes: 1,
+        failures: 0,
       }),
-    );
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          response: expect.objectContaining({
+            output: 'Transform: Provider: Original output',
+          }),
+        }),
+      ]),
+    });
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
   });
 
@@ -1192,8 +1211,9 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(0);
     expect(summary.stats.failures).toBe(1);
@@ -1217,8 +1237,9 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -1263,8 +1284,9 @@ describe('evaluator', () => {
       ],
       tests: [{ vars: { problem: '8x + 31 = 2' } }],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -1312,12 +1334,12 @@ describe('evaluator', () => {
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
     mockedRunExtensionHook.mockClear();
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
 
     // Check if runExtensionHook was called 4 times (beforeAll, beforeEach, afterEach, afterAll)
     expect(mockedRunExtensionHook).toHaveBeenCalledTimes(4);
-
+    console.log('mockedRunExtensionHook', mockedRunExtensionHook.mock.calls);
     // Check beforeAll call
     expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
       1,
@@ -1385,8 +1407,9 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [],
     };
-    const resultsFile = Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const summary = await evaluate(testSuite, resultsFile, {});
+    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(2);
     expect(summary.stats.failures).toBe(0);

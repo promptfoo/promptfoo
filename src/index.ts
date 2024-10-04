@@ -22,13 +22,7 @@ import type {
   PromptFunction,
   Scenario,
 } from './types';
-import {
-  readFilters,
-  writeResultsToDatabase,
-  writeMultipleOutputs,
-  writeOutput,
-  migrateResultsFromFileSystemToDatabase,
-} from './util';
+import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 
 export * from './types';
 
@@ -101,31 +95,28 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
   const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
-  const resultsFile = Eval.create(unifiedConfig, constructedTestSuite.prompts);
+  const evalRecord = testSuite.writeLatestResults
+    ? Eval.create(unifiedConfig, constructedTestSuite.prompts)
+    : new Eval(unifiedConfig);
+
   // Run the eval!
   const ret = await doEvaluate(
     {
       ...constructedTestSuite,
       providerPromptMap: parsedProviderPromptMap,
     },
-    resultsFile,
+    evalRecord,
     {
       eventSource: 'library',
       ...options,
     },
   );
 
-  let evalId: string | null = null;
-  if (testSuite.writeLatestResults) {
-    await migrateResultsFromFileSystemToDatabase();
-    evalId = await writeResultsToDatabase(ret, unifiedConfig);
-  }
-
   if (testSuite.outputPath) {
     if (typeof testSuite.outputPath === 'string') {
-      await writeOutput(testSuite.outputPath, evalId, ret, unifiedConfig, null);
+      await writeOutput(testSuite.outputPath, evalRecord, null);
     } else if (Array.isArray(testSuite.outputPath)) {
-      await writeMultipleOutputs(testSuite.outputPath, evalId, ret, unifiedConfig, null);
+      await writeMultipleOutputs(testSuite.outputPath, evalRecord, null);
     }
   }
 

@@ -1,5 +1,5 @@
 import { filterFailingTests } from '../../../src/commands/eval/filterFailingTests';
-import type { EvaluateSummary, TestSuite } from '../../../src/types';
+import type { EvaluateSummaryV2, TestSuite } from '../../../src/types';
 import { readOutput } from '../../../src/util';
 
 jest.mock('../../../src/util', () => {
@@ -57,7 +57,7 @@ describe('filterFailingTests', () => {
         ],
         table: {} as any,
         stats: {} as any,
-      } as EvaluateSummary,
+      } as EvaluateSummaryV2,
     } as any);
   });
 
@@ -106,7 +106,7 @@ describe('filterFailingTests', () => {
         ],
         table: {} as any,
         stats: {} as any,
-      } as EvaluateSummary,
+      } as EvaluateSummaryV2,
     } as any);
 
     const result = await filterFailingTests(testSuite, outputPath);

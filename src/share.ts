@@ -10,7 +10,7 @@ import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
-import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
+import type { SharedResults } from './types';
 
 async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
   const response = await fetchWithProxy(`${apiHost}/health`, {
@@ -69,10 +69,8 @@ export function stripAuthFromUrl(urlString: string): string {
 }
 
 export async function createShareableUrl(
-  results: EvaluateSummary,
-  config: Partial<UnifiedConfig>,
+  evalRecord: Eval,
   showAuth: boolean = false,
-  databaseRecord: Eval | null = null,
 ): Promise<string | null> {
   if (process.stdout.isTTY && !isCI() && !getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
     let email = getUserEmail();
@@ -89,8 +87,8 @@ export async function createShareableUrl(
 
   let response: Response;
   let apiBaseUrl =
-    typeof config.sharing === 'object'
-      ? config.sharing.apiBaseUrl || SHARE_API_BASE_URL
+    typeof evalRecord.config.sharing === 'object'
+      ? evalRecord.config.sharing.apiBaseUrl || SHARE_API_BASE_URL
       : SHARE_API_BASE_URL;
 
   if (cloudConfig.isEnabled()) {
@@ -99,12 +97,19 @@ export async function createShareableUrl(
 
   const canUseNewResults = await targetHostCanUseNewResults(apiBaseUrl);
   logger.debug(
-    `Sharing with ${apiBaseUrl} canUseNewResults: ${canUseNewResults} Use old results: ${databaseRecord?.useOldResults()}`,
+    `Sharing with ${apiBaseUrl} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
   let evalId: string | undefined;
-  if (canUseNewResults && databaseRecord && !databaseRecord.useOldResults()) {
-    evalId = await sendEvalResults(databaseRecord, apiBaseUrl);
+  if (canUseNewResults && evalRecord && !evalRecord.useOldResults()) {
+    evalId = await sendEvalResults(evalRecord, apiBaseUrl);
   } else {
+    const summary = await evalRecord.toEvaluateSummary();
+    const table = await evalRecord.getTable();
+    const v2Summary = {
+      ...summary,
+      version: 2,
+      table,
+    };
     logger.debug(`Sending eval results (v3) to ${apiBaseUrl}`);
     // check if we're using the cloud
     const sharedResults: SharedResults = {
@@ -112,14 +117,10 @@ export async function createShareableUrl(
         version: 3,
         createdAt: new Date().toISOString(),
         author: getAuthor(),
-        results,
-        config,
+        results: v2Summary,
+        config: evalRecord.config,
       },
     };
-    if (!results.table && databaseRecord) {
-      logger.debug(`Getting table from database record`);
-      results.table = await databaseRecord?.getTable();
-    }
     if (cloudConfig.isEnabled()) {
       apiBaseUrl = cloudConfig.getApiHost();
 
@@ -155,7 +156,9 @@ export async function createShareableUrl(
     fullUrl = `${appBaseUrl}/results/${evalId}`;
   } else {
     const appBaseUrl =
-      typeof config.sharing === 'object' ? config.sharing.appBaseUrl : SHARE_VIEW_BASE_URL;
+      typeof evalRecord.config.sharing === 'object'
+        ? evalRecord.config.sharing.appBaseUrl
+        : SHARE_VIEW_BASE_URL;
     fullUrl =
       SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
         ? `${appBaseUrl}/eval/${evalId}`

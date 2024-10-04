@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import readline from 'readline';
+import invariant from 'tiny-invariant';
 import { URL } from 'url';
 import { getEnvString } from '../envars';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -8,20 +9,11 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
-import type { EvaluateSummary, ResultsFile } from '../types';
 import { setupEnv } from '../util';
 
-export async function createPublicUrl(
-  results: ResultsFile,
-  showAuth: boolean,
-  databaseRecord: Eval | null,
-) {
-  const url = await createShareableUrl(
-    results.results as EvaluateSummary,
-    results.config,
-    showAuth,
-    databaseRecord,
-  );
+export async function createPublicUrl(evalRecord: Eval, showAuth: boolean) {
+  const url = await createShareableUrl(evalRecord, showAuth);
+
   logger.info(`View results: ${chalk.greenBright.bold(url)}`);
   return url;
 }
@@ -66,9 +58,9 @@ export function shareCommand(program: Command) {
           }
           results = await eval_.toResultsFile();
         }
-
+        invariant(eval_, 'No eval found');
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
-          await createPublicUrl(results, cmdObj.showAuth, eval_);
+          await createPublicUrl(eval_, cmdObj.showAuth);
         } else {
           const reader = readline.createInterface({
             input: process.stdin,
@@ -79,7 +71,7 @@ export function shareCommand(program: Command) {
           const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
           if (cloudConfig.isEnabled()) {
             logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
-            await createPublicUrl(results, cmdObj.showAuth, eval_);
+            await createPublicUrl(eval_, cmdObj.showAuth);
             process.exit(0);
           } else {
             reader.question(
@@ -95,7 +87,7 @@ export function shareCommand(program: Command) {
                 }
                 reader.close();
 
-                await createPublicUrl(results, cmdObj.showAuth, eval_);
+                await createPublicUrl(eval_, cmdObj.showAuth);
               },
             );
           }

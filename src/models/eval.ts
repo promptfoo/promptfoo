@@ -20,7 +20,8 @@ import type {
   CompletedPrompt,
   EvaluateResult,
   EvaluateStats,
-  EvaluateSummary,
+  EvaluateSummaryV3,
+  EvaluateSummaryV2,
   EvaluateTable,
   Prompt,
   ResultsFile,
@@ -62,7 +63,7 @@ export default class Eval {
   results: EvalResult[];
   datasetId?: string;
   prompts: CompletedPrompt[];
-  oldResults?: EvaluateSummary;
+  oldResults?: EvaluateSummaryV2;
   persisted: boolean;
 
   static async summaryResults(
@@ -161,7 +162,7 @@ export default class Eval {
     if (results.length > 0) {
       evalInstance.results = results.map((r) => new EvalResult({ ...r, persisted: true }));
     } else {
-      evalInstance.oldResults = eval_.results as EvaluateSummary;
+      evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
     }
 
     return evalInstance;
@@ -418,10 +419,16 @@ export default class Eval {
     await this.loadResults();
     return this.results;
   }
-  async toEvaluateSummary(withTable: boolean = false): Promise<EvaluateSummary> {
+  async toEvaluateSummary(): Promise<EvaluateSummaryV3> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return this.oldResults;
+      return {
+        version: 3,
+        timestamp: new Date(this.createdAt).toISOString(),
+        results: this.oldResults.results,
+        prompts: this.prompts,
+        stats: this.oldResults.stats,
+      };
     }
     if (this.results.length === 0) {
       await this.loadResults();
@@ -447,11 +454,11 @@ export default class Eval {
     }
 
     return {
-      version: 2,
+      version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
+      prompts: this.prompts,
       results: this.results.map((r) => r.toEvaluateResult()),
       stats,
-      table: withTable ? await this.getTable() : undefined,
     };
   }
 

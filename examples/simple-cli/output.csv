@@ -1,0 +1,37 @@
+body,language,[openai:gpt-4o-mini] Rephrase this in {{language}}: {{body}},[openai:gpt-4o-mini] Translate this to conversational {{language}}: {{body}}
+Hello world,French,"[PASS] (1.00)
+
+Bonjour le monde.
+
+Pass Reason: No assertions","[PASS] (1.00)
+
+Salut tout le monde !
+
+Pass Reason: No assertions"
+I'm hungry,French,"[PASS] (1.00)
+
+J'ai faim.
+
+Pass Reason: No assertions","[PASS] (1.00)
+
+J'ai faim.
+
+Pass Reason: No assertions"
+Hello world,Pirate,"[PASS] (1.00)
+
+Ahoy, me hearties!
+
+Pass Reason: No assertions","[PASS] (1.00)
+
+Ahoy, me hearty! Greetings to ye, world!
+
+Pass Reason: No assertions"
+I'm hungry,Pirate,"[PASS] (1.00)
+
+Arrr, me belly be grumblin'!
+
+Pass Reason: No assertions","[PASS] (1.00)
+
+Arrr, me belly be rumblin'! I be feelin' mighty hungry, matey!
+
+Pass Reason: No assertions"

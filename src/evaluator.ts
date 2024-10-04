@@ -24,7 +24,6 @@ import type {
   EvaluateOptions,
   EvaluateResult,
   EvaluateStats,
-  EvaluateSummary,
   Prompt,
   ProviderResponse,
   RunEvalOptions,
@@ -339,7 +338,7 @@ class Evaluator {
     }
   }
 
-  async evaluate(): Promise<EvaluateSummary> {
+  async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
     const rowsWithSelectBestAssertion = new Set<number>();
@@ -581,7 +580,6 @@ class Evaluator {
         }
       }
     }
-
     // Determine run parameters
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     if (concurrency > 1) {
@@ -856,7 +854,7 @@ class Evaluator {
     }
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
-      results: this.dbRecord.results,
+      results: this.dbRecord.results.map((r) => r.toEvaluateResult()),
       suite: testSuite,
     });
 
@@ -882,13 +880,7 @@ class Evaluator {
       hasAnyPass: this.dbRecord.results.some((r) => r.success),
       isRedteam: Boolean(testSuite.redteam),
     });
-
-    return {
-      version: 2,
-      timestamp: new Date().toISOString(),
-      results: this.dbRecord.results.map((r) => r.toEvaluateResult()),
-      stats: this.stats,
-    };
+    return this.dbRecord;
   }
 }
 

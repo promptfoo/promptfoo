@@ -1,0 +1,503 @@
+results:
+  version: 2
+  timestamp: '2024-10-04T14:17:00.919Z'
+  results:
+    - provider:
+        id: openai:gpt-4o-mini
+        label: ''
+        config: &ref_1
+          basePath: ''
+      prompt:
+        raw: 'Translate this to conversational French: Hello world'
+        label: 'Translate this to conversational {{language}}: {{body}}'
+      vars: &ref_0
+        language: French
+        body: Hello world
+      response:
+        output: Salut tout le monde !
+        tokenUsage: &ref_21
+          cached: 20
+          total: 20
+        cached: true
+        cost: 0.0000052500000000000006
+      success: true
+      score: 1
+      namedScores: &ref_20 {}
+      latencyMs: 4
+      cost: 0.0000052500000000000006
+      promptIdx: 1
+      testIdx: 0
+      testCase: &ref_23
+        vars: *ref_0
+        assert: &ref_2 []
+        options: &ref_3{}
+        metadata: &ref_4 {}
+      promptId: ''
+      gradingResult: &ref_22
+        pass: true
+        score: 1
+        reason: No assertions
+        tokensUsed:
+          total: 0
+          prompt: 0
+          completion: 0
+          cached: 0
+        assertion: null
+    - provider:
+        id: openai:gpt-4o-mini
+        label: ''
+        config: *ref_1
+      prompt:
+        raw: 'Rephrase this in French: Hello world'
+        label: 'Rephrase this in {{language}}: {{body}}'
+      vars: *ref_0
+      response:
+        output: Bonjour le monde.
+        tokenUsage: &ref_18
+          cached: 19
+          total: 19
+        cached: true
+        cost: 0.0000046499999999999995
+      success: true
+      score: 1
+      namedScores: &ref_17 {}
+      latencyMs: 13
+      cost: 0.0000046499999999999995
+      promptIdx: 0
+      testIdx: 0
+      testCase:
+        vars: *ref_0
+        assert: *ref_2
+        options: *ref_3
+        metadata: *ref_4
+      promptId: ''
+      gradingResult: &ref_19
+        pass: true
+        score: 1
+        reason: No assertions
+        tokensUsed:
+          total: 0
+          prompt: 0
+          completion: 0
+          cached: 0
+        assertion: null
+    - provider:
+        id: openai:gpt-4o-mini
+        label: ''
+        config: *ref_1
+      prompt:
+        raw: 'Translate this to conversational French: I''m hungry'
+        label: 'Translate this to conversational {{language}}: {{body}}'
+      vars: &ref_5
+        language: French
+        body: I'm hungry
+      response:
+        output: J'ai faim.
+        tokenUsage: &ref_28
+          cached: 19
+          total: 19
+        cached: true
+        cost: 0.0000046499999999999995
+      success: true
+      score: 1
+      namedScores: &ref_27 {}
+      latencyMs: 15
+      cost: 0.0000046499999999999995
+      promptIdx: 1
+      testIdx: 1
+      testCase: &ref_30
+        vars: *ref_5
+        assert: &ref_6 []
+        options: &ref_7{}
+        metadata: &ref_8 {}
+      promptId: ''
+      gradingResult: &ref_29
+        pass: true
+        score: 1
+        reason: No assertions
+        tokensUsed:
+          total: 0
+          prompt: 0
+          completion: 0
+          cached: 0
+        assertion: null
+    - provider:
+        id: openai:gpt-4o-mini
+        label: ''
+        config: *ref_1
+      prompt:
+        raw: 'Rephrase this in French: I''m hungry'
+        label: 'Rephrase this in {{language}}: {{body}}'
+      vars: *ref_5
+      response:
+        output: J'ai faim.
+        tokenUsage: &ref_25
+          cached: 19
+          total: 19
+        cached: true
+        cost: 0.0000046499999999999995
+      success: true
+      score: 1
+      namedScores: &ref_24 {}
+      latencyMs: 17
+      cost: 0.0000046499999999999995
+      promptIdx: 0
+      testIdx: 1
+      testCase:
+        vars: *ref_5
+        assert: *ref_6
+        options: *ref_7
+        metadata: *ref_8
+      promptId: ''
+      gradingResult: &ref_26
+        pass: true
+        score: 1
+        reason: No assertions
+        tokensUsed:
+          total: 0
+          prompt: 0
+          completion: 0
+          cached: 0
+        assertion: null
+    - provider:
+        id: openai:gpt-4o-mini
+        label: ''
+        config: *ref_1
+      prompt:
+        raw: 'Rephrase this in Pirate: Hello world'
+        label: 'Rephrase this in {{language}}: {{body}}'
+      vars: &ref_9
+        language: Pirate
+        body: Hello world
+      response:
+        output: Ahoy, me hearties!
+        tokenUsage: &ref_32
+          cached: 22
+          total: 22
+        cached: true
+        cost: 0.000006449999999999999
+      success: true
+      score: 1
+      namedScores: &ref_31 {}
+      latencyMs: 8
+      cost: 0.000006449999999999999
+      promptIdx: 0
+      testIdx: 2
+      testCase: &ref_37
+        vars: *ref_9
+        assert: &ref_11 []
+        options: &ref_12{}
+        metadata: &ref_13 {}
+      promptId: ''
+      gradingResult: &ref_33
+        pass: true
+        score: 1
+        reason: No assertions
+        tokensUsed:
+          total: 0
+          prompt: 0
+          completion: 0
+          cached: 0
+        assertion: null
+    - provider:
+        id: openai:gpt-4o-mini
+        label: ''
+        config: *ref_1
+      prompt:
+        raw: 'Rephrase this in Pirate: I''m hungry'
+        label: 'Rephrase this in {{language}}: {{body}}'
+      vars: &ref_10
+        language: Pirate
+        body: I'm hungry
+      response:
+        output: Arrr, me belly be grumblin'!
+        tokenUsage: &ref_39
+          cached: 27
+          total: 27
+        cached: true
+        cost: 0.00000945
+      success: true
+      score: 1
+      namedScores: &ref_38 {}
+      latencyMs: 3
+      cost: 0.00000945
+      promptIdx: 0
+      testIdx: 3
+      testCase: &ref_44
+        vars: *ref_10
+        assert: &ref_14 []
+        options: &ref_15{}
+        metadata: &ref_16 {}
+      promptId: ''
+      gradingResult: &ref_40
+        pass: true
+        score: 1
+        reason: No assertions
+        tokensUsed:
+          total: 0
+          prompt: 0
+          completion: 0
+          cached: 0
+        assertion: null
+    - provider:
+        id: openai:gpt-4o-mini
+        label: ''
+        config: *ref_1
+      prompt:
+        raw: 'Translate this to conversational Pirate: Hello world'
+        label: 'Translate this to conversational {{language}}: {{body}}'
+      vars: *ref_9
+      response:
+        output: Ahoy, me hearty! Greetings to ye, world!
+        tokenUsage: &ref_35
+          cached: 27
+          total: 27
+        cached: true
+        cost: 0.00000945
+      success: true
+      score: 1
+      namedScores: &ref_34 {}
+      latencyMs: 8
+      cost: 0.00000945
+      promptIdx: 1
+      testIdx: 2
+      testCase:
+        vars: *ref_9
+        assert: *ref_11
+        options: *ref_12
+        metadata: *ref_13
+      promptId: ''
+      gradingResult: &ref_36
+        pass: true
+        score: 1
+        reason: No assertions
+        tokensUsed:
+          total: 0
+          prompt: 0
+          completion: 0
+          cached: 0
+        assertion: null
+    - provider:
+        id: openai:gpt-4o-mini
+        label: ''
+        config: *ref_1
+      prompt:
+        raw: 'Translate this to conversational Pirate: I''m hungry'
+        label: 'Translate this to conversational {{language}}: {{body}}'
+      vars: *ref_10
+      response:
+        output: Arrr, me belly be rumblin'! I be feelin' mighty hungry, matey!
+        tokenUsage: &ref_42
+          cached: 37
+          total: 37
+        cached: true
+        cost: 0.00001545
+      success: true
+      score: 1
+      namedScores: &ref_41 {}
+      latencyMs: 4
+      cost: 0.00001545
+      promptIdx: 1
+      testIdx: 3
+      testCase:
+        vars: *ref_10
+        assert: *ref_14
+        options: *ref_15
+        metadata: *ref_16
+      promptId: ''
+      gradingResult: &ref_43
+        pass: true
+        score: 1
+        reason: No assertions
+        tokensUsed:
+          total: 0
+          prompt: 0
+          completion: 0
+          cached: 0
+        assertion: null
+  stats:
+    successes: 8
+    failures: 0
+    tokenUsage:
+      total: 190
+      prompt: 0
+      completion: 0
+      cached: 190
+  table:
+    head:
+      prompts:
+        - raw: 'Rephrase this in {{language}}: {{body}}'
+          label: 'Rephrase this in {{language}}: {{body}}'
+          id: dd3415036994f2d82d0ba70cc5bb2caed82da6ccbdaca8a2174cf3992141c207
+          provider: openai:gpt-4o-mini
+          metrics:
+            score: 4
+            testPassCount: 4
+            testFailCount: 0
+            assertPassCount: 0
+            assertFailCount: 0
+            totalLatencyMs: 41
+            tokenUsage:
+              total: 87
+              prompt: 0
+              completion: 0
+              cached: 87
+            namedScores: {}
+            namedScoresCount: {}
+            cost: 0.000025199999999999996
+        - raw: 'Translate this to conversational {{language}}: {{body}}'
+          label: 'Translate this to conversational {{language}}: {{body}}'
+          id: 68f67e9473a10ba8e5294074e90b8cc9daa9aed6256e89391e4ad7adbffba52c
+          provider: openai:gpt-4o-mini
+          metrics:
+            score: 4
+            testPassCount: 4
+            testFailCount: 0
+            assertPassCount: 0
+            assertFailCount: 0
+            totalLatencyMs: 31
+            tokenUsage:
+              total: 103
+              prompt: 0
+              completion: 0
+              cached: 103
+            namedScores: {}
+            namedScoresCount: {}
+            cost: 0.0000348
+      vars:
+        - body
+        - language
+    body:
+      - outputs:
+          - id: 0-0
+            pass: true
+            score: 1
+            namedScores: *ref_17
+            text: Bonjour le monde.
+            prompt: 'Rephrase this in French: Hello world'
+            provider: openai:gpt-4o-mini
+            latencyMs: 13
+            tokenUsage: *ref_18
+            gradingResult: *ref_19
+            cost: 0.0000046499999999999995
+          - id: 0-1
+            pass: true
+            score: 1
+            namedScores: *ref_20
+            text: Salut tout le monde !
+            prompt: 'Translate this to conversational French: Hello world'
+            provider: openai:gpt-4o-mini
+            latencyMs: 4
+            tokenUsage: *ref_21
+            gradingResult: *ref_22
+            cost: 0.0000052500000000000006
+        test: *ref_23
+        vars:
+          - Hello world
+          - French
+      - outputs:
+          - id: 1-0
+            pass: true
+            score: 1
+            namedScores: *ref_24
+            text: J'ai faim.
+            prompt: 'Rephrase this in French: I''m hungry'
+            provider: openai:gpt-4o-mini
+            latencyMs: 17
+            tokenUsage: *ref_25
+            gradingResult: *ref_26
+            cost: 0.0000046499999999999995
+          - id: 1-1
+            pass: true
+            score: 1
+            namedScores: *ref_27
+            text: J'ai faim.
+            prompt: 'Translate this to conversational French: I''m hungry'
+            provider: openai:gpt-4o-mini
+            latencyMs: 15
+            tokenUsage: *ref_28
+            gradingResult: *ref_29
+            cost: 0.0000046499999999999995
+        test: *ref_30
+        vars:
+          - I'm hungry
+          - French
+      - outputs:
+          - id: 2-0
+            pass: true
+            score: 1
+            namedScores: *ref_31
+            text: Ahoy, me hearties!
+            prompt: 'Rephrase this in Pirate: Hello world'
+            provider: openai:gpt-4o-mini
+            latencyMs: 8
+            tokenUsage: *ref_32
+            gradingResult: *ref_33
+            cost: 0.000006449999999999999
+          - id: 2-1
+            pass: true
+            score: 1
+            namedScores: *ref_34
+            text: Ahoy, me hearty! Greetings to ye, world!
+            prompt: 'Translate this to conversational Pirate: Hello world'
+            provider: openai:gpt-4o-mini
+            latencyMs: 8
+            tokenUsage: *ref_35
+            gradingResult: *ref_36
+            cost: 0.00000945
+        test: *ref_37
+        vars:
+          - Hello world
+          - Pirate
+      - outputs:
+          - id: 3-0
+            pass: true
+            score: 1
+            namedScores: *ref_38
+            text: Arrr, me belly be grumblin'!
+            prompt: 'Rephrase this in Pirate: I''m hungry'
+            provider: openai:gpt-4o-mini
+            latencyMs: 3
+            tokenUsage: *ref_39
+            gradingResult: *ref_40
+            cost: 0.00000945
+          - id: 3-1
+            pass: true
+            score: 1
+            namedScores: *ref_41
+            text: Arrr, me belly be rumblin'! I be feelin' mighty hungry, matey!
+            prompt: 'Translate this to conversational Pirate: I''m hungry'
+            provider: openai:gpt-4o-mini
+            latencyMs: 4
+            tokenUsage: *ref_42
+            gradingResult: *ref_43
+            cost: 0.00001545
+        test: *ref_44
+        vars:
+          - I'm hungry
+          - Pirate
+config:
+  description: Simple test
+  prompts:
+    - 'Rephrase this in {{language}}: {{body}}'
+    - 'Translate this to conversational {{language}}: {{body}}'
+  providers:
+    - openai:gpt-4o-mini
+  tests:
+    - vars:
+        language: French
+        body: Hello world
+    - vars:
+        language: French
+        body: I'm hungry
+    - vars:
+        language: Pirate
+        body: Hello world
+    - vars:
+        language: Pirate
+        body: I'm hungry
+  sharing: true
+  outputPath:
+    - output.yaml
+  extensions: []
+shareableUrl: null

@@ -16,6 +16,7 @@ import { VERSION } from '../constants';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type {
+  EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
   GradingResult,
   Job,
@@ -109,11 +110,11 @@ export function createApp() {
           },
         }),
       )
-      .then((result) => {
+      .then(async (result) => {
         const job = evalJobs.get(id);
         invariant(job, 'Job not found');
         job.status = 'complete';
-        job.result = result;
+        job.result = await result.toEvaluateSummary();
         console.log(`[${id}] Complete`);
       });
 
@@ -173,7 +174,10 @@ export function createApp() {
       if (body.data) {
         logger.debug('[POST /api/eval] Saving eval results (v3) to database');
         const { data: payload } = req.body as { data: ResultsFile };
-        const id = await writeResultsToDatabase(payload.results, payload.config);
+        const id = await writeResultsToDatabase(
+          payload.results as EvaluateSummaryV2,
+          payload.config,
+        );
         res.json({ id });
       } else {
         const incEval = body as unknown as Eval;
@@ -281,7 +285,7 @@ export function createApp() {
     }
     const eval_ = await Eval.findById(id);
     invariant(eval_, 'Eval not found');
-    const url = await createPublicUrl(result.result, true, eval_);
+    const url = await createPublicUrl(eval_, true);
     res.json({ url });
   });
 

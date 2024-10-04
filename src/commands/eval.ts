@@ -12,7 +12,7 @@ import cliState from '../cliState';
 import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
-import Eval, { getEvalId } from '../models/eval';
+import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
 import { generateTable } from '../table';
@@ -141,27 +141,28 @@ export async function doEval(
     }
 
     // TODO(steve): We're going to write everything to the database and then delete it later so we can eventually(tm) remove the results array and table from the evaluate function. Nothing should be held in memory.
-    const eval_ = cmdObj.write ? await Eval.create(config, testSuite.prompts) : new Eval(config);
-    const summary = await evaluate(testSuite, eval_, {
+    const evalRecord = cmdObj.write
+      ? await Eval.create(config, testSuite.prompts)
+      : new Eval(config);
+    await evaluate(testSuite, evalRecord, {
       ...options,
       eventSource: 'cli',
     });
 
     const shareableUrl =
-      cmdObj.share && config.sharing
-        ? await createShareableUrl(summary, config, false, eval_)
-        : null;
+      cmdObj.share && config.sharing ? await createShareableUrl(evalRecord, false) : null;
 
+    const summary = await evalRecord.toEvaluateSummary();
+    const table = await evalRecord.getTable();
     if (cmdObj.table && getLogLevel() !== 'debug') {
       // Output CLI table
 
-      const summaryWithTable = await eval_.toEvaluateSummary(true);
-      invariant(summaryWithTable.table, 'Table is required');
-      const table = generateTable(summaryWithTable);
+      const table = await evalRecord.getTable();
+      const outputTable = generateTable(table);
 
-      logger.info('\n' + table.toString());
-      if (summaryWithTable.table.body.length > 25) {
-        const rowsLeft = summaryWithTable.table.body.length - 25;
+      logger.info('\n' + outputTable.toString());
+      if (table.body.length > 25) {
+        const rowsLeft = table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
       }
     } else if (summary.stats.failures !== 0) {
@@ -178,21 +179,18 @@ export async function doEval(
       const outputPath = config.outputPath;
       config = { outputPath };
       summary.results = [];
-      invariant(summary.table, 'Table is required');
-      summary.table.head.vars = [];
-      for (const row of summary.table.body) {
+      table.head.vars = [];
+      for (const row of table.body) {
         row.vars = [];
       }
     }
-
-    const evalId = eval_?.id || getEvalId();
 
     const { outputPath } = config;
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
       (p): p is string => typeof p === 'string' && p.length > 0,
     );
     if (paths.length) {
-      await writeMultipleOutputs(paths, evalId, summary, config, shareableUrl);
+      await writeMultipleOutputs(paths, evalRecord, shareableUrl);
       logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
 

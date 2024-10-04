@@ -245,11 +245,19 @@ export interface EvaluateStats {
   tokenUsage: Required<TokenUsage>;
 }
 
-export interface EvaluateSummary {
+export interface EvaluateSummaryV3 {
+  version: 3;
+  timestamp: string;
+  results: EvaluateResult[];
+  prompts: CompletedPrompt[];
+  stats: EvaluateStats;
+}
+
+export interface EvaluateSummaryV2 {
   version: number;
   timestamp: string;
   results: EvaluateResult[];
-  table?: EvaluateTable;
+  table: EvaluateTable;
   stats: EvaluateStats;
 }
 
@@ -719,7 +727,7 @@ export interface EvalWithMetadata {
   id: string;
   date: Date;
   config: Partial<UnifiedConfig>;
-  results: EvaluateSummary;
+  results: EvaluateSummaryV3;
   description?: string;
 }
 
@@ -741,7 +749,7 @@ export interface SharedResults {
 export interface ResultsFile {
   version: number;
   createdAt: string;
-  results: EvaluateSummary;
+  results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   author: string | null;
   prompts?: CompletedPrompt[];
@@ -763,7 +771,7 @@ export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
-  results: EvaluateSummary;
+  results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
 }
@@ -773,7 +781,7 @@ export interface Job {
   status: 'in-progress' | 'complete';
   progress: number;
   total: number;
-  result: EvaluateSummary | null;
+  result: EvaluateSummaryV3 | EvaluateSummaryV2 | null;
 }
 
 // used for writing eval results
