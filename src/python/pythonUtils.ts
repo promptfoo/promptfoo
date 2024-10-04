@@ -104,8 +104,6 @@ export async function runPython(
 
   await validatePythonPath(pythonPath, typeof customPath === 'string');
 
-  let capturedStdout = Buffer.alloc(0);
-
   const pythonOptions: PythonShellOptions = {
     mode: 'binary',
     pythonPath,
@@ -117,26 +115,33 @@ export async function runPython(
     await fs.writeFileSync(tempJsonPath, safeJsonStringify(args), 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
 
-    const pyshell = new PythonShell('wrapper.py', pythonOptions);
-
-    pyshell.stdout.on('data', (chunk: Buffer) => {
-      capturedStdout = Buffer.concat([capturedStdout, chunk]);
-      process.stdout.write(chunk); // Print captured stdout in real-time
-    });
-
     await new Promise<void>((resolve, reject) => {
-      pyshell.end((err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
+      try {
+        const pyshell = new PythonShell('wrapper.py', pythonOptions);
+
+        pyshell.stdout.on('data', (chunk: Buffer) => {
+          logger.debug(chunk.toString('utf-8').trim());
+        });
+
+        pyshell.stderr.on('data', (chunk: Buffer) => {
+          logger.error(chunk.toString('utf-8').trim());
+        });
+
+        pyshell.end((err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
     });
 
     const output = await fs.readFileSync(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
-    logger.warn(`Captured stdout: ${capturedStdout.toString('utf-8')}`);
+
     let result: { type: 'final_result'; data: any } | undefined;
     try {
       result = JSON.parse(output);
