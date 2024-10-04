@@ -418,7 +418,7 @@ export default class Eval {
     await this.loadResults();
     return this.results;
   }
-  async toEvaluateSummary(): Promise<EvaluateSummary> {
+  async toEvaluateSummary(withTable: boolean = false): Promise<EvaluateSummary> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       return this.oldResults;
@@ -451,6 +451,7 @@ export default class Eval {
       timestamp: new Date(this.createdAt).toISOString(),
       results: this.results.map((r) => r.toEvaluateResult()),
       stats,
+      table: withTable ? await this.getTable() : undefined,
     };
   }
 

@@ -25,7 +25,6 @@ import type {
   EvaluateResult,
   EvaluateStats,
   EvaluateSummary,
-  EvaluateTable,
   Prompt,
   ProviderResponse,
   RunEvalOptions,
@@ -343,6 +342,7 @@ class Evaluator {
   async evaluate(): Promise<EvaluateSummary> {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
+    const rowsWithSelectBestAssertion = new Set<number>();
 
     await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
 
@@ -582,20 +582,6 @@ class Evaluator {
       }
     }
 
-    // Set up table...
-    const isTest = tests.some((t) => !!t.assert);
-
-    const table: EvaluateTable = {
-      head: {
-        prompts,
-        vars: [
-          ...Object.keys(testSuite.defaultTest?.vars || {}).sort(),
-          ...Array.from(varNames).sort(),
-        ],
-      },
-      body: [],
-    };
-
     // Determine run parameters
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     if (concurrency > 1) {
@@ -613,7 +599,6 @@ class Evaluator {
     }
 
     // Actually run the eval
-    const results: EvaluateResult[] = [];
     let numComplete = 0;
 
     const processEvalStep = async (evalStep: RunEvalOptions, index: number | string) => {
@@ -624,72 +609,30 @@ class Evaluator {
       await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
+
       const row = await this.runEval(evalStep);
 
-      results.push(row);
+      if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
+        rowsWithSelectBestAssertion.add(row.testIdx);
+      }
 
       numComplete++;
       if (options.progressCallback) {
-        options.progressCallback(results.length, runEvalOptions.length, index, evalStep);
+        options.progressCallback(
+          this.dbRecord.results.length,
+          runEvalOptions.length,
+          index,
+          evalStep,
+        );
       }
-      const { testIdx, promptIdx } = row;
+
       try {
         await this.dbRecord.addResult(row, evalStep.test);
       } catch (error) {
-        logger.error(`Error adding result: ${error} ${JSON.stringify(row.response)}`);
+        logger.error(`Error adding result: ${error}`);
       }
-
-      // Bookkeeping for table
-      let resultText: string | undefined;
-      const outputTextDisplay = (
-        typeof row.response?.output === 'object'
-          ? JSON.stringify(row.response.output)
-          : row.response?.output || row.error || ''
-      ) as string;
-      if (isTest) {
-        if (row.success) {
-          resultText = `${outputTextDisplay || row.error || ''}`;
-        } else {
-          resultText = `${row.error}\n---\n${outputTextDisplay}`;
-        }
-      } else if (row.error) {
-        resultText = `${row.error}`;
-      } else {
-        resultText = outputTextDisplay;
-      }
-
-      if (!table.body[testIdx]) {
-        table.body[testIdx] = {
-          description: evalStep.test.description,
-          outputs: [],
-          test: evalStep.test,
-          vars: table.head.vars
-            .map((varName) => {
-              const varValue = evalStep.test.vars?.[varName] || '';
-              if (typeof varValue === 'string') {
-                return varValue;
-              }
-              return JSON.stringify(varValue);
-            })
-            .flat(),
-        };
-      }
-      table.body[testIdx].outputs[promptIdx] = {
-        id: `${testIdx}-${promptIdx}`,
-        pass: row.success,
-        score: row.score,
-        namedScores: row.namedScores,
-        text: resultText,
-        prompt: row.prompt.raw,
-        provider: row.provider.label || row.provider.id,
-        latencyMs: row.latencyMs,
-        tokenUsage: row.response?.tokenUsage,
-        gradingResult: row.gradingResult,
-        cost: row.cost || 0,
-        metadata: row.metadata,
-      };
-
-      const metrics = table.head.prompts[promptIdx].metrics;
+      const { promptIdx } = row;
+      const metrics = prompts[promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       metrics.score += row.score;
       for (const [key, value] of Object.entries(row.namedScores)) {
@@ -818,10 +761,7 @@ class Evaluator {
     await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, processEvalStep);
 
     // Do we have to run comparisons between row outputs?
-    const compareRowsCount = table.body.reduce(
-      (count, row) => count + (row.test.assert?.some((a) => a.type === 'select-best') ? 1 : 0),
-      0,
-    );
+    const compareRowsCount = rowsWithSelectBestAssertion.size;
 
     let progressBar;
     if (compareRowsCount > 0 && multibar) {
@@ -831,62 +771,78 @@ class Evaluator {
         vars: '',
       });
     }
+    let compareCount = 0;
+    for (const testIdx of rowsWithSelectBestAssertion) {
+      compareCount++;
 
-    for (let index = 0; index < table.body.length; index++) {
-      const row = table.body[index];
-      const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best') as Assertion;
+      const resultsToCompare = this.dbRecord.results.filter((r) => r.testIdx === testIdx);
+      if (resultsToCompare.length === 0) {
+        logger.warn(`Expected results to be found for test index ${testIdx}`);
+        continue;
+      }
+
+      const compareAssertion = resultsToCompare[0].testCase.assert?.find(
+        (a) => a.type === 'select-best',
+      ) as Assertion;
       if (compareAssertion) {
-        const outputs = row.outputs.map((o) => o.text);
-        const gradingResults = await runCompareAssertion(row.test, compareAssertion, outputs);
-        row.outputs.forEach((output, index) => {
+        const outputs = resultsToCompare.map((r) => r.providerResponse?.output || '');
+        const gradingResults = await runCompareAssertion(
+          resultsToCompare[0].testCase,
+          compareAssertion,
+          outputs,
+        );
+        for (let index = 0; index < resultsToCompare.length; index++) {
+          const result = resultsToCompare[index];
           const gradingResult = gradingResults[index];
-          if (output.gradingResult) {
-            output.gradingResult.tokensUsed = output.gradingResult.tokensUsed || {
+          if (result.gradingResult) {
+            result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
               total: 0,
               prompt: 0,
               completion: 0,
             };
-            output.gradingResult.tokensUsed = output.gradingResult.tokensUsed || {
+            result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
               total: 0,
               prompt: 0,
               completion: 0,
             };
-            output.gradingResult.tokensUsed.total =
-              (output.gradingResult.tokensUsed.total || 0) + (gradingResult.tokensUsed?.total || 0);
-            output.gradingResult.tokensUsed.prompt =
-              (output.gradingResult.tokensUsed.prompt || 0) +
+            result.gradingResult.tokensUsed.total =
+              (result.gradingResult.tokensUsed.total || 0) + (gradingResult.tokensUsed?.total || 0);
+            result.gradingResult.tokensUsed.prompt =
+              (result.gradingResult.tokensUsed.prompt || 0) +
               (gradingResult.tokensUsed?.prompt || 0);
-            output.gradingResult.tokensUsed.completion =
-              (output.gradingResult.tokensUsed.completion || 0) +
+            result.gradingResult.tokensUsed.completion =
+              (result.gradingResult.tokensUsed.completion || 0) +
               (gradingResult.tokensUsed?.completion || 0);
-            output.pass = output.gradingResult.pass =
-              output.gradingResult.pass && gradingResult.pass;
+            result.success = result.gradingResult.pass =
+              result.gradingResult.pass && gradingResult.pass;
             if (!gradingResult.pass) {
               // Failure overrides the reason and the score
-              output.gradingResult.reason = gradingResult.reason;
-              output.score = output.gradingResult.score = gradingResult.score;
-              output.text = `${gradingResult.reason}\n---\n${output.text}`;
+              result.gradingResult.reason = gradingResult.reason;
+              result.score = result.gradingResult.score = gradingResult.score;
             }
-            if (!output.gradingResult.componentResults) {
-              output.gradingResult.componentResults = [];
+            if (!result.gradingResult.componentResults) {
+              result.gradingResult.componentResults = [];
             }
-            output.gradingResult.componentResults.push(gradingResult);
+            result.gradingResult.componentResults.push(gradingResult);
           } else {
-            output.gradingResult = gradingResult;
+            result.gradingResult = gradingResult;
           }
-        });
+          if (this.dbRecord.persisted) {
+            await result.save();
+          }
+        }
         if (progressBar) {
           progressBar.increment({
-            prompt: row.outputs[0].text.slice(0, 10).replace(/\n/g, ''),
+            prompt: resultsToCompare[0].prompt.raw.slice(0, 10).replace(/\n/g, ''),
           });
         } else {
-          logger.debug(`Model-graded comparison #${index + 1} of ${compareRowsCount} complete`);
+          logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
       }
     }
 
     if (this.dbRecord) {
-      await this.dbRecord.addPrompts(table.head.prompts);
+      await this.dbRecord.addPrompts(prompts);
       const providers = await Provider.createMultiple(testSuite.providers);
       await this.dbRecord.addProviders(providers);
     }
@@ -900,7 +856,7 @@ class Evaluator {
     }
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
-      results,
+      results: this.dbRecord.results,
       suite: testSuite,
     });
 
@@ -923,11 +879,16 @@ class Evaluator {
       ).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
-      hasAnyPass: results.some((r) => r.success),
+      hasAnyPass: this.dbRecord.results.some((r) => r.success),
       isRedteam: Boolean(testSuite.redteam),
     });
 
-    return { version: 2, timestamp: new Date().toISOString(), results, stats: this.stats, table };
+    return {
+      version: 2,
+      timestamp: new Date().toISOString(),
+      results: this.dbRecord.results.map((r) => r.toEvaluateResult()),
+      stats: this.stats,
+    };
   }
 }
 
