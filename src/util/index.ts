@@ -30,7 +30,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { getEvalId, getSummaryofLatestEvals } from '../models/eval';
+import Eval, { createEvalId, getSummaryofLatestEvals } from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -208,7 +208,7 @@ export async function writeResultsToDatabase(
   createdAt: Date = new Date(),
 ): Promise<string> {
   createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
-  const evalId = getEvalId(createdAt);
+  const evalId = createEvalId(createdAt);
   const db = getDb();
 
   const promises = [];
