@@ -143,6 +143,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
   const sortedVars = [...varsForHeader].sort();
   for (const [rowIdx, row] of rows.entries()) {
+    if (!row) {
+      continue;
+    }
     row.vars = sortedVars.map((varName) => varValuesForRow.get(rowIdx)?.[varName] || '');
   }
   return {

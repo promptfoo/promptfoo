@@ -77,11 +77,11 @@ export const useStore = create<TableState>()(
       table: null,
       setTable: (table: EvaluateTable | null) => set(() => ({ table })),
       setTableFromResultsFile: (resultsFile: ResultsFile) => {
-        if (resultsFile?.version && resultsFile.version >= 4) {
+        if (resultsFile.version && resultsFile.version >= 4) {
           set(() => ({ table: convertResultsToTable(resultsFile), version: resultsFile.version }));
         } else {
-          const results = resultsFile?.results as EvaluateSummaryV2;
-          set(() => ({ table: results?.table, version: resultsFile?.version || 3 }));
+          const results = resultsFile.results as EvaluateSummaryV2;
+          set(() => ({ table: results.table, version: resultsFile.version }));
         }
       },
       config: null,
