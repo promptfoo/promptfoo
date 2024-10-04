@@ -101,7 +101,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
   const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
   const evalRecord = testSuite.writeLatestResults
-    ? Eval.create(unifiedConfig, constructedTestSuite.prompts)
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts)
     : new Eval(unifiedConfig);
 
   // Run the eval!

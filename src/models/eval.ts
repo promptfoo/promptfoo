@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { and, desc, eq, like, sql } from 'drizzle-orm';
 import invariant from 'tiny-invariant';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
@@ -145,19 +146,20 @@ export default class Eval {
     );
   }
 
-  static create(
+  static async create(
     config: Partial<UnifiedConfig>,
     renderedPrompts: Prompt[], // The config doesn't contain the actual prompts, so we need to pass them in separately
     opts?: {
       id?: string;
       createdAt?: Date;
       author?: string;
+      results?: EvalResult[];
     },
-  ) {
+  ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
     const evalId = opts?.id || getEvalId(createdAt);
     const db = getDb();
-    db.transaction((tx) => {
+    await db.transaction((tx) => {
       tx.insert(evalsTable)
         .values({
           id: evalId,
@@ -168,6 +170,11 @@ export default class Eval {
           results: {},
         })
         .run();
+      for (const result of opts?.results || []) {
+        tx.insert(evalResultsTable)
+          .values({ ...result, evalId, id: randomUUID() })
+          .returning();
+      }
 
       for (const prompt of renderedPrompts) {
         const label = prompt.label || prompt.display || prompt.raw;

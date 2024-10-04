@@ -80,7 +80,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -103,7 +103,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -126,7 +126,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -149,7 +149,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -172,7 +172,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -195,7 +195,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -213,7 +213,7 @@ describe('evaluator', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -231,7 +231,7 @@ describe('evaluator', () => {
       providers: [mockApiProvider, mockApiProvider, mockApiProvider],
       prompts: [toPrompt('Test prompt')],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -259,7 +259,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -285,7 +285,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -311,7 +311,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -337,7 +337,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -368,7 +368,7 @@ describe('evaluator', () => {
         },
       },
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -399,7 +399,7 @@ describe('evaluator', () => {
         },
       },
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -420,7 +420,7 @@ describe('evaluator', () => {
         },
       },
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -448,7 +448,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -484,7 +484,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -519,7 +519,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -550,7 +550,7 @@ describe('evaluator', () => {
         },
       },
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
     expect(summary).toEqual(
@@ -622,7 +622,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -658,7 +658,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -696,7 +696,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -757,7 +757,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -816,7 +816,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -879,7 +879,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
     expect(summary).toMatchObject({
@@ -927,7 +927,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
     expect(evalRecord.results[0].testCase.metadata).toEqual({
@@ -959,7 +959,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -1005,7 +1005,7 @@ describe('evaluator', () => {
         'unlabeled-provider-id': ['prompt2'],
       },
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
     expect(summary).toMatchObject({
@@ -1062,7 +1062,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -1099,7 +1099,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -1136,7 +1136,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
     expect(summary).toMatchObject({
@@ -1178,7 +1178,7 @@ describe('evaluator', () => {
         },
       ],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
     expect(summary).toMatchObject({
@@ -1211,7 +1211,7 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -1237,7 +1237,7 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -1284,7 +1284,7 @@ describe('evaluator', () => {
       ],
       tests: [{ vars: { problem: '8x + 31 = 2' } }],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
@@ -1334,7 +1334,7 @@ describe('evaluator', () => {
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
     mockedRunExtensionHook.mockClear();
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
     // Check if runExtensionHook was called 4 times (beforeAll, beforeEach, afterEach, afterAll)
@@ -1407,7 +1407,7 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [],
     };
-    const evalRecord = Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 

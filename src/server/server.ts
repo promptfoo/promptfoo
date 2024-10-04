@@ -166,7 +166,6 @@ export function createApp() {
     return res.json(result);
   });
 
-  // @ts-ignore
   app.post('/api/eval', async (req, res) => {
     const body = req.body;
     try {
@@ -183,28 +182,19 @@ export function createApp() {
         logger.debug('[POST /api/eval] Saving eval results (v4) to database');
         const eval_ = await Eval.create(incEval.config, incEval.prompts || [], {
           author: incEval.author,
+          createdAt: new Date(incEval.createdAt),
+          results: incEval.results,
         });
         logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
-        const failedItems: { index: number; error: string; data: EvalResult }[] = [];
-        await EvalResult.createMany(incEval.results, eval_.id);
 
         logger.debug(
           `[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`,
         );
 
-        if (failedItems.length > 0) {
-          res.status(207).json({
-            id: eval_.id,
-            message: `Eval created, but some results failed to save. ${incEval.results.length - failedItems.length} created, ${failedItems.length} failed.`,
-            failedItems,
-            successCount: incEval.results.length - failedItems.length,
-          });
-        } else {
-          res.json({ id: eval_.id });
-        }
+        res.json({ id: eval_.id });
       }
     } catch (error) {
-      console.error('Failed to write eval to database', error);
+      console.error('Failed to write eval to database', error, body);
       res.status(500).json({ error: 'Failed to write eval to database' });
     }
   });
