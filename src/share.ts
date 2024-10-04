@@ -26,15 +26,15 @@ async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
   return 'version' in responseJson;
 }
 
-async function sendEvalResults(dbRecord: Eval, apiHost: string) {
-  await dbRecord.loadResults();
-  logger.debug(`Sending eval results (v4) to ${apiHost}`);
-  const response = await fetchWithProxy(`${apiHost}/api/eval`, {
+async function sendEvalResults(evalRecord: Eval, url: string) {
+  await evalRecord.loadResults();
+
+  const response = await fetchWithProxy(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(dbRecord),
+    body: JSON.stringify(evalRecord),
   });
 
   if (!response.ok) {
@@ -86,31 +86,37 @@ export async function createShareableUrl(
   }
 
   let response: Response;
-  let apiBaseUrl =
-    typeof evalRecord.config.sharing === 'object'
-      ? evalRecord.config.sharing.apiBaseUrl || SHARE_API_BASE_URL
-      : SHARE_API_BASE_URL;
-
+  let apiBaseUrl: string;
+  let url: string;
   if (cloudConfig.isEnabled()) {
     apiBaseUrl = cloudConfig.getApiHost();
+    url = `${apiBaseUrl}/results`;
+  } else {
+    apiBaseUrl =
+      typeof evalRecord.config.sharing === 'object'
+        ? evalRecord.config.sharing.apiBaseUrl || SHARE_API_BASE_URL
+        : SHARE_API_BASE_URL;
+
+    url = `${apiBaseUrl}/api/eval`;
   }
 
   const canUseNewResults = await targetHostCanUseNewResults(apiBaseUrl);
   logger.debug(
-    `Sharing with ${apiBaseUrl} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
+    `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
   let evalId: string | undefined;
-  if (canUseNewResults && evalRecord && !evalRecord.useOldResults()) {
-    evalId = await sendEvalResults(evalRecord, apiBaseUrl);
+  if (canUseNewResults && !evalRecord.useOldResults()) {
+    evalId = await sendEvalResults(evalRecord, url);
   } else {
     const summary = await evalRecord.toEvaluateSummary();
     const table = await evalRecord.getTable();
     const v2Summary = {
       ...summary,
-      version: 2,
       table,
+      version: 2,
     };
-    logger.debug(`Sending eval results (v3) to ${apiBaseUrl}`);
+
+    logger.debug(`Sending eval results (v2 result file) to ${url}`);
     // check if we're using the cloud
     const sharedResults: SharedResults = {
       data: {
@@ -122,9 +128,7 @@ export async function createShareableUrl(
       },
     };
     if (cloudConfig.isEnabled()) {
-      apiBaseUrl = cloudConfig.getApiHost();
-
-      response = await fetchWithProxy(`${apiBaseUrl}/results`, {
+      response = await fetchWithProxy(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -133,7 +137,7 @@ export async function createShareableUrl(
         body: JSON.stringify(sharedResults),
       });
     } else {
-      response = await fetchWithProxy(`${apiBaseUrl}/api/eval`, {
+      response = await fetchWithProxy(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
