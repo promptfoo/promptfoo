@@ -87,9 +87,9 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
 export async function runPython(
   scriptPath: string,
   method: string,
-  args: (string | object | undefined)[],
+  args: (string | number | object | undefined)[],
   options: { pythonExecutable?: string } = {},
-): Promise<string | object> {
+): Promise<any> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
     os.tmpdir(),
@@ -105,18 +105,44 @@ export async function runPython(
   await validatePythonPath(pythonPath, typeof customPath === 'string');
 
   const pythonOptions: PythonShellOptions = {
+    args: [absPath, method, tempJsonPath, outputPath],
+    env: process.env,
     mode: 'binary',
     pythonPath,
     scriptPath: __dirname,
-    args: [absPath, method, tempJsonPath, outputPath],
   };
 
   try {
     await fs.writeFileSync(tempJsonPath, safeJsonStringify(args), 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
-    await PythonShell.run('wrapper.py', pythonOptions);
+
+    await new Promise<void>((resolve, reject) => {
+      try {
+        const pyshell = new PythonShell('wrapper.py', pythonOptions);
+
+        pyshell.stdout.on('data', (chunk: Buffer) => {
+          logger.debug(chunk.toString('utf-8').trim());
+        });
+
+        pyshell.stderr.on('data', (chunk: Buffer) => {
+          logger.error(chunk.toString('utf-8').trim());
+        });
+
+        pyshell.end((err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+
     const output = await fs.readFileSync(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
+
     let result: { type: 'final_result'; data: any } | undefined;
     try {
       result = JSON.parse(output);

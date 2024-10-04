@@ -26,7 +26,6 @@ jobs:
         # Temporarily disabled 22.x due to github runner compatibility issues
         # TODO(Michael): Re-enable once issues are resolved, 2024-08-23
         node: ['18.x', '20.x']
-        python: ['3.9']
         os: [ubuntu-latest, windows-latest, macOS-latest]
         exclude:
           # Remove when https://github.com/nodejs/node/issues/51766 is resolved
@@ -43,10 +42,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: 'npm'
 
-      - name: Use Python ${{ matrix.python }}
+      - name: Use Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
+          python-version: 3.12
 
       - name: Install Dependencies
         run: |

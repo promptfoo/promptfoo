@@ -34,6 +34,15 @@ jest.mock('../../src/python/execAsync', () => ({
   execAsync: jest.fn(),
 }));
 
+const mockPythonShellInstance = {
+  stdout: { on: jest.fn() },
+  stderr: { on: jest.fn() },
+  end: jest.fn(),
+};
+jest.mock('python-shell', () => ({
+  PythonShell: jest.fn(() => mockPythonShellInstance),
+}));
+
 describe('pythonUtils', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -144,6 +153,7 @@ describe('pythonUtils', () => {
   describe('runPython', () => {
     beforeEach(() => {
       pythonUtils.state.cachedPythonPath = '/usr/bin/python3';
+      jest.clearAllMocks();
     });
 
     it('should correctly run a Python script with provided arguments and read the output file', async () => {
@@ -152,7 +162,8 @@ describe('pythonUtils', () => {
       jest.mocked(fs.writeFileSync).mockImplementation();
       jest.mocked(fs.readFileSync).mockReturnValue(mockOutput);
       jest.mocked(fs.unlinkSync).mockImplementation();
-      jest.mocked(PythonShell.run).mockResolvedValue([]);
+
+      mockPythonShellInstance.end.mockImplementation((callback) => callback());
 
       const result = await pythonUtils.runPython('testScript.py', 'testMethod', [
         'arg1',
@@ -160,7 +171,7 @@ describe('pythonUtils', () => {
       ]);
 
       expect(result).toBe('test result');
-      expect(PythonShell.run).toHaveBeenCalledWith(
+      expect(PythonShell).toHaveBeenCalledWith(
         'wrapper.py',
         expect.objectContaining({
           args: expect.arrayContaining([
@@ -183,32 +194,52 @@ describe('pythonUtils', () => {
       expect(fs.unlinkSync).toHaveBeenCalledTimes(2);
     });
 
+    it('should log stdout and stderr', async () => {
+      const mockOutput = JSON.stringify({ type: 'final_result', data: 'test result' });
+      jest.mocked(fs.readFileSync).mockReturnValue(mockOutput);
+
+      let stdoutCallback: ((chunk: Buffer) => void) | null = null;
+      let stderrCallback: ((chunk: Buffer) => void) | null = null;
+
+      mockPythonShellInstance.stdout.on.mockImplementation((event, callback) => {
+        if (event === 'data') {
+          stdoutCallback = callback;
+        }
+      });
+      mockPythonShellInstance.stderr.on.mockImplementation((event, callback) => {
+        if (event === 'data') {
+          stderrCallback = callback;
+        }
+      });
+      mockPythonShellInstance.end.mockImplementation((callback) => {
+        if (stdoutCallback) {
+          stdoutCallback(Buffer.from('stdout message'));
+        }
+        if (stderrCallback) {
+          stderrCallback(Buffer.from('stderr message'));
+        }
+        callback();
+      });
+
+      await pythonUtils.runPython('testScript.py', 'testMethod', ['arg1']);
+
+      expect(logger.debug).toHaveBeenCalledWith('stdout message');
+      expect(logger.error).toHaveBeenCalledWith('stderr message');
+    });
+
     it('should throw an error if the Python script execution fails', async () => {
-      jest.mocked(PythonShell.run).mockRejectedValue(new Error('Test Error'));
+      const mockError = new Error('Test Error');
+      mockPythonShellInstance.end.mockImplementation((callback) => callback(mockError));
 
       await expect(pythonUtils.runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'Error running Python script: Test Error',
-      );
-      expect(PythonShell.run).toHaveBeenCalledWith(
-        'wrapper.py',
-        expect.objectContaining({
-          args: expect.arrayContaining([
-            expect.stringContaining('testScript.py'),
-            'testMethod',
-            expect.stringContaining('promptfoo-python-input-json'),
-            expect.stringContaining('promptfoo-python-output-json'),
-          ]),
-        }),
       );
     });
 
     it('should handle Python script returning incorrect result type', async () => {
       const mockOutput = JSON.stringify({ type: 'unexpected_result', data: 'test result' });
-
-      jest.mocked(fs.writeFileSync).mockImplementation();
       jest.mocked(fs.readFileSync).mockReturnValue(mockOutput);
-      jest.mocked(fs.unlinkSync).mockImplementation();
-      jest.mocked(PythonShell.run).mockResolvedValue([]);
+      mockPythonShellInstance.end.mockImplementation((callback) => callback());
 
       await expect(pythonUtils.runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'The Python script `call_api` function must return a dict with an `output`',
@@ -216,10 +247,8 @@ describe('pythonUtils', () => {
     });
 
     it('should handle invalid JSON in the output file', async () => {
-      jest.mocked(fs.writeFileSync).mockImplementation();
       jest.mocked(fs.readFileSync).mockReturnValue('Invalid JSON');
-      jest.mocked(fs.unlinkSync).mockImplementation();
-      jest.mocked(PythonShell.run).mockResolvedValue([]);
+      mockPythonShellInstance.end.mockImplementation((callback) => callback());
 
       await expect(pythonUtils.runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'Invalid JSON:',
@@ -229,8 +258,7 @@ describe('pythonUtils', () => {
     it('should log and throw an error with stack trace when Python script execution fails', async () => {
       const mockError = new Error('Test Error');
       mockError.stack = '--- Python Traceback ---\nError details';
-
-      jest.mocked(PythonShell.run).mockRejectedValue(mockError);
+      mockPythonShellInstance.end.mockImplementation((callback) => callback(mockError));
 
       await expect(pythonUtils.runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'Error running Python script: Test Error\nStack Trace: Python Traceback: \nError details',
@@ -244,8 +272,7 @@ describe('pythonUtils', () => {
     it('should handle error without stack trace', async () => {
       const mockError = new Error('Test Error Without Stack');
       mockError.stack = undefined;
-
-      jest.mocked(PythonShell.run).mockRejectedValue(mockError);
+      mockPythonShellInstance.end.mockImplementation((callback) => callback(mockError));
 
       await expect(pythonUtils.runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'Error running Python script: Test Error Without Stack\nStack Trace: No Python traceback available',
@@ -258,10 +285,8 @@ describe('pythonUtils', () => {
 
     it('should log an error when unable to remove temporary files', async () => {
       const mockOutput = JSON.stringify({ type: 'final_result', data: 'test result' });
-
-      jest.mocked(fs.writeFileSync).mockImplementation();
       jest.mocked(fs.readFileSync).mockReturnValue(mockOutput);
-      jest.mocked(PythonShell.run).mockResolvedValue([]);
+      mockPythonShellInstance.end.mockImplementation((callback) => callback());
 
       jest.mocked(fs.unlinkSync).mockImplementation(() => {
         throw new Error('Unable to delete file');
