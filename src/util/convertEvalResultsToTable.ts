@@ -49,9 +49,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   const completedPrompts: Record<string, CompletedPrompt> = {};
   const varsForHeader = new Set<string>();
   const varValuesForRow = new Map<number, Record<string, string>>();
-  let highestTestIdx = -1;
   for (const result of results.results) {
-    highestTestIdx = Math.max(highestTestIdx, result.testIdx);
     // vars
     for (const varName of Object.keys(result.vars || {})) {
       varsForHeader.add(varName);
