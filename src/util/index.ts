@@ -1078,7 +1078,3 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
   }
   return contents;
 }
-
-export function getCurrentTimestamp() {
-  return Math.floor(new Date().getTime() / 1000);
-}

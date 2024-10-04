@@ -11,7 +11,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import { type EvaluateResult } from '../types';
-import { getCurrentTimestamp } from '../util';
+import { getCurrentTimestamp } from '../util/time';
 
 export default class EvalResult {
   static async createFromEvaluateResult(

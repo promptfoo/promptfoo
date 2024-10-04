@@ -28,9 +28,9 @@ import type {
   ResultsFile,
   UnifiedConfig,
 } from '../types';
-import { getCurrentTimestamp } from '../util';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
 import type Provider from './provider';
 
