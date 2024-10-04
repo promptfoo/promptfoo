@@ -149,7 +149,7 @@ export async function doEval(
     });
 
     const shareableUrl =
-      cmdObj.share && config.sharing ? await createShareableUrl(evalRecord, false) : null;
+      cmdObj.share && config.sharing ? await createShareableUrl(evalRecord) : null;
 
     const summary = await evalRecord.toEvaluateSummary();
     const table = await evalRecord.getTable();
