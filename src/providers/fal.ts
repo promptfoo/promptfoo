@@ -4,11 +4,24 @@ import fetch from 'node-fetch';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types';
+import type { ApiProvider, EnvOverrides, Prompt, ProviderResponse } from '../types';
+import { PromptSchema } from '../validators/prompts';
 
 type FalProviderOptions = {
   apiKey?: string;
 };
+
+function parsePrompt(prompt: string): Prompt {
+  try {
+    const json = JSON.parse(prompt);
+    if (typeof json === 'object') {
+      return PromptSchema.parse(json);
+    }
+    return { label: json.toString(), raw: json.toString() };
+  } catch {
+    return { label: prompt, raw: prompt };
+  }
+}
 
 class FalProvider<Input = any> implements ApiProvider {
   modelName: string;
@@ -43,6 +56,7 @@ class FalProvider<Input = any> implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
+    const { raw: promptValue, config: inputOverrides = {} } = parsePrompt(prompt);
     if (!this.apiKey) {
       throw new Error(
         'fal.ai API key is not set. Set the FAL_KEY environment variable or or add `apiKey` to the provider config.',
@@ -54,8 +68,9 @@ class FalProvider<Input = any> implements ApiProvider {
     let cached = false;
 
     const input = {
-      prompt,
+      prompt: promptValue,
       ...this.input,
+      ...inputOverrides,
     };
     const cacheKey = `fal:${this.modelName}:${JSON.stringify(input)}`;
     if (isCacheEnabled()) {
