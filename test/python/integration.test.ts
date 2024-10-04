@@ -1,8 +1,12 @@
+import { exec } from 'child_process';
 import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
+import util from 'util';
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
+
+const execPromise = util.promisify(exec);
 
 jest.mock('../../src/logger');
 
@@ -59,6 +63,11 @@ describe('pythonUtils Integration Tests', () => {
 
   afterAll(() => {
     fs.rmSync(path.join(scriptsDir), { recursive: true, force: true });
+  });
+
+  it('should be able to call Python directly', async () => {
+    const { stdout } = await execPromise('python --version');
+    expect(stdout).toContain('Python');
   });
 
   it('should successfully run a simple Python script', async () => {
