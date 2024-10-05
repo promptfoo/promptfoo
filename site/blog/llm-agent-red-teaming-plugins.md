@@ -1,5 +1,6 @@
 ---
 date: 2024-08-14
+image: /img/blog/bola.svg
 ---
 
 # New Red Teaming Plugins for LLM Agents: Enhancing API Security
