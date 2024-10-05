@@ -1,5 +1,6 @@
 ---
 date: 2024-10-04
+image: /img/blog/foundation-model-security/artificial_analysis.png
 ---
 
 # How Much Does Foundation Model Security Matter?
