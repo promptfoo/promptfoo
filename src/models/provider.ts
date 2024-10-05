@@ -15,7 +15,7 @@ export default class Provider {
 
     for (const provider of providers) {
       const id = getProviderId(provider);
-      let providerResult: { id: string; provider_id: string; config: Record<string, any> };
+      let providerResult: { id: string; providerId: string; config: Record<string, any> };
       let results = await db.select().from(providerTable).where(eq(providerTable.id, id));
       if (results.length > 0) {
         providerResult = results[0];
@@ -24,14 +24,14 @@ export default class Provider {
           .insert(providerTable)
           .values({
             id,
-            provider_id: provider.id(),
+            providerId: provider.id(),
             config: provider.config || {},
           })
           .onConflictDoNothing()
           .returning();
         providerResult = results[0];
       }
-      ret.push(new Provider(providerResult.id, providerResult.provider_id, providerResult.config));
+      ret.push(new Provider(providerResult.id, providerResult.providerId, providerResult.config));
     }
 
     return ret;

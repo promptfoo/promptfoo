@@ -23,7 +23,7 @@ import type {
 
 export const providers = sqliteTable('providers', {
   id: text('id').primaryKey(),
-  provider_id: text('provider_id').notNull(),
+  providerId: text('provider_id').notNull(),
   config: text('options', { mode: 'json' }).$type<Record<string, any>>().notNull(),
 });
 
