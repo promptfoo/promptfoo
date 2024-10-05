@@ -1,7 +1,4 @@
 {
-  "ts-node": {
-    "require": ["tsconfig-paths/register"]
-  },
   "compilerOptions": {
     "declaration": true,
     "declarationMap": true,
@@ -13,8 +10,10 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "composite": true,
+    "rootDir": "."
   },
-  "include": ["src/", "typings/**/*", "test/"],
+  "include": ["src/", "typings/**/*", "test/", "./package.json", "src/**/*.json"],
   "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*"]
 }
