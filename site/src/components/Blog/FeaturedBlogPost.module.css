@@ -83,3 +83,14 @@
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
 }
+
+.featuredPostLink {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.featuredPostLink:hover {
+  color: inherit;
+  text-decoration: none;
+}

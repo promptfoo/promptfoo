@@ -13,7 +13,7 @@ export default function BlogPostCard({ post }: BlogPostCardProps): JSX.Element {
   const author = metadata.authors[0];
 
   return (
-    <div className={styles.blogPostCard}>
+    <Link to={permalink} className={styles.blogPostCard}>
       {metadata.frontMatter.image && (
         <div className={styles.blogPostImage}>
           <img src={metadata.frontMatter.image} alt={title} />
@@ -21,9 +21,7 @@ export default function BlogPostCard({ post }: BlogPostCardProps): JSX.Element {
       )}
       <div className={styles.blogPostContent}>
         {tags && tags.length > 0 && <div className={styles.tag}>{tags[0].label}</div>}
-        <h3 className={styles.title}>
-          <Link to={permalink}>{title}</Link>
-        </h3>
+        <h3 className={styles.title}>{title}</h3>
         <div className={styles.blogPostMeta}>
           {author && (
             <span className={styles.author}>
@@ -33,6 +31,6 @@ export default function BlogPostCard({ post }: BlogPostCardProps): JSX.Element {
         </div>
         {description && <p className={styles.preview}>{description.split('. ')[0]}.</p>}
       </div>
-    </div>
+    </Link>
   );
 }

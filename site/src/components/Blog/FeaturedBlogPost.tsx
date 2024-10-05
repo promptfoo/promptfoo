@@ -13,30 +13,30 @@ export default function FeaturedBlogPost({ post }: FeaturedBlogPostProps): JSX.E
   const author = metadata.authors[0];
 
   return (
-    <div className={styles.featuredPost}>
-      <div className={styles.featuredPostContent}>
-        <div className={styles.featuredPostHeader}>
-          {tags && tags.length > 0 && <div className={styles.tag}>{tags[0].label}</div>}
-          <h2 className={styles.title}>
-            <Link to={permalink}>{title}</Link>
-          </h2>
-        </div>
-        <div className={styles.featuredPostMeta}>
-          {author && (
-            <span className={styles.author}>
-              {author.name} · {new Date(date).toLocaleDateString()}
-            </span>
+    <Link to={permalink} className={styles.featuredPostLink}>
+      <div className={styles.featuredPost}>
+        <div className={styles.featuredPostContent}>
+          <div className={styles.featuredPostHeader}>
+            {tags && tags.length > 0 && <div className={styles.tag}>{tags[0].label}</div>}
+            <h2 className={styles.title}>{title}</h2>
+          </div>
+          <div className={styles.featuredPostMeta}>
+            {author && (
+              <span className={styles.author}>
+                {author.name} · {new Date(date).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          {description && (
+            <p className={styles.preview}>{description.split('. ').slice(0, 2).join('. ')}.</p>
           )}
         </div>
-        {description && (
-          <p className={styles.preview}>{description.split('. ').slice(0, 2).join('. ')}.</p>
+        {metadata.frontMatter.image && (
+          <div className={styles.featuredPostImage}>
+            <img src={metadata.frontMatter.image} alt={title} />
+          </div>
         )}
       </div>
-      {metadata.frontMatter.image && (
-        <div className={styles.featuredPostImage}>
-          <img src={metadata.frontMatter.image} alt={title} />
-        </div>
-      )}
-    </div>
+    </Link>
   );
 }
