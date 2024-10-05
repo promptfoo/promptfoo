@@ -39,6 +39,7 @@
 
 .title {
   font-size: 2.5rem;
+  font-weight: 500;
   margin: 0;
   color: var(--ifm-heading-color);
   line-height: 1.2;
