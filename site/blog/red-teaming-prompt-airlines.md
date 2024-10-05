@@ -1,5 +1,6 @@
 ---
 date: 2024-09-26
+image: /img/blog/prompt-airlines/promptairlines_homepage.png
 ---
 
 # Jailbreaking Black-Box LLMs Using Promptfoo: A Walkthrough
