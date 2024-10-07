@@ -12,7 +12,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
-import { isJavascriptFile } from '../util';
+import { isJavascriptFile } from '../util/file';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';

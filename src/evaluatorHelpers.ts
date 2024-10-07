@@ -8,7 +8,8 @@ import { importModule } from './esm';
 import logger from './logger';
 import { runPython } from './python/pythonUtils';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
-import { isJavascriptFile, renderVarsInObject } from './util';
+import { renderVarsInObject } from './util';
+import { isJavascriptFile } from './util/file';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 

@@ -26,7 +26,8 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from '../../types';
-import { isJavascriptFile, maybeLoadFromExternalFile, readFilters } from '../../util';
+import { maybeLoadFromExternalFile, readFilters } from '../../util';
+import { isJavascriptFile } from '../../util/file';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {

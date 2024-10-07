@@ -129,11 +129,12 @@ export async function doEval(
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
+      const validationError = fromError(testSuiteSchema.error);
       logger.warn(
         chalk.yellow(dedent`
       TestSuite Schema Validation Error:
       
-        ${JSON.stringify(testSuiteSchema.error.format())}
+        ${validationError.toString()}
       
       Please review your promptfooconfig.yaml configuration.`),
       );

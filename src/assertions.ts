@@ -48,7 +48,7 @@ import {
   type TestCase,
   isGradingResult,
 } from './types';
-import { isJavascriptFile } from './util';
+import { isJavascriptFile } from './util/file';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
