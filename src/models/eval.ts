@@ -4,15 +4,15 @@ import invariant from 'tiny-invariant';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import {
-  datasets,
-  evals as evalsTable,
-  evalsToDatasets,
-  evalsToPrompts,
-  prompts as promptsTable,
-  tags as tagsTable,
-  evalsToTags,
+  datasetsTable,
+  evalsTable,
+  evalsToDatasetsTable,
+  evalsToPromptsTable,
+  promptsTable,
+  tagsTable,
+  evalsToTagsTable,
   evalResultsTable,
-  evalsToProviders,
+  evalsToProvidersTable,
 } from '../database/tables';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -93,10 +93,10 @@ export default class Eval {
       const evals = await tx.select().from(evalsTable).where(eq(evalsTable.id, id));
       const datasetResults = await tx
         .select({
-          datasetId: evalsToDatasets.datasetId,
+          datasetId: evalsToDatasetsTable.datasetId,
         })
-        .from(evalsToDatasets)
-        .where(eq(evalsToDatasets.evalId, id))
+        .from(evalsToDatasetsTable)
+        .where(eq(evalsToDatasetsTable.evalId, id))
         .limit(1);
 
       return { evals, datasetResults };
@@ -191,7 +191,7 @@ export default class Eval {
           .onConflictDoNothing()
           .run();
 
-        tx.insert(evalsToPrompts)
+        tx.insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
@@ -204,7 +204,7 @@ export default class Eval {
 
       // Record dataset relation
       const datasetId = sha256(JSON.stringify(config.tests || []));
-      tx.insert(datasets)
+      tx.insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
@@ -212,7 +212,7 @@ export default class Eval {
         .onConflictDoNothing()
         .run();
 
-      tx.insert(evalsToDatasets)
+      tx.insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
@@ -236,7 +236,7 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          tx.insert(evalsToTags)
+          tx.insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,
@@ -360,7 +360,7 @@ export default class Eval {
       await db.transaction(async (tx) => {
         for (const provider of providers) {
           const id = provider.id;
-          tx.insert(evalsToProviders)
+          tx.insert(evalsToProvidersTable)
             .values({
               evalId: this.id,
               providerId: id,
@@ -444,10 +444,10 @@ export default class Eval {
   async delete() {
     const db = getDb();
     await db.transaction(() => {
-      db.delete(evalsToDatasets).where(eq(evalsToDatasets.evalId, this.id)).run();
-      db.delete(evalsToPrompts).where(eq(evalsToPrompts.evalId, this.id)).run();
-      db.delete(evalsToTags).where(eq(evalsToTags.evalId, this.id)).run();
-      db.delete(evalsToProviders).where(eq(evalsToProviders.evalId, this.id)).run();
+      db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
+      db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
+      db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
+      db.delete(evalsToProvidersTable).where(eq(evalsToProvidersTable.evalId, this.id)).run();
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
@@ -467,14 +467,14 @@ export async function getSummaryofLatestEvals(
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
       numTests: sql`MAX(${evalResultsTable.testIdx} + 1)`.as('numTests'),
-      datasetId: evalsToDatasets.datasetId,
+      datasetId: evalsToDatasetsTable.datasetId,
     })
     .from(evalsTable)
-    .leftJoin(evalsToDatasets, eq(evalsTable.id, evalsToDatasets.evalId))
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .leftJoin(evalResultsTable, eq(evalsTable.id, evalResultsTable.evalId))
     .where(
       and(
-        datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
+        datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined,
         filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
         eq(evalsTable.results, {}),
       ),

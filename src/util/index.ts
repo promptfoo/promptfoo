@@ -14,14 +14,14 @@ import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
 import {
-  datasets,
-  evals,
-  evalsToDatasets,
-  evalsToPrompts,
-  evalsToProviders,
-  evalsToTags,
-  prompts,
-  tags,
+  datasetsTable,
+  evalsTable,
+  evalsToDatasetsTable,
+  evalsToPromptsTable,
+  evalsToProvidersTable,
+  evalsToTagsTable,
+  promptsTable,
+  tagsTable,
   evalResultsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
@@ -214,7 +214,7 @@ export async function writeResultsToDatabase(
   const promises = [];
   promises.push(
     db
-      .insert(evals)
+      .insert(evalsTable)
       .values({
         id: evalId,
         createdAt: createdAt.getTime(),
@@ -238,7 +238,7 @@ export async function writeResultsToDatabase(
 
     promises.push(
       db
-        .insert(prompts)
+        .insert(promptsTable)
         .values({
           id: promptId,
           prompt: label,
@@ -249,7 +249,7 @@ export async function writeResultsToDatabase(
 
     promises.push(
       db
-        .insert(evalsToPrompts)
+        .insert(evalsToPromptsTable)
         .values({
           evalId,
           promptId,
@@ -265,7 +265,7 @@ export async function writeResultsToDatabase(
   const datasetId = sha256(JSON.stringify(config.tests || []));
   promises.push(
     db
-      .insert(datasets)
+      .insert(datasetsTable)
       .values({
         id: datasetId,
         tests: config.tests,
@@ -276,7 +276,7 @@ export async function writeResultsToDatabase(
 
   promises.push(
     db
-      .insert(evalsToDatasets)
+      .insert(evalsToDatasetsTable)
       .values({
         evalId,
         datasetId,
@@ -294,7 +294,7 @@ export async function writeResultsToDatabase(
 
       promises.push(
         db
-          .insert(tags)
+          .insert(tagsTable)
           .values({
             id: tagId,
             name: tagKey,
@@ -306,7 +306,7 @@ export async function writeResultsToDatabase(
 
       promises.push(
         db
-          .insert(evalsToTags)
+          .insert(evalsToTagsTable)
           .values({
             evalId,
             tagId,
@@ -348,23 +348,23 @@ export async function listPreviousResults(
 
   const query = db
     .select({
-      evalId: evals.id,
-      createdAt: evals.createdAt,
-      description: evals.description,
-      numTests: sql<number>`json_array_length(${evals.results}->'table'->'body')`,
-      datasetId: evalsToDatasets.datasetId,
+      evalId: evalsTable.id,
+      createdAt: evalsTable.createdAt,
+      description: evalsTable.description,
+      numTests: sql<number>`json_array_length(${evalsTable.results}->'table'->'body')`,
+      datasetId: evalsToDatasetsTable.datasetId,
     })
-    .from(evals)
-    .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
+    .from(evalsTable)
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(
       and(
-        datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
-        filterDescription ? like(evals.description, `%${filterDescription}%`) : undefined,
-        not(eq(evals.results, {})),
+        datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined,
+        filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
+        not(eq(evalsTable.results, {})),
       ),
     );
 
-  const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
+  const results = query.orderBy(desc(evalsTable.createdAt)).limit(limit).all();
   const mappedResults = results.map((result) => ({
     evalId: result.evalId,
     createdAt: result.createdAt,
@@ -698,15 +698,15 @@ export async function getEvalsWithPredicate(
   const db = getDb();
   const evals_ = await db
     .select({
-      id: evals.id,
-      createdAt: evals.createdAt,
-      author: evals.author,
-      results: evals.results,
-      config: evals.config,
-      description: evals.description,
+      id: evalsTable.id,
+      createdAt: evalsTable.createdAt,
+      author: evalsTable.author,
+      results: evalsTable.results,
+      config: evalsTable.config,
+      description: evalsTable.description,
     })
-    .from(evals)
-    .orderBy(desc(evals.createdAt))
+    .from(evalsTable)
+    .orderBy(desc(evalsTable.createdAt))
     .limit(limit)
     .all();
 
@@ -756,13 +756,13 @@ export async function deleteEval(evalId: string) {
   const db = getDb();
   await db.transaction(async () => {
     // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
-    await db.delete(evalsToPrompts).where(eq(evalsToPrompts.evalId, evalId)).run();
-    await db.delete(evalsToDatasets).where(eq(evalsToDatasets.evalId, evalId)).run();
-    await db.delete(evalsToTags).where(eq(evalsToTags.evalId, evalId)).run();
+    await db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
+    await db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
+    await db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
     await db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
-    await db.delete(evalsToProviders).where(eq(evalsToProviders.evalId, evalId)).run();
+    await db.delete(evalsToProvidersTable).where(eq(evalsToProvidersTable.evalId, evalId)).run();
     // Finally, delete the eval record
-    const deletedIds = await db.delete(evals).where(eq(evals.id, evalId)).run();
+    const deletedIds = await db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
     if (deletedIds.changes === 0) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
@@ -777,10 +777,10 @@ export async function deleteEval(evalId: string) {
 export async function deleteAllEvals(): Promise<void> {
   const db = getDb();
   await db.transaction(async (tx) => {
-    await tx.delete(evalsToPrompts).run();
-    await tx.delete(evalsToDatasets).run();
-    await tx.delete(evalsToTags).run();
-    await tx.delete(evals).run();
+    await tx.delete(evalsToPromptsTable).run();
+    await tx.delete(evalsToDatasetsTable).run();
+    await tx.delete(evalsToTagsTable).run();
+    await tx.delete(evalsTable).run();
   });
 }
 
@@ -849,28 +849,28 @@ export async function getStandaloneEvals({
   const db = getDb();
   const results = db
     .select({
-      evalId: evals.id,
-      description: evals.description,
-      results: evals.results,
-      createdAt: evals.createdAt,
-      promptId: evalsToPrompts.promptId,
-      datasetId: evalsToDatasets.datasetId,
-      tagName: tags.name,
-      tagValue: tags.value,
+      evalId: evalsTable.id,
+      description: evalsTable.description,
+      results: evalsTable.results,
+      createdAt: evalsTable.createdAt,
+      promptId: evalsToPromptsTable.promptId,
+      datasetId: evalsToDatasetsTable.datasetId,
+      tagName: tagsTable.name,
+      tagValue: tagsTable.value,
       isRedteam: sql`json_extract(evals.config, '$.redteam') IS NOT NULL`.as('isRedteam'),
     })
-    .from(evals)
-    .leftJoin(evalsToPrompts, eq(evals.id, evalsToPrompts.evalId))
-    .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
-    .leftJoin(evalsToTags, eq(evals.id, evalsToTags.evalId))
-    .leftJoin(tags, eq(evalsToTags.tagId, tags.id))
+    .from(evalsTable)
+    .leftJoin(evalsToPromptsTable, eq(evalsTable.id, evalsToPromptsTable.evalId))
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
+    .leftJoin(evalsToTagsTable, eq(evalsTable.id, evalsToTagsTable.evalId))
+    .leftJoin(tagsTable, eq(evalsToTagsTable.tagId, tagsTable.id))
     .where(
       and(
-        tag ? and(eq(tags.name, tag.key), eq(tags.value, tag.value)) : undefined,
-        description ? eq(evals.description, description) : undefined,
+        tag ? and(eq(tagsTable.name, tag.key), eq(tagsTable.value, tag.value)) : undefined,
+        description ? eq(evalsTable.description, description) : undefined,
       ),
     )
-    .orderBy(desc(evals.createdAt))
+    .orderBy(desc(evalsTable.createdAt))
     .limit(limit)
     .all();
 

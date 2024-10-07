@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import fs from 'fs';
 import { getDb } from '../database';
-import { evals } from '../database/tables';
+import { evalsTable } from '../database/tables';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
@@ -29,7 +29,7 @@ export function importCommand(program: Command) {
           logger.debug('Importing v2 eval');
           evalId = evalData.id || createEvalId(evalData.createdAt);
           await db
-            .insert(evals)
+            .insert(evalsTable)
             .values({
               id: evalId,
               createdAt: evalData.createdAt,

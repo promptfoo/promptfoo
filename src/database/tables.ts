@@ -29,7 +29,7 @@ export const providers = sqliteTable('providers', {
 
 // ------------ Prompts ------------
 
-export const prompts = sqliteTable(
+export const promptsTable = sqliteTable(
   'prompts',
   {
     id: text('id').primaryKey(),
@@ -45,7 +45,7 @@ export const prompts = sqliteTable(
 
 // ------------ Tags ------------
 
-export const tags = sqliteTable(
+export const tagsTable = sqliteTable(
   'tags',
   {
     id: text('id').primaryKey(),
@@ -60,7 +60,7 @@ export const tags = sqliteTable(
 
 // ------------ Evals ------------
 
-export const evals = sqliteTable(
+export const evalsTable = sqliteTable(
   'evals',
   {
     id: text('id').primaryKey(),
@@ -91,13 +91,13 @@ export const evalResultsTable = sqliteTable(
       .default(sql`cast(unixepoch() as int)`),
     evalId: text('eval_id')
       .notNull()
-      .references(() => evals.id),
+      .references(() => evalsTable.id),
     promptIdx: integer('prompt_idx').notNull(),
     testIdx: integer('test_idx').notNull(),
 
     testCase: text('test_case', { mode: 'json' }).$type<AtomicTestCase>().notNull(),
     prompt: text('prompt', { mode: 'json' }).$type<Prompt>().notNull(),
-    promptId: text('prompt_id').references(() => prompts.id),
+    promptId: text('prompt_id').references(() => promptsTable.id),
 
     // Provider-related fields
     provider: text('provider', { mode: 'json' }).$type<ProviderOptions>().notNull(),
@@ -124,15 +124,15 @@ export const evalResultsTable = sqliteTable(
   }),
 );
 
-export const evalsToPrompts = sqliteTable(
+export const evalsToPromptsTable = sqliteTable(
   'evals_to_prompts',
   {
     evalId: text('eval_id')
       .notNull()
-      .references(() => evals.id, { onDelete: 'cascade' }),
+      .references(() => evalsTable.id, { onDelete: 'cascade' }),
     promptId: text('prompt_id')
       .notNull()
-      .references(() => prompts.id),
+      .references(() => promptsTable.id),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.evalId, t.promptId] }),
@@ -141,19 +141,19 @@ export const evalsToPrompts = sqliteTable(
   }),
 );
 
-export const promptsRelations = relations(prompts, ({ many }) => ({
-  evalsToPrompts: many(evalsToPrompts),
+export const promptsRelations = relations(promptsTable, ({ many }) => ({
+  evalsToPrompts: many(evalsToPromptsTable),
 }));
 
-export const evalsToTags = sqliteTable(
+export const evalsToTagsTable = sqliteTable(
   'evals_to_tags',
   {
     evalId: text('eval_id')
       .notNull()
-      .references(() => evals.id),
+      .references(() => evalsTable.id),
     tagId: text('tag_id')
       .notNull()
-      .references(() => tags.id),
+      .references(() => tagsTable.id),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.evalId, t.tagId] }),
@@ -162,22 +162,22 @@ export const evalsToTags = sqliteTable(
   }),
 );
 
-export const tagsRelations = relations(tags, ({ many }) => ({
-  evalsToTags: many(evalsToTags),
+export const tagsRelations = relations(tagsTable, ({ many }) => ({
+  evalsToTags: many(evalsToTagsTable),
 }));
 
-export const evalsToTagsRelations = relations(evalsToTags, ({ one }) => ({
-  eval: one(evals, {
-    fields: [evalsToTags.evalId],
-    references: [evals.id],
+export const evalsToTagsRelations = relations(evalsToTagsTable, ({ one }) => ({
+  eval: one(evalsTable, {
+    fields: [evalsToTagsTable.evalId],
+    references: [evalsTable.id],
   }),
-  tag: one(tags, {
-    fields: [evalsToTags.tagId],
-    references: [tags.id],
+  tag: one(tagsTable, {
+    fields: [evalsToTagsTable.tagId],
+    references: [tagsTable.id],
   }),
 }));
 
-export const evalsToProviders = sqliteTable(
+export const evalsToProvidersTable = sqliteTable(
   'evals_to_providers',
   {
     providerId: text('provider_id')
@@ -185,27 +185,27 @@ export const evalsToProviders = sqliteTable(
       .references(() => providers.id),
     evalId: text('eval_id')
       .notNull()
-      .references(() => evals.id),
+      .references(() => evalsTable.id),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.providerId, t.evalId] }),
   }),
 );
 
-export const evalsToProvidersRelations = relations(evalsToProviders, ({ one }) => ({
+export const evalsToProvidersRelations = relations(evalsToProvidersTable, ({ one }) => ({
   provider: one(providers, {
-    fields: [evalsToProviders.providerId],
+    fields: [evalsToProvidersTable.providerId],
     references: [providers.id],
   }),
-  eval: one(evals, {
-    fields: [evalsToProviders.evalId],
-    references: [evals.id],
+  eval: one(evalsTable, {
+    fields: [evalsToProvidersTable.evalId],
+    references: [evalsTable.id],
   }),
 }));
 
 // ------------ Datasets ------------
 
-export const datasets = sqliteTable(
+export const datasetsTable = sqliteTable(
   'datasets',
   {
     id: text('id').primaryKey(),
@@ -219,17 +219,17 @@ export const datasets = sqliteTable(
   }),
 );
 
-export const evalsToDatasets = sqliteTable(
+export const evalsToDatasetsTable = sqliteTable(
   'evals_to_datasets',
   {
     evalId: text('eval_id')
       .notNull()
-      .references(() => evals.id),
+      .references(() => evalsTable.id),
     // Drizzle doesn't support this migration for sqlite, so we remove foreign keys manually.
     //.references(() => evals.id, { onDelete: 'cascade' }),
     datasetId: text('dataset_id')
       .notNull()
-      .references(() => datasets.id),
+      .references(() => datasetsTable.id),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.evalId, t.datasetId] }),
@@ -238,37 +238,37 @@ export const evalsToDatasets = sqliteTable(
   }),
 );
 
-export const datasetsRelations = relations(datasets, ({ many }) => ({
-  evalsToDatasets: many(evalsToDatasets),
+export const datasetsRelations = relations(datasetsTable, ({ many }) => ({
+  evalsToDatasets: many(evalsToDatasetsTable),
 }));
 
 // ------------ Evals ------------
 
-export const evalsRelations = relations(evals, ({ many }) => ({
-  evalsToPrompts: many(evalsToPrompts),
-  evalsToDatasets: many(evalsToDatasets),
-  evalsToTags: many(evalsToTags),
+export const evalsRelations = relations(evalsTable, ({ many }) => ({
+  evalsToPrompts: many(evalsToPromptsTable),
+  evalsToDatasets: many(evalsToDatasetsTable),
+  evalsToTags: many(evalsToTagsTable),
 }));
 
-export const evalsToPromptsRelations = relations(evalsToPrompts, ({ one }) => ({
-  eval: one(evals, {
-    fields: [evalsToPrompts.evalId],
-    references: [evals.id],
+export const evalsToPromptsRelations = relations(evalsToPromptsTable, ({ one }) => ({
+  eval: one(evalsTable, {
+    fields: [evalsToPromptsTable.evalId],
+    references: [evalsTable.id],
   }),
-  prompt: one(prompts, {
-    fields: [evalsToPrompts.promptId],
-    references: [prompts.id],
+  prompt: one(promptsTable, {
+    fields: [evalsToPromptsTable.promptId],
+    references: [promptsTable.id],
   }),
 }));
 
-export const evalsToDatasetsRelations = relations(evalsToDatasets, ({ one }) => ({
-  eval: one(evals, {
-    fields: [evalsToDatasets.evalId],
-    references: [evals.id],
+export const evalsToDatasetsRelations = relations(evalsToDatasetsTable, ({ one }) => ({
+  eval: one(evalsTable, {
+    fields: [evalsToDatasetsTable.evalId],
+    references: [evalsTable.id],
   }),
-  dataset: one(datasets, {
-    fields: [evalsToDatasets.datasetId],
-    references: [datasets.id],
+  dataset: one(datasetsTable, {
+    fields: [evalsToDatasetsTable.datasetId],
+    references: [datasetsTable.id],
   }),
 }));
 
