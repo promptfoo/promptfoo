@@ -12,6 +12,7 @@ const config: Config = {
   testPathIgnorePatterns: [
     '.*\\.test\\.tsx$',
     '.*\\.integration\\.test\\.ts$',
+    '\\.integration\\.test\\.ts$',
     '<rootDir>/dist',
     '<rootDir>/examples',
     '<rootDir>/node_modules',
