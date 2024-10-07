@@ -6,17 +6,15 @@ title: LLM red teaming guide (open source)
 
 # LLM red teaming
 
-LLM red teaming is a proactive approach to finding vulnerabilities in AI systems by simulating malicious inputs.
+LLM red teaming is a way to find vulnerabilities in AI systems _before_ they're deployed by using simulated inputs.
 
 As of today, there are multiple inherent security challenges with LLM architectures. Depending on your system's design, e.g. [RAG](/docs/red-team/rag/), [LLM agent](/docs/red-team/agents/), or [chatbot](/docs/red-team/llm-vulnerability-types/), you'll face different types of vulnerabilities.
 
 Almost every LLM app has potential issues with generation of off-topic, inappropriate, or harmful content that breaches business policies or other guidelines. As architectures become more complex, problems can arise in the form of information leakage and access control (RAG architectures), misuse of connected APIs or databases (in agents), and more.
 
-The purpose of red teaming is to identify and address these vulnerabilities before they make it to production.
+In order to identify these types of vulnerabilities before they make it to production, we need to generate a wide range of adversarial inputs and evaluate the LLM's responses.
 
-In order to do this, we need to systematically generate a wide range of adversarial inputs and evaluate the LLM's responses. This process is known as "red teaming".
-
-By systematically probing the LLM application, you can produce a report that quantifies the risk of misuse and provides suggestions for mitigation.
+By systematically probing the LLM application, we can produce a report that quantifies the risk of misuse and provides suggestions for mitigation.
 
 :::tip
 Ready to run a red team? Jump to **[Quickstart](/docs/red-team/quickstart/)**.
@@ -26,7 +24,7 @@ Ready to run a red team? Jump to **[Quickstart](/docs/red-team/quickstart/)**.
 ![llm red team report](/img/riskreport-1@2x.png)
 </div>
 
-## Red teaming is a core requirement of AI security
+## Why is LLM red teaming important?
 
 Red teaming is different from other AI security approaches because it provides a quantitative measure of risk _before_ deployment.
 
