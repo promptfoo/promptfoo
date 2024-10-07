@@ -24,6 +24,7 @@ import type {
   Scenario,
 } from './types';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
+import { PromptSchema } from './validators/prompts';
 
 export * from './types';
 
@@ -56,6 +57,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
             };
           } else if (typeof promptInput === 'string') {
             return readPrompts(promptInput);
+          } else if (typeof promptInput === 'object') {
+            return PromptSchema.parse(promptInput);
           } else {
             return {
               raw: JSON.stringify(promptInput),
