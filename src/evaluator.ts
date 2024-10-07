@@ -11,7 +11,9 @@ import cliState from './cliState';
 import { getEnvBool, getEnvInt, isCI } from './envars';
 import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
+import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
+import Provider from './models/provider';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -22,8 +24,6 @@ import type {
   EvaluateOptions,
   EvaluateResult,
   EvaluateStats,
-  EvaluateSummary,
-  EvaluateTable,
   Prompt,
   ProviderResponse,
   RunEvalOptions,
@@ -100,6 +100,7 @@ export function generateVarCombinations(
 }
 
 class Evaluator {
+  evalRecord: Eval;
   testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
@@ -109,8 +110,9 @@ class Evaluator {
   >;
   registers: Record<string, string | object>;
 
-  constructor(testSuite: TestSuite, options: EvaluateOptions) {
+  constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
+    this.evalRecord = evalRecord;
     this.options = options;
     this.stats = {
       successes: 0,
@@ -133,6 +135,8 @@ class Evaluator {
     delay,
     nunjucksFilters: filters,
     evaluateOptions,
+    testIdx,
+    promptIdx,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the label, not renderedPrompt
     const promptLabel = prompt.label;
@@ -164,6 +168,7 @@ class Evaluator {
       provider: {
         id: provider.id(),
         label: provider.label,
+        config: provider.config,
       },
       prompt: {
         raw: renderedPrompt,
@@ -244,6 +249,10 @@ class Evaluator {
         latencyMs,
         cost: response.cost,
         metadata: response.metadata,
+        promptIdx,
+        testIdx,
+        testCase: test,
+        promptId: prompt.id || '',
       };
       if (response.error) {
         ret.error = response.error;
@@ -321,13 +330,18 @@ class Evaluator {
         score: 0,
         namedScores: {},
         latencyMs,
+        promptIdx,
+        testIdx,
+        testCase: test,
+        promptId: prompt.id || '',
       };
     }
   }
 
-  async evaluate(): Promise<EvaluateSummary> {
+  async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
+    const rowsWithSelectBestAssertion = new Set<number>();
 
     await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
 
@@ -505,7 +519,7 @@ class Evaluator {
 
     // Set up eval cases
     const runEvalOptions: RunEvalOptions[] = [];
-    let rowIndex = 0;
+    let testIdx = 0;
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
@@ -537,7 +551,7 @@ class Evaluator {
       const numRepeat = this.options.repeat || 1;
       for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
         for (const vars of varCombinations) {
-          let colIndex = 0;
+          let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
             for (const prompt of testSuite.prompts) {
@@ -554,33 +568,18 @@ class Evaluator {
                 },
                 test: { ...testCase, vars, options: testCase.options },
                 nunjucksFilters: testSuite.nunjucksFilters,
-                rowIndex,
-                colIndex,
+                testIdx,
+                promptIdx,
                 repeatIndex,
                 evaluateOptions: options,
               });
-              colIndex++;
+              promptIdx++;
             }
           }
-          rowIndex++;
+          testIdx++;
         }
       }
     }
-
-    // Set up table...
-    const isTest = tests.some((t) => !!t.assert);
-
-    const table: EvaluateTable = {
-      head: {
-        prompts,
-        vars: [
-          ...Object.keys(testSuite.defaultTest?.vars || {}).sort(),
-          ...Array.from(varNames).sort(),
-        ],
-      },
-      body: [],
-    };
-
     // Determine run parameters
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     if (concurrency > 1) {
@@ -598,7 +597,6 @@ class Evaluator {
     }
 
     // Actually run the eval
-    const results: EvaluateResult[] = [];
     let numComplete = 0;
 
     const processEvalStep = async (evalStep: RunEvalOptions, index: number | string) => {
@@ -609,66 +607,30 @@ class Evaluator {
       await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
+
       const row = await this.runEval(evalStep);
 
-      results.push(row);
+      if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
+        rowsWithSelectBestAssertion.add(row.testIdx);
+      }
 
       numComplete++;
       if (options.progressCallback) {
-        options.progressCallback(results.length, runEvalOptions.length, index, evalStep);
+        options.progressCallback(
+          this.evalRecord.results.length,
+          runEvalOptions.length,
+          index,
+          evalStep,
+        );
       }
 
-      // Bookkeeping for table
-      let resultText: string | undefined;
-      const outputTextDisplay = (
-        typeof row.response?.output === 'object'
-          ? JSON.stringify(row.response.output)
-          : row.response?.output || row.error || ''
-      ) as string;
-      if (isTest) {
-        if (row.success) {
-          resultText = `${outputTextDisplay || row.error || ''}`;
-        } else {
-          resultText = `${row.error}\n---\n${outputTextDisplay}`;
-        }
-      } else if (row.error) {
-        resultText = `${row.error}`;
-      } else {
-        resultText = outputTextDisplay;
+      try {
+        await this.evalRecord.addResult(row, evalStep.test);
+      } catch (error) {
+        logger.error(`Error saving result: ${error} ${JSON.stringify(row)}`);
       }
-
-      const { rowIndex, colIndex } = evalStep;
-      if (!table.body[rowIndex]) {
-        table.body[rowIndex] = {
-          description: evalStep.test.description,
-          outputs: [],
-          test: evalStep.test,
-          vars: table.head.vars
-            .map((varName) => {
-              const varValue = evalStep.test.vars?.[varName] || '';
-              if (typeof varValue === 'string') {
-                return varValue;
-              }
-              return JSON.stringify(varValue);
-            })
-            .flat(),
-        };
-      }
-      table.body[rowIndex].outputs[colIndex] = {
-        pass: row.success,
-        score: row.score,
-        namedScores: row.namedScores,
-        text: resultText,
-        prompt: row.prompt.raw,
-        provider: row.provider.label || row.provider.id,
-        latencyMs: row.latencyMs,
-        tokenUsage: row.response?.tokenUsage,
-        gradingResult: row.gradingResult,
-        cost: row.cost || 0,
-        metadata: row.metadata,
-      };
-
-      const metrics = table.head.prompts[colIndex].metrics;
+      const { promptIdx } = row;
+      const metrics = prompts[promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       metrics.score += row.score;
       for (const [key, value] of Object.entries(row.namedScores)) {
@@ -797,10 +759,7 @@ class Evaluator {
     await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, processEvalStep);
 
     // Do we have to run comparisons between row outputs?
-    const compareRowsCount = table.body.reduce(
-      (count, row) => count + (row.test.assert?.some((a) => a.type === 'select-best') ? 1 : 0),
-      0,
-    );
+    const compareRowsCount = rowsWithSelectBestAssertion.size;
 
     let progressBar;
     if (compareRowsCount > 0 && multibar) {
@@ -810,59 +769,79 @@ class Evaluator {
         vars: '',
       });
     }
+    let compareCount = 0;
+    for (const testIdx of rowsWithSelectBestAssertion) {
+      compareCount++;
 
-    for (let index = 0; index < table.body.length; index++) {
-      const row = table.body[index];
-      const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best') as Assertion;
+      const resultsToCompare = this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+      if (resultsToCompare.length === 0) {
+        logger.warn(`Expected results to be found for test index ${testIdx}`);
+        continue;
+      }
+
+      const compareAssertion = resultsToCompare[0].testCase.assert?.find(
+        (a) => a.type === 'select-best',
+      ) as Assertion;
       if (compareAssertion) {
-        const outputs = row.outputs.map((o) => o.text);
-        const gradingResults = await runCompareAssertion(row.test, compareAssertion, outputs);
-        row.outputs.forEach((output, index) => {
+        const outputs = resultsToCompare.map((r) => r.response?.output || '');
+        const gradingResults = await runCompareAssertion(
+          resultsToCompare[0].testCase,
+          compareAssertion,
+          outputs,
+        );
+        for (let index = 0; index < resultsToCompare.length; index++) {
+          const result = resultsToCompare[index];
           const gradingResult = gradingResults[index];
-          if (output.gradingResult) {
-            output.gradingResult.tokensUsed = output.gradingResult.tokensUsed || {
+          if (result.gradingResult) {
+            result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
               total: 0,
               prompt: 0,
               completion: 0,
             };
-            output.gradingResult.tokensUsed = output.gradingResult.tokensUsed || {
+            result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
               total: 0,
               prompt: 0,
               completion: 0,
             };
-            output.gradingResult.tokensUsed.total =
-              (output.gradingResult.tokensUsed.total || 0) + (gradingResult.tokensUsed?.total || 0);
-            output.gradingResult.tokensUsed.prompt =
-              (output.gradingResult.tokensUsed.prompt || 0) +
+            result.gradingResult.tokensUsed.total =
+              (result.gradingResult.tokensUsed.total || 0) + (gradingResult.tokensUsed?.total || 0);
+            result.gradingResult.tokensUsed.prompt =
+              (result.gradingResult.tokensUsed.prompt || 0) +
               (gradingResult.tokensUsed?.prompt || 0);
-            output.gradingResult.tokensUsed.completion =
-              (output.gradingResult.tokensUsed.completion || 0) +
+            result.gradingResult.tokensUsed.completion =
+              (result.gradingResult.tokensUsed.completion || 0) +
               (gradingResult.tokensUsed?.completion || 0);
-            output.pass = output.gradingResult.pass =
-              output.gradingResult.pass && gradingResult.pass;
+            result.success = result.gradingResult.pass =
+              result.gradingResult.pass && gradingResult.pass;
             if (!gradingResult.pass) {
               // Failure overrides the reason and the score
-              output.gradingResult.reason = gradingResult.reason;
-              output.score = output.gradingResult.score = gradingResult.score;
-              output.text = `${gradingResult.reason}\n---\n${output.text}`;
+              result.gradingResult.reason = gradingResult.reason;
+              result.score = result.gradingResult.score = gradingResult.score;
             }
-            if (!output.gradingResult.componentResults) {
-              output.gradingResult.componentResults = [];
+            if (!result.gradingResult.componentResults) {
+              result.gradingResult.componentResults = [];
             }
-            output.gradingResult.componentResults.push(gradingResult);
+            result.gradingResult.componentResults.push(gradingResult);
           } else {
-            output.gradingResult = gradingResult;
+            result.gradingResult = gradingResult;
           }
-        });
+          if (this.evalRecord.persisted) {
+            await result.save();
+          }
+        }
         if (progressBar) {
           progressBar.increment({
-            prompt: row.outputs[0].text.slice(0, 10).replace(/\n/g, ''),
+            prompt: resultsToCompare[0].prompt.raw.slice(0, 10).replace(/\n/g, ''),
           });
         } else {
-          logger.debug(`Model-graded comparison #${index + 1} of ${compareRowsCount} complete`);
+          logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
       }
     }
+
+    await this.evalRecord.addPrompts(prompts);
+    const providers = await Provider.createMultiple(testSuite.providers);
+    await this.evalRecord.addProviders(providers);
 
     // Finish up
     if (multibar) {
@@ -873,7 +852,7 @@ class Evaluator {
     }
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
-      results,
+      results: this.evalRecord.results.map((r) => r.toEvaluateResult()),
       suite: testSuite,
     });
 
@@ -896,15 +875,14 @@ class Evaluator {
       ).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
-      hasAnyPass: results.some((r) => r.success),
+      hasAnyPass: this.evalRecord.results.some((r) => r.success),
       isRedteam: Boolean(testSuite.redteam),
     });
-
-    return { version: 2, timestamp: new Date().toISOString(), results, stats: this.stats, table };
+    return this.evalRecord;
   }
 }
 
-export function evaluate(testSuite: TestSuite, options: EvaluateOptions) {
-  const ev = new Evaluator(testSuite, options);
+export function evaluate(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
+  const ev = new Evaluator(testSuite, evalRecord, options);
   return ev.evaluate();
 }

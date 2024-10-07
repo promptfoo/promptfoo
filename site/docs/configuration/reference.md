@@ -361,10 +361,21 @@ interface EvaluateTableOutput {
 ### EvaluateSummary
 
 EvaluateSummary is an object that represents a summary of the evaluation results. It includes the version of the evaluator, the results of each evaluation, a table of the results, and statistics about the evaluation.
+The latest version is 3. It removed the table and added in a new prompts property.
 
 ```typescript
-interface EvaluateSummary {
-  version: number;
+interface EvaluateSummaryV3 {
+  version: 3;
+  timestamp: string; // ISO 8601 datetime
+  results: EvaluateResult[];
+  prompts: CompletedPrompt[];
+  stats: EvaluateStats;
+}
+```
+
+```typescript
+interface EvaluateSummaryV2 {
+  version: 2;
   timestamp: string; // ISO 8601 datetime
   results: EvaluateResult[];
   table: EvaluateTable;
@@ -415,5 +426,40 @@ interface GradingResult {
   componentResults?: GradingResult[];   # if this is a composite score, it can have nested results
   assertion: Assertion | null;          # source of assertion
   latencyMs?: number;                   # latency of LLM call
+}
+```
+
+### CompletedPrompt
+
+CompletedPrompt is an object that represents a prompt that has been evaluated. It includes the raw prompt, the provider, metrics, and other information.
+
+```typescript
+interface CompletedPrompt {
+  id?: string;
+  raw: string;
+  label: string;
+  function?: PromptFunction;
+
+  // These config options are merged into the provider config.
+  config?: any;
+  provider: string;
+  metrics?: {
+    score: number;
+    testPassCount: number;
+    testFailCount: number;
+    assertPassCount: number;
+    assertFailCount: number;
+    totalLatencyMs: number;
+    tokenUsage: TokenUsage;
+    namedScores: Record<string, number>;
+    namedScoresCount: Record<string, number>;
+    redteam?: {
+      pluginPassCount: Record<string, number>;
+      pluginFailCount: Record<string, number>;
+      strategyPassCount: Record<string, number>;
+      strategyFailCount: Record<string, number>;
+    };
+    cost: number;
+  };
 }
 ```

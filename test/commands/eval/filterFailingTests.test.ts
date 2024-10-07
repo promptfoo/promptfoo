@@ -1,5 +1,5 @@
 import { filterFailingTests } from '../../../src/commands/eval/filterFailingTests';
-import type { EvaluateSummary, TestSuite } from '../../../src/types';
+import type { EvaluateSummaryV2, TestSuite } from '../../../src/types';
 import { readOutput } from '../../../src/util';
 
 jest.mock('../../../src/util', () => {
@@ -34,12 +34,30 @@ describe('filterFailingTests', () => {
         version: 2,
         timestamp: '2024-01-01T00:00:00.000Z',
         results: [
-          { ...restResult, success: true, provider: { id: 'provider1' }, vars: varsSuccess },
-          { ...restResult, success: false, provider: { id: 'provider2' }, vars: varsFailure },
+          {
+            ...restResult,
+            success: true,
+            provider: { id: 'provider1' },
+            vars: varsSuccess,
+            promptIdx: 0,
+            testIdx: 0,
+            testCase: {},
+            promptId: 'foo',
+          },
+          {
+            ...restResult,
+            success: false,
+            provider: { id: 'provider2' },
+            vars: varsFailure,
+            promptIdx: 0,
+            testIdx: 0,
+            testCase: {},
+            promptId: 'foo',
+          },
         ],
         table: {} as any,
         stats: {} as any,
-      } as EvaluateSummary,
+      } as EvaluateSummaryV2,
     } as any);
   });
 
@@ -80,11 +98,15 @@ describe('filterFailingTests', () => {
             score: 0.5,
             latencyMs: 1000,
             namedScores: {},
+            promptIdx: 0,
+            testIdx: 0,
+            testCase: {},
+            promptId: 'foo',
           },
         ],
         table: {} as any,
         stats: {} as any,
-      } as EvaluateSummary,
+      } as EvaluateSummaryV2,
     } as any);
 
     const result = await filterFailingTests(testSuite, outputPath);

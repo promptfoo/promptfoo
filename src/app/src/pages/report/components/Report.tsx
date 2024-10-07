@@ -18,7 +18,9 @@ import type {
   SharedResults,
   GradingResult,
   ResultLightweightWithLabel,
+  EvaluateSummaryV2,
 } from '@promptfoo/types';
+import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
@@ -137,7 +139,7 @@ const App: React.FC = () => {
           prompt:
             result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
           output: result.response?.output,
-          gradingResult: result.gradingResult,
+          gradingResult: result.gradingResult || undefined,
         });
       }
     });
@@ -178,9 +180,15 @@ const App: React.FC = () => {
     );
   }
 
-  const prompts = evalData.results.table.head.prompts;
+  const prompts =
+    (evalData.version >= 4
+      ? evalData.prompts
+      : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
   const selectedPrompt = prompts[selectedPromptIndex];
-  const tableData = evalData.results.table.body;
+  const tableData =
+    (evalData.version >= 4
+      ? convertResultsToTable(evalData).body
+      : (evalData.results as EvaluateSummaryV2).table.body) || [];
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {
@@ -297,16 +305,18 @@ const App: React.FC = () => {
             })}
           </Typography>
           <Box className="report-details">
-            <Chip
-              size="small"
-              label={
-                <>
-                  <strong>Model:</strong> {selectedPrompt.provider}
-                </>
-              }
-              onClick={handlePromptChipClick}
-              style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
-            />
+            {selectedPrompt && (
+              <Chip
+                size="small"
+                label={
+                  <>
+                    <strong>Model:</strong> {selectedPrompt.provider}
+                  </>
+                }
+                onClick={handlePromptChipClick}
+                style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
+              />
+            )}
             <Chip
               size="small"
               label={
@@ -315,20 +325,22 @@ const App: React.FC = () => {
                 </>
               }
             />
-            <Chip
-              size="small"
-              label={
-                <>
-                  <strong>Prompt:</strong> &quot;
-                  {selectedPrompt.raw.length > 40
-                    ? `${selectedPrompt.raw.substring(0, 40)}...`
-                    : selectedPrompt.raw}
-                  &quot;
-                </>
-              }
-              onClick={handlePromptChipClick}
-              style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
-            />
+            {selectedPrompt && (
+              <Chip
+                size="small"
+                label={
+                  <>
+                    <strong>Prompt:</strong> &quot;
+                    {selectedPrompt.raw.length > 40
+                      ? `${selectedPrompt.raw.substring(0, 40)}...`
+                      : selectedPrompt.raw}
+                    &quot;
+                  </>
+                }
+                onClick={handlePromptChipClick}
+                style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
+              />
+            )}
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} />

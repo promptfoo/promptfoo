@@ -2,8 +2,9 @@ import * as cache from '../src/cache';
 import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
 import { evaluate } from '../src/index';
+import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts';
-import { writeResultsToDatabase, writeOutput, writeMultipleOutputs } from '../src/util';
+import { writeOutput, writeMultipleOutputs } from '../src/util';
 
 jest.mock('../src/telemetry');
 jest.mock('../src/evaluator', () => {
@@ -22,6 +23,11 @@ jest.mock('../src/prompts', () => {
 });
 jest.mock('../src/util');
 jest.mock('../src/cache');
+jest.mock('../src/database', () => ({
+  getDb: jest
+    .fn()
+    .mockReturnValue({ select: jest.fn(), insert: jest.fn(), transaction: jest.fn() }),
+}));
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
@@ -144,6 +150,7 @@ describe('evaluate function', () => {
         ],
         providerPromptMap: {},
       }),
+      expect.anything(),
       expect.objectContaining({
         eventSource: 'library',
       }),
@@ -170,6 +177,7 @@ describe('evaluate function', () => {
           expect.any(Object),
         ]),
       }),
+      expect.anything(),
       expect.any(Object),
     );
   });
@@ -192,6 +200,7 @@ describe('evaluate function', () => {
         ]),
       }),
       expect.anything(),
+      expect.anything(),
     );
   });
 
@@ -201,25 +210,19 @@ describe('evaluate function', () => {
   });
 
   it('should write results to database when writeLatestResults is true', async () => {
+    const createEvalSpy = jest.spyOn(Eval, 'create');
+
     const testSuite = {
       prompts: ['test'],
       providers: [],
       writeLatestResults: true,
     };
+
     await evaluate(testSuite);
-    expect(writeResultsToDatabase).toHaveBeenCalledWith(
-      expect.objectContaining({ results: expect.any(Array) }),
-      expect.objectContaining({
-        prompts: expect.arrayContaining([
-          expect.objectContaining({
-            raw: 'test',
-            label: 'test',
-          }),
-        ]),
-        providers: [],
-        writeLatestResults: true,
-      }),
-    );
+
+    expect(createEvalSpy).toHaveBeenCalledWith(expect.anything(), expect.anything());
+
+    createEvalSpy.mockRestore();
   });
 
   it('should write output to file when outputPath is set', async () => {
@@ -229,22 +232,7 @@ describe('evaluate function', () => {
       outputPath: 'test.json',
     };
     await evaluate(testSuite);
-    expect(writeOutput).toHaveBeenCalledWith(
-      'test.json',
-      null,
-      expect.objectContaining({ results: expect.any(Array) }),
-      expect.objectContaining({
-        outputPath: 'test.json',
-        prompts: expect.arrayContaining([
-          expect.objectContaining({
-            raw: 'test',
-            label: 'test',
-          }),
-        ]),
-        providers: [],
-      }),
-      null,
-    );
+    expect(writeOutput).toHaveBeenCalledWith('test.json', expect.any(Eval), null);
   });
 
   it('should write multiple outputs when outputPath is an array', async () => {
@@ -256,18 +244,7 @@ describe('evaluate function', () => {
     await evaluate(testSuite);
     expect(writeMultipleOutputs).toHaveBeenCalledWith(
       ['test1.json', 'test2.json'],
-      null,
-      expect.objectContaining({ results: expect.any(Array) }),
-      expect.objectContaining({
-        outputPath: ['test1.json', 'test2.json'],
-        prompts: expect.arrayContaining([
-          expect.objectContaining({
-            raw: 'test',
-            label: 'test',
-          }),
-        ]),
-        providers: [],
-      }),
+      expect.any(Eval),
       null,
     );
   });

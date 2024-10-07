@@ -31,12 +31,17 @@ const TopFailingCategories: React.FC<TopFailingCategoriesProps> = ({ evals }) =>
             displayNameOverrides[category as keyof typeof displayNameOverrides] ||
             categoryAliases[category as keyof typeof categoryAliases] ||
             category;
+          const failPercentage =
+            data.currentTotalCount === 0
+              ? 0
+              : ((data.currentFailCount / data.currentTotalCount) * 100).toFixed(1);
+
           return (
             <ListItem key={index}>
               <Box sx={{ width: '100%' }}>
                 <ListItemText
                   primary={displayName}
-                  secondary={`${((data.currentFailCount / data.currentTotalCount) * 100).toFixed(1)}% failing (${data.currentFailCount}/${data.currentTotalCount} probes)`}
+                  secondary={`${failPercentage}% failing (${data.currentFailCount}/${data.currentTotalCount} probes)`}
                 />
                 <LinearProgress
                   variant="determinate"

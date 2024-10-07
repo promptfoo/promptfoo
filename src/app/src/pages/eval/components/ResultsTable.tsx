@@ -135,7 +135,7 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, config, inComparisonMode } = useMainStore();
+  const { evalId, table, setTable, config, inComparisonMode, version } = useMainStore();
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
@@ -145,6 +145,7 @@ function ResultsTable({
     async (
       rowIndex: number,
       promptIndex: number,
+      resultId: string,
       isPass?: boolean,
       score?: number,
       comment?: string,
@@ -195,18 +196,30 @@ function ResultsTable({
         head,
         body: updatedData,
       };
+
       setTable(newTable);
       if (inComparisonMode) {
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
         try {
-          const response = await callApi(`/eval/${evalId}`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ table: newTable }),
-          });
+          let response;
+          if (version && version >= 4) {
+            response = await callApi(`/eval/${evalId}/results/${resultId}/rating`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ ...gradingResult }),
+            });
+          } else {
+            response = await callApi(`/eval/${evalId}`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ table: newTable }),
+            });
+          }
           if (!response.ok) {
             throw new Error('Network response was not ok');
           }
@@ -300,7 +313,7 @@ function ResultsTable({
   const numGoodTests = React.useMemo(
     () =>
       head.prompts.map((_, idx) =>
-        body.reduce((acc, row) => acc + (row.outputs[idx].pass ? 1 : 0), 0),
+        body.reduce((acc, row) => acc + (row.outputs[idx]?.pass ? 1 : 0), 0),
       ),
     [head.prompts, body],
   );
@@ -309,7 +322,7 @@ function ResultsTable({
     () =>
       head.prompts.map((_, idx) =>
         body.reduce(
-          (acc, row) => acc + (row.outputs[idx].gradingResult?.componentResults?.length || 0),
+          (acc, row) => acc + (row.outputs[idx]?.gradingResult?.componentResults?.length || 0),
           0,
         ),
       ),
@@ -320,7 +333,7 @@ function ResultsTable({
     () =>
       head.prompts.map((_, idx) =>
         body.reduce((acc, row) => {
-          const componentResults = row.outputs[idx].gradingResult?.componentResults;
+          const componentResults = row.outputs[idx]?.gradingResult?.componentResults;
           return acc + (componentResults ? componentResults.filter((r) => r?.pass).length : 0);
         }, 0),
       ),
@@ -532,7 +545,7 @@ function ResultsTable({
             },
             cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => {
               const output = getOutput(info.row.index, idx);
-              return (
+              return output ? (
                 <EvalOutputCell
                   output={output}
                   maxTextLength={maxTextLength}
@@ -542,12 +555,15 @@ function ResultsTable({
                     null,
                     output.originalRowIndex ?? info.row.index,
                     output.originalPromptIndex ?? idx,
+                    output.id,
                   )}
                   firstOutput={getFirstOutput(info.row.index)}
                   showDiffs={filterMode === 'different'}
                   searchText={searchText}
                   showStats={showStats}
                 />
+              ) : (
+                <div style={{ padding: '20px' }}>'Test still in progress...'</div>
               );
             },
           }),

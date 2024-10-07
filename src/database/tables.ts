@@ -6,8 +6,26 @@ import {
   primaryKey,
   index,
   uniqueIndex,
+  real,
 } from 'drizzle-orm/sqlite-core';
-import type { EvaluateSummary, UnifiedConfig } from '../types';
+import type {
+  Prompt,
+  ProviderResponse,
+  GradingResult,
+  UnifiedConfig,
+  ProviderOptions,
+  AtomicTestCase,
+  CompletedPrompt,
+  EvaluateSummaryV2,
+} from '../types';
+
+// ------------ Providers ------------
+
+export const providers = sqliteTable('providers', {
+  id: text('id').primaryKey(),
+  providerId: text('provider_id').notNull(),
+  config: text('options', { mode: 'json' }).$type<Record<string, any>>().notNull(),
+});
 
 // ------------ Prompts ------------
 
@@ -17,7 +35,7 @@ export const prompts = sqliteTable(
     id: text('id').primaryKey(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+      .default(sql`cast(unixepoch() as int)`),
     prompt: text('prompt').notNull(),
   },
   (table) => ({
@@ -48,15 +66,61 @@ export const evals = sqliteTable(
     id: text('id').primaryKey(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+      .default(sql`cast(unixepoch() as int)`),
     author: text('author'),
     description: text('description'),
-    results: text('results', { mode: 'json' }).$type<EvaluateSummary>().notNull(),
+    results: text('results', { mode: 'json' }).$type<EvaluateSummaryV2 | object>().notNull(),
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
+    prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
     authorIdx: index('evals_author_idx').on(table.author),
+  }),
+);
+
+export const evalResultsTable = sqliteTable(
+  'eval_results',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`cast(unixepoch() as int)`),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(sql`cast(unixepoch() as int)`),
+    evalId: text('eval_id')
+      .notNull()
+      .references(() => evals.id),
+    promptIdx: integer('prompt_idx').notNull(),
+    testIdx: integer('test_idx').notNull(),
+
+    testCase: text('test_case', { mode: 'json' }).$type<AtomicTestCase>().notNull(),
+    prompt: text('prompt', { mode: 'json' }).$type<Prompt>().notNull(),
+    promptId: text('prompt_id').references(() => prompts.id),
+
+    // Provider-related fields
+    provider: text('provider', { mode: 'json' }).$type<ProviderOptions>().notNull(),
+    providerId: text('provider_id').references(() => providers.id),
+
+    latencyMs: integer('latency_ms'),
+    cost: real('cost'),
+
+    // Output-related fields
+    response: text('response', { mode: 'json' }).$type<ProviderResponse>(),
+    error: text('error'),
+
+    // Result-related fields
+    success: integer('success', { mode: 'boolean' }).notNull(),
+    score: real('score').notNull(),
+    gradingResult: text('grading_result', { mode: 'json' }).$type<GradingResult>(),
+    namedScores: text('named_scores', { mode: 'json' }).$type<Record<string, number>>(),
+
+    // Metadata fields
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, string>>(),
+  },
+  (table) => ({
+    evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
   }),
 );
 
@@ -65,9 +129,7 @@ export const evalsToPrompts = sqliteTable(
   {
     evalId: text('eval_id')
       .notNull()
-      .references(() => evals.id),
-    // Drizzle doesn't support this migration for sqlite, so we remove foreign keys manually.
-    //.references(() => evals.id, { onDelete: 'cascade' }),
+      .references(() => evals.id, { onDelete: 'cascade' }),
     promptId: text('prompt_id')
       .notNull()
       .references(() => prompts.id),
@@ -115,6 +177,32 @@ export const evalsToTagsRelations = relations(evalsToTags, ({ one }) => ({
   }),
 }));
 
+export const evalsToProviders = sqliteTable(
+  'evals_to_providers',
+  {
+    providerId: text('provider_id')
+      .notNull()
+      .references(() => providers.id),
+    evalId: text('eval_id')
+      .notNull()
+      .references(() => evals.id),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.providerId, t.evalId] }),
+  }),
+);
+
+export const evalsToProvidersRelations = relations(evalsToProviders, ({ one }) => ({
+  provider: one(providers, {
+    fields: [evalsToProviders.providerId],
+    references: [providers.id],
+  }),
+  eval: one(evals, {
+    fields: [evalsToProviders.evalId],
+    references: [evals.id],
+  }),
+}));
+
 // ------------ Datasets ------------
 
 export const datasets = sqliteTable(
@@ -124,7 +212,7 @@ export const datasets = sqliteTable(
     tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+      .default(sql`cast(unixepoch() as int)`),
   },
   (table) => ({
     createdAtIdx: index('datasets_created_at_idx').on(table.createdAt),
@@ -194,7 +282,7 @@ export const llmOutputs = sqliteTable(
     id: text('id')
       .notNull()
       .unique(),
-    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`cast(unixepoch() as int)`),
     evalId: text('eval_id')
       .notNull()
       .references(() => evals.id),

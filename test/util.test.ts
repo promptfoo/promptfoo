@@ -2,8 +2,10 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
 import cliState from '../src/cliState';
+import { getDb } from '../src/database';
 import * as googleSheets from '../src/googleSheets';
-import type { ApiProvider, EvaluateResult, EvaluateTable, TestCase } from '../src/types';
+import Eval from '../src/models/eval';
+import type { ApiProvider, EvaluateResult, TestCase } from '../src/types';
 import {
   maybeLoadFromExternalFile,
   parsePathOrGlob,
@@ -17,6 +19,10 @@ import {
 } from '../src/util';
 import { TestGrader } from './utils';
 
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
+
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
@@ -26,6 +32,7 @@ jest.mock('glob', () => ({
 }));
 
 jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   statSync: jest.fn(),
@@ -36,9 +43,6 @@ jest.mock('fs', () => ({
 
 jest.mock('../src/logger');
 jest.mock('../src/esm');
-jest.mock('../src/database', () => ({
-  getDb: jest.fn(),
-}));
 
 jest.mock('../src/googleSheets', () => ({
   writeCsvToGoogleSheet: jest.fn(),
@@ -174,12 +178,25 @@ describe('util', () => {
 
     beforeEach(() => {
       consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      // @ts-ignore
+      jest.mocked(getDb).mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+        insert: jest.fn().mockReturnValue({
+          values: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
     });
 
     afterEach(() => {
       consoleLogSpy.mockRestore();
     });
-    it('writeOutput with CSV output', () => {
+    it('writeOutput with CSV output', async () => {
       const outputPath = 'output.csv';
       const results: EvaluateResult[] = [
         {
@@ -201,317 +218,54 @@ describe('util', () => {
             var1: 'value1',
             var2: 'value2',
           },
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {},
+          promptId: 'foo',
         },
       ];
-      const table: EvaluateTable = {
-        head: {
-          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
-          vars: ['var1', 'var2'],
-        },
-        body: [
-          {
-            outputs: [
-              {
-                pass: true,
-                score: 1.0,
-                namedScores: {},
-                text: 'Test output',
-                prompt: 'Test prompt',
-                latencyMs: 1000,
-                cost: 0,
-              },
-            ],
-            vars: ['value1', 'value2'],
-            test: {},
-          },
-        ],
-      };
-      const summary = {
-        version: 2,
-        timestamp: '2024-01-01T00:00:00.000Z',
-        stats: {
-          successes: 1,
-          failures: 1,
-          tokenUsage: {
-            total: 10,
-            prompt: 5,
-            completion: 5,
-            cached: 0,
-          },
-        },
-        results,
-        table,
-      };
-      const config = {
-        description: 'test',
-      };
+      const eval_ = new Eval({});
+      eval_.addResult(results[0], {});
+
       const shareableUrl = null;
-      writeOutput(outputPath, null, summary, config, shareableUrl);
+      await writeOutput(outputPath, eval_, shareableUrl);
 
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
 
-    it('writeOutput with JSON output', () => {
+    it('writeOutput with JSON output', async () => {
       const outputPath = 'output.json';
-      const results: EvaluateResult[] = [
-        {
-          success: true,
-          score: 1.0,
-          namedScores: {},
-          latencyMs: 1000,
-          provider: {
-            id: 'foo',
-          },
-          prompt: {
-            raw: 'Test prompt',
-            label: '[display] Test prompt',
-          },
-          response: {
-            output: 'Test output',
-          },
-          vars: {
-            var1: 'value1',
-            var2: 'value2',
-          },
-        },
-      ];
-      const table: EvaluateTable = {
-        head: {
-          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
-          vars: ['var1', 'var2'],
-        },
-        body: [
-          {
-            outputs: [
-              {
-                pass: true,
-                score: 1.0,
-                namedScores: {},
-                text: 'Test output',
-                prompt: 'Test prompt',
-                latencyMs: 1000,
-                cost: 0,
-              },
-            ],
-            vars: ['value1', 'value2'],
-            test: {},
-          },
-        ],
-      };
-      const summary = {
-        version: 2,
-        timestamp: '2024-01-01T00:00:00.000Z',
-        stats: {
-          successes: 1,
-          failures: 1,
-          tokenUsage: {
-            total: 10,
-            prompt: 5,
-            completion: 5,
-            cached: 0,
-          },
-        },
-        results,
-        table,
-      };
-      const config = {
-        description: 'test',
-      };
-      const shareableUrl = null;
-      writeOutput(outputPath, null, summary, config, shareableUrl);
+      const eval_ = new Eval({});
+      await writeOutput(outputPath, eval_, null);
 
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
 
-    it('writeOutput with YAML output', () => {
+    it('writeOutput with YAML output', async () => {
       const outputPath = 'output.yaml';
-      const results: EvaluateResult[] = [
-        {
-          success: true,
-          score: 1.0,
-          namedScores: {},
-          latencyMs: 1000,
-          provider: {
-            id: 'foo',
-          },
-          prompt: {
-            raw: 'Test prompt',
-            label: '[display] Test prompt',
-          },
-          response: {
-            output: 'Test output',
-          },
-          vars: {
-            var1: 'value1',
-            var2: 'value2',
-          },
-        },
-      ];
-      const table: EvaluateTable = {
-        head: {
-          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
-          vars: ['var1', 'var2'],
-        },
-        body: [
-          {
-            outputs: [
-              {
-                pass: true,
-                score: 1.0,
-                namedScores: {},
-                text: 'Test output',
-                prompt: 'Test prompt',
-                latencyMs: 1000,
-                cost: 0,
-              },
-            ],
-            vars: ['value1', 'value2'],
-            test: {},
-          },
-        ],
-      };
-      const summary = {
-        version: 2,
-        timestamp: '2024-01-01T00:00:00.000Z',
-        stats: {
-          successes: 1,
-          failures: 1,
-          tokenUsage: {
-            total: 10,
-            prompt: 5,
-            completion: 5,
-            cached: 0,
-          },
-        },
-        results,
-        table,
-      };
-      const config = {
-        description: 'test',
-      };
-      const shareableUrl = null;
-      writeOutput(outputPath, null, summary, config, shareableUrl);
+      const eval_ = new Eval({});
+      await writeOutput(outputPath, eval_, null);
 
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
 
-    it('writeOutput with json and txt output', () => {
+    it('writeOutput with json and txt output', async () => {
       const outputPath = ['output.json', 'output.txt'];
-      const results: EvaluateResult[] = [
-        {
-          success: true,
-          score: 1.0,
-          namedScores: {},
-          latencyMs: 1000,
-          provider: {
-            id: 'foo',
-          },
-          prompt: {
-            raw: 'Test prompt',
-            label: '[display] Test prompt',
-          },
-          response: {
-            output: 'Test output',
-          },
-          vars: {
-            var1: 'value1',
-            var2: 'value2',
-          },
-        },
-      ];
-      const table: EvaluateTable = {
-        head: {
-          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
-          vars: ['var1', 'var2'],
-        },
-        body: [
-          {
-            outputs: [
-              {
-                pass: true,
-                score: 1.0,
-                namedScores: {},
-                text: 'Test output',
-                prompt: 'Test prompt',
-                latencyMs: 1000,
-                cost: 0,
-              },
-            ],
-            vars: ['value1', 'value2'],
-            test: {},
-          },
-        ],
-      };
-      const summary = {
-        version: 2,
-        timestamp: '2024-01-01T00:00:00.000Z',
-        stats: {
-          successes: 1,
-          failures: 1,
-          tokenUsage: {
-            total: 10,
-            prompt: 5,
-            completion: 5,
-            cached: 0,
-          },
-        },
-        results,
-        table,
-      };
-      const config = {
-        description: 'test',
-      };
-      const shareableUrl = null;
-      writeMultipleOutputs(outputPath, null, summary, config, shareableUrl);
+      const eval_ = new Eval({});
+
+      await writeMultipleOutputs(outputPath, eval_, null);
 
       expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
     });
 
     it('writes output to Google Sheets', async () => {
       const outputPath = 'https://docs.google.com/spreadsheets/d/1234567890/edit#gid=0';
-      const evalId = null;
-      const results = {
-        version: 2,
-        timestamp: '2024-01-01T00:00:00.000Z',
-        stats: {
-          successes: 1,
-          failures: 0,
-          tokenUsage: {
-            total: 10,
-            prompt: 5,
-            completion: 5,
-            cached: 0,
-          },
-        },
-        results: [],
-        table: {
-          head: {
-            vars: ['var1', 'var2'],
-            prompts: [{ raw: 'Test prompt', label: 'Test prompt', provider: 'test-provider' }],
-          },
-          body: [
-            {
-              vars: ['value1', 'value2'],
-              outputs: [
-                {
-                  pass: true,
-                  score: 1.0,
-                  namedScores: { accuracy: 0.9 },
-                  text: 'Test output',
-                  prompt: 'Test prompt',
-                  latencyMs: 1000,
-                  cost: 0,
-                },
-              ],
-              test: {},
-            },
-          ],
-        },
-      };
+
       const config = { description: 'Test config' };
       const shareableUrl = null;
+      const eval_ = new Eval(config);
 
-      await writeOutput(outputPath, evalId, results, config, shareableUrl);
+      await writeOutput(outputPath, eval_, shareableUrl);
 
       expect(googleSheets.writeCsvToGoogleSheet).toHaveBeenCalledTimes(1);
     });

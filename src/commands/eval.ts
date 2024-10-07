@@ -12,6 +12,7 @@ import cliState from '../cliState';
 import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
+import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
 import { generateTable } from '../table';
@@ -31,7 +32,6 @@ import {
   printBorder,
   setupEnv,
   writeMultipleOutputs,
-  writeResultsToDatabase,
 } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
@@ -133,28 +133,33 @@ export async function doEval(
       logger.warn(
         chalk.yellow(dedent`
       TestSuite Schema Validation Error:
-      
+
         ${validationError.toString()}
-      
+
       Please review your promptfooconfig.yaml configuration.`),
       );
     }
 
-    const summary = await evaluate(testSuite, {
+    const evalRecord = cmdObj.write
+      ? await Eval.create(config, testSuite.prompts)
+      : new Eval(config);
+    await evaluate(testSuite, evalRecord, {
       ...options,
       eventSource: 'cli',
     });
 
     const shareableUrl =
-      cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
+      cmdObj.share && config.sharing ? await createShareableUrl(evalRecord) : null;
 
+    const summary = await evalRecord.toEvaluateSummary();
+    const table = await evalRecord.getTable();
     if (cmdObj.table && getLogLevel() !== 'debug') {
       // Output CLI table
-      const table = generateTable(summary, cmdObj.tableCellMaxLength);
+      const outputTable = generateTable(table);
 
-      logger.info('\n' + table.toString());
-      if (summary.table.body.length > 25) {
-        const rowsLeft = summary.table.body.length - 25;
+      logger.info('\n' + outputTable.toString());
+      if (table.body.length > 25) {
+        const rowsLeft = table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
       }
     } else if (summary.stats.failures !== 0) {
@@ -171,15 +176,10 @@ export async function doEval(
       const outputPath = config.outputPath;
       config = { outputPath };
       summary.results = [];
-      summary.table.head.vars = [];
-      for (const row of summary.table.body) {
+      table.head.vars = [];
+      for (const row of table.body) {
         row.vars = [];
       }
-    }
-
-    let evalId: string | null = null;
-    if (cmdObj.write) {
-      evalId = await writeResultsToDatabase(summary, config);
     }
 
     const { outputPath } = config;
@@ -187,7 +187,7 @@ export async function doEval(
       (p): p is string => typeof p === 'string' && p.length > 0,
     );
     if (paths.length) {
-      await writeMultipleOutputs(paths, evalId, summary, config, shareableUrl);
+      await writeMultipleOutputs(paths, evalRecord, shareableUrl);
       logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
 

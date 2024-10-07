@@ -452,11 +452,11 @@ export async function loadApiProvider(
     ret = new CustomApiProvider(options);
   } else {
     logger.error(dedent`
-      Could not identify provider: ${chalk.bold(providerPath)}. 
-      
+      Could not identify provider: ${chalk.bold(providerPath)}.
+
       ${chalk.white(dedent`
         Please check your configuration and ensure the provider is correctly specified.
-  
+
         For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
     `);
     process.exit(1);

@@ -32,6 +32,7 @@ import type { StackProps } from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
+import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import type { VisibilityState } from '@tanstack/table-core';
 import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
@@ -166,7 +167,10 @@ export default function ResultsView({
         cache: 'no-store',
       });
       const body = await response.json();
-      const comparisonTable = body.data.results.table as EvaluateTable;
+      const comparisonTable =
+        body.data.version < 4
+          ? (body.data.results.table as EvaluateTable)
+          : convertResultsToTable(body.data);
 
       // Combine the comparison table with the current table
       const combinedTable: EvaluateTable = {
@@ -188,7 +192,6 @@ export default function ResultsView({
           outputs: [...row.outputs, ...(comparisonTable.body[index]?.outputs || [])],
         })),
       };
-
       // Update the state with the combined table
       setTable(combinedTable);
 
@@ -206,7 +209,7 @@ export default function ResultsView({
   };
 
   const hasAnyDescriptions = React.useMemo(
-    () => table.body.some((row) => row.description),
+    () => table.body?.some((row) => row.description),
     [table.body],
   );
 

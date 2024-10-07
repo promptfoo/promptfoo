@@ -1,5 +1,3 @@
-'use client';
-
 import * as React from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
@@ -9,7 +7,6 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import CircularProgress from '@mui/material/CircularProgress';
 import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
-import type { EvaluateTable } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
@@ -32,8 +29,17 @@ export default function Eval({
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
 
-  const { table, setTable, config, setConfig, evalId, setEvalId, setAuthor, setInComparisonMode } =
-    useStore();
+  const {
+    table,
+    setTable,
+    setTableFromResultsFile,
+    config,
+    setConfig,
+    evalId,
+    setEvalId,
+    setAuthor,
+    setInComparisonMode,
+  } = useStore();
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
@@ -54,8 +60,13 @@ export default function Eval({
   const fetchEvalById = React.useCallback(
     async (id: string) => {
       const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
+      if (!resp.ok) {
+        setFailed(true);
+        return;
+      }
       const body = (await resp.json()) as { data: ResultsFile };
-      setTable(body.data.results.table);
+
+      setTableFromResultsFile(body.data);
       setConfig(body.data.config);
       setAuthor(body.data.author);
       setEvalId(id);
@@ -88,7 +99,7 @@ export default function Eval({
       run();
     } else if (preloadedData) {
       console.log('Eval init: Using preloaded data');
-      setTable(preloadedData.data.results?.table as EvaluateTable);
+      setTableFromResultsFile(preloadedData.data);
       setConfig(preloadedData.data.config);
       setAuthor(preloadedData.data.author || null);
       setLoaded(true);
@@ -100,7 +111,7 @@ export default function Eval({
       socket.on('init', (data) => {
         console.log('Initialized socket connection', data);
         setLoaded(true);
-        setTable(data?.results.table);
+        setTableFromResultsFile(data);
         setConfig(data?.config);
         setAuthor(data?.author || null);
         fetchRecentFileEvals().then((newRecentEvals) => {

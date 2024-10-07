@@ -15,7 +15,7 @@ export function getDbSignalPath() {
 
 export function getDb() {
   if (!dbInstance) {
-    const sqlite = new Database(getDbPath());
+    const sqlite = new Database(process.env.IS_TESTING ? ':memory:' : getDbPath());
     dbInstance = drizzle(sqlite);
   }
   return dbInstance;

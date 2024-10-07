@@ -2,6 +2,8 @@ import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
+import { runDbMigrations } from './migrate';
+import Eval from './models/eval';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
@@ -21,19 +23,17 @@ import type {
   PromptFunction,
   Scenario,
 } from './types';
-import {
-  readFilters,
-  writeResultsToDatabase,
-  writeMultipleOutputs,
-  writeOutput,
-  migrateResultsFromFileSystemToDatabase,
-} from './util';
+import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 
 export * from './types';
 
 export { generateTable } from './table';
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
+  if (testSuite.writeLatestResults) {
+    await runDbMigrations();
+  }
+
   const constructedTestSuite: TestSuite = {
     ...testSuite,
     scenarios: testSuite.scenarios as Scenario[],
@@ -99,6 +99,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   }
 
   const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
+  const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
+  const evalRecord = testSuite.writeLatestResults
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts)
+    : new Eval(unifiedConfig);
 
   // Run the eval!
   const ret = await doEvaluate(
@@ -106,24 +110,18 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       ...constructedTestSuite,
       providerPromptMap: parsedProviderPromptMap,
     },
+    evalRecord,
     {
       eventSource: 'library',
       ...options,
     },
   );
 
-  const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
-  let evalId: string | null = null;
-  if (testSuite.writeLatestResults) {
-    await migrateResultsFromFileSystemToDatabase();
-    evalId = await writeResultsToDatabase(ret, unifiedConfig);
-  }
-
   if (testSuite.outputPath) {
     if (typeof testSuite.outputPath === 'string') {
-      await writeOutput(testSuite.outputPath, evalId, ret, unifiedConfig, null);
+      await writeOutput(testSuite.outputPath, evalRecord, null);
     } else if (Array.isArray(testSuite.outputPath)) {
-      await writeMultipleOutputs(testSuite.outputPath, evalId, ret, unifiedConfig, null);
+      await writeMultipleOutputs(testSuite.outputPath, evalRecord, null);
     }
   }
 

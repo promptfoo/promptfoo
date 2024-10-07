@@ -1,9 +1,10 @@
+import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import type { VisibilityState } from '@tanstack/table-core';
 import { get, set, del } from 'idb-keyval';
 import { create } from 'zustand';
 import type { StateStorage } from 'zustand/middleware';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { EvaluateTable, UnifiedConfig } from './types';
+import type { EvaluateSummaryV2, EvaluateTable, ResultsFile, UnifiedConfig } from './types';
 
 const storage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
@@ -31,9 +32,13 @@ interface TableState {
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
+  setTableFromResultsFile: (resultsFile: ResultsFile) => void;
 
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
+
+  version: number | null;
+  setVersion: (version: number) => void;
 
   maxTextLength: number;
   setMaxTextLength: (maxTextLength: number) => void;
@@ -66,8 +71,19 @@ export const useStore = create<TableState>()(
       author: null,
       setAuthor: (author: string | null) => set(() => ({ author })),
 
+      version: null,
+      setVersion: (version: number) => set(() => ({ version })),
+
       table: null,
       setTable: (table: EvaluateTable | null) => set(() => ({ table })),
+      setTableFromResultsFile: (resultsFile: ResultsFile) => {
+        if (resultsFile.version && resultsFile.version >= 4) {
+          set(() => ({ table: convertResultsToTable(resultsFile), version: resultsFile.version }));
+        } else {
+          const results = resultsFile.results as EvaluateSummaryV2;
+          set(() => ({ table: results.table, version: resultsFile.version }));
+        }
+      },
       config: null,
       setConfig: (config: Partial<UnifiedConfig> | null) => set(() => ({ config })),
 

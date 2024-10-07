@@ -1,9 +1,10 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import logger from '../logger';
+import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
 import telemetry from '../telemetry';
-import { getEvals, getPrompts, getTestCases, printBorder, setupEnv } from '../util';
+import { getPrompts, getTestCases, printBorder, setupEnv } from '../util';
 import { sha256 } from '../util/createHash';
 
 export function listCommand(program: Command) {
@@ -21,13 +22,19 @@ export function listCommand(program: Command) {
       });
       await telemetry.send();
 
-      const evals = await getEvals(Number(cmdObj.n) || undefined);
-      const tableData = evals.map((evl) => ({
-        'Eval ID': evl.id,
-        Description: evl.description || '',
-        Prompts: evl.results.table.head.prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', '),
-        Vars: evl.results.table.head.vars.map((v) => v).join(', '),
-      }));
+      const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
+
+      const vars = await EvalQueries.getVarsFromEvals(evals);
+
+      const tableData = evals.map((evl) => {
+        const prompts = evl.getPrompts();
+        return {
+          'Eval ID': evl.id,
+          Description: evl.description || '',
+          Prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', ') || '',
+          Vars: vars[evl.id]?.join(', ') || '',
+        };
+      });
 
       logger.info(wrapTable(tableData));
       printBorder();

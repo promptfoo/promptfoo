@@ -12,10 +12,13 @@ import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { createPublicUrl } from '../commands/share';
+import { VERSION } from '../constants';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type {
+  EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
+  GradingResult,
   Job,
   Prompt,
   PromptWithMetadata,
@@ -25,6 +28,8 @@ import type {
 } from '../index';
 import promptfoo from '../index';
 import logger from '../logger';
+import Eval from '../models/eval';
+import EvalResult from '../models/evalResult';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
   getPrompts,
@@ -53,11 +58,7 @@ export enum BrowserBehavior {
   OPEN_TO_REPORT = 3,
 }
 
-export function startServer(
-  port = 15500,
-  browserBehavior = BrowserBehavior.ASK,
-  filterDescription?: string,
-) {
+export function createApp() {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'app');
@@ -66,40 +67,15 @@ export function startServer(
   app.use(compression());
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
-
-  const httpServer = http.createServer(app);
-  const io = new SocketIOServer(httpServer, {
-    cors: {
-      origin: '*',
-    },
-  });
-
-  migrateResultsFromFileSystemToDatabase().then(() => {
-    logger.info('Migrated results from file system to database');
-  });
-
-  const watchFilePath = getDbSignalPath();
-  const watcher = debounce(async (curr: Stats, prev: Stats) => {
-    if (curr.mtime !== prev.mtime) {
-      io.emit('update', await getLatestEval(filterDescription));
-      allPrompts = null;
-    }
-  }, 250);
-  fs.watchFile(watchFilePath, watcher);
-
-  io.on('connection', async (socket) => {
-    socket.emit('init', await getLatestEval(filterDescription));
-  });
-
   app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK' });
+    res.status(200).json({ status: 'OK', version: VERSION });
   });
 
-  app.get('/api/results', (req, res) => {
+  app.get('/api/results', async (req, res) => {
     const datasetId = req.query.datasetId as string | undefined;
-    const previousResults = listPreviousResults(
+    const previousResults = await listPreviousResults(
       undefined /* limit */,
-      filterDescription,
+      undefined /* offset */,
       datasetId,
     );
     res.json({
@@ -134,11 +110,11 @@ export function startServer(
           },
         }),
       )
-      .then((result) => {
+      .then(async (result) => {
         const job = evalJobs.get(id);
         invariant(job, 'Job not found');
         job.status = 'complete';
-        job.result = result;
+        job.result = await result.toEvaluateSummary();
         console.log(`[${id}] Complete`);
       });
 
@@ -176,14 +152,49 @@ export function startServer(
     }
   });
 
-  app.post('/api/eval', async (req, res) => {
-    const { data: payload } = req.body as { data: ResultsFile };
+  // @ts-ignore
+  app.post('/api/eval/:evalId/results/:id/rating', async (req, res) => {
+    const { id } = req.params;
+    const gradingResult = req.body as GradingResult;
+    const result = await EvalResult.findById(id);
+    invariant(result, 'Result not found');
+    result.gradingResult = gradingResult;
+    result.success = gradingResult.pass;
+    result.score = gradingResult.score;
 
+    await result.save();
+    return res.json(result);
+  });
+
+  app.post('/api/eval', async (req, res) => {
+    const body = req.body;
     try {
-      const id = await writeResultsToDatabase(payload.results, payload.config);
-      res.json({ id });
+      if (body.data) {
+        logger.debug('[POST /api/eval] Saving eval results (v3) to database');
+        const { data: payload } = req.body as { data: ResultsFile };
+        const id = await writeResultsToDatabase(
+          payload.results as EvaluateSummaryV2,
+          payload.config,
+        );
+        res.json({ id });
+      } else {
+        const incEval = body as unknown as Eval;
+        logger.debug('[POST /api/eval] Saving eval results (v4) to database');
+        const eval_ = await Eval.create(incEval.config, incEval.prompts || [], {
+          author: incEval.author,
+          createdAt: new Date(incEval.createdAt),
+          results: incEval.results,
+        });
+        logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
+
+        logger.debug(
+          `[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`,
+        );
+
+        res.json({ id: eval_.id });
+      }
     } catch (error) {
-      console.error('Failed to write eval to database', error);
+      console.error('Failed to write eval to database', error, body);
       res.status(500).json({ error: 'Failed to write eval to database' });
     }
   });
@@ -238,6 +249,7 @@ export function startServer(
     res.json({ data: await getTestCases() });
   });
 
+  // This is used by ResultsView.tsx to share an eval with another promptfoo instance
   app.post('/api/results/share', async (req, res) => {
     const { id } = req.body;
 
@@ -246,7 +258,9 @@ export function startServer(
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
-    const url = await createPublicUrl(result.result, true);
+    const eval_ = await Eval.findById(id);
+    invariant(eval_, 'Eval not found');
+    const url = await createPublicUrl(eval_, true);
     res.json({ url });
   });
 
@@ -267,6 +281,39 @@ export function startServer(
   // Handle client routing, return all requests to the app
   app.get('*', (_req, res) => {
     res.sendFile(path.join(staticDir, 'index.html'));
+  });
+  return app;
+}
+
+export function startServer(
+  port = 15500,
+  browserBehavior = BrowserBehavior.ASK,
+  filterDescription?: string,
+) {
+  const app = createApp();
+
+  const httpServer = http.createServer(app);
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: '*',
+    },
+  });
+
+  migrateResultsFromFileSystemToDatabase().then(() => {
+    logger.info('Migrated results from file system to database');
+  });
+
+  const watchFilePath = getDbSignalPath();
+  const watcher = debounce(async (curr: Stats, prev: Stats) => {
+    if (curr.mtime !== prev.mtime) {
+      io.emit('update', await getLatestEval(filterDescription));
+      allPrompts = null;
+    }
+  }, 250);
+  fs.watchFile(watchFilePath, watcher);
+
+  io.on('connection', async (socket) => {
+    socket.emit('init', await getLatestEval(filterDescription));
   });
 
   httpServer

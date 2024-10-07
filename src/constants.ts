@@ -3,6 +3,8 @@ import { getEnvString } from './envars';
 
 export const VERSION = packageJson.version;
 
+export const DEFAULT_QUERY_LIMIT = 100;
+
 // We use process.env in this file because it's imported by the next.js server as well.
 
 // This is used for sharing evals.
