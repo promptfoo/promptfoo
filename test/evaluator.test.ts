@@ -1339,7 +1339,6 @@ describe('evaluator', () => {
 
     // Check if runExtensionHook was called 4 times (beforeAll, beforeEach, afterEach, afterAll)
     expect(mockedRunExtensionHook).toHaveBeenCalledTimes(4);
-    console.log('mockedRunExtensionHook', mockedRunExtensionHook.mock.calls);
     // Check beforeAll call
     expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
       1,

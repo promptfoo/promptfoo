@@ -195,9 +195,6 @@ describe('TestSuiteConfigSchema', () => {
           },
         )
         .safeParse(config);
-      if (!result.success) {
-        console.error(`Validation failed for ${file}:`, result.error);
-      }
       expect(result.success).toBe(true);
     });
   }
@@ -224,7 +221,6 @@ describe('TestSuiteSchema', () => {
 
       validExtensions.forEach((extension) => {
         const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
-        console.log(result.error);
         expect(result.success).toBe(true);
       });
     });
@@ -252,7 +248,6 @@ describe('TestSuiteSchema', () => {
       ['file://path/to/file.py:function_name:extra_arg', 'Extra argument'],
     ])('should reject invalid extension path: %s (%s)', (extension, reason) => {
       const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
-      console.log(result.error);
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].message).toMatch(/Extension must/);
     });

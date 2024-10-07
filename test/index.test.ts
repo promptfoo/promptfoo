@@ -6,7 +6,12 @@ import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts';
 import { writeOutput, writeMultipleOutputs } from '../src/util';
 
-jest.mock('../src/telemetry');
+jest.mock('../src/cache');
+jest.mock('../src/database', () => ({
+  getDb: jest
+    .fn()
+    .mockReturnValue({ select: jest.fn(), insert: jest.fn(), transaction: jest.fn() }),
+}));
 jest.mock('../src/evaluator', () => {
   const originalModule = jest.requireActual('../src/evaluator');
   return {
@@ -14,6 +19,7 @@ jest.mock('../src/evaluator', () => {
     evaluate: jest.fn().mockResolvedValue({ results: [] }),
   };
 });
+jest.mock('../src/migrate');
 jest.mock('../src/prompts', () => {
   const originalModule = jest.requireActual('../src/prompts');
   return {
@@ -21,13 +27,8 @@ jest.mock('../src/prompts', () => {
     readProviderPromptMap: jest.fn().mockReturnValue({}),
   };
 });
+jest.mock('../src/telemetry');
 jest.mock('../src/util');
-jest.mock('../src/cache');
-jest.mock('../src/database', () => ({
-  getDb: jest
-    .fn()
-    .mockReturnValue({ select: jest.fn(), insert: jest.fn(), transaction: jest.fn() }),
-}));
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
