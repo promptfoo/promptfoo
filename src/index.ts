@@ -57,9 +57,13 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
             };
           } else if (typeof promptInput === 'string') {
             return readPrompts(promptInput);
-          } else if (typeof promptInput === 'object') {
+          }
+          try {
             return PromptSchema.parse(promptInput);
-          } else {
+          } catch (error) {
+            console.warn(
+              `Prompt input is not a valid prompt schema: ${error}\nFalling back to serialized JSON as raw prompt.`,
+            );
             return {
               raw: JSON.stringify(promptInput),
               label: JSON.stringify(promptInput),
