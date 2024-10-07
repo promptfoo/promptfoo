@@ -24,6 +24,7 @@ import type {
   Scenario,
 } from './types';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
+import { PromptSchema } from './validators/prompts';
 
 export * from './types';
 
@@ -56,7 +57,13 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
             };
           } else if (typeof promptInput === 'string') {
             return readPrompts(promptInput);
-          } else {
+          }
+          try {
+            return PromptSchema.parse(promptInput);
+          } catch (error) {
+            console.warn(
+              `Prompt input is not a valid prompt schema: ${error}\nFalling back to serialized JSON as raw prompt.`,
+            );
             return {
               raw: JSON.stringify(promptInput),
               label: JSON.stringify(promptInput),
