@@ -20,6 +20,6 @@
       "@app/*": ["./src/app/*"]
     }
   },
-  "include": ["src/", "typings/**/*", "test/"],
+  "include": ["src/", "typings/**/*", "test/", "watsonx_tiny_test.js"],
   "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*"]
 }
