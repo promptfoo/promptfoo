@@ -76,7 +76,7 @@ import type {
   ProviderOptions,
   ProviderOptionsMap,
 } from './types/providers';
-import { isJavascriptFile } from './util';
+import { isJavascriptFile } from './util/file';
 import { getNunjucksEngine } from './util/templates';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.

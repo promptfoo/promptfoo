@@ -3,7 +3,7 @@ import cliState from '../cliState';
 import { importModule } from '../esm';
 import { runPython } from '../python/pythonUtils';
 import type { Prompt, Vars } from '../types';
-import { isJavascriptFile } from './';
+import { isJavascriptFile } from './file';
 
 export type TransformContext = {
   vars?: Vars;

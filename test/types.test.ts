@@ -3,12 +3,14 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import path from 'path';
 import { z } from 'zod';
+import type { TestSuite } from '../src/types';
 import {
   AssertionSchema,
   BaseAssertionTypesSchema,
   isGradingResult,
   VarsSchema,
   TestSuiteConfigSchema,
+  TestSuiteSchema,
 } from '../src/types';
 
 describe('AssertionSchema', () => {
@@ -199,4 +201,70 @@ describe('TestSuiteConfigSchema', () => {
       expect(result.success).toBe(true);
     });
   }
+});
+
+describe('TestSuiteSchema', () => {
+  const baseTestSuite: TestSuite = {
+    providers: [
+      {
+        id: () => 'mock-provider',
+        callApi: () => Promise.resolve({}),
+      },
+    ],
+    prompts: [{ raw: 'Hello, world!', label: 'mock-prompt' }],
+  };
+
+  describe('extensions field', () => {
+    it('should accept valid Python extension paths', () => {
+      const validExtensions = [
+        'file://path/to/file.py:function_name',
+        'file://./relative/path.py:function_name',
+        'file:///absolute/path.py:function_name',
+      ];
+
+      validExtensions.forEach((extension) => {
+        const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
+        console.log(result.error);
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it('should accept valid JavaScript extension paths', () => {
+      const validExtensions = [
+        'file://path/to/file.js:function_name',
+        'file://./relative/path.ts:function_name',
+        'file:///absolute/path.mjs:function_name',
+        'file://path/to/file.cjs:function_name',
+      ];
+
+      validExtensions.forEach((extension) => {
+        const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it.each([
+      ['path/to/file.py:function_name', 'Missing file:// prefix'],
+      ['file://path/to/file.txt:function_name', 'Invalid file extension'],
+      ['file://path/to/file.py', 'Missing function name'],
+      ['file://path/to/file.py:', 'Empty function name'],
+      ['file://:function_name', 'Missing file path'],
+      ['file://path/to/file.py:function_name:extra_arg', 'Extra argument'],
+    ])('should reject invalid extension path: %s (%s)', (extension, reason) => {
+      const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
+      console.log(result.error);
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].message).toMatch(/Extension must/);
+    });
+
+    it('should allow extensions field to be optional', () => {
+      const result = TestSuiteSchema.safeParse({ ...baseTestSuite });
+      expect(result.success).toBe(true);
+    });
+
+    it('should allow an empty array of extensions', () => {
+      const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [] });
+      expect(result.success).toBe(true);
+    });
+  });
 });

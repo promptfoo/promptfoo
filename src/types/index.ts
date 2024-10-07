@@ -2,6 +2,7 @@
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
 import type { RedteamAssertionTypes, RedteamFileConfig } from '../redteam/types';
+import { isJavascriptFile } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import {
   ApiProviderSchema,
@@ -588,7 +589,37 @@ export const TestSuiteSchema = z.object({
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Extensions that are called at various plugin points
-  extensions: z.array(z.string()).optional(),
+  extensions: z
+    .array(
+      z
+        .string()
+        .refine((value) => value.startsWith('file://'), {
+          message: 'Extension must start with file://',
+        })
+        .refine(
+          (value) => {
+            const parts = value.split(':');
+            return parts.length === 3 && parts.every((part) => part.trim() !== '');
+          },
+          {
+            message: 'Extension must be of the form file://path/to/file.py:function_name',
+          },
+        )
+        .refine(
+          (value) => {
+            const parts = value.split(':');
+            return (
+              (parts[1].endsWith('.py') || isJavascriptFile(parts[1])) &&
+              (parts.length === 3 || parts.length === 2)
+            );
+          },
+          {
+            message:
+              'Extension must be a python (.py) or javascript (.js, .ts, .mjs, .cjs, etc.) file followed by a colon and function name',
+          },
+        ),
+    )
+    .optional(),
 
   // Redteam configuration - used only when generating redteam tests
   redteam: z.custom<RedteamFileConfig>().optional(),

@@ -8,7 +8,8 @@ import type {
   TestSuite,
   ProviderOptions,
 } from '../types';
-import { isJavascriptFile, parsePathOrGlob } from '../util';
+import { parsePathOrGlob } from '../util';
+import { isJavascriptFile } from '../util/file';
 import { processJsFile } from './processors/javascript';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
