@@ -226,7 +226,11 @@ export async function writeResultsToDatabase(
         .insert(prompts)
         .values({
           id: promptId,
-          prompt: label,
+          type: 'prompt',
+          content: prompt.raw,
+          version: 1,
+          author: getAuthor(),
+          createdAt: createdAt.getTime(),
         })
         .onConflictDoNothing()
         .run(),

@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
 import debounce from 'debounce';
+import { eq, and, type SQL } from 'drizzle-orm';
 import express from 'express';
 import type { Stats } from 'fs';
 import fs from 'fs';
@@ -13,6 +14,8 @@ import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { createPublicUrl } from '../commands/share';
 import { getDbSignalPath } from '../database';
+import { getDb } from '../database';
+import { prompts, promptLabels } from '../database/tables';
 import { getDirectory } from '../esm';
 import type {
   EvaluateTestSuiteWithEvaluateOptions,
@@ -27,7 +30,6 @@ import promptfoo from '../index';
 import logger from '../logger';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
-  getPrompts,
   getPromptsForTestCasesHash,
   listPreviousResults,
   readResult,
@@ -42,9 +44,6 @@ import {
 
 // Running jobs
 const evalJobs = new Map<string, Job>();
-
-// Prompts cache
-let allPrompts: PromptWithMetadata[] | null = null;
 
 export enum BrowserBehavior {
   ASK = 0,
@@ -209,10 +208,71 @@ export function startServer(
   });
 
   app.get('/api/prompts', async (req, res) => {
-    if (allPrompts == null) {
-      allPrompts = await getPrompts();
+    const { id, label, latest, limit } = req.query;
+    const db = getDb();
+
+    const filters: SQL[] = [];
+
+    if (id) {
+      filters.push(eq(prompts.id, id as string));
     }
-    res.json({ data: allPrompts });
+
+    if (label) {
+      filters.push(eq(promptLabels.label, label as string));
+    }
+
+    const query = db
+      .select()
+      .from(prompts)
+      .leftJoin(promptLabels, eq(prompts.id, promptLabels.promptId))
+      .where(and(...filters));
+
+    const numLimit = latest === 'true' ? 1 : limit ? Number(limit) : 100;
+    const results = await query.limit(numLimit).all();
+    res.json({ data: results });
+  });
+
+  app.post('/api/prompts/:id', async (req, res) => {
+    const { id } = req.params;
+    const { type, labels, content, author } = req.body;
+
+    try {
+      const db = getDb();
+      await db.transaction(async (tx) => {
+        const existingPrompt = await tx
+          .select({ version: prompts.version })
+          .from(prompts)
+          .where(eq(prompts.id, id))
+          .limit(1);
+
+        const newVersion = existingPrompt.length > 0 ? existingPrompt[0].version + 1 : 1;
+
+        await tx.insert(prompts).values({
+          id,
+          type,
+          content,
+          version: newVersion,
+          author,
+        });
+
+        if (labels && labels.length > 0) {
+          await tx
+            .insert(promptLabels)
+            .values(labels.map((label: string) => ({ promptId: id, label })));
+        }
+
+        // Automatically update 'latest' label
+        await tx
+          .delete(promptLabels)
+          .where(and(eq(promptLabels.promptId, id), eq(promptLabels.label, 'latest')));
+        await tx.insert(promptLabels).values({ promptId: id, label: 'latest' });
+      });
+
+      res.status(201).json({ message: 'Prompt created successfully' });
+    } catch (error) {
+      console.error('Error creating prompt:', error);
+      res.status(500).json({ error: 'Failed to create prompt' });
+    }
   });
 
   app.get('/api/progress', async (req, res) => {

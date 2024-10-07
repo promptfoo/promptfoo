@@ -13,6 +13,7 @@ import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
+import { pushCommand } from './commands/push';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { viewCommand } from './commands/view';
@@ -51,6 +52,7 @@ async function main() {
   const generateCommand = program.command('generate').description('Generate synthetic data');
   importCommand(program);
   listCommand(program);
+  pushCommand(program);
   showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import fetch from 'node-fetch';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import cliState from './cliState';
@@ -157,6 +158,38 @@ export async function renderPrompt(
       minorVersion === undefined ? undefined : Number(minorVersion),
     );
     return heliconeResult;
+  } else if (prompt.raw.startsWith('pf://')) {
+    const pfPrompt = prompt.raw.slice('pf://prompts/'.length);
+    const [id, version] = pfPrompt.split(':');
+
+    // Construct the API URL
+    const apiUrl = new URL(
+      '/api/prompts',
+      // FIXME(ian): what should this be
+      process.env.PROMPTFOO_API_URL || 'http://localhost:15500',
+    );
+    apiUrl.searchParams.append('id', id);
+    if (version) {
+      apiUrl.searchParams.append('version', version);
+    } else {
+      apiUrl.searchParams.append('latest', 'true');
+    }
+
+    try {
+      const response = await fetch(apiUrl.toString());
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = (await response.json()) as { data: { prompts: { content: string } }[] };
+      logger.debug(`Loaded prompt from ${prompt.raw}: ${JSON.stringify(data)}`);
+      if (!data.data || data.data.length === 0) {
+        throw new Error(`No prompt found for id: ${id}`);
+      }
+      return data.data[0].prompts.content;
+    } catch (error) {
+      logger.error(`Error fetching prompt from pf:// URL: ${error}`);
+      throw error;
+    }
   }
 
   // Render prompt

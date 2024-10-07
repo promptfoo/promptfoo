@@ -18,12 +18,39 @@ export const prompts = sqliteTable(
     createdAt: integer('created_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
-    prompt: text('prompt').notNull(),
+    content: text('content').notNull(),
+    type: text('type').notNull(),
+    version: integer('version').notNull(),
+    author: text('author'),
   },
   (table) => ({
     createdAtIdx: index('prompts_created_at_idx').on(table.createdAt),
+    typeIdx: index('prompts_type_idx').on(table.type),
+    versionIdx: index('prompts_version_idx').on(table.version),
   }),
 );
+
+export const promptLabels = sqliteTable(
+  'prompt_labels',
+  {
+    promptId: text('prompt_id')
+      .notNull()
+      .references(() => prompts.id),
+    label: text('label').notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.promptId, t.label] }),
+    promptIdIdx: index('prompt_labels_prompt_id_idx').on(t.promptId),
+    labelIdx: index('prompt_labels_label_idx').on(t.label),
+  }),
+);
+
+export const promptLabelsRelations = relations(promptLabels, ({ one }) => ({
+  prompt: one(prompts, {
+    fields: [promptLabels.promptId],
+    references: [prompts.id],
+  }),
+}));
 
 // ------------ Tags ------------
 
