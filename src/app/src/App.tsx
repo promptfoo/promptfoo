@@ -14,7 +14,6 @@ import EvalPage from './pages/eval/page';
 import ProgressPage from './pages/progress/page';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/report/page';
-import './App.css';
 
 const DEFAULT_ROUTE = import.meta.env.VITE_PUBLIC_HOSTED ? '/setup' : '/eval';
 
