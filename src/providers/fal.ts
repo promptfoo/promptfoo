@@ -4,7 +4,7 @@ import fetch from 'node-fetch';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types';
+import type { ApiProvider, CallApiContextParams, EnvOverrides, ProviderResponse } from '../types';
 
 type FalProviderOptions = {
   apiKey?: string;
@@ -42,7 +42,7 @@ class FalProvider<Input = any> implements ApiProvider {
     return `[fal.ai Inference Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, context: any): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'fal.ai API key is not set. Set the FAL_KEY environment variable or or add `apiKey` to the provider config.',
@@ -56,7 +56,7 @@ class FalProvider<Input = any> implements ApiProvider {
     const input = {
       prompt,
       ...this.input,
-      ...(context.prompt?.config ?? {}),
+      ...(context?.prompt?.config ?? {}),
     };
     const cacheKey = `fal:${this.modelName}:${JSON.stringify(input)}`;
     if (isCacheEnabled()) {
