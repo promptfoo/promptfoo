@@ -31,3 +31,27 @@ providers:
       temperature: 0
       maxOutputTokens: 1024
 ```
+
+You can also pass in a `responseSchema` file:
+
+```yaml
+providers:
+  - id: google:gemini-pro
+    config:
+      responseSchema: file://test.json
+```
+
+If you want more fine tuned control over the `generationConfig`:
+
+```yaml
+providers:
+  - id: google:gemini-1.5-flash-002
+    config:
+      generationConfig:
+        response_mime_type: application/json
+        response_schema:
+          type: object
+          properties:
+            foo:
+              type: string
+```

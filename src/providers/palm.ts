@@ -1,7 +1,8 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types';
+import type { ApiProvider, EnvOverrides, ProviderResponse, CallApiContextParams } from '../types';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -16,6 +17,7 @@ interface PalmCompletionOptions {
   topP?: number;
   topK?: number;
   generationConfig?: Record<string, any>;
+  responseSchema?: string;
 }
 
 class PalmGenericProvider implements ApiProvider {
@@ -83,7 +85,7 @@ export class PalmChatProvider extends PalmGenericProvider {
     super(modelName, options);
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -92,7 +94,7 @@ export class PalmChatProvider extends PalmGenericProvider {
 
     const isGemini = this.modelName.startsWith('gemini');
     if (isGemini) {
-      return this.callGemini(prompt);
+      return this.callGemini(prompt, context);
     }
 
     // https://developers.generativeai.google/tutorials/curl_quickstart
@@ -151,9 +153,9 @@ export class PalmChatProvider extends PalmGenericProvider {
     }
   }
 
-  async callGemini(prompt: string): Promise<ProviderResponse> {
+  async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const contents = parseChatPrompt(prompt, [{ parts: [{ text: prompt }] }]);
-    const body = {
+    const body: Record<string, any> = {
       contents,
       generationConfig: {
         temperature: this.config.temperature,
@@ -165,6 +167,23 @@ export class PalmChatProvider extends PalmGenericProvider {
       },
       safetySettings: this.config.safetySettings,
     };
+
+    if (this.config.responseSchema) {
+      // If the `response_schema` has already been set by the client.
+      if (body.generationConfig.response_schema) {
+        throw new Error(
+          '`responseSchema` provided but `generationConfig.response_schema` already set.',
+        );
+      }
+
+      const schema = maybeLoadFromExternalFile(
+        renderVarsInObject(this.config.responseSchema, context?.vars),
+      );
+
+      body.generationConfig.response_schema = schema;
+      body.generationConfig.response_mime_type = 'application/json';
+    }
+
     logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
     let data;
