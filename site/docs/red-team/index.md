@@ -6,7 +6,7 @@ title: LLM red teaming guide (open source)
 
 # LLM red teaming
 
-LLM red teaming is a way to find vulnerabilities in AI systems _before_ they're deployed by using simulated inputs.
+LLM red teaming is a way to find vulnerabilities in AI systems _before_ they're deployed by using simulated adversarial inputs.
 
 As of today, there are multiple inherent security challenges with LLM architectures. Depending on your system's design, e.g. [RAG](/docs/red-team/rag/), [LLM agent](/docs/red-team/agents/), or [chatbot](/docs/red-team/llm-vulnerability-types/), you'll face different types of vulnerabilities.
 
@@ -42,9 +42,11 @@ The process of red teaming LLMs generally requires some degree of automation for
 
 A systematic approach looks like this:
 
-1. Generate a diverse set of adversarial inputs
-2. Run these inputs through your LLM application
-3. Analyze the outputs for vulnerabilities or undesirable behaviors
+1. **Generate Adversarial Inputs**: Create or curate a diverse set of malicious intents targeting potential vulnerabilities. For each intent, wrap it in a prompt that attempts to exploit the target. You can incorporate methods like prompt injection and jailbreaking at this step.
+
+2. **Evaluate Responses**: Run these inputs through your LLM application to observe the model's behavior. This step is a great candidate for automation.
+
+3. **Analyze Vulnerabilities**: Evaluate the LLM's outputs automatically using deterministic and model-graded metrics, and examine the responses to identify weaknesses or undesirable behaviors.
 
 Once a process is set up, it can be applied in two primary ways:
 
