@@ -45,7 +45,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   );
   // first we need to get our prompts, we can get that from any of the results in each column
   const results = eval_.results;
-  const completedPrompts: Record<string, CompletedPrompt> = {};
+  const completedPrompts: CompletedPrompt[] = [];
   const varsForHeader = new Set<string>();
   const varValuesForRow = new Map<number, Record<string, string>>();
 
@@ -108,15 +108,14 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       cost: result.cost || 0,
     };
     invariant(result.promptId, 'Prompt ID is required');
-    const completedPromptId = `${result.promptId}-${JSON.stringify(result.provider)}`;
-    if (!completedPrompts[completedPromptId]) {
-      completedPrompts[completedPromptId] = {
+    if (!completedPrompts[result.promptIdx]) {
+      completedPrompts[result.promptIdx] = {
         ...result.prompt,
         provider: result.provider?.label || result.provider?.id || 'unknown provider',
         metrics: new PromptMetrics(),
       };
     }
-    const prompt = completedPrompts[completedPromptId];
+    const prompt = completedPrompts[result.promptIdx];
     invariant(prompt.metrics, 'Prompt metrics are required');
     prompt.metrics.score += result.score;
     prompt.metrics.testPassCount += result.success ? 1 : 0;
@@ -147,7 +146,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
   return {
     head: {
-      prompts: Object.values(completedPrompts),
+      prompts: completedPrompts,
       vars: [...varsForHeader].sort(),
     },
     body: rows,
