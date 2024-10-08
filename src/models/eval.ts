@@ -466,7 +466,7 @@ export async function getSummaryofLatestEvals(
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
-      numTests: sql`MAX(${evalResultsTable.testIdx} + 1)`.as('numTests'),
+      numTests: sql`COUNT(DISTINCT ${evalResultsTable.testIdx})`.as('numTests'),
       datasetId: evalsToDatasetsTable.datasetId,
     })
     .from(evalsTable)
