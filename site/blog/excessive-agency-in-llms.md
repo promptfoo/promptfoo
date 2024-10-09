@@ -19,6 +19,8 @@ Example: A customer service chatbot that can read customer info is fine. But if 
 
 The [OWASP Top 10](https://genai.owasp.org/llmrisk/llm08-excessive-agency/) for LLM Apps lists this as a major concern. To fix it, developers need to carefully limit what their AI can do.
 
+<!-- truncate -->
+
 ## What causes excessive agency?
 
 Excessive agency in LLMs often stems from well-intentioned but poorly implemented features. This vulnerability type arises when AI systems are granted broader capabilities or access than necessary for their intended functions.
