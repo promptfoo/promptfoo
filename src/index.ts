@@ -2,6 +2,7 @@ import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
+import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { readPrompts, readProviderPromptMap } from './prompts';
@@ -61,7 +62,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
           try {
             return PromptSchema.parse(promptInput);
           } catch (error) {
-            console.warn(
+            logger.warn(
               `Prompt input is not a valid prompt schema: ${error}\nFalling back to serialized JSON as raw prompt.`,
             );
             return {
