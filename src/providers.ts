@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
+import get from 'lodash.get';
 import invariant from 'tiny-invariant';
 import cliState from './cliState';
 import { importModule } from './esm';
@@ -69,7 +70,7 @@ import RedteamCrescendoProvider from './redteam/providers/crescendo';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
-import type { TestSuiteConfig } from './types';
+import {PackageJson, TestSuiteConfig} from './types';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -439,6 +440,29 @@ export async function loadApiProvider(
       ? providerPath.slice('file://'.length)
       : providerPath.split(':').slice(1).join(':');
     ret = new GolangProvider(scriptPath, providerOptions);
+  } else if (providerPath.startsWith('custom:')) {
+    const packageName = providerPath.split(':')[1];
+    const providerName = providerPath.split(':')[2];
+    const modulePath = path.join(basePath || process.cwd(), 'node_modules', packageName);
+    const pkgPath = path.join(modulePath, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as PackageJson;
+    if (!pkg.main) {
+      logger.error(dedent`
+      Could not determine main entry in package.json: ${chalk.bold(pkgPath)}.
+
+      ${chalk.white(dedent`Please check your package.json and ensure the property 'main' is correctly specified.`)}
+    `);
+      process.exit(1);
+    }
+    const module = await importModule(path.join(modulePath, pkg.main));
+    const Provider = get(module, providerName);
+    if (!Provider) {
+        logger.error(dedent`
+        Could not find provider: ${chalk.bold(providerName)} in module: ${chalk.bold(modulePath)}.
+        `);
+        process.exit(1);
+    }
+    ret = new Provider(options);
   } else if (isJavascriptFile(providerPath)) {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
