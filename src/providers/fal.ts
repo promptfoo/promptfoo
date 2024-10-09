@@ -1,4 +1,3 @@
-import * as fal from '@fal-ai/serverless-client';
 import type { Cache } from 'cache-manager';
 import fetch from 'node-fetch';
 import { getCache, isCacheEnabled } from '../cache';
@@ -16,6 +15,9 @@ class FalProvider<Input = any> implements ApiProvider {
   apiKey?: string;
   config: FalProviderOptions;
   input: Input;
+
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+  private fal: typeof import('@fal-ai/serverless-client') | null = null;
 
   constructor(
     modelType: 'image',
@@ -66,7 +68,11 @@ class FalProvider<Input = any> implements ApiProvider {
       cached = response !== undefined;
     }
 
-    fal.config({
+    if (!this.fal) {
+      this.fal = await import('@fal-ai/serverless-client');
+    }
+
+    this.fal.config({
       credentials: this.apiKey,
       fetch: fetch as any, // TODO fix type incompatibility
     });
@@ -90,7 +96,11 @@ class FalProvider<Input = any> implements ApiProvider {
   }
 
   async runInference<Result = any>(input: Input): Promise<Result> {
-    const result = await fal.subscribe(this.modelName, {
+    if (!this.fal) {
+      this.fal = await import('@fal-ai/serverless-client');
+    }
+
+    const result = await this.fal.subscribe(this.modelName, {
       input,
     });
     return result as Result;

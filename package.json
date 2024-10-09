@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.92.1",
+  "version": "0.92.2",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -45,6 +45,7 @@
     "build:watch": "tsc --watch",
     "build": "tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx mkdir -p dist/src/golang && shx cp src/golang/wrapper.go dist/src/golang && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:app && shx chmod +x dist/src/main.js",
     "test": "jest",
+    "test:integration": "jest --config jest.integration.config.ts integration",
     "test:watch": "jest --watch",
     "test:app": "npm run test --prefix src/app",
     "format": "prettier -w .",
@@ -133,7 +134,7 @@
     "zod-to-json-schema": "^3.23.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.28.0",
+    "@anthropic-ai/sdk": "^0.29.0",
     "@apidevtools/json-schema-ref-parser": "^11.7.0",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",

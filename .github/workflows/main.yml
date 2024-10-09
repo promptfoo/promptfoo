@@ -50,9 +50,8 @@ jobs:
       - name: Install Dependencies
         run: |
           npm ci
-
       - name: Test
-        run: npm run test --ci --coverage --maxWorkers=2
+        run: npm run test -- --ci --coverage --maxWorkers=2
 
       - name: Build
         run: npm run build
@@ -225,4 +224,4 @@ jobs:
           npm ci
 
       - name: Run Integration Tests
-        run: npx jest integration --coverage
+        run: npm run test:integration -- --ci --coverage --maxWorkers=2
