@@ -29,11 +29,16 @@ async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
 async function sendEvalResults(evalRecord: Eval, url: string) {
   await evalRecord.loadResults();
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (cloudConfig.isEnabled()) {
+    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
+  }
+
   const response = await fetchWithProxy(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(evalRecord),
   });
 
@@ -100,7 +105,8 @@ export async function createShareableUrl(
     url = `${apiBaseUrl}/api/eval`;
   }
 
-  const canUseNewResults = await targetHostCanUseNewResults(apiBaseUrl);
+  const canUseNewResults =
+    cloudConfig.isEnabled() || (await targetHostCanUseNewResults(apiBaseUrl));
   logger.debug(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
