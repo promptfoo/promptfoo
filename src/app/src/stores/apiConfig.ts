@@ -6,6 +6,8 @@ export interface ApiConfig {
   setApiBaseUrl: (apiBaseUrl: string) => void;
   fetchingPromise: Promise<Response> | null;
   setFetchingPromise: (fetchingPromise: Promise<Response> | null) => void;
+  persistApiBaseUrl: boolean;
+  enablePersistApiBaseUrl: () => void;
 }
 
 const useApiConfig = create<ApiConfig>()(
@@ -13,12 +15,16 @@ const useApiConfig = create<ApiConfig>()(
     (set) => ({
       apiBaseUrl: import.meta.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL || '',
       setApiBaseUrl: (apiBaseUrl: string) => set({ apiBaseUrl }),
+      persistApiBaseUrl: false,
+      enablePersistApiBaseUrl: () => set({ persistApiBaseUrl: true }),
       fetchingPromise: null,
       setFetchingPromise: (fetchingPromise: Promise<Response> | null) => set({ fetchingPromise }),
     }),
     {
       name: 'api-config-storage',
-      partialize: (state) => ({ apiBaseUrl: state.apiBaseUrl }) as Partial<ApiConfig>,
+      partialize: (state) => {
+        return state.persistApiBaseUrl ? { apiBaseUrl: state.apiBaseUrl } : {};
+      },
     },
   ),
 );
