@@ -11,7 +11,7 @@ const AboutPage = () => {
     >
       <Container maxWidth="lg">
         <Box py={8}>
-          <Typography variant="h1" component="h1" align="center" gutterBottom fontWeight="bold">
+          <Typography variant="h2" component="h2" align="center" gutterBottom fontWeight="bold">
             Securing the Future of AI
           </Typography>
           <Typography variant="h5" component="h2" align="center" color="text.secondary" paragraph>
@@ -71,10 +71,16 @@ const AboutPage = () => {
                 name: 'Steve Klein',
                 title: 'Staff Engineer',
                 image: '/img/team/steve.jpeg',
-                bio: 'Steve brings decades of experience in engineering, product development, and security. Most recently, he scaled AI products at Discord.',
+                bio: `Steve brings decades of expertise in engineering, product, and cybersecurity. He has led technical and product teams, and conducted pentests at companies like Microsoft, Shopify, Intercom, and PwC. Most recently he was scaling AI products at Discord.`,
+              },
+              {
+                name: 'Vanessa Sauter',
+                title: 'Principal Solutions Architect',
+                image: '/img/team/vanessa.jpeg',
+                bio: 'Vanessa led hundreds of security and privacy reviews for customers at Gong. She has also pentested dozens of enterprises and launched hundreds of bug bounty programs for a leading crowdsourced security company and is published in Forbes, Lawfare, and Dark Reading.',
               },
             ].map((leader) => (
-              <Grid item xs={12} sm={6} md={4} key={leader.name}>
+              <Grid item xs={12} sm={6} md={3} key={leader.name}>
                 <Box textAlign="center">
                   <Avatar
                     alt={leader.name}
