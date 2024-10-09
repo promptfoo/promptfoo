@@ -151,10 +151,14 @@ export async function createShareableUrl(
         body: JSON.stringify(sharedResults),
       });
     }
-
+    if (!response.ok) {
+      logger.error(`Failed to create shareable URL: ${response.statusText}`);
+      return null;
+    }
     const responseJson = (await response.json()) as { id?: string; error?: string };
     if (responseJson.error) {
-      throw new Error(`Failed to create shareable URL: ${responseJson.error}`);
+      logger.error(`Failed to create shareable URL: ${responseJson.error}`);
+      return null;
     }
     evalId = responseJson.id;
   }
