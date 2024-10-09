@@ -113,7 +113,7 @@ Implement **safeguards** against illogical or biased conclusions. Use fact-check
 
 Use a **fairness metric** that measure performance across different groups, not just accuracy. This can be done with a [classifier](/docs/configuration/expected-outputs/classifier/) grader using one of the many available models on [HuggingFace](https://huggingface.co/d4data/bias-detection-model).
 
-**Test across many contexts and demographics**. You can construct test cases yourself, or you can use [**automated red-teaming**](/docs/red-team/redteam/) to stress-test your system. These automations generate thousands of adversarial inputs to uncover edge cases and unexpected biases at scale.
+**Test across many contexts and demographics**. You can construct test cases yourself, or you can use [**automated red-teaming**](/docs/red-team/) to stress-test your system. These automations generate thousands of adversarial inputs to uncover edge cases and unexpected biases at scale.
 
 You should **freeze your models** to make sure that updates don't introduce unexpected behaviors.
 
@@ -150,4 +150,4 @@ Research is ongoing, but there are a few promising directions:
 
 Above all, evaluation of models and applications (often referred to as "evals" or "red teaming") is crucial for teams that want to develop a strategy to identify and mitigate bias in their LLM applications.
 
-If you're interested in learning more about detecting bias in your generative AI applications, we've got you covered. Please [get in touch](/contact/) or check out our [LLM red teaming guide](/docs/red-team/redteam/) to get started.
+If you're interested in learning more about detecting bias in your generative AI applications, we've got you covered. Please [get in touch](/contact/) or check out our [LLM red teaming guide](/docs/red-team/) to get started.
