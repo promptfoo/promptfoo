@@ -134,7 +134,7 @@
     "zod-to-json-schema": "^3.23.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.28.0",
+    "@anthropic-ai/sdk": "^0.29.0",
     "@apidevtools/json-schema-ref-parser": "^11.7.0",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
