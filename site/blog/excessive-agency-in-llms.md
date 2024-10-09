@@ -27,11 +27,13 @@ Excessive agency in LLMs often stems from well-intentioned but poorly implemente
 
 ### Common Examples
 
+Excessive agency arises in a handful of ways, but there are a few common patterns.
+
 ![excessive agency examples](/img/blog/excessive-agency/excessive-agency-examples.svg)
 
 - **Overreaching tools**: Most LLM providers have first-class support for ["tools" or functions](https://platform.openai.com/docs/guides/function-calling), which is just a fancy way of saying "APIs that are exposed to the LLM".
 
-These APIs frequently include unnecessary functionality. For example, document summarization tool might also have edit and delete capabilities, expanding the potential attack surface.
+  These APIs frequently include unnecessary functionality. For example, document summarization tool might also have edit and delete capabilities, expanding the potential attack surface.
 
 - **Insecure APIs**: LLMs cannot be trusted with access to backend systems. We often see IDOR-style vulnerabilities where an LLM can make arbitrary data references.
 
