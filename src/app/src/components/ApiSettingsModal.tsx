@@ -14,7 +14,7 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
   open,
   onClose,
 }: T) {
-  const { apiBaseUrl, setApiBaseUrl } = useApiConfig();
+  const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
   const [tempApiBaseUrl, setTempApiBaseUrl] = useState(apiBaseUrl || '');
 
   useEffect(() => {
@@ -27,6 +27,7 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
 
   const handleSave = () => {
     setApiBaseUrl(tempApiBaseUrl);
+    enablePersistApiBaseUrl();
     onClose();
   };
 
