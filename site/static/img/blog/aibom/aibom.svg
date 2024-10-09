@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <defs>
+    <style>
+      .title { font: bold 24px sans-serif; }
+      .subtitle { font: italic 18px sans-serif; }
+      .label { font: 14px sans-serif; }
+    </style>
+  </defs>
+  
+  <!-- Title -->
+  <text x="400" y="40" text-anchor="middle" class="title">AI Bill of Materials (AIBOM)</text>
+  <text x="400" y="80" text-anchor="middle" class="subtitle">Comprehensive Inventory of AI System Components</text>
+
+  <!-- Main AIBOM circle -->
+  <circle cx="400" cy="350" r="230" fill="#f0f0f0" stroke="#333" stroke-width="3"/>
+  
+  <!-- AIBOM Components -->
+  <g>
+    <!-- Model Information -->
+    <circle cx="400" cy="220" r="65" fill="#ff9999"/>
+    <text x="400" y="220" text-anchor="middle" class="label">Model Information</text>
+
+    <!-- Software Dependencies -->
+    <circle cx="270" cy="310" r="65" fill="#99ff99"/>
+    <text x="270" y="310" text-anchor="middle" class="label">Software</text>
+    <text x="270" y="330" text-anchor="middle" class="label">Dependencies</text>
+
+    <!-- Hardware Requirements -->
+    <circle cx="530" cy="310" r="65" fill="#9999ff"/>
+    <text x="530" y="310" text-anchor="middle" class="label">Hardware</text>
+    <text x="530" y="330" text-anchor="middle" class="label">Requirements</text>
+
+    <!-- Data Pipeline -->
+    <circle cx="310" cy="440" r="65" fill="#ffff99"/>
+    <text x="310" y="440" text-anchor="middle" class="label">Data Pipeline</text>
+
+    <!-- Ethical Considerations -->
+    <circle cx="490" cy="440" r="65" fill="#ff99ff"/>
+    <text x="490" y="440" text-anchor="middle" class="label">Ethical</text>
+    <text x="490" y="460" text-anchor="middle" class="label">Considerations</text>
+  </g>
+</svg>
