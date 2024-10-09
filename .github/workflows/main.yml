@@ -51,7 +51,7 @@ jobs:
         run: |
           npm ci
       - name: Test
-        run: npm run test -- --ci --coverage --maxWorkers=2 --testPathIgnorePatterns='integration\.test\.ts$|\.tsx$'
+        run: npm run test -- --ci --coverage --maxWorkers=2 --testPathIgnorePatterns="integration\.test\.ts$|\.tsx$"
 
       - name: Build
         run: npm run build
