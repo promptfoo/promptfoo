@@ -7,7 +7,6 @@ import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type { TestCaseWithPlugin } from '../types';
-import { maybeLoadFromExternalFile } from '../util';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
 import { extractEntities } from './extraction/entities';
@@ -306,17 +305,7 @@ export async function synthesize({
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
     } else if (plugin.id.startsWith('file://')) {
-      logger.debug(`Loading custom plugin from ${plugin.id}`);
-      const filePath = plugin.id.slice('file://'.length);
-
-      const definition = maybeLoadFromExternalFile(filePath) as {
-        generator: string;
-        grader: string;
-      };
-
-      logger.debug(`Custom plugin definition: ${JSON.stringify(definition, null, 2)}`);
-
-      const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, definition);
+      const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
       const customTests = await customPlugin.generateTests(plugin.numTests, delay);
       testCases.push(
         ...customTests.map((t) => ({
