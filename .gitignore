@@ -8,6 +8,7 @@ node_modules
 dist
 .aider*
 .local
+.idea
 
 __pycache__
 
