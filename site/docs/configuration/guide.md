@@ -230,7 +230,8 @@ tests:
 fetch_dynamic_context.py:
 
 ```python
-def get_var(var_name, prompt, other_vars):
+def get_var(var_name: str, prompt: str, other_vars: Dict[str, str]) -> Dict[str, str]:
+    # NOTE: Must return a dictionary with an 'output' key or an 'error' key.
     # Example logic to dynamically generate variable content
     if var_name == 'context':
         return {
