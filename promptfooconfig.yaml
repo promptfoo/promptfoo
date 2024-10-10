@@ -1,0 +1,55 @@
+extensions:
+  - file:///app/geminiFileUploadInJs.mjs:geminiUploadExtension
+
+prompts:
+  - /app/motion/prompts/prompt_one.txt
+  - /app/motion/prompts/prompt_two.txt
+#  - /Users/itaylevy/IdeaProjects/promptfoo/prompt_three.txt
+providers:
+  #  - id: openai:chat:gpt-4o
+  #    config:
+  #      temperature: 0.1
+  #      max_tokens: 2000
+#  - id: openai:chat:gpt-4o-mini
+#    config:
+#      temperature: 0.1
+#      max_tokens: 2000
+  - id: google:gemini-1.5-pro
+    config:
+      temperature: 1.0
+assert:
+  # Pass if the LLM call costs less than $0.01
+  - type: cost
+    threshold: 100.0
+#defaultTest:
+#  assert:
+#    - type: select-best
+#      value: choose the response that contains the most practical and non-generic suggestions.
+#evaluateOptions:
+#  maxConcurrency: 5
+#  repeat: 2
+tests:
+  - vars:
+      CTR: 4.42%
+      CPR: 1.06%
+    fileUrls:
+      - "https://motionaccountassets.blob.core.windows.net/65007302c2f5f5e85c5b601d/creativeassetfacebook/66d6f4c01cf0ed433f6f8921/video.mp4"
+    assert:
+      - type: llm-rubric
+        value: Is clear and concise, and provides suggestions that are likely going to deliver the target objective if executed.
+        metric: Effective
+      - type: llm-rubric
+        value: The suggestions are prioritized in a way that gives more weighting to the impact of the suggestion.
+        metric: Ordering
+  - vars:
+      CTR: 2.48%
+      CPR: 2.29%
+    fileUrls:
+      - "https://motionaccountassets.blob.core.windows.net/65007302c2f5f5e85c5b601d/creativeassetfacebook/66d6f4c01cf0ed433f6f8921/video.mp4"
+    assert:
+      - type: llm-rubric
+        value: Is clear and concise, and provides suggestions that are likely going to deliver the target objective if executed.
+        metric: Effective
+      - type: llm-rubric
+        value: The suggestions are prioritized in a way that gives more weighting to the impact of the suggestion.
+        metric: Ordering

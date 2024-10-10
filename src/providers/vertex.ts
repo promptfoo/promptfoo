@@ -219,9 +219,17 @@ export class VertexChatProvider extends VertexGenericProvider {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     let contents = parseChatPrompt(prompt, {
       role: 'user',
-      parts: {
-        text: prompt,
-      },
+      parts: [
+        {
+          fileData: {
+            mimeType: 'video/mp4',
+            fileUri: 'https://generativelanguage.googleapis.com/v1beta/files/aevyiwsr0gr6',
+          },
+        },
+        {
+          text: prompt,
+        },
+      ],
     });
     const { contents: updatedContents, coerced } = maybeCoerceToGeminiFormat(contents);
     if (coerced) {

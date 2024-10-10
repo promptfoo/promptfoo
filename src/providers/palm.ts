@@ -1,7 +1,14 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  EnvOverrides,
+  LLMFile,
+  ProviderResponse,
+} from '../types';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -65,13 +72,18 @@ class PalmGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, llmFiles?: LLMFile[]): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
 
 export class PalmChatProvider extends PalmGenericProvider {
-  static CHAT_MODELS = ['chat-bison-001', 'gemini-pro', 'gemini-pro-vision'];
+  static CHAT_MODELS = [
+    'chat-bison-001',
+    'gemini-pro',
+    'gemini-pro-vision',
+    'gemini-1.5-pro',
+  ];
 
   constructor(
     modelName: string,
@@ -83,7 +95,12 @@ export class PalmChatProvider extends PalmGenericProvider {
     super(modelName, options);
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+    llmFiles?: LLMFile[],
+  ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -92,12 +109,20 @@ export class PalmChatProvider extends PalmGenericProvider {
 
     const isGemini = this.modelName.startsWith('gemini');
     if (isGemini) {
-      return this.callGemini(prompt);
+      return this.callGemini(prompt, llmFiles);
     }
 
     // https://developers.generativeai.google/tutorials/curl_quickstart
     // https://ai.google.dev/api/rest/v1beta/models/generateMessage
-    const messages = parseChatPrompt(prompt, [{ content: prompt }]);
+    const messages = parseChatPrompt(prompt, [
+      {
+        fileData: {
+          mimeType: 'video/mp4',
+          fileUri: 'https://generativelanguage.googleapis.com/v1beta/files/aevyiwsr0gr6',
+        },
+      },
+      { text: prompt },
+    ]);
     const body = {
       prompt: { messages },
       temperature: this.config.temperature,
@@ -151,8 +176,24 @@ export class PalmChatProvider extends PalmGenericProvider {
     }
   }
 
-  async callGemini(prompt: string): Promise<ProviderResponse> {
-    const contents = parseChatPrompt(prompt, [{ parts: [{ text: prompt }] }]);
+  async callGemini(prompt: string, llmFiles?: LLMFile[],): Promise<ProviderResponse> {
+    const geminiFiles = llmFiles?.map((llmFile) => ({
+      fileData: {
+        fileUri: llmFile.url,
+        mimeType: llmFile.mimeType,
+      }
+    })) || [];
+
+    const whatWeNeed = [
+      {
+        parts: [
+          ...geminiFiles,
+          { text: prompt }
+        ]
+      },
+    ];
+    // const contents = parseChatPrompt(prompt, [{ parts: [{ text: prompt }] }]);
+    const contents = parseChatPrompt(prompt, whatWeNeed);
     const body = {
       contents,
       generationConfig: {

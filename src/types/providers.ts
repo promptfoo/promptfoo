@@ -1,6 +1,7 @@
 import type winston from 'winston';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
+import { LLMFile } from './index';
 
 export type ProviderId = string;
 export type ProviderLabel = string;
@@ -149,6 +150,7 @@ export type CallApiFunction = {
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
+    llmFiles?: LLMFile[],
   ): Promise<ProviderResponse>;
   label?: string;
 };

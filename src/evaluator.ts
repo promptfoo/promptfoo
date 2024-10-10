@@ -202,7 +202,6 @@ class Evaluator {
             prompt,
             filters,
             originalProvider: provider,
-
             // All of these are removed in python and script providers, but every Javascript provider gets them
             logger,
             fetchWithCache,
@@ -211,6 +210,7 @@ class Evaluator {
           {
             includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
           },
+          test.llmFiles,
         );
       }
       const endTime = Date.now();

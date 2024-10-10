@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  app:
+    image: promptfoo_fork
+    volumes:
+      - .:/app
+      - /app/node_modules
+    stdin_open: true  # Keep STDIN open even if not attached
+    tty: true         # Allocate a pseudo-TTY

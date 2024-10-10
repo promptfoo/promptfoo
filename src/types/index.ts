@@ -463,6 +463,16 @@ export const VarsSchema = z.record(
   ]),
 );
 
+export const LLMFileSchema = z.object({
+  url: z.string(),
+  mimeType: z.string(),
+  uploadTime: z.number(),
+  originalUrl: z.string(),
+});
+
+export type LLMFile = z.infer<typeof LLMFileSchema>;
+
+
 export type Vars = z.infer<typeof VarsSchema>;
 
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
@@ -546,6 +556,8 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: z.record(z.union([z.string(), z.object({})])).optional(),
+  fileUrls: z.array(z.string()).optional(),
+  llmFiles: z.array(LLMFileSchema).optional(),
 }).strict();
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

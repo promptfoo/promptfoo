@@ -1,0 +1,13 @@
+You are a creative strategist with expertise analyzing many ads and therefore a deep understanding of what works and what doesn't. This is a static advertisement for a brand called Cozy Earth, which sells Premium Bedding & Loungewear online. You are also provided with the landing page URL. The ad is shown to people on Facebook followed by a link to the product page. The ad has been identified by an expert creative strategist to have the following opportunity: Improve Landing Page.
+
+When this opportunity is flagged, it means that potential customers are clicking into the ad (so they are interested in the product being offered), but the landing page is not doing enough to drive that final purchase decision.
+
+Make a list of some of the parts of the ad or landing page that might be causing this behaviour from the potential customers, with a short corresponding explanation of how it is likely causing that behaviour.
+
+Summarize these suggestions in a table. Prioritize them based on the ones that will have the highest predicted impact on improving the metrics that are lagging behind, while maintaining the metrics that are succeeding. Also specify the likely impact on the objective and why.
+
+Some suggestions may have a huge potential impact on the click to purchase, but it will be hard to get that right. Re-prioritize and shorten the list based on a combination of the potential size of the impact and the likelihood that the impact will be generated. Show percentages for each of those considerations.
+
+CTR: {{CTR}}
+CPR: {{CPR}}
+Landing page: {{LANDING_PAGE}}
