@@ -26,13 +26,18 @@ Welcome! This guide will help you set up and run the application on your Windows
         - This command builds the Docker image using the `Dockerfile` in the current directory.
         - `-t promptfoo_fork` assigns the name `promptfoo_fork` to the image. You can replace `promptfoo_fork` with any name you prefer.
 
-### Set up environment variables
+### Set up non-source controlled files
+#### file DB
+Create `fileDb.json` at the root of the project, with the contents: `{}`
+
+#### Set up environment variables
 - Create a `.env` file in the root directory of the project if one does not exist
 - Add the relevant API keys as environment variables in the `.env` file:
 ```env
 OPENAI_API_KEY=...
 GOOGLE_API_KEY=...
 ```
+
 
 ### Install the application inside the Docker container
 - **Start the Docker container:**
@@ -50,6 +55,7 @@ GOOGLE_API_KEY=...
       ```cmd
         npm run build:app
       ```
+
 
 ## Usage
 ### Launch & enter the Docker container

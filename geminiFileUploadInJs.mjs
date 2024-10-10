@@ -26,12 +26,17 @@ export class FileDb {
   }
 
   get(originalUrl) {
-    return this._db[originalUrl];
+    console.log(`Getting ${originalUrl} from cache`);
+    const result = this._db[originalUrl];
+    console.log(`Found ${originalUrl} in cache: ${!!result}`);
+    return result;
   }
 
   async set(originalUrl, fileDbEntry) {
     this._db[originalUrl] = fileDbEntry;
+    console.log(`Saving ${originalUrl} to ${fileDbLocalPath}`);
     await writeFile(fileDbLocalPath, JSON.stringify(this._db, null, 2));
+    console.log(`Saved ${originalUrl} to ${fileDbLocalPath}`);
   }
 }
 
@@ -238,6 +243,7 @@ export const geminiUploadExtension = async (hookName, context) => {
     return;
   }
 
+  const videoIds = {};
   const testSuite = context.suite;
   const fileUrls = testSuite.tests.flatMap((test) => test.fileUrls || []);
   const geminiApiKey =
@@ -256,10 +262,20 @@ export const geminiUploadExtension = async (hookName, context) => {
         return;
       }
 
+      test.fileUrls.sort();
       test.llmFiles = test.fileUrls.map((fileUrl) => ({
         ...fileDb.get(fileUrl),
         originalUrl: fileUrl,
       }));
+      if (!test.vars) {
+        test.vars = {};
+      }
+
+      const videoUrlsString = test.fileUrls.join(',');
+      const videoId = videoIds[videoUrlsString] || uuidV4();
+      videoIds[videoUrlsString] = videoId;
+      test.vars.fileUrls = test.fileUrls.join(',');
+      test.vars.filesId = videoId;
     });
   } catch (error) {
     console.error('GeminiApiService:geminiUploadExtension - Error uploading files', {
