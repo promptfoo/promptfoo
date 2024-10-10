@@ -305,19 +305,24 @@ export async function synthesize({
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
     } else if (plugin.id.startsWith('file://')) {
-      const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
-      const customTests = await customPlugin.generateTests(plugin.numTests, delay);
-      testCases.push(
-        ...customTests.map((t) => ({
-          ...t,
-          metadata: {
-            ...(t.metadata || {}),
-            pluginId: plugin.id,
-          },
-        })),
-      );
-      logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-      pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
+      try {
+        const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
+        const customTests = await customPlugin.generateTests(plugin.numTests, delay);
+        testCases.push(
+          ...customTests.map((t) => ({
+            ...t,
+            metadata: {
+              ...(t.metadata || {}),
+              pluginId: plugin.id,
+            },
+          })),
+        );
+        logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
+        pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
+      } catch (e) {
+        logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
+        pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
+      }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
       pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };

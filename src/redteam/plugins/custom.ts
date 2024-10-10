@@ -26,12 +26,15 @@ export function loadCustomPluginDefinition(filePath: string): CustomPluginDefini
   const result = CustomPluginDefinitionSchema.safeParse(maybeLoadFromExternalFile(filePath));
   if (!result.success) {
     const validationError = fromError(result.error);
-    throw new Error(dedent`
+    throw new Error(
+      '\n' +
+        dedent`
     Custom Plugin Schema Validation Error:
 
       ${validationError.toString()}
 
-    Please review your plugin file ${filePath} configuration.`);
+    Please review your plugin file ${filePath} configuration.`,
+    );
   }
   logger.debug(`Custom plugin definition: ${JSON.stringify(result.data, null, 2)}`);
   return result.data;

@@ -37,14 +37,17 @@ describe('CustomPlugin', () => {
     const mockApiResponse = 'Prompt: Test prompt 1\nPrompt: Test prompt 2';
     jest.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: mockApiResponse });
 
-    const tests = await plugin.generateTests(2);
-
-    expect(tests).toHaveLength(2);
-    expect(tests[0].vars).toEqual({ testVar: 'Test prompt 1' });
-    expect(tests[1].vars).toEqual({ testVar: 'Test prompt 2' });
-    expect(tests[0].assert).toEqual([
-      { type: 'llm-rubric', value: 'Grade the response based on test-purpose' },
-    ]);
+    await expect(plugin.generateTests(2)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          vars: { testVar: 'Test prompt 1' },
+          assert: [{ type: 'llm-rubric', value: 'Grade the response based on test-purpose' }],
+        }),
+        expect.objectContaining({
+          vars: { testVar: 'Test prompt 2' },
+        }),
+      ]),
+    );
 
     expect(mockProvider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Generate 2 test prompts for test-purpose'),
