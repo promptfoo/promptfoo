@@ -65,15 +65,17 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
             }}
             target="_blank"
           >
-            <Typography variant="subtitle2">Version {import.meta.env.PROMPTFOO_VERSION}</Typography>
+            <Typography variant="subtitle2">
+              Version {import.meta.env.VITE_PROMPTFOO_VERSION}
+            </Typography>
           </Link>
         </Stack>
       </DialogTitle>
       <DialogContent>
         <Typography variant="body2" gutterBottom>
-          Promptfoo is a MIT licensed open-source tool for evaluating LLMs. We make it easy to track
-          the performance of your models and prompts over time with automated support for dataset
-          generation and grading.
+          Promptfoo is a MIT licensed open-source tool for evaluating and red-teaming LLMs. We make
+          it easy to track the performance of your models and prompts over time with automated
+          support for dataset generation and grading.
         </Typography>
         <Stack spacing={2} mt={2}>
           {links.map((item, index) => (
