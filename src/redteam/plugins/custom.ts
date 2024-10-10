@@ -12,11 +12,7 @@ const CustomPluginDefinitionSchema = z
     generator: z.string().min(1, 'Generator must not be empty').trim(),
     grader: z.string().min(1, 'Grader must not be empty').trim(),
   })
-  .strict()
-  .refine((data) => data.generator !== data.grader, {
-    message: 'Generator and grader must be different',
-    path: ['grader'],
-  });
+  .strict();
 
 type CustomPluginDefinition = z.infer<typeof CustomPluginDefinitionSchema>;
 

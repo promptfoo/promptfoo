@@ -97,17 +97,6 @@ describe('loadCustomPluginDefinition', () => {
     );
   });
 
-  it('should throw an error when generator and grader are the same', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-      generator: 'Same template',
-      grader: 'Same template',
-    });
-
-    expect(() => loadCustomPluginDefinition('path/to/invalid-plugin.json')).toThrow(
-      'Generator and grader must be different',
-    );
-  });
-
   it('should throw an error when the plugin definition is missing a required field', () => {
     jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
       generator: 'Valid generator template',
