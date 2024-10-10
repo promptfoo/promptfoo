@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
+import { createHash } from 'crypto';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
@@ -9,6 +10,7 @@ import { z } from 'zod';
 import { synthesize } from '..';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
+import { VERSION } from '../../constants';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
@@ -27,6 +29,11 @@ import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
 import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
 import { shouldGenerateRemote } from '../util';
 
+function getConfigHash(configPath: string): string {
+  const content = fs.readFileSync(configPath, 'utf8');
+  return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
+}
+
 export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptions>) {
   setupEnv(options.envFile);
   if (!options.cache) {
@@ -37,6 +44,27 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
   let testSuite: TestSuite;
   let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
+  const outputPath = options.output || 'redteam.yaml';
+
+  // Check for updates to the config file and decide whether to generate
+  let shouldGenerate = options.force;
+  if (!options.force && fs.existsSync(outputPath) && configPath) {
+    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as any;
+    const storedHash = redteamContent.metadata?.configHash;
+    const currentHash = getConfigHash(configPath);
+
+    shouldGenerate = storedHash !== currentHash;
+  } else {
+    shouldGenerate = true;
+  }
+
+  if (!shouldGenerate) {
+    logger.warn(
+      'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+    );
+    return;
+  }
+
   if (configPath) {
     const resolved = await resolveConfigs(
       {
@@ -158,6 +186,10 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
       },
       tests: redteamTests,
       redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
+      metadata: {
+        ...(existingYaml.metadata || {}),
+        ...(configPath ? { configHash: getConfigHash(configPath) } : {}),
+      },
     };
     writePromptfooConfig(updatedYaml, options.output);
     printBorder();
@@ -186,6 +218,10 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     };
     existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
     existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+    existingConfig.metadata = {
+      ...(existingConfig.metadata || {}),
+      configHash: getConfigHash(configPath),
+    };
     writePromptfooConfig(existingConfig, configPath);
     logger.info(
       `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
@@ -278,6 +314,7 @@ export function redteamGenerateCommand(
       Number.parseInt(val, 10),
     )
     .option('--remote', 'Force remote inference wherever possible', false)
+    .option('--force', 'Force generation even if no changes are detected', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
       if (opts.remote) {
         cliState.remote = true;

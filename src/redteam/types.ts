@@ -42,6 +42,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   envFile?: string;
   maxConcurrency?: number;
   output?: string;
+  force?: boolean;
   write: boolean;
 }
 
