@@ -787,9 +787,3 @@ export interface Job {
 // used for writing eval results
 export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'txt', 'yaml', 'yml']);
 export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
-
-// Package.json
-export interface PackageJson {
-  name: string;
-  main?: string;
-}
