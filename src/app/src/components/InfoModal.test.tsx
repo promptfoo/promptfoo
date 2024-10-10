@@ -17,7 +17,7 @@ describe('InfoModal', () => {
   });
 
   it('displays the correct version', () => {
-    process.env.PROMPTFOO_VERSION = '1.0.0';
+    process.env.VITE_PROMPTFOO_VERSION = '1.0.0';
     render(<InfoModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Version 1.0.0')).toBeInTheDocument();
   });
