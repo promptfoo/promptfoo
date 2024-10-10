@@ -84,13 +84,17 @@ export async function renderPrompt(
           varName,
           basePrompt,
           vars,
-        ])) as { output?: string; error?: string };
+        ])) as { output?: any; error?: string };
         if (pythonScriptOutput.error) {
           throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
         }
         if (!pythonScriptOutput.output) {
           throw new Error(`Python script ${filePath} did not return any output`);
         }
+        invariant(
+          typeof pythonScriptOutput.output === 'string',
+          `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
+        );
         vars[varName] = pythonScriptOutput.output.trim();
       } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
         vars[varName] = JSON.stringify(

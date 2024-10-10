@@ -1,10 +1,7 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { createHash } from 'crypto';
 import * as fs from 'fs';
-import * as yaml from 'js-yaml';
 import { z } from 'zod';
-import packageJson from '../../../package.json';
 import cliState from '../../cliState';
 import { doEval } from '../../commands/eval';
 import logger from '../../logger';
@@ -23,12 +20,7 @@ interface RedteamRunOptions {
   maxConcurrency?: number;
   delay?: number;
   remote?: boolean;
-}
-
-function getConfigHash(configPath: string): string {
-  const content = fs.readFileSync(configPath, 'utf8');
-  const version = packageJson.version;
-  return createHash('md5').update(`${version}:${content}`).digest('hex');
+  force?: boolean;
 }
 
 async function doRedteamRun(options: RedteamRunOptions) {
@@ -43,35 +35,19 @@ async function doRedteamRun(options: RedteamRunOptions) {
     return;
   }
 
-  // Check for updates to the config file and regenerate redteam if necessary
-  let shouldGenerate = true;
-  if (fs.existsSync(redteamPath)) {
-    const redteamContent = yaml.load(fs.readFileSync(redteamPath, 'utf8')) as any;
-    const storedHash = redteamContent.metadata?.configHash;
-    const currentHash = getConfigHash(configPath);
+  // Generate new test cases
+  logger.info('Generating test cases...');
+  await doGenerateRedteam({
+    ...options,
+    config: configPath,
+    output: redteamPath,
+    force: options.force,
+  } as Partial<RedteamCliGenerateOptions>);
 
-    if (storedHash === currentHash) {
-      shouldGenerate = false;
-    }
-  }
-
-  if (shouldGenerate) {
-    logger.info('Generating new test cases...');
-    await doGenerateRedteam({
-      ...options,
-      config: configPath,
-      output: redteamPath,
-    } as Partial<RedteamCliGenerateOptions>);
-
-    // Update redteam.yaml with the new config hash
-    const redteamContent = yaml.load(fs.readFileSync(redteamPath, 'utf8')) as any;
-    redteamContent.metadata = {
-      ...redteamContent.metadata,
-      configHash: getConfigHash(configPath),
-    };
-    fs.writeFileSync(redteamPath, yaml.dump(redteamContent));
-  } else {
-    logger.info('Using existing test cases...');
+  // Check if redteam.yaml exists before running evaluation
+  if (!fs.existsSync(redteamPath)) {
+    logger.info('No test cases generated. Skipping evaluation.');
+    return;
   }
 
   // Run evaluation
@@ -112,6 +88,7 @@ export function redteamRunCommand(program: Command) {
       Number.parseInt(val, 10),
     )
     .option('--remote', 'Force remote inference wherever possible', false)
+    .option('--force', 'Force generation even if no changes are detected', false)
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
       telemetry.record('command_used', {

@@ -71,9 +71,6 @@ export class PolicyPlugin extends RedteamPluginBase {
 export class PolicyViolationGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = dedent`
-    <query>
-      {{prompt}}
-    </query>
     <system_purpose>
       {{purpose}}
     </system_purpose>
