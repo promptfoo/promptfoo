@@ -8,9 +8,9 @@ import path from 'path';
 import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { synthesize } from '..';
-import packageJson from '../../../package.json';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
+import { VERSION } from '../../constants';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
@@ -31,8 +31,7 @@ import { shouldGenerateRemote } from '../util';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
-  const version = packageJson.version;
-  return createHash('md5').update(`${version}:${content}`).digest('hex');
+  return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
 }
 
 export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptions>) {
@@ -44,12 +43,12 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
 
   let testSuite: TestSuite;
   let redteamConfig: RedteamFileConfig | undefined;
-  const configPath = options.config || options.defaultConfigPath || 'promptfooconfig.yaml';
+  const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
-  if (!options.force && fs.existsSync(outputPath)) {
+  if (!options.force && fs.existsSync(outputPath) && configPath) {
     const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as any;
     const storedHash = redteamContent.metadata?.configHash;
     const currentHash = getConfigHash(configPath);
@@ -189,7 +188,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
       redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
       metadata: {
         ...(existingYaml.metadata || {}),
-        configHash: getConfigHash(configPath),
+        ...(configPath ? { configHash: getConfigHash(configPath) } : {}),
       },
     };
     writePromptfooConfig(updatedYaml, options.output);
