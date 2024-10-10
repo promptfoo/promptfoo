@@ -1,12 +1,11 @@
 ---
 sidebar_label: Prompt injection
-title: Prompt Injection
 image: /img/blog/prompt-injection/direct-vs-indirect.svg
 date: 2024-10-09
 # https://www.tldraw.com/r/f_RRQMHxGe4erRNUVAfZA?d=v-171.-485.3560.2381.page
 ---
 
-# Prompt Injection Vulnerabilities
+# Prompt Injection: A Comprehensive Guide
 
 In August 2024, security researcher Johann Rehberger uncovered a critical vulnerability in Microsoft 365 Copilot: through a sophisticated prompt injection attack, he [demonstrated](https://embracethered.com/blog/posts/2024/m365-copilot-prompt-injection-tool-invocation-and-data-exfil-using-ascii-smuggling/) how sensitive company data could be secretly exfiltrated.
 
