@@ -33,7 +33,7 @@ import { WatsonXProvider } from '../../src/providers/watsonx';
 (async () => {
   const apiKey = process.env.WATSONX_API_KEY;
   const projectId = process.env.WATSONX_PROJECT_ID;
-  const modelId = process.env.WATSONX_MODEL_ID;
+  const modelId = '';
   const serviceUrl = process.env.WATSONX_SERVICE_URL || 'https://us-south.ml.cloud.ibm.com';
 
   if (!apiKey || !projectId || !modelId) {

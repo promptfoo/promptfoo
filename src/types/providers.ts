@@ -140,7 +140,6 @@ export type EnvOverrides = {
   VERTEX_REGION?: string;
   WATSONX_API_KEY?: string;
   WATSONX_PROJECT_ID?: string;
-  WATSONX_MODEL_ID?: string;
 };
 
 export type FilePath = string;

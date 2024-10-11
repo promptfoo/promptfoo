@@ -77,10 +77,7 @@ import type {
     apiKey?: string;
     client: WatsonXAIClient | undefined;
 
-    constructor(
-      modelName: string,
-      options: ProviderOptions,
-    ) {
+    constructor(modelName: string, options: ProviderOptions,) {
       if (!options.config) {
         throw new Error('WatsonXProvider requires a valid config.');
       }
@@ -93,17 +90,14 @@ import type {
       this.apiKey = this.getApiKey();
     }
   
-    // Generates a unique identifier for the provider
     id(): string {
       return `watsonx:${this.modelName}`;
     }
   
-    // Returns a readable string representation of the provider
     toString(): string {
       return `[Watsonx Provider ${this.modelName}]`;
     }
   
-    // Retrieves the API key from config or environment variables
     getApiKey(): string | undefined {
       return (
         this.options.config.apiKey ||
@@ -128,18 +122,18 @@ import type {
       );
     }
     
-    getModelId(): string | undefined {
-      return (
-        this.options.config.modelId ||
-        (this.options.config.modelIdEnvar
-          ? process.env[this.options.config.modelIdEnvar] ||
-            this.env?.[this.options.config.modelIdEnvar as keyof EnvOverrides]
-          : undefined) ||
-        this.env?.WATSONX_MODEL_ID ||
-        getEnvString('WATSONX_MODEL_ID')
-      );
+    getModelId(): string {
+      if (!this.options.id) {
+        throw new Error('Provider id must be specified in the configuration.');
+      }
+  
+      const modelId = this.options.id.split(':')[1];
+      if (!modelId) {
+        throw new Error('Unable to extract modelId from provider id.');
+      }
+  
+      return modelId;
     }
-    
   
     // Initializes and returns the WatsonXAI client instance
     async getClient(): Promise<WatsonXAIClient> {
@@ -161,6 +155,11 @@ import type {
     }
   
     async callApi(prompt: string): Promise<ProviderResponse> {
+      const modelId = this.getModelId();
+      const projectId = this.getProjectId();
+      if (!modelId) {
+        throw new Error('Model ID is required for WatsonX API call.');
+      }
       if (!this.apiKey) {
         throw new Error(
           'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -188,8 +187,8 @@ import type {
     
         const params = {
           input: prompt,
-          modelId: this.getModelId() || '',
-          projectId: this.getProjectId() || '',
+          modelId: modelId,
+          projectId: projectId || '',
           parameters: textGenRequestParametersModel,
         };
     
