@@ -71,7 +71,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient = {
         generateText: jest.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient);
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
 
       const client = await provider.getClient();
 
@@ -121,7 +121,7 @@ describe('WatsonXProvider', () => {
         generateText: mockedGenerateText,
       };
 
-      jest.spyOn(provider, 'getClient').mockResolvedValue(mockedClient);
+      jest.spyOn(provider, 'getClient').mockResolvedValue(mockedClient as any);
 
       const cache = {
         get: jest.fn().mockResolvedValue(null),
@@ -201,7 +201,7 @@ describe('WatsonXProvider', () => {
         generateText: mockedGenerateText,
       };
 
-      jest.spyOn(provider, 'getClient').mockResolvedValue(mockedClient);
+      jest.spyOn(provider, 'getClient').mockResolvedValue(mockedClient as any);
 
       const cache = {
         get: jest.fn().mockResolvedValue(null),
