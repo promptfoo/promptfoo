@@ -126,10 +126,11 @@ describe('WatsonXProvider', () => {
       const cache = {
         get: jest.fn().mockResolvedValue(null),
         set: jest.fn(),
-      };
-      jest.mocked(getCache).mockResolvedValue(cache);
+      } as any;
+      
+      jest.mocked(getCache as any).mockResolvedValue(cache);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
-
+               
       const response = await provider.callApi(prompt);
 
       expect(mockedGenerateText).toHaveBeenCalledWith({
@@ -180,8 +181,9 @@ describe('WatsonXProvider', () => {
       const cache = {
         get: jest.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
         set: jest.fn(),
-      };
-      jest.mocked(getCache).mockResolvedValue(cache);
+      } as any;
+      
+      jest.mocked(getCache as any).mockResolvedValue(cache);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
 
       const getClientSpy = jest.spyOn(provider, 'getClient');
@@ -206,8 +208,9 @@ describe('WatsonXProvider', () => {
       const cache = {
         get: jest.fn().mockResolvedValue(null),
         set: jest.fn(),
-      };
-      jest.mocked(getCache).mockResolvedValue(cache);
+      } as any;
+      
+      jest.mocked(getCache as any).mockResolvedValue(cache);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
 
       const response = await provider.callApi(prompt);
