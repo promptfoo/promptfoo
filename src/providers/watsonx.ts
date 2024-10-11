@@ -9,22 +9,21 @@ import type {
   import logger from '../logger';
   import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
   import type { ProviderOptions } from '../types/providers';
-  import { REQUEST_TIMEOUT_MS } from './shared';
   
   // Interface for provider configuration
-  interface WatsonxGenerationParameters {
-    apiKey?: string | null;
-    apiKeyEnvar?: string | null;
-    serviceUrl?: string;
-    version?: string;
-    projectId: string;
-    modelId: string;
-    maxNewTokens?: number;
-  }
+  // interface WatsonxGenerationParameters {
+  //   apiKey?: string | null;
+  //   apiKeyEnvar?: string | null;
+  //   serviceUrl?: string;
+  //   version?: string;
+  //   projectId: string;
+  //   modelId: string;
+  //   maxNewTokens?: number;
+  // }
   
-  interface WatsonxModerations {
-    // TODO: Define moderation parameters here
-  }
+  // interface WatsonxModerations {
+  //   TODO: Define moderation parameters here
+  // }
   
   // Interface for text generation response
   interface TextGenResponse {
@@ -82,7 +81,7 @@ import type {
         throw new Error('WatsonXProvider requires a valid config.');
       }
   
-      const { config, env } = options;
+      const { env } = options;
       this.modelName = modelName;
       this.options = options;
       this.env = env;
@@ -186,7 +185,7 @@ import type {
     
         const params = {
           input: prompt,
-          modelId: modelId,
+          modelId,
           projectId: projectId || '',
           parameters: textGenRequestParametersModel,
         };

@@ -2,7 +2,6 @@ import { WatsonXProvider } from '../src/providers/watsonx';
 import { getCache, isCacheEnabled } from '../src/cache';
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { IamAuthenticator } from 'ibm-cloud-sdk-core';
-import logger from '../src/logger';
 
 jest.mock('@ibm-cloud/watsonx-ai', () => ({
   WatsonXAI: {
@@ -72,7 +71,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient = {
         generateText: jest.fn(),
       };
-      (WatsonXAI.newInstance as jest.Mock).mockReturnValue(mockedWatsonXAIClient);
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient);
 
       const client = await provider.getClient();
 
@@ -122,14 +121,14 @@ describe('WatsonXProvider', () => {
         generateText: mockedGenerateText,
       };
 
-      provider.getClient = jest.fn().mockResolvedValue(mockedClient);
+      jest.spyOn(provider, 'getClient').mockResolvedValue(mockedClient);
 
       const cache = {
         get: jest.fn().mockResolvedValue(null),
         set: jest.fn(),
       };
-      (getCache as jest.Mock).mockResolvedValue(cache);
-      (isCacheEnabled as jest.Mock).mockReturnValue(true);
+      jest.mocked(getCache).mockResolvedValue(cache);
+      jest.mocked(isCacheEnabled).mockReturnValue(true);
 
       const response = await provider.callApi(prompt);
 
@@ -155,7 +154,11 @@ describe('WatsonXProvider', () => {
         logProbs: undefined,
       });
 
-      expect(cache.set).toHaveBeenCalled();
+      expect(cache.set).toHaveBeenCalledWith(
+        `watsonx:${modelName}:${prompt}`,
+        JSON.stringify(response),
+        { ttl: 300 }
+      );
     });
 
     it('should return cached response if available', async () => {
@@ -178,8 +181,8 @@ describe('WatsonXProvider', () => {
         get: jest.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
         set: jest.fn(),
       };
-      (getCache as jest.Mock).mockResolvedValue(cache);
-      (isCacheEnabled as jest.Mock).mockReturnValue(true);
+      jest.mocked(getCache).mockResolvedValue(cache);
+      jest.mocked(isCacheEnabled).mockReturnValue(true);
 
       const getClientSpy = jest.spyOn(provider, 'getClient');
 
@@ -188,8 +191,6 @@ describe('WatsonXProvider', () => {
       expect(response).toEqual(cachedResponse);
 
       expect(getClientSpy).not.toHaveBeenCalled();
-
-      expect(provider.getClient).not.toHaveBeenCalled();
     });
 
     it('should handle API errors gracefully', async () => {
@@ -200,14 +201,14 @@ describe('WatsonXProvider', () => {
         generateText: mockedGenerateText,
       };
 
-      provider.getClient = jest.fn().mockResolvedValue(mockedClient);
+      jest.spyOn(provider, 'getClient').mockResolvedValue(mockedClient);
 
       const cache = {
         get: jest.fn().mockResolvedValue(null),
         set: jest.fn(),
       };
-      (getCache as jest.Mock).mockResolvedValue(cache);
-      (isCacheEnabled as jest.Mock).mockReturnValue(true);
+      jest.mocked(getCache).mockResolvedValue(cache);
+      jest.mocked(isCacheEnabled).mockReturnValue(true);
 
       const response = await provider.callApi(prompt);
 
@@ -219,13 +220,13 @@ describe('WatsonXProvider', () => {
     });
 
     it('should throw an error if API key is not set when calling callApi', async () => {
-        const provider = new WatsonXProvider(modelName, { config: { ...config, apiKey: undefined } });
-    
-        jest.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
-    
-        await expect(provider.callApi(prompt)).rejects.toThrow(
-            'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
-        );
+      const provider = new WatsonXProvider(modelName, { config: { ...config, apiKey: undefined } });
+
+      jest.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
+
+      await expect(provider.callApi(prompt)).rejects.toThrow(
+        'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
     });    
   });
 });
