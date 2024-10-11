@@ -132,7 +132,7 @@ import type {
         }
         return parts[1];
       }
-      return this.modelName;
+      return this.options.config.modelId || this.modelName;
     }
   
     async getClient(): Promise<WatsonXAIClient> {

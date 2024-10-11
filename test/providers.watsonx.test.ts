@@ -45,11 +45,10 @@ describe('WatsonXProvider', () => {
       expect(provider.options.config).toEqual(config);
     });
 
-    it('should initialize with id function if id is provided', () => {
-      const id = 'test-id';
-      const provider = new WatsonXProvider(modelName, { config, id });
-      expect(provider.id()).toBe(id);
-    });
+    it('should initialize with default id based on modelName', () => {
+      const provider = new WatsonXProvider(modelName, { config });
+      expect(provider.id()).toBe(`watsonx:${modelName}`);
+    });    
   });
 
   describe('id', () => {
