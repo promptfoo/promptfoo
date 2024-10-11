@@ -252,6 +252,7 @@ export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[
   const map: Record<string, keyof EnvOverrides> = {
     openai: 'OPENAI_API_KEY',
     anthropic: 'ANTHROPIC_API_KEY',
+    watsonx: 'WATSONX_API_KEY'
   };
 
   return Object.entries(map)
@@ -381,6 +382,10 @@ export async function createDummyFiles(directory: string | null, interactive: bo
                 },
               ]
             : ['openai:gpt-4o-mini', 'openai:gpt-4o'],
+      },
+      {
+        name: '[WatsonX] IBM Granite Chat, ...',
+        value: ['watsonx:ibm/granite-13b-chat-v2'],
       },
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
