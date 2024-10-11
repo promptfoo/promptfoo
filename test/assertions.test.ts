@@ -152,7 +152,7 @@ describe('runAssertions', () => {
   });
 
   it('should fail when any assertion fails', async () => {
-    const output = 'Different output';
+    const output = 'Actual output';
 
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',
@@ -162,7 +162,7 @@ describe('runAssertions', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "Expected output" to equal "Different output"',
+      reason: 'Expected output "Actual output" to equal "Expected output"',
     });
   });
 
@@ -177,7 +177,7 @@ describe('runAssertions', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "Expected output" to equal "{"key":"value"}"',
+      reason: 'Expected output "{"key":"value"}" to equal "Expected output"',
     });
   });
 
@@ -268,7 +268,7 @@ describe('runAssertions', () => {
     });
 
     it('assert-set failure', async () => {
-      const output = 'Expected output';
+      const output = 'Actual output';
       const test: AtomicTestCase = {
         assert: [
           {
@@ -276,7 +276,7 @@ describe('runAssertions', () => {
             assert: [
               {
                 type: 'equals',
-                value: 'Something different',
+                value: 'Expected output',
               },
             ],
           },
@@ -291,7 +291,7 @@ describe('runAssertions', () => {
       });
       expect(result).toMatchObject({
         pass: false,
-        reason: 'Expected output "Something different" to equal "Expected output"',
+        reason: 'Expected output "Actual output" to equal "Expected output"',
       });
     });
 
@@ -669,7 +669,7 @@ describe('runAssertion', () => {
   });
 
   it('should fail when the equality assertion fails', async () => {
-    const output = 'Different output';
+    const output = 'Actual output';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -680,7 +680,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "Expected output" to equal "Different output"',
+      reason: 'Expected output "Actual output" to equal "Expected output"',
     });
   });
 
@@ -732,7 +732,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "Expected output" to equal "{"key":"value"}"',
+      reason: 'Expected output "{"key":"value"}" to equal "Expected output"',
     });
   });
 
@@ -764,7 +764,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "{"key":"value"}" to equal "{"key":"not value"}"',
+      reason: 'Expected output "{"key":"not value"}" to equal "{"key":"value"}"',
     });
   });
 
@@ -776,7 +776,7 @@ describe('runAssertion', () => {
 
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
-    const output = '{"key": "value"}';
+    const output = '{"key":"value"}';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -800,7 +800,7 @@ describe('runAssertion', () => {
 
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
-    const output = '{"key": "not value"}';
+    const output = '{"key":"not value"}';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -812,12 +812,12 @@ describe('runAssertion', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "{"key":"value"}" to equal "{"key": "not value"}"',
+      reason: 'Expected output "{"key":"not value"}" to equal "{"key":"value"}"',
     });
   });
 
   it('should pass when the is-json assertion passes', async () => {
-    const output = '{"key": "value"}';
+    const output = '{"key":"value"}';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
