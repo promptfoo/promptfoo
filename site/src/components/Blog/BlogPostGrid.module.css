@@ -1,0 +1,16 @@
+.blogPostGridContainer {
+  margin-top: 4rem;
+}
+
+.blogPostGridTitle {
+  font-size: 2rem;
+  font-weight: 500;
+  margin-bottom: 2rem;
+  color: var(--ifm-heading-color);
+}
+
+.blogPostGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem;
+}

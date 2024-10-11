@@ -37,6 +37,13 @@ const OPENAI_CHAT_MODELS = [
       output: 12 / 1e6,
     },
   })),
+  ...['gpt-4o-2024-08-06'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
   ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
     id: model,
     cost: {
@@ -487,7 +494,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // NOTE: Special handling for o1 models which do not support max_tokens and temperature
     const isO1Model = this.modelName.startsWith('o1-');
     const maxCompletionTokens = isO1Model
-      ? (this.config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS', 1024))
+      ? (this.config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
     const maxTokens = isO1Model
       ? undefined
@@ -522,7 +529,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
         : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
-      ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
+      ...(this.config.response_format
+        ? {
+            response_format: maybeLoadFromExternalFile(
+              renderVarsInObject(this.config.response_format, context?.vars),
+            ),
+          }
+        : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(this.config.stop ? { stop: this.config.stop } : {}),
       ...(this.config.passthrough || {}),
@@ -1074,4 +1087,4 @@ export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-
   },
 });
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
-export const DefaultModerationProvider = new OpenAiModerationProvider('text-moderation-latest');
+export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');

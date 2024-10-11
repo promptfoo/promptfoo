@@ -6,13 +6,14 @@ import {
   RouterProvider,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
+// NOTE(mldangelo): Dashboard feature is currently under development
+import DashboardPage from './pages/dashboard/page';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
 import EvalPage from './pages/eval/page';
 import ProgressPage from './pages/progress/page';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/report/page';
-import './App.css';
 
 const DEFAULT_ROUTE = import.meta.env.VITE_PUBLIC_HOSTED ? '/setup' : '/eval';
 
@@ -27,6 +28,9 @@ const router = createBrowserRouter(
       <Route path="/progress" element={<ProgressPage />} />
       <Route path="/datasets" element={<DatasetsPage />} />
       <Route path="/report" element={<ReportPage />} />
+      {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
+        <Route path="/dashboard" element={<DashboardPage />} />
+      )}
     </Route>,
   ]),
 );

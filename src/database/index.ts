@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as path from 'path';
-import { getConfigDirectoryPath } from '../util/config';
+import { getConfigDirectoryPath } from '../util/config/manage';
 
 let dbInstance: ReturnType<typeof drizzle> | null = null;
 
@@ -15,7 +15,7 @@ export function getDbSignalPath() {
 
 export function getDb() {
   if (!dbInstance) {
-    const sqlite = new Database(getDbPath());
+    const sqlite = new Database(process.env.IS_TESTING ? ':memory:' : getDbPath());
     dbInstance = drizzle(sqlite);
   }
   return dbInstance;

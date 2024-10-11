@@ -12,6 +12,9 @@ import {
   COLLECTIONS,
   ALIASED_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
+  ALIASED_PLUGIN_MAPPINGS,
+  type Strategy,
+  type Plugin,
 } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
 import { ProviderSchema } from '../validators/providers';
@@ -149,39 +152,86 @@ export const RedteamConfigSchema = z
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
+    const strategySet = new Set<Strategy>();
 
-    data.plugins.forEach((plugin) => {
+    const addPlugin = (id: string, config: any, numTests: number | undefined) => {
+      const key = `${id}:${JSON.stringify(config)}`;
+      const pluginObject: RedteamPluginObject = { id };
+      if (numTests !== undefined || data.numTests !== undefined) {
+        pluginObject.numTests = numTests ?? data.numTests;
+      }
+      if (config !== undefined) {
+        pluginObject.config = config;
+      }
+      pluginMap.set(key, pluginObject);
+    };
+
+    const expandCollection = (
+      collection: string[] | ReadonlySet<Plugin>,
+      config: any,
+      numTests: number | undefined,
+    ) => {
+      (Array.isArray(collection) ? collection : Array.from(collection)).forEach((item) => {
+        // Only add the plugin if it doesn't already exist or if the existing one has undefined numTests
+        const existingPlugin = pluginMap.get(`${item}:${JSON.stringify(config)}`);
+        if (!existingPlugin || existingPlugin.numTests === undefined) {
+          addPlugin(item, config, numTests);
+        }
+      });
+    };
+
+    const handleCollectionExpansion = (id: string, config: any, numTests: number | undefined) => {
+      if (id === 'harmful') {
+        expandCollection(Object.keys(HARM_PLUGINS), config, numTests);
+      } else if (id === 'pii') {
+        expandCollection([...PII_PLUGINS], config, numTests);
+      } else if (id === 'default') {
+        expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests);
+      }
+    };
+
+    const handlePlugin = (plugin: string | RedteamPluginObject) => {
       const pluginObj =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests };
 
-      if (pluginObj.id === 'harmful') {
-        Object.keys(HARM_PLUGINS).forEach((id) => {
-          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
-          if (!pluginMap.has(key)) {
-            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
-          }
+      if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
+        Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {
+          plugins.forEach((id) => {
+            if (COLLECTIONS.includes(id as any)) {
+              handleCollectionExpansion(id, pluginObj.config, pluginObj.numTests);
+            } else {
+              addPlugin(id, pluginObj.config, pluginObj.numTests);
+            }
+          });
+          strategies.forEach((strategy) => strategySet.add(strategy as Strategy));
         });
-      } else if (pluginObj.id === 'pii') {
-        PII_PLUGINS.forEach((id) => {
-          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
-          if (!pluginMap.has(key)) {
-            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
-          }
-        });
-      } else if (pluginObj.id === 'default') {
-        REDTEAM_DEFAULT_PLUGINS.forEach((id) => {
-          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
-          if (!pluginMap.has(key)) {
-            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
-          }
-        });
+      } else if (COLLECTIONS.includes(pluginObj.id as any)) {
+        handleCollectionExpansion(pluginObj.id, pluginObj.config, pluginObj.numTests);
       } else {
-        const key = `${pluginObj.id}:${JSON.stringify(pluginObj.config)}`;
-        pluginMap.set(key, pluginObj);
+        const mapping = Object.entries(ALIASED_PLUGIN_MAPPINGS).find(([, value]) =>
+          Object.keys(value).includes(pluginObj.id),
+        );
+        if (mapping) {
+          const [, aliasedMapping] = mapping;
+          aliasedMapping[pluginObj.id].plugins.forEach((id) => {
+            if (COLLECTIONS.includes(id as any)) {
+              handleCollectionExpansion(id, pluginObj.config, pluginObj.numTests);
+            } else {
+              addPlugin(id, pluginObj.config, pluginObj.numTests);
+            }
+          });
+          aliasedMapping[pluginObj.id].strategies.forEach((strategy) =>
+            strategySet.add(strategy as Strategy),
+          );
+        } else {
+          addPlugin(pluginObj.id, pluginObj.config, pluginObj.numTests);
+        }
       }
-    });
+    };
+
+    data.plugins.forEach(handlePlugin);
 
     const uniquePlugins = Array.from(pluginMap.values())
       .filter((plugin) => !COLLECTIONS.includes(plugin.id as (typeof COLLECTIONS)[number]))
@@ -192,19 +242,21 @@ export const RedteamConfigSchema = z
         return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
       });
 
-    const strategies = data.strategies
-      ?.map((strategy) => {
-        if (typeof strategy === 'string') {
-          if (strategy === 'basic') {
-            return [];
+    const strategies = Array.from(
+      new Set(
+        [...(data.strategies || []), ...Array.from(strategySet)].flatMap((strategy) => {
+          if (typeof strategy === 'string') {
+            if (strategy === 'basic') {
+              return [];
+            }
+            return strategy === 'default' ? DEFAULT_STRATEGIES.map((id) => id) : [strategy];
           }
-          return strategy === 'default'
-            ? DEFAULT_STRATEGIES.map((id) => ({ id }))
-            : { id: strategy };
-        }
-        return strategy;
-      })
-      .flat();
+          return [strategy.id];
+        }),
+      ),
+    )
+      .map((id) => ({ id }))
+      .sort((a, b) => a.id.localeCompare(b.id));
 
     return {
       numTests: data.numTests,

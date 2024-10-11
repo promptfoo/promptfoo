@@ -192,7 +192,19 @@ tests:
 
 ## Adding a New Provider
 
-Please refer to our [Custom API Provider Docs](/docs/providers/custom-api/) for details on how to implement a custom TypeScript provider.
+Providers are defined in TypeScript. We also provide language bindings for Python and Go. To contribute a new provider:
+
+1. Ensure your provider doesn't already exist in promptfoo and fits its scope. For OpenAI-compatible providers, you may be able to re-use the openai provider and override the base URL and other settings. If your provider is OpenAI compatible, feel free to skip to step 4.
+
+2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as a peer dependency with `npm install --save-peer`.
+
+3. Write unit tests in `test/providers.yourProviderName.test.ts` and create an example in the `examples/` directory.
+
+4. Document your provider in `site/docs/providers/yourProviderName.md`, including a description, setup instructions, configuration options, and usage examples. You can also add examples to the `examples/` directory. Consider writing a guide comparing your provider to others or highlighting unique features or benefits.
+
+5. Update `src/providers/index.ts` and `site/docs/providers/index.md` to include your new provider. Update `src/envars.ts` to include any new environment variables your provider may need.
+
+6. Ensure all tests pass (`npm test`) and fix any linting issues (`npm run lint`).
 
 ## Contributing to the Web UI
 

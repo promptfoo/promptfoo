@@ -3,7 +3,14 @@ import invariant from 'tiny-invariant';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import type { ApiProvider, Assertion, AssertionValue, PluginConfig, TestCase } from '../../types';
+import type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  PluginConfig,
+  ResultSuggestion,
+  TestCase,
+} from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
@@ -14,9 +21,9 @@ import { removePrefix } from '../util';
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
-export abstract class PluginBase {
+export abstract class RedteamPluginBase {
   /**
-   * Creates an instance of PluginBase.
+   * Creates an instance of RedteamPluginBase.
    * @param provider - The API provider used for generating prompts.
    * @param purpose - The purpose of the plugin.
    * @param injectVar - The variable name to inject the generated prompt into.
@@ -28,7 +35,7 @@ export abstract class PluginBase {
     protected injectVar: string,
     protected config: PluginConfig = {},
   ) {
-    logger.debug(`PluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
+    logger.debug(`RedteamPluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }
 
   /**
@@ -189,7 +196,7 @@ export abstract class PluginBase {
  *
  * But if you'd like, you can override the `getResult` method to use a different grading method.
  */
-export abstract class RedteamModelGrader {
+export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
 
@@ -211,13 +218,25 @@ export abstract class RedteamModelGrader {
     }
   }
 
+  getSuggestions({
+    test,
+    rawPrompt,
+    renderedValue,
+  }: {
+    test: AtomicTestCase;
+    rawPrompt: string;
+    renderedValue?: AssertionValue;
+  }): ResultSuggestion[] {
+    return [];
+  }
+
   async getResult(
     prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
     renderedValue: AssertionValue | undefined,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
+  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
     const vars = {
       ...test.metadata,
@@ -240,6 +259,13 @@ export abstract class RedteamModelGrader {
       }),
     });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
-    return { grade, rubric: finalRubric };
+
+    let suggestions;
+    if (!grade.pass) {
+      // TODO(ian): Need to pass in the user input only
+      suggestions = this.getSuggestions({ test, rawPrompt: prompt, renderedValue });
+    }
+
+    return { grade, rubric: finalRubric, suggestions };
   }
 }

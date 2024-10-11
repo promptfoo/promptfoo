@@ -7,7 +7,7 @@ import path from 'path';
 import { getEnvBool, getEnvString, getEnvInt } from './envars';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
-import { getConfigDirectoryPath } from './util/config';
+import { getConfigDirectoryPath } from './util/config/manage';
 
 let cacheInstance: Cache | undefined;
 
@@ -41,13 +41,18 @@ export function getCache() {
   return cacheInstance;
 }
 
-export async function fetchWithCache(
+export type FetchWithCacheResult<T> = {
+  data: T;
+  cached: boolean;
+};
+
+export async function fetchWithCache<T = any>(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number,
   format: 'json' | 'text' = 'json',
   bust: boolean = false,
-): Promise<{ data: any; cached: boolean }> {
+): Promise<FetchWithCacheResult<T>> {
   if (!enabled || bust) {
     const resp = await fetchWithRetries(url, options, timeout);
     const respText = await resp.text();
@@ -104,7 +109,7 @@ export async function fetchWithCache(
 
   return {
     cached,
-    data: JSON.parse((cachedResponse ?? errorResponse) as string),
+    data: JSON.parse((cachedResponse ?? errorResponse) as string) as T,
   };
 }
 

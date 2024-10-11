@@ -17,7 +17,7 @@ describe('InfoModal', () => {
   });
 
   it('displays the correct version', () => {
-    process.env.PROMPTFOO_VERSION = '1.0.0';
+    process.env.VITE_PROMPTFOO_VERSION = '1.0.0';
     render(<InfoModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Version 1.0.0')).toBeInTheDocument();
   });
@@ -68,7 +68,7 @@ describe('InfoModal', () => {
       { text: 'GitHub Repository', href: 'https://github.com/promptfoo/promptfoo' },
       { text: 'File an Issue', href: 'https://github.com/promptfoo/promptfoo/issues' },
       { text: 'Join Our Discord Community', href: 'https://discord.gg/gHPS9jjfbs' },
-      { text: 'Book a Meeting', href: 'https://cal.com/team/promptfoo/intro' },
+      { text: 'Book a Meeting', href: 'https://cal.com/team/promptfoo/intro2' },
     ];
 
     links.forEach(({ text, href }) => {

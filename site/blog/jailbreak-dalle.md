@@ -16,6 +16,8 @@ This post shows how to automatically discover one-shot jailbreaks with open-sour
   <img src="https://storage.googleapis.com/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle/gallery-blurred.png" alt="llm image red teaming" />
 </a>
 
+<!-- truncate -->
+
 ## How it works
 
 Each red team attempt starts with a harmful goal. By default, OpenAI's system refuses these prompts ("Your request was rejected by our safety system").

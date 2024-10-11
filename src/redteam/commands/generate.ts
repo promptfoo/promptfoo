@@ -9,12 +9,12 @@ import { z } from 'zod';
 import { synthesize } from '..';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
-import { resolveConfigs } from '../../config';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
-import { writePromptfooConfig } from '../../util/config';
+import { resolveConfigs } from '../../util/config/load';
+import { writePromptfooConfig } from '../../util/config/manage';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 import {
   REDTEAM_MODEL,
@@ -27,7 +27,7 @@ import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
 import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
 import { shouldGenerateRemote } from '../util';
 
-export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
+export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptions>) {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
@@ -42,7 +42,7 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
       {
         config: [configPath],
       },
-      options.defaultConfig,
+      options.defaultConfig || {},
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
@@ -166,7 +166,11 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
     logger.info(
       '\n' +
         chalk.green(
-          `Run ${chalk.bold(`promptfoo eval -c ${relativeOutputPath}`)} to run the red team!`,
+          `Run ${chalk.bold(
+            relativeOutputPath === 'redteam.yaml'
+              ? 'promptfoo redteam eval'
+              : `promptfoo redteam eval -c ${relativeOutputPath}`,
+          )} to run the red team!`,
         ),
     );
     printBorder();
@@ -204,7 +208,7 @@ export async function doGenerateRedteam(options: RedteamCliGenerateOptions) {
   await telemetry.send();
 }
 
-export function generateRedteamCommand(
+export function redteamGenerateCommand(
   program: Command,
   command: 'redteam' | 'generate',
   defaultConfig: Partial<UnifiedConfig>,

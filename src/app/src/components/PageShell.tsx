@@ -1,11 +1,8 @@
-'use client';
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Navigation from '@app/components/Navigation';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import './PageShell.css';
 
 const createAppTheme = (darkMode: boolean) =>
   createTheme({

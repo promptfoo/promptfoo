@@ -16,9 +16,13 @@ describe('System Purpose Extractor', () => {
   let provider: ApiProvider;
   let originalEnv: NodeJS.ProcessEnv;
 
-  beforeEach(() => {
+  beforeAll(() => {
     originalEnv = process.env;
+  });
+
+  beforeEach(() => {
     process.env = { ...originalEnv };
+    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
     provider = {
       callApi: jest
         .fn()

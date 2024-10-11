@@ -2,11 +2,11 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { isBasicRefusal } from '../util';
-import { PluginBase, RedteamModelGrader } from './base';
+import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:prompt-extraction';
 
-export class PromptExtractionPlugin extends PluginBase {
+export class PromptExtractionPlugin extends RedteamPluginBase {
   private systemPrompt: string;
 
   constructor(
@@ -78,7 +78,7 @@ export class PromptExtractionPlugin extends PluginBase {
   }
 }
 
-export class PromptExtractionGrader extends RedteamModelGrader {
+export class PromptExtractionGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = dedent`
     <UserQuery>

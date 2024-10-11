@@ -36,3 +36,58 @@ defaultTest:
         config:
           apiHost: xxx.openai.azure.com
 ```
+
+## Timeout errors
+
+When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. These timeouts can manifest as generic errors or as a lack of useful error messages.
+
+To resolve timeout issues, try limiting concurrency by using the `-j 1` flag when running `promptfoo eval`. This reduces the number of simultaneous requests:
+
+```
+promptfoo eval -j 1
+```
+
+## Debugging Python
+
+When using custom Python providers, prompts, hooks, assertions, etc., you may need to debug your Python code. Here are some tips to help you troubleshoot issues:
+
+### Viewing Python output
+
+To see the output from your Python script, including print statements, set the `LOG_LEVEL` environment variable to `debug` when running your eval:
+
+```bash
+LOG_LEVEL=debug promptfoo eval
+```
+
+Alternatively, you can use the `--verbose` flag:
+
+```bash
+promptfoo eval --verbose
+```
+
+### Using a debugger
+
+While standard Python debuggers like `pdb` are not directly supported, you can use `remote-pdb` for debugging. First, install `remote-pdb`:
+
+```bash
+pip install remote-pdb
+```
+
+Then, add the following lines to your Python script where you want to set a breakpoint:
+
+```python
+from remote_pdb import RemotePdb
+RemotePdb('127.0.0.1', 4444).set_trace()
+```
+
+When your code reaches this point, it will pause execution and wait for you to connect to the debugger. You can then connect to the debugger using a tool like `telnet`:
+
+```bash
+telnet 127.0.0.1 4444
+```
+
+### Handling errors
+
+If you encounter errors in your Python script, the error message and stack trace will be displayed in the promptfoo output. Make sure to check this information for clues about what might be going wrong in your code.
+
+Remember that promptfoo runs your Python script in a separate process, so some standard debugging techniques may not work as expected. Using logging and remote debugging as described above are the most reliable ways to troubleshoot issues in your Python providers.

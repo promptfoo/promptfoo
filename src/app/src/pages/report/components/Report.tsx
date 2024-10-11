@@ -1,8 +1,6 @@
-'use client';
-
 import React from 'react';
-import type { EvaluateResult, ResultsFile, SharedResults } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
+import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
@@ -11,8 +9,18 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Modal from '@mui/material/Modal';
+import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import type {
+  EvaluateResult,
+  ResultsFile,
+  SharedResults,
+  GradingResult,
+  ResultLightweightWithLabel,
+  EvaluateSummaryV2,
+} from '@promptfoo/types';
+import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
@@ -69,8 +77,53 @@ const App: React.FC = () => {
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
 
+  React.useEffect(() => {
+    const fetchEvalById = async (id: string) => {
+      const resp = await callApi(`/results/${id}`, {
+        cache: 'no-store',
+      });
+      const body = (await resp.json()) as SharedResults;
+      setEvalData(body.data);
+    };
+
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams) {
+      const evalId = searchParams.get('evalId');
+      if (evalId) {
+        setEvalId(evalId);
+        fetchEvalById(evalId);
+      } else {
+        // Need to fetch the latest evalId from the server
+        const fetchLatestEvalId = async () => {
+          try {
+            const resp = await callApi('/results', { cache: 'no-store' });
+            if (!resp.ok) {
+              console.error('Failed to fetch recent evals');
+              return;
+            }
+            const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
+            if (body.data && body.data.length > 0) {
+              const latestEvalId = body.data[0].evalId;
+              setEvalId(latestEvalId);
+              fetchEvalById(latestEvalId);
+            } else {
+              console.log('No recent evals found');
+            }
+          } catch (error) {
+            console.error('Error fetching latest eval:', error);
+          }
+        };
+
+        fetchLatestEvalId();
+      }
+    }
+  }, []);
+
   const failuresByPlugin = React.useMemo(() => {
-    const failures: Record<string, { prompt: string; output: string }[]> = {};
+    const failures: Record<
+      string,
+      { prompt: string; output: string; gradingResult?: GradingResult }[]
+    > = {};
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
@@ -83,33 +136,15 @@ const App: React.FC = () => {
         }
         failures[pluginId].push({
           // FIXME(ian): Use injectVar (and contextVar), not hardcoded query
-          prompt: result.vars.query?.toString() || result.prompt.raw,
+          prompt:
+            result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
           output: result.response?.output,
+          gradingResult: result.gradingResult || undefined,
         });
       }
     });
     return failures;
   }, [evalData]);
-
-  React.useEffect(() => {
-    const fetchEvalById = async (id: string) => {
-      const resp = await callApi(`/results/${id}`, {
-        cache: 'no-store',
-      });
-      const body = (await resp.json()) as SharedResults;
-      setEvalData(body.data);
-    };
-
-    const searchParams = new URLSearchParams(window.location.search);
-    if (!searchParams) {
-      return;
-    }
-    const evalId = searchParams.get('evalId');
-    if (evalId) {
-      setEvalId(evalId);
-      fetchEvalById(evalId);
-    }
-  }, []);
 
   React.useEffect(() => {
     document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
@@ -119,9 +154,41 @@ const App: React.FC = () => {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
   }
 
-  const prompts = evalData.results.table.head.prompts;
+  if (!evalData.config.redteam) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          padding: 3,
+        }}
+      >
+        <Paper elevation={3} sx={{ padding: 4, maxWidth: 600, textAlign: 'center' }}>
+          <WarningIcon color="warning" sx={{ fontSize: 60, marginBottom: 2 }} />
+          <Typography variant="h4" mb={3}>
+            Report unavailable
+          </Typography>
+          <Typography variant="body1">
+            The latest evaluation results are not displayable in report format.
+          </Typography>
+          <Typography variant="body1">Please run a red team and try again.</Typography>
+        </Paper>
+      </Box>
+    );
+  }
+
+  const prompts =
+    (evalData.version >= 4
+      ? evalData.prompts
+      : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
   const selectedPrompt = prompts[selectedPromptIndex];
-  const tableData = evalData.results.table.body;
+  const tableData =
+    (evalData.version >= 4
+      ? convertResultsToTable(evalData).body
+      : (evalData.results as EvaluateSummaryV2).table.body) || [];
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {
@@ -210,9 +277,7 @@ const App: React.FC = () => {
   );
 
   const handlePromptChipClick = () => {
-    if (prompts.length > 1) {
-      setIsPromptModalOpen(true);
-    }
+    setIsPromptModalOpen(true);
   };
 
   const handlePromptSelect = (index: number) => {
@@ -240,16 +305,18 @@ const App: React.FC = () => {
             })}
           </Typography>
           <Box className="report-details">
-            <Chip
-              size="small"
-              label={
-                <>
-                  <strong>Model:</strong> {selectedPrompt.provider}
-                </>
-              }
-              onClick={handlePromptChipClick}
-              style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
-            />
+            {selectedPrompt && (
+              <Chip
+                size="small"
+                label={
+                  <>
+                    <strong>Model:</strong> {selectedPrompt.provider}
+                  </>
+                }
+                onClick={handlePromptChipClick}
+                style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
+              />
+            )}
             <Chip
               size="small"
               label={
@@ -258,20 +325,22 @@ const App: React.FC = () => {
                 </>
               }
             />
-            <Chip
-              size="small"
-              label={
-                <>
-                  <strong>Prompt:</strong> &quot;
-                  {selectedPrompt.raw.length > 40
-                    ? `${selectedPrompt.raw.substring(0, 40)}...`
-                    : selectedPrompt.raw}
-                  &quot;
-                </>
-              }
-              onClick={handlePromptChipClick}
-              style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
-            />
+            {selectedPrompt && (
+              <Chip
+                size="small"
+                label={
+                  <>
+                    <strong>Prompt:</strong> &quot;
+                    {selectedPrompt.raw.length > 40
+                      ? `${selectedPrompt.raw.substring(0, 40)}...`
+                      : selectedPrompt.raw}
+                    &quot;
+                  </>
+                }
+                onClick={handlePromptChipClick}
+                style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
+              />
+            )}
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} />
@@ -329,7 +398,11 @@ const App: React.FC = () => {
                 <ListItemText
                   primary={`${prompt.provider}`}
                   secondary={
-                    prompt.raw.length > 100 ? `${prompt.raw.substring(0, 100)}...` : prompt.raw
+                    <pre>
+                      {prompt.raw.length > 100 && prompts.length > 1
+                        ? `${prompt.raw.substring(0, 100)}...`
+                        : prompt.raw}
+                    </pre>
                   }
                 />
               </ListItem>

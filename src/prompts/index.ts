@@ -8,7 +8,8 @@ import type {
   TestSuite,
   ProviderOptions,
 } from '../types';
-import { isJavascriptFile, parsePathOrGlob } from '../util';
+import { parsePathOrGlob } from '../util';
+import { isJavascriptFile } from '../util/file';
 import { processJsFile } from './processors/javascript';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
@@ -28,7 +29,7 @@ export * from './grading';
  * @returns A map of provider IDs to their respective prompts.
  */
 export function readProviderPromptMap(
-  config: Partial<UnifiedConfig>,
+  config: Pick<Partial<UnifiedConfig>, 'providers'>,
   parsedPrompts: Prompt[],
 ): TestSuite['providerPromptMap'] {
   const ret: Record<string, string[]> = {};
@@ -92,6 +93,11 @@ export async function processPrompt(
     typeof prompt.raw === 'string',
     `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
   );
+
+  // Handling when the prompt is a raw function (e.g. javascript function)
+  if (prompt.function) {
+    return [prompt as Prompt];
+  }
 
   if (!maybeFilePath(prompt.raw)) {
     return processString(prompt);

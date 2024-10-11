@@ -6,20 +6,14 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginConfig, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS, REMOTE_GENERATION_URL } from '../constants';
 import { shouldGenerateRemote } from '../util';
-import { AsciiSmugglingPlugin } from './asciiSmuggling';
-import { type PluginBase } from './base';
-import { BflaPlugin } from './bfla';
-import { BolaPlugin } from './bola';
-import { CompetitorPlugin } from './competitors';
+import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { DebugAccessPlugin } from './debugAccess';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { getHarmfulTests } from './harmful';
-import { HijackingPlugin } from './hijacking';
 import { ImitationPlugin } from './imitation';
-import { IndirectPromptInjectionPlugin } from './indirectPromptInjection';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PolicyPlugin } from './policy';
@@ -28,7 +22,6 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
-import { SsrfPlugin } from './ssrf';
 
 export interface PluginFactory {
   key: string;
@@ -48,7 +41,7 @@ type PluginClass<T extends PluginConfig> = new (
   purpose: string,
   injectVar: string,
   config: T,
-) => PluginBase;
+) => RedteamPluginBase;
 
 async function fetchRemoteTestCases(
   key: string,
@@ -110,13 +103,10 @@ function createPluginFactory<T extends PluginConfig>(
 }
 
 const pluginFactories: PluginFactory[] = [
-  createPluginFactory(AsciiSmugglingPlugin, 'ascii-smuggling'),
-  createPluginFactory(CompetitorPlugin, 'competitors'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
-  createPluginFactory(HijackingPlugin, 'hijacking'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
@@ -124,9 +114,6 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(DebugAccessPlugin, 'debug-access'),
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(PoliticsPlugin, 'politics'),
-  createPluginFactory(BolaPlugin, 'bola'),
-  createPluginFactory(BflaPlugin, 'bfla'),
-  createPluginFactory(SsrfPlugin, 'ssrf'),
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
   ),
@@ -137,15 +124,6 @@ const pluginFactories: PluginFactory[] = [
       invariant(
         config.systemPrompt,
         'Prompt extraction plugin requires `config.systemPrompt` to be set',
-      ),
-  ),
-  createPluginFactory<{ indirectInjectionVar: string }>(
-    IndirectPromptInjectionPlugin,
-    'indirect-prompt-injection',
-    (config) =>
-      invariant(
-        config.indirectInjectionVar,
-        'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
       ),
   ),
 ];
@@ -172,4 +150,39 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category) => ({
   },
 }));
 
-export const Plugins: PluginFactory[] = [...pluginFactories, ...harmPlugins, ...piiPlugins];
+function createRemotePlugin<T extends PluginConfig>(
+  key: string,
+  validate?: (config: T) => void,
+): PluginFactory {
+  return {
+    key,
+    validate: validate as ((config: PluginConfig) => void) | undefined,
+    action: async (provider, purpose, injectVar, n, delayMs, config) => {
+      return fetchRemoteTestCases(key, purpose, injectVar, n, config);
+    },
+  };
+}
+const remotePlugins: PluginFactory[] = [
+  'ascii-smuggling',
+  'bfla',
+  'bola',
+  'competitors',
+  'hijacking',
+  'religion',
+  'ssrf',
+].map((key) => createRemotePlugin(key));
+remotePlugins.push(
+  createRemotePlugin<{ indirectInjectionVar: string }>('indirect-prompt-injection', (config) =>
+    invariant(
+      config.indirectInjectionVar,
+      'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
+    ),
+  ),
+);
+
+export const Plugins: PluginFactory[] = [
+  ...pluginFactories,
+  ...harmPlugins,
+  ...piiPlugins,
+  ...remotePlugins,
+];

@@ -5,15 +5,24 @@ sidebar_label: 'Configuration'
 
 # Redteam Configuration
 
-The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
+The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
+
+The most important components of your redteam configuration are:
+
+- **Targets**: The endpoints or models you want to test (also known as "providers").
+- **Plugins**: Adversarial input generators that produce potentially malicious payloads.
+- **Strategies**: Techniques used to deliver these payloads to the target (e.g. adding a prompt injection, or by applying a specific attack algorithm).
+- **Purpose**: A description of the system's purpose, used to guide adversarial input generation.
 
 ## Getting Started
 
-To initialize a basic redteam configuration, run:
+Red teams happen in three steps:
 
-```bash
-npx promptfoo@latest redteam init
-```
+- `promptfoo redteam init` to initialize a basic redteam configuration
+- `promptfoo redteam run` to generate adversarial test cases and run them against the target
+- `promptfoo redteam report` to view the results
+
+`promptfoo redteam run` is a shortcut that combines `redteam generate` and `redteam eval` steps, ensuring that your generated test cases are always synced with the latest configuration.
 
 ## Configuration Structure
 
@@ -22,9 +31,6 @@ The redteam configuration uses the following YAML structure:
 ```yaml
 targets:
   - openai:gpt-4o
-
-prompts:
-  - 'Your prompt template here: {{variable}}'
 
 redteam:
   plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
@@ -38,23 +44,17 @@ redteam:
 
 ### Configuration Fields
 
-| Field        | Type                      | Description                                                              | Default                         |
-| ------------ | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
-| `injectVar`  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
-| `numTests`   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
-| `plugins`    | `Array<string\|object>`   | Plugins to use for redteam generation                                    | `default`                       |
-| `provider`   | `string\|ProviderOptions` | AI model provider for generating adversarial inputs                      | `openai:gpt-4o`                 |
-| `purpose`    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
-| `strategies` | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
-| `language`   | `string`                  | Language for generated tests                                             | English                         |
+| Field                   | Type                      | Description                                                              | Default                         |
+| ----------------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
+| `injectVar`             | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
+| `numTests`              | `number`                  | Default number of tests to generate per plugin                           | 5                               |
+| `plugins`               | `Array<string\|object>`   | Plugins to use for redteam generation                                    | `default`                       |
+| `provider` or `targets` | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4o`                 |
+| `purpose`               | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
+| `strategies`            | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
+| `language`              | `string`                  | Language for generated tests                                             | English                         |
 
 ## Core Concepts
-
-There are three main components that affect the generation of redteam tests:
-
-1. Individual plugins
-2. Collections of related plugins
-3. Strategies
 
 ### Plugins
 
@@ -329,7 +329,7 @@ policy: >
 To see a complete list of available plugins, run:
 
 ```bash
-promptfoo redteam generate --help
+promptfoo redteam plugins
 ```
 
 ### Custom Plugins
@@ -497,6 +497,25 @@ targets:
       responseParser: 'json.output'
 ```
 
+Or, let's say you have a raw HTTP request exported from a tool like Burp Suite. Put it in a file called `request.txt`:
+
+```
+POST /api/generate HTTP/1.1
+Host: example.com
+Content-Type: application/json
+
+{"prompt": "Tell me a joke"}
+```
+
+Then, in your Promptfoo config, you can reference it like this:
+
+```yaml
+targets:
+  - id: http # or https
+    config:
+      request: file://request.txt
+```
+
 #### Custom scripts
 
 Alternatively, you can use a custom [Python](/docs/providers/python/), [Javascript](/docs/providers/custom-api/), or other [script](/docs/providers/custom-script/) in order to precisely construct your requests.
@@ -505,7 +524,7 @@ For example, let's create a Python provider. Your config would look like this:
 
 ```yaml
 targets:
-  - id: 'python:send_redteam.py'
+  - id: 'file://send_redteam.py'
     label: 'Test script 1' # Optional display label
 ```
 
@@ -603,7 +622,7 @@ In this case, be sure to specify a `purpose`, because the redteam generator can 
 purpose: 'Act as a travel agent with a focus on European holidays'
 
 targets:
-  - python:send_redteam.py
+  - file://send_redteam.py
 
 redteam:
   numTests: 10

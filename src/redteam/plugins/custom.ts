@@ -1,7 +1,7 @@
 import type { ApiProvider, Assertion } from '../../types';
-import { PluginBase } from './base';
+import { RedteamPluginBase } from './base';
 
-export class CustomPlugin extends PluginBase {
+export class CustomPlugin extends RedteamPluginBase {
   private definition: { generator: string; grader: string };
 
   constructor(

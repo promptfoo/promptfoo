@@ -1,6 +1,8 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
+import invariant from 'tiny-invariant';
 import logger from '../logger';
+import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
 import telemetry from '../telemetry';
 import {
@@ -63,17 +65,18 @@ async function handleEval(id: string) {
     name: 'show eval',
   });
   await telemetry.send();
-
-  const evl = await getEvalFromId(id);
-  if (!evl) {
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
     logger.error(`No evaluation found with ID ${id}`);
     return;
   }
+  const table = await eval_.getTable();
+  invariant(table, 'Could not generate table');
+  const { prompts, vars } = table.head;
 
-  const { prompts, vars } = evl.results.table.head;
-  logger.info(generateTable(evl.results, 100, 25));
-  if (evl.results.table.body.length > 25) {
-    const rowsLeft = evl.results.table.body.length - 25;
+  logger.info(generateTable(table, 100, 25));
+  if (table.body.length > 25) {
+    const rowsLeft = table.body.length - 25;
     logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
   }
 

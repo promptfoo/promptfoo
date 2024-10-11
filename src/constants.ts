@@ -1,6 +1,9 @@
 import packageJson from '../package.json';
+import { getEnvString } from './envars';
 
 export const VERSION = packageJson.version;
+
+export const DEFAULT_QUERY_LIMIT = 100;
 
 // We use process.env in this file because it's imported by the next.js server as well.
 
@@ -12,7 +15,10 @@ export const SHARE_API_BASE_URL =
   process.env.PROMPTFOO_REMOTE_API_BASE_URL ||
   `https://api.promptfoo.dev`;
 
-export const DEFAULT_SHARE_VIEW_BASE_URL = `https://app.promptfoo.dev`;
+export const DEFAULT_SHARE_VIEW_BASE_URL = getEnvString(
+  'PROMPTFOO_SHARING_APP_BASE_URL',
+  `https://app.promptfoo.dev`,
+);
 
 // This is used for creating shared eval links.
 export const SHARE_VIEW_BASE_URL =

@@ -1,5 +1,6 @@
 ---
 date: 2024-08-21
+image: /img/continuous-testing.png
 ---
 
 # Promptfoo for Enterprise

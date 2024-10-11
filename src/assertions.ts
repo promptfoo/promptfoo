@@ -48,7 +48,7 @@ import {
   type TestCase,
   isGradingResult,
 } from './types';
-import { isJavascriptFile } from './util';
+import { isJavascriptFile } from './util/file';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
@@ -313,6 +313,7 @@ export async function runAssertion({
     vars: test.vars || {},
     test,
     logProbs,
+    ...(assertion.config ? { config: assertion.config } : {}),
   };
 
   // Render assertion values
@@ -1372,7 +1373,7 @@ ${
     const grader = getGraderById(baseType);
     invariant(grader, `Unknown promptfoo grader: ${baseType}`);
     invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
-    const { grade, rubric } = await grader.getResult(
+    const { grade, rubric, suggestions } = await grader.getResult(
       prompt,
       outputString,
       test,
@@ -1385,6 +1386,7 @@ ${
         value: rubric,
       },
       ...grade,
+      suggestions,
       metadata: {
         // Pass through all test metadata for redteam
         ...test.metadata,

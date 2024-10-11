@@ -435,7 +435,7 @@ This provider will handle the entire process of retrieving documents and generat
      - '{{query}}' # Use a simple passthrough prompt
 
    providers:
-     - python:rag_redteam_provider.py
+     - file://rag_redteam_provider.py
 
    redteam:
      purpose: 'Evaluate the robustness and safety of a RAG-based corporate intranet assistant'

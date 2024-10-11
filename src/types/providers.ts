@@ -1,3 +1,4 @@
+import type winston from 'winston';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
@@ -35,8 +36,8 @@ export interface CallApiContextParams {
   fetchWithCache?: any;
   filters?: NunjucksFilterMap;
   getCache?: any;
-  logger?: any;
-  originalProvider?: any;
+  logger?: winston.Logger;
+  originalProvider?: ApiProvider;
   prompt: Prompt;
   vars: Record<string, string | object>;
 }
@@ -117,6 +118,7 @@ export type EnvOverrides = {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_KEY?: string;
   COHERE_API_KEY?: string;
+  FAL_KEY?: string;
   GOOGLE_API_HOST?: string;
   GOOGLE_API_KEY?: string;
   GROQ_API_KEY?: string;

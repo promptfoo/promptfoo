@@ -12,16 +12,19 @@
     "Evals",
     "globbed",
     "Groq",
+    "logprobs",
     "mitigations",
     "openai",
     "overreliance",
     "OWASP",
+    "Probs",
     "promptfoo",
     "promptfooconfig",
     "rawlist",
     "redteam",
     "TEMPLATING",
     "TESTCASE",
+    "transpiling",
     "unindented",
     "uuidv"
   ],
@@ -30,5 +33,8 @@
     {
       "mode": "auto"
     }
-  ]
+  ],
+  "[shellscript]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format"
+  }
 }

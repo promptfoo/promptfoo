@@ -1,37 +1,40 @@
-import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
-import { desc, eq, like, and, sql } from 'drizzle-orm';
+import { desc, eq, like, and, sql, not } from 'drizzle-orm';
 import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import NodeCache from 'node-cache';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
-import { getAuthor } from '../accounts';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
 import {
-  datasets,
-  evals,
-  evalsToDatasets,
-  evalsToPrompts,
-  evalsToTags,
-  prompts,
-  tags,
+  datasetsTable,
+  evalsTable,
+  evalsToDatasetsTable,
+  evalsToPromptsTable,
+  evalsToProvidersTable,
+  evalsToTagsTable,
+  promptsTable,
+  tagsTable,
+  evalResultsTable,
 } from '../database/tables';
-import { getEnvBool, getEnvInt } from '../envars';
+import { getEnvBool } from '../envars';
 import { getDirectory, importModule } from '../esm';
+import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
+import Eval, { createEvalId, getSummaryofLatestEvals } from '../models/eval';
+import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
-  type EvaluateSummary,
   type EvaluateTable,
   type EvaluateTableOutput,
   type NunjucksFilterMap,
@@ -48,21 +51,14 @@ import {
   isApiProvider,
   isProviderOptions,
   OutputFileExtension,
+  type EvaluateSummaryV2,
 } from '../types';
-import { getConfigDirectoryPath } from './config';
+import { getConfigDirectoryPath } from './config/manage';
+import { sha256 } from './createHash';
+import { isJavascriptFile } from './file';
 import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;
-
-/**
- * Checks if a file is a JavaScript or TypeScript file based on its extension.
- *
- * @param filePath - The path of the file to check.
- * @returns True if the file has a JavaScript or TypeScript extension, false otherwise.
- */
-export function isJavascriptFile(filePath: string): boolean {
-  return /\.(js|cjs|mjs|ts|cts|mts)$/.test(filePath);
-}
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass ? '[PASS]' : '[FAIL]';
@@ -87,18 +83,19 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
 
 export async function writeOutput(
   outputPath: string,
-  evalId: string | null,
-  results: EvaluateSummary,
-  config: Partial<UnifiedConfig>,
+  evalRecord: Eval,
   shareableUrl: string | null,
 ) {
+  const table = await evalRecord.getTable();
+
+  invariant(table, 'Table is required');
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
-    const rows = results.table.body.map((row) => {
+    const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
-      results.table.head.vars.forEach((varName, index) => {
+      table.head.vars.forEach((varName, index) => {
         csvRow[varName] = row.vars[index];
       });
-      results.table.head.prompts.forEach((prompt, index) => {
+      table.head.prompts.forEach((prompt, index) => {
         csvRow[prompt.label] = outputToSimpleString(row.outputs[index]);
       });
       return csvRow;
@@ -125,32 +122,52 @@ export async function writeOutput(
   if (outputExtension === 'csv') {
     const csvOutput = stringify([
       [
-        ...results.table.head.vars,
-        ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+        ...table.head.vars,
+        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
       ],
-      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+      ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
     ]);
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
+    const summary = await evalRecord.toEvaluateSummary();
     fs.writeFileSync(
       outputPath,
-      JSON.stringify({ evalId, results, config, shareableUrl } satisfies OutputFile, null, 2),
+      JSON.stringify(
+        {
+          evalId: evalRecord.id,
+          results: summary,
+          config: evalRecord.config,
+          shareableUrl,
+        } satisfies OutputFile,
+        null,
+        2,
+      ),
     );
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
-    fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl } as OutputFile));
+    const summary = await evalRecord.toEvaluateSummary();
+    fs.writeFileSync(
+      outputPath,
+      yaml.dump({
+        evalId: evalRecord.id,
+        results: summary,
+        config: evalRecord.config,
+        shareableUrl,
+      } as OutputFile),
+    );
   } else if (outputExtension === 'html') {
+    const summary = await evalRecord.toEvaluateSummary();
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
-    const table = [
+    const htmlTable = [
       [
-        ...results.table.head.vars,
-        ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+        ...table.head.vars,
+        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
       ],
-      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+      ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
     ];
     const htmlOutput = getNunjucksEngine().renderString(template, {
-      config,
-      table,
-      results: results.results,
+      config: evalRecord.config,
+      table: htmlTable,
+      results: summary,
     });
     fs.writeFileSync(outputPath, htmlOutput);
   }
@@ -158,18 +175,12 @@ export async function writeOutput(
 
 export async function writeMultipleOutputs(
   outputPaths: string[],
-  evalId: string | null,
-  results: EvaluateSummary,
-  config: Partial<UnifiedConfig>,
+  evalRecord: Eval,
   shareableUrl: string | null,
 ) {
   await Promise.all(
-    outputPaths.map((outputPath) => writeOutput(outputPath, evalId, results, config, shareableUrl)),
+    outputPaths.map((outputPath) => writeOutput(outputPath, evalRecord, shareableUrl)),
   );
-}
-
-export function sha256(str: string) {
-  return createHash('sha256').update(str).digest('hex');
 }
 
 export async function readOutput(outputPath: string): Promise<OutputFile> {
@@ -192,18 +203,18 @@ export function getLatestResultsPath(): string {
 }
 
 export async function writeResultsToDatabase(
-  results: EvaluateSummary,
+  results: EvaluateSummaryV2,
   config: Partial<UnifiedConfig>,
-  createdAt?: Date,
+  createdAt: Date = new Date(),
 ): Promise<string> {
   createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
-  const evalId = `eval-${createdAt.toISOString().slice(0, 19)}`;
+  const evalId = createEvalId(createdAt);
   const db = getDb();
 
   const promises = [];
   promises.push(
     db
-      .insert(evals)
+      .insert(evalsTable)
       .values({
         id: evalId,
         createdAt: createdAt.getTime(),
@@ -219,13 +230,15 @@ export async function writeResultsToDatabase(
   logger.debug(`Inserting eval ${evalId}`);
 
   // Record prompt relation
+  invariant(results.table, 'Table is required');
+
   for (const prompt of results.table.head.prompts) {
     const label = prompt.label || prompt.display || prompt.raw;
-    const promptId = sha256(label);
+    const promptId = generateIdFromPrompt(prompt);
 
     promises.push(
       db
-        .insert(prompts)
+        .insert(promptsTable)
         .values({
           id: promptId,
           prompt: label,
@@ -236,7 +249,7 @@ export async function writeResultsToDatabase(
 
     promises.push(
       db
-        .insert(evalsToPrompts)
+        .insert(evalsToPromptsTable)
         .values({
           evalId,
           promptId,
@@ -252,7 +265,7 @@ export async function writeResultsToDatabase(
   const datasetId = sha256(JSON.stringify(config.tests || []));
   promises.push(
     db
-      .insert(datasets)
+      .insert(datasetsTable)
       .values({
         id: datasetId,
         tests: config.tests,
@@ -263,7 +276,7 @@ export async function writeResultsToDatabase(
 
   promises.push(
     db
-      .insert(evalsToDatasets)
+      .insert(evalsToDatasetsTable)
       .values({
         evalId,
         datasetId,
@@ -281,7 +294,7 @@ export async function writeResultsToDatabase(
 
       promises.push(
         db
-          .insert(tags)
+          .insert(tagsTable)
           .values({
             id: tagId,
             name: tagKey,
@@ -293,7 +306,7 @@ export async function writeResultsToDatabase(
 
       promises.push(
         db
-          .insert(evalsToTags)
+          .insert(evalsToTagsTable)
           .values({
             evalId,
             tagId,
@@ -325,32 +338,33 @@ export async function writeResultsToDatabase(
  *
  * @returns Last n evals in descending order.
  */
-export function listPreviousResults(
+export async function listPreviousResults(
   limit: number = DEFAULT_QUERY_LIMIT,
   filterDescription?: string,
   datasetId?: string,
-): ResultLightweight[] {
+): Promise<ResultLightweight[]> {
   const db = getDb();
   const startTime = performance.now();
 
   const query = db
     .select({
-      evalId: evals.id,
-      createdAt: evals.createdAt,
-      description: evals.description,
-      numTests: sql<number>`json_array_length(${evals.results}->'table'->'body')`,
-      datasetId: evalsToDatasets.datasetId,
+      evalId: evalsTable.id,
+      createdAt: evalsTable.createdAt,
+      description: evalsTable.description,
+      numTests: sql<number>`json_array_length(${evalsTable.results}->'table'->'body')`,
+      datasetId: evalsToDatasetsTable.datasetId,
     })
-    .from(evals)
-    .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
+    .from(evalsTable)
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(
       and(
-        datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
-        filterDescription ? like(evals.description, `%${filterDescription}%`) : undefined,
+        datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined,
+        filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
+        not(eq(evalsTable.results, {})),
       ),
     );
 
-  const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
+  const results = query.orderBy(desc(evalsTable.createdAt)).limit(limit).all();
   const mappedResults = results.map((result) => ({
     evalId: result.evalId,
     createdAt: result.createdAt,
@@ -361,9 +375,10 @@ export function listPreviousResults(
 
   const endTime = performance.now();
   const executionTime = endTime - startTime;
+  const evalResults = await getSummaryofLatestEvals(undefined, filterDescription, datasetId);
   logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
-
-  return mappedResults;
+  const combinedResults = [...evalResults, ...mappedResults];
+  return combinedResults;
 }
 
 /**
@@ -461,113 +476,22 @@ export function readResult_fileSystem(
   }
 }
 
-let attemptedMigration = false;
-
 export async function migrateResultsFromFileSystemToDatabase() {
-  if (attemptedMigration) {
-    // TODO(ian): Record this bit in the database.
-    return;
-  }
-
   // First run db migrations
   logger.debug('Running db migrations...');
   await runDbMigrations();
-
-  const fileNames = listPreviousResultFilenames_fileSystem();
-  if (fileNames.length === 0) {
-    return;
-  }
-
-  logger.info(`🔁 Migrating ${fileNames.length} flat files to local database.`);
-  logger.info('This is a one-time operation and may take a minute...');
-  attemptedMigration = true;
-
-  const outputDir = path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'output');
-  const backupDir = `${outputDir}-backup-${new Date()
-    .toISOString()
-    .slice(0, 10)
-    .replace(/-/g, '')}`;
-  try {
-    fs.cpSync(outputDir, backupDir, { recursive: true });
-    logger.info(`Backup of output directory created at ${backupDir}`);
-  } catch (backupError) {
-    logger.error(`Failed to create backup of output directory: ${backupError}`);
-    return;
-  }
-
-  logger.info('Moving files into database...');
-  const migrationPromises = fileNames.map(async (fileName) => {
-    const fileData = readResult_fileSystem(fileName);
-    if (fileData) {
-      await writeResultsToDatabase(
-        fileData.result.results,
-        fileData.result.config,
-        filenameToDate(fileName),
-      );
-      logger.debug(`Migrated ${fileName} to database.`);
-      try {
-        fs.unlinkSync(path.join(outputDir, fileName));
-      } catch (err) {
-        logger.warn(`Failed to delete ${fileName} after migration: ${err}`);
-      }
-    } else {
-      logger.warn(`Failed to migrate result ${fileName} due to read error.`);
-    }
-  });
-  await Promise.all(migrationPromises);
-  try {
-    fs.unlinkSync(getLatestResultsPath());
-  } catch (err) {
-    logger.warn(`Failed to delete latest.json: ${err}`);
-  }
-  logger.info('Migration complete. Please restart your web server if it is running.');
-}
-
-const RESULT_HISTORY_LENGTH = getEnvInt('RESULT_HISTORY_LENGTH', DEFAULT_QUERY_LIMIT);
-
-export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
-  const sortedFilenames = listPreviousResultFilenames_fileSystem();
-  for (let i = 0; i < sortedFilenames.length - remaining; i++) {
-    fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFilenames[i]));
-  }
 }
 
 export async function readResult(
   id: string,
 ): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {
-  const db = getDb();
   try {
-    const evalResult = await db
-      .select({
-        id: evals.id,
-        createdAt: evals.createdAt,
-        author: evals.author,
-        results: evals.results,
-        config: evals.config,
-        datasetId: evalsToDatasets.datasetId,
-      })
-      .from(evals)
-      .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
-      .where(eq(evals.id, id))
-      .execute();
-
-    if (evalResult.length === 0) {
-      return undefined;
-    }
-
-    const { id: resultId, createdAt, results, config, author, datasetId } = evalResult[0];
-    const result: ResultsFile = {
-      version: 3,
-      createdAt: new Date(createdAt).toISOString().slice(0, 10),
-      author,
-      results,
-      config,
-      datasetId,
-    };
+    const eval_ = await Eval.findById(id);
+    invariant(eval_, `Eval with ID ${id} not found.`);
     return {
-      id: resultId,
-      result,
-      createdAt: new Date(createdAt),
+      id,
+      result: await eval_.toResultsFile(),
+      createdAt: new Date(eval_.createdAt),
     };
   } catch (err) {
     logger.error(`Failed to read result with ID ${id} from database:\n${err}`);
@@ -579,41 +503,23 @@ export async function updateResult(
   newConfig?: Partial<UnifiedConfig>,
   newTable?: EvaluateTable,
 ): Promise<void> {
-  const db = getDb();
   try {
     // Fetch the existing eval data from the database
-    const existingEval = await db
-      .select({
-        config: evals.config,
-        results: evals.results,
-      })
-      .from(evals)
-      .where(eq(evals.id, id))
-      .limit(1)
-      .all();
+    const existingEval = await Eval.findById(id);
 
-    if (existingEval.length === 0) {
+    if (!existingEval) {
       logger.error(`Eval with ID ${id} not found.`);
       return;
     }
 
-    const evalData = existingEval[0];
     if (newConfig) {
-      evalData.config = newConfig;
+      existingEval.config = newConfig;
     }
     if (newTable) {
-      evalData.results.table = newTable;
+      existingEval.setTable(newTable);
     }
 
-    await db
-      .update(evals)
-      .set({
-        description: evalData.config.description,
-        config: evalData.config,
-        results: evalData.results,
-      })
-      .where(eq(evals.id, id))
-      .run();
+    await existingEval.save();
 
     logger.info(`Updated eval with ID ${id}`);
   } catch (err) {
@@ -622,37 +528,8 @@ export async function updateResult(
 }
 
 export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
-  const db = getDb();
-  let latestResults = await db
-    .select({
-      id: evals.id,
-      createdAt: evals.createdAt,
-      author: evals.author,
-      description: evals.description,
-      results: evals.results,
-      config: evals.config,
-    })
-    .from(evals)
-    .orderBy(desc(evals.createdAt))
-    .limit(1);
-
-  if (filterDescription) {
-    const regex = new RegExp(filterDescription, 'i');
-    latestResults = latestResults.filter((result) => regex.test(result.description || ''));
-  }
-
-  if (!latestResults.length) {
-    return undefined;
-  }
-
-  const latestResult = latestResults[0];
-  return {
-    version: 3,
-    createdAt: new Date(latestResult.createdAt).toISOString(),
-    author: latestResult.author,
-    results: latestResult.results,
-    config: latestResult.config,
-  };
+  const eval_ = await Eval.latest();
+  return await eval_?.toResultsFile();
 }
 
 export async function getPromptsWithPredicate(
@@ -660,32 +537,15 @@ export async function getPromptsWithPredicate(
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
-  const db = getDb();
-  const evals_ = await db
-    .select({
-      id: evals.id,
-      createdAt: evals.createdAt,
-      author: evals.author,
-      results: evals.results,
-      config: evals.config,
-    })
-    .from(evals)
-    .limit(limit)
-    .all();
+  const evals_ = await Eval.getMany(limit);
 
   const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = {
-      version: 3,
-      createdAt,
-      author: eval_.author,
-      results: eval_.results,
-      config: eval_.config,
-    };
+    const resultWrapper: ResultsFile = await eval_.toResultsFile();
     if (predicate(resultWrapper)) {
-      for (const prompt of resultWrapper.results.table.head.prompts) {
+      for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
         const datasetId = resultWrapper.config.tests
           ? sha256(JSON.stringify(resultWrapper.config.tests))
@@ -747,40 +607,24 @@ export async function getTestCasesWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<TestCasesWithMetadata[]> {
-  const db = getDb();
-  const evals_ = await db
-    .select({
-      id: evals.id,
-      createdAt: evals.createdAt,
-      author: evals.author,
-      results: evals.results,
-      config: evals.config,
-    })
-    .from(evals)
-    .limit(limit)
-    .all();
+  const evals_ = await Eval.getMany(limit);
 
   const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = {
-      version: 3,
-      createdAt,
-      author: eval_.author,
-      results: eval_.results,
-      config: eval_.config,
-    };
+    const resultWrapper: ResultsFile = await eval_.toResultsFile();
     const testCases = resultWrapper.config.tests;
     if (testCases && predicate(resultWrapper)) {
       const evalId = eval_.id;
       const datasetId = sha256(JSON.stringify(testCases));
+
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(
           Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), eval_.createdAt),
         );
         groupedTestCases[datasetId].count += 1;
-        const newPrompts = resultWrapper.results.table.head.prompts.map((prompt) => ({
+        const newPrompts = eval_.getPrompts().map((prompt) => ({
           id: sha256(prompt.raw),
           prompt,
           evalId,
@@ -793,7 +637,7 @@ export async function getTestCasesWithPredicate(
         }
         groupedTestCases[datasetId].prompts = Object.values(promptsById);
       } else {
-        const newPrompts = resultWrapper.results.table.head.prompts.map((prompt) => ({
+        const newPrompts = eval_.getPrompts().map((prompt) => ({
           id: sha256(prompt.raw),
           prompt,
           evalId,
@@ -854,15 +698,15 @@ export async function getEvalsWithPredicate(
   const db = getDb();
   const evals_ = await db
     .select({
-      id: evals.id,
-      createdAt: evals.createdAt,
-      author: evals.author,
-      results: evals.results,
-      config: evals.config,
-      description: evals.description,
+      id: evalsTable.id,
+      createdAt: evalsTable.createdAt,
+      author: evalsTable.author,
+      results: evalsTable.results,
+      config: evalsTable.config,
+      description: evalsTable.description,
     })
-    .from(evals)
-    .orderBy(desc(evals.createdAt))
+    .from(evalsTable)
+    .orderBy(desc(evalsTable.createdAt))
     .limit(limit)
     .all();
 
@@ -874,6 +718,7 @@ export async function getEvalsWithPredicate(
       version: 3,
       createdAt,
       author: eval_.author,
+      // @ts-ignore
       results: eval_.results,
       config: eval_.config,
     };
@@ -883,6 +728,7 @@ export async function getEvalsWithPredicate(
         id: evalId,
         date: new Date(eval_.createdAt),
         config: eval_.config,
+        // @ts-ignore
         results: eval_.results,
         description: eval_.description || undefined,
       });
@@ -910,11 +756,13 @@ export async function deleteEval(evalId: string) {
   const db = getDb();
   await db.transaction(async () => {
     // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
-    await db.delete(evalsToPrompts).where(eq(evalsToPrompts.evalId, evalId)).run();
-    await db.delete(evalsToDatasets).where(eq(evalsToDatasets.evalId, evalId)).run();
-
+    await db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
+    await db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
+    await db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
+    await db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
+    await db.delete(evalsToProvidersTable).where(eq(evalsToProvidersTable.evalId, evalId)).run();
     // Finally, delete the eval record
-    const deletedIds = await db.delete(evals).where(eq(evals.id, evalId)).run();
+    const deletedIds = await db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
     if (deletedIds.changes === 0) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
@@ -929,10 +777,10 @@ export async function deleteEval(evalId: string) {
 export async function deleteAllEvals(): Promise<void> {
   const db = getDb();
   await db.transaction(async (tx) => {
-    await tx.delete(evalsToPrompts).run();
-    await tx.delete(evalsToDatasets).run();
-    await tx.delete(evalsToTags).run();
-    await tx.delete(evals).run();
+    await tx.delete(evalsToPromptsTable).run();
+    await tx.delete(evalsToDatasetsTable).run();
+    await tx.delete(evalsToTagsTable).run();
+    await tx.delete(evalsTable).run();
   });
 }
 
@@ -970,55 +818,116 @@ export function setupEnv(envPath: string | undefined) {
 
 export type StandaloneEval = CompletedPrompt & {
   evalId: string;
+  description: string | null;
   datasetId: string | null;
   promptId: string | null;
+  isRedteam: boolean;
+  createdAt: number;
+
+  pluginFailCount: Record<string, number>;
+  pluginPassCount: Record<string, number>;
 };
 
-export function getStandaloneEvals({
+const standaloneEvalCache = new NodeCache({ stdTTL: 60 * 60 * 2 }); // Cache for 2 hours
+
+export async function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
   tag,
+  description,
 }: {
   limit?: number;
   tag?: { key: string; value: string };
-} = {}): StandaloneEval[] {
+  description?: string;
+} = {}): Promise<StandaloneEval[]> {
+  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}`;
+  const cachedResult = standaloneEvalCache.get<StandaloneEval[]>(cacheKey);
+
+  if (cachedResult) {
+    return cachedResult;
+  }
+
   const db = getDb();
   const results = db
     .select({
-      evalId: evals.id,
-      description: evals.description,
-      results: evals.results,
-      createdAt: evals.createdAt,
-      promptId: evalsToPrompts.promptId,
-      datasetId: evalsToDatasets.datasetId,
-      tagName: tags.name,
-      tagValue: tags.value,
+      evalId: evalsTable.id,
+      description: evalsTable.description,
+      results: evalsTable.results,
+      createdAt: evalsTable.createdAt,
+      promptId: evalsToPromptsTable.promptId,
+      datasetId: evalsToDatasetsTable.datasetId,
+      tagName: tagsTable.name,
+      tagValue: tagsTable.value,
+      isRedteam: sql`json_extract(evals.config, '$.redteam') IS NOT NULL`.as('isRedteam'),
     })
-    .from(evals)
-    .leftJoin(evalsToPrompts, eq(evals.id, evalsToPrompts.evalId))
-    .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
-    .leftJoin(evalsToTags, eq(evals.id, evalsToTags.evalId))
-    .leftJoin(tags, eq(evalsToTags.tagId, tags.id))
-    .where(tag ? and(eq(tags.name, tag.key), eq(tags.value, tag.value)) : undefined)
-    .orderBy(desc(evals.createdAt))
+    .from(evalsTable)
+    .leftJoin(evalsToPromptsTable, eq(evalsTable.id, evalsToPromptsTable.evalId))
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
+    .leftJoin(evalsToTagsTable, eq(evalsTable.id, evalsToTagsTable.evalId))
+    .leftJoin(tagsTable, eq(evalsToTagsTable.tagId, tagsTable.id))
+    .where(
+      and(
+        tag ? and(eq(tagsTable.name, tag.key), eq(tagsTable.value, tag.value)) : undefined,
+        description ? eq(evalsTable.description, description) : undefined,
+      ),
+    )
+    .orderBy(desc(evalsTable.createdAt))
     .limit(limit)
     .all();
 
-  return results.flatMap((result) => {
-    const {
-      createdAt,
-      evalId,
-      promptId,
-      datasetId,
-      results: { table },
-    } = result;
-    return table.head.prompts.map((col) => ({
-      evalId,
-      promptId,
-      datasetId,
-      createdAt,
-      ...col,
-    }));
-  });
+  const standaloneEvals = (
+    await Promise.all(
+      results.map(async (result) => {
+        const {
+          description,
+          createdAt,
+          evalId,
+          promptId,
+          datasetId,
+          // @ts-ignore
+          isRedteam,
+        } = result;
+        const eval_ = await Eval.findById(evalId);
+        invariant(eval_, `Eval with ID ${evalId} not found`);
+        const table = (await eval_.getTable()) || { body: [] };
+        // @ts-ignore
+        return eval_.getPrompts().map((col, index) => {
+          // Compute some stats
+          const pluginCounts = table.body.reduce(
+            // @ts-ignore
+            (acc, row) => {
+              const pluginId = row.test.metadata?.pluginId;
+              if (pluginId) {
+                const isPass = row.outputs[index].pass;
+                acc.pluginPassCount[pluginId] =
+                  (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
+                acc.pluginFailCount[pluginId] =
+                  (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
+              }
+              return acc;
+            },
+            { pluginPassCount: {}, pluginFailCount: {} } as {
+              pluginPassCount: Record<string, number>;
+              pluginFailCount: Record<string, number>;
+            },
+          );
+
+          return {
+            evalId,
+            description,
+            promptId,
+            datasetId,
+            createdAt,
+            isRedteam: isRedteam as boolean,
+            ...pluginCounts,
+            ...col,
+          };
+        });
+      }),
+    )
+  ).flat();
+
+  standaloneEvalCache.set(cacheKey, standaloneEvals);
+  return standaloneEvals;
 }
 
 export function providerToIdentifier(provider: TestCase['provider']): string | undefined {

@@ -2,7 +2,7 @@
 import type { Config } from 'jest';
 
 const config: Config = {
-  collectCoverage: true,
+  collectCoverage: false,
   coverageDirectory: '.coverage',
   coverageProvider: 'v8',
   extensionsToTreatAsEsm: ['.ts'],
@@ -11,6 +11,7 @@ const config: Config = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testPathIgnorePatterns: [
     '.*\\.test\\.tsx$',
+    '.*\\.integration\\.test\\.ts$',
     '<rootDir>/dist',
     '<rootDir>/examples',
     '<rootDir>/node_modules',
