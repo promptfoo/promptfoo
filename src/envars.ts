@@ -85,6 +85,9 @@ export type EnvVars = {
   REPLICATE_TOP_P?: number;
   VOYAGE_API_BASE_URL?: string;
   VOYAGE_API_KEY?: string;
+  WATSONX_API_KEY?: string;
+  WATSONX_PROJECT_ID?: string;
+  WATSONX_MODEL_ID?: string;
 
   // node/npm
   NODE_ENV?: string;

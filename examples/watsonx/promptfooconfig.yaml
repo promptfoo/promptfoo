@@ -1,9 +1,9 @@
 providers:
   - id: watsonx:test-model
     config:
-      apiKey: WATSONX_API_KEY
-      projectId: WATSONX_PROJECT_ID
-      modelId: WATSONX_MODEL_ID
+      apiKeyEnvar: WATSONX_API_KEY
+      projectIdEnvar: WATSONX_PROJECT_ID
+      modelIdEnvar: WATSONX_MODEL_ID
       serviceUrl: 'https://us-south.ml.cloud.ibm.com'
       version: '2023-05-29'
       maxNewTokens: 50
