@@ -1,36 +1,35 @@
-providers:
-  - id: watsonx:ibm/granite-13b-chat-v2
+# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+description: "My eval"
 
 prompts:
-  - "Answer the following question: '{{question}}'"
+  - "Write a funny tweet about {{topic}}"
+  - "Make a joke in a tweet about {{topic}}"
+
+
+providers:
+  - "watsonx:ibm/granite-13b-chat-v2"
+
 
 tests:
   - vars:
-      question: "What is the capital of France?"
-    assert:
-      - type: contains
-        value: "Paris"
+      topic: bananas
 
   - vars:
-      question: "What is 2 + 2?"
+      topic: avocado toast
     assert:
-      - type: contains
-        value: "4"
+      # For more information on assertions, see https://promptfoo.dev/docs/configuration/expected-outputs
+
+      # Make sure output contains the word "avocado"
+      - type: icontains
+        value: avocado
+
+      # Prefer shorter outputs
+      - type: javascript
+        value: 1 / (output.length + 1)
 
   - vars:
-      question: "Is the sky blue?"
+      topic: new york city
     assert:
-      - type: contains
-        value: "yes"
-
-  - vars:
-      question: "Who wrote 'Romeo and Juliet'?"
-    assert:
-      - type: contains
-        value: "William Shakespeare"
-
-  - vars:
-      question: "How many continents are there on Earth?"
-    assert:
-      - type: contains
-        value: "seven"
+      # For more information on model-graded evals, see https://promptfoo.dev/docs/configuration/expected-outputs/model-graded
+      - type: llm-rubric
+        value: ensure that the tweet contains a pun, joke, or sarcastic remark

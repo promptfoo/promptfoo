@@ -82,11 +82,10 @@ import type {
         throw new Error('WatsonXProvider requires a valid config.');
       }
   
-      const { id, config, env } = options;
+      const { config, env } = options;
       this.modelName = modelName;
       this.options = options;
       this.env = env;
-      this.id = id ? () => id : this.id;
       this.apiKey = this.getApiKey();
     }
   
@@ -123,19 +122,19 @@ import type {
     }
     
     getModelId(): string {
-      if (!this.options.id) {
-        throw new Error('Provider id must be specified in the configuration.');
+      if (!this.modelName) {
+        throw new Error('Model name must be specified.');
       }
-  
-      const modelId = this.options.id.split(':')[1];
-      if (!modelId) {
-        throw new Error('Unable to extract modelId from provider id.');
+      if (this.modelName.includes(':')) {
+        const parts = this.modelName.split(':');
+        if (parts.length < 2 || !parts[1]) {
+          throw new Error(`Unable to extract modelId from modelName: ${this.modelName}`);
+        }
+        return parts[1];
       }
-  
-      return modelId;
+      return this.modelName;
     }
   
-    // Initializes and returns the WatsonXAI client instance
     async getClient(): Promise<WatsonXAIClient> {
       if (!this.client) {
         const apiKey = this.getApiKey();
