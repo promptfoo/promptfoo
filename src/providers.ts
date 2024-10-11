@@ -480,6 +480,6 @@ export default {
   GroqProvider,
   MistralChatCompletionProvider,
   MistralEmbeddingProvider,
-  WatsonXProvider,
   loadApiProvider,
+  WatsonXProvider,
 };
