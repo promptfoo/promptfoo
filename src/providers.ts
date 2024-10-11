@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import fs from 'fs';
 import yaml from 'js-yaml';
-import get from 'lodash.get';
 import path from 'path';
 import invariant from 'tiny-invariant';
 import cliState from './cliState';
@@ -53,6 +52,7 @@ import {
   OpenAiImageProvider,
   OpenAiModerationProvider,
 } from './providers/openai';
+import { parsePackageProvider } from './providers/packageParser';
 import { PalmChatProvider } from './providers/palm';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { PythonProvider } from './providers/pythonCompletion';
@@ -441,31 +441,7 @@ export async function loadApiProvider(
       : providerPath.split(':').slice(1).join(':');
     ret = new GolangProvider(scriptPath, providerOptions);
   } else if (providerPath.startsWith('package:')) {
-    const packageName = providerPath.split(':')[1];
-    const providerName = providerPath.split(':')[2];
-    const modulePath = path.join(basePath || process.cwd(), 'node_modules', packageName);
-    const pkgPath = path.join(modulePath, 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as {
-      name: string;
-      main?: string;
-    };
-    if (!pkg.main) {
-      logger.error(dedent`
-      Could not determine main entry in package.json: ${chalk.bold(pkgPath)}.
-
-      ${chalk.white(dedent`Please check your package.json and ensure the property 'main' is correctly specified.`)}
-    `);
-      process.exit(1);
-    }
-    const module = await importModule(path.join(modulePath, pkg.main));
-    const Provider = get(module, providerName);
-    if (!Provider) {
-      logger.error(dedent`
-        Could not find provider: ${chalk.bold(providerName)} in module: ${chalk.bold(modulePath)}.
-        `);
-      process.exit(1);
-    }
-    ret = new Provider(options);
+    ret = await parsePackageProvider(providerPath, basePath || process.cwd(), providerOptions);
   } else if (isJavascriptFile(providerPath)) {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
