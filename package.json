@@ -132,8 +132,8 @@
     "supertest": "^7.0.0",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.6.2",
-    "typescript-eslint": "^8.8.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.8.1",
     "zod-to-json-schema": "^3.23.3"
   },
   "dependencies": {
