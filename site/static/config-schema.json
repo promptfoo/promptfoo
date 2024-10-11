@@ -838,6 +838,9 @@
             "filterProviders": {
               "type": "string"
             },
+            "filterTargets": {
+              "type": "string"
+            },
             "var": {
               "type": "object",
               "additionalProperties": {
