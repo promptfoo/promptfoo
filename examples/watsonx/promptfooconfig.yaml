@@ -1,0 +1,43 @@
+providers:
+  - id: watsonx:test-model
+    config:
+      apiKey: WATSONX_API_KEY
+      projectId: WATSONX_PROJECT_ID
+      modelId: WATSONX_MODEL_ID
+      serviceUrl: 'https://us-south.ml.cloud.ibm.com'
+      version: '2023-05-29'
+      maxNewTokens: 50
+
+prompts:
+  - "Answer the following question: '{{question}}'"
+
+tests:
+  - vars:
+      question: "What is the capital of France?"
+    assert:
+      - type: contains
+        value: "Paris"
+
+  - vars:
+      question: "What is 2 + 2?"
+    assert:
+      - type: contains
+        value: "4"
+
+  - vars:
+      question: "Is the sky blue?"
+    assert:
+      - type: contains
+        value: "yes"
+
+  - vars:
+      question: "Who wrote 'Romeo and Juliet'?"
+    assert:
+      - type: contains
+        value: "William Shakespeare"
+
+  - vars:
+      question: "How many continents are there on Earth?"
+    assert:
+      - type: contains
+        value: "seven"

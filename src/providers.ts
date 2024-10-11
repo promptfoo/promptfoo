@@ -210,31 +210,7 @@ export async function loadApiProvider(
     ret = new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
   } else if (providerPath.startsWith('watsonx:')) {
     const splits = providerPath.split(':');
-    if (splits.length < 2) {
-      throw new Error(
-        `Invalid Watsonx provider path: ${providerPath}. Expected format: watsonx:<model-name>`
-      );
-    }
     const modelName = splits.slice(1).join(':');
-  
-    // Check if config is provided, if not, provide default values or throw an error
-    if (!options.config) {
-      throw new Error('WatsonXProvider requires a valid config with modelId and spaceId.');
-    }
-  
-    const providerOptions: ProviderOptions = {
-      id: options.id,
-      config: {
-        modelId: options.config?.modelId || 'default-model-id',
-        spaceId: options.config?.spaceId || 'default-space-id',
-        maxNewTokens: options.config?.maxNewTokens || 100,
-        apiKey: options.config?.apiKey || 'your-default-api-key',
-        serviceUrl: options.config?.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
-        version: options.config?.version || '2024-05-31',
-      },
-      env,
-    };
-  
     ret = new WatsonXProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('bedrock:')) {
     const splits = providerPath.split(':');
@@ -504,5 +480,6 @@ export default {
   GroqProvider,
   MistralChatCompletionProvider,
   MistralEmbeddingProvider,
+  WatsonXProvider,
   loadApiProvider,
 };

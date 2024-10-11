@@ -3,10 +3,12 @@ import type {
   } from '@ibm-cloud/watsonx-ai';
   
   import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
+  import { IamAuthenticator } from 'ibm-cloud-sdk-core';
   import { getCache, isCacheEnabled } from '../cache';
   import { getEnvString } from '../envars';
   import logger from '../logger';
   import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+  import type { ProviderOptions } from '../types/providers';
   import { REQUEST_TIMEOUT_MS } from './shared';
   
   // Interface for provider configuration
@@ -15,7 +17,7 @@ import type {
     apiKeyEnvar?: string | null;
     serviceUrl?: string;
     version?: string;
-    spaceId: string;
+    projectId: string;
     modelId: string;
     maxNewTokens?: number;
   }
@@ -26,30 +28,39 @@ import type {
   
   // Interface for text generation response
   interface TextGenResponse {
+    model_id: string;
+    model_version: string;
+    created_at: string;
     results: Array<{
       generated_text: string;
-      generated_tokens: number;
-      prompt_tokens: number;
+      generated_token_count?: number;
+      input_token_count?: number;
+      stop_reason?: string;
     }>;
   }
   
-  
+
   // Helper function to convert API response to ProviderResponse
   function convertResponse(response: TextGenResponse): ProviderResponse {
-    const firstResult = response.results.length > 0 ? response.results[0] : null;
+    const firstResult = response.results && response.results[0];
   
-    const totalGeneratedTokens = firstResult?.generated_tokens || 0;
-    const promptTokens = firstResult?.prompt_tokens || 0;
-    
+    if (!firstResult) {
+      throw new Error('No results returned from text generation API.');
+    }
+  
+    const totalGeneratedTokens = firstResult.generated_token_count || 0;
+    const promptTokens = firstResult.input_token_count || 0;
+    const completionTokens = totalGeneratedTokens - promptTokens;
+  
     const tokenUsage: Partial<TokenUsage> = {
       total: totalGeneratedTokens,
       prompt: promptTokens,
-      completion: totalGeneratedTokens - promptTokens,
+      completion: completionTokens >= 0 ? completionTokens : totalGeneratedTokens,
     };
   
     const providerResponse: ProviderResponse = {
       error: undefined,
-      output: firstResult?.generated_text || '',
+      output: firstResult.generated_text || '',
       tokenUsage,
       cost: undefined,
       cached: undefined,
@@ -61,26 +72,23 @@ import type {
   
   export class WatsonXProvider implements ApiProvider {
     modelName: string;
-    config?: WatsonxGenerationParameters;
-    moderations?: WatsonxModerations;
+    options: ProviderOptions;
     env?: EnvOverrides;
     apiKey?: string;
     client: WatsonXAIClient | undefined;
-  
+
     constructor(
       modelName: string,
-      options: {
-        id?: string;
-        config: WatsonxGenerationParameters;
-        env?: EnvOverrides;
-        moderations?: WatsonxModerations;
-      },
+      options: ProviderOptions,
     ) {
-      const { id, config, env, moderations } = options;
-      this.env = env;
+      if (!options.config) {
+        throw new Error('WatsonXProvider requires a valid config.');
+      }
+  
+      const { id, config, env } = options;
       this.modelName = modelName;
-      this.config = config || {};
-      this.moderations = moderations;
+      this.options = options;
+      this.env = env;
       this.id = id ? () => id : this.id;
       this.apiKey = this.getApiKey();
     }
@@ -98,15 +106,40 @@ import type {
     // Retrieves the API key from config or environment variables
     getApiKey(): string | undefined {
       return (
-        this.config?.apiKey ||
-        (this.config?.apiKeyEnvar
-          ? process.env[this.config.apiKeyEnvar] ||
-            this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        this.options.config.apiKey ||
+        (this.options.config.apiKeyEnvar
+          ? process.env[this.options.config.apiKeyEnvar] ||
+            this.env?.[this.options.config.apiKeyEnvar as keyof EnvOverrides]
           : undefined) ||
         this.env?.WATSONX_API_KEY ||
         getEnvString('WATSONX_API_KEY')
       );
     }
+
+    getProjectId(): string | undefined {
+      return (
+        this.options.config.projectId ||
+        (this.options.config.projectIdEnvar
+          ? process.env[this.options.config.projectIdEnvar] ||
+            this.env?.[this.options.config.projectIdEnvar as keyof EnvOverrides]
+          : undefined) ||
+        this.env?.WATSONX_PROJECT_ID ||
+        getEnvString('WATSONX_PROJECT_ID')
+      );
+    }
+    
+    getModelId(): string | undefined {
+      return (
+        this.options.config.modelId ||
+        (this.options.config.modelIdEnvar
+          ? process.env[this.options.config.modelIdEnvar] ||
+            this.env?.[this.options.config.modelIdEnvar as keyof EnvOverrides]
+          : undefined) ||
+        this.env?.WATSONX_MODEL_ID ||
+        getEnvString('WATSONX_MODEL_ID')
+      );
+    }
+    
   
     // Initializes and returns the WatsonXAI client instance
     async getClient(): Promise<WatsonXAIClient> {
@@ -119,102 +152,70 @@ import type {
         }
   
         this.client = WatsonXAI.newInstance({
-          version: this.config?.version || '2024-05-31',
-          serviceUrl: this.config?.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
-          apiKey: apiKey,
+          version: this.options.config.version || '2023-05-29',
+          serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
+          authenticator: new IamAuthenticator({ apikey: apiKey }),
         });
       }
       return this.client;
     }
   
-    // Main method to call the Watsonx AI API for text generation
     async callApi(prompt: string): Promise<ProviderResponse> {
       if (!this.apiKey) {
         throw new Error(
           'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
         );
       }
-  
-      try {
-        const cache = await getCache();
-        const cacheKey = `watsonx:${this.modelName}:${prompt}`;
-        if (isCacheEnabled()) {
-          const cachedResponse = await cache.get(cacheKey);
-          if (cachedResponse) {
-            logger.debug(`Watsonx: Returning cached response for prompt "${prompt}": ${cachedResponse}`);
-            return {
-              output: JSON.parse(cachedResponse as string),
-              tokenUsage: {},
-            };
-          }
+    
+      const cache = await getCache();
+      const cacheKey = `watsonx:${this.modelName}:${prompt}`;
+      if (isCacheEnabled()) {
+        const cachedResponse = await cache.get(cacheKey);
+        if (cachedResponse) {
+          logger.debug(
+            `Watsonx: Returning cached response for prompt "${prompt}": ${cachedResponse}`,
+          );
+          return JSON.parse(cachedResponse as string) as ProviderResponse;
         }
-  
-        const client = await this.getClient();
-  
+      }
+    
+      const client = await this.getClient();
+    
+      try {
         const textGenRequestParametersModel = {
-          max_new_tokens: this.config?.maxNewTokens || 100,
+          max_new_tokens: this.options.config.maxNewTokens || 100,
         };
-  
+    
         const params = {
           input: prompt,
-          modelId: this.config?.modelId || "",
-          projectId: this.config?.spaceId || "",
+          modelId: this.getModelId() || '',
+          projectId: this.getProjectId() || '',
           parameters: textGenRequestParametersModel,
-
         };
-
+    
         const apiResponse = await client.generateText(params);
-
-        // Access the first result in the `results` array
-        const textGenResponse = apiResponse.result; 
-
-        const firstResult = textGenResponse.results.length > 0 ? textGenResponse.results[0] : null;
-
-        // Ensure we have at least one result
-        if (!firstResult) {
-        throw new Error("No results returned from text generation API.");
+        const textGenResponse = apiResponse.result as TextGenResponse;
+    
+        // console.log('API Response:', JSON.stringify(textGenResponse, null, 2));
+    
+        const providerResponse = convertResponse(textGenResponse);
+    
+        if (isCacheEnabled()) {
+          await cache.set(cacheKey, JSON.stringify(providerResponse), {
+            ttl: 60 * 5, // Cache for 5 minutes
+          });
         }
-  
-        // const apiResponse = await client.generateText(params);
-        
-        // console.log('API Response:', apiResponse);
-        // const textGenResponse: TextGenResponse = apiResponse.result;
-
-        const dummyProviderResponse: ProviderResponse = {
-            error: undefined,
-            output: 'This is a dummy response for debugging purposes.',
-            tokenUsage: {
-              total: 50,     // Simulating that 50 tokens were generated
-              prompt: 10,    // Simulating that the prompt used 10 tokens
-              completion: 40 // Simulating that 40 tokens were generated as completion
-            },
-            cost: undefined,
-            cached: false,
-            logProbs: undefined,
-          };
-          
-  
-        // const providerResponse = convertResponse(textGenResponse);
-        
-  
-        // if (isCacheEnabled()) {
-        //   await cache.set(cacheKey, JSON.stringify(providerResponse.output), {
-        //     ttl: 60 * 5, // Cache for 5 minutes
-        //   });
-        // }
-  
-        // return providerResponse;
-
-        return dummyProviderResponse;
+    
+        return providerResponse;
       } catch (err) {
         logger.error(`Watsonx: API call error: ${String(err)}`);
-  
+    
         return {
           error: `API call error: ${String(err)}`,
           output: '',
           tokenUsage: {},
         };
       }
-    }
+    }    
   }
   
