@@ -16,7 +16,7 @@ import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/report/page';
 
 const DEFAULT_ROUTE = import.meta.env.VITE_PUBLIC_HOSTED ? '/setup' : '/eval';
-const basename = import.meta.env.VITE_PUBLIC_BASENAME || undefined;
+const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 const router = createBrowserRouter(
   createRoutesFromElements([
     <Route path="/" element={<PageShell />}>
