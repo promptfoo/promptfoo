@@ -1,7 +1,7 @@
-import { WatsonXProvider } from '../src/providers/watsonx';
-import { getCache, isCacheEnabled } from '../src/cache';
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { IamAuthenticator } from 'ibm-cloud-sdk-core';
+import { getCache, isCacheEnabled } from '../src/cache';
+import { WatsonXProvider } from '../src/providers/watsonx';
 
 jest.mock('@ibm-cloud/watsonx-ai', () => ({
   WatsonXAI: {
@@ -47,7 +47,7 @@ describe('WatsonXProvider', () => {
     it('should initialize with default id based on modelName', () => {
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.id()).toBe(`watsonx:${modelName}`);
-    });    
+    });
   });
 
   describe('id', () => {
@@ -127,10 +127,10 @@ describe('WatsonXProvider', () => {
         get: jest.fn().mockResolvedValue(null),
         set: jest.fn(),
       } as any;
-      
+
       jest.mocked(getCache as any).mockResolvedValue(cache);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
-               
+
       const response = await provider.callApi(prompt);
 
       expect(mockedGenerateText).toHaveBeenCalledWith({
@@ -158,7 +158,7 @@ describe('WatsonXProvider', () => {
       expect(cache.set).toHaveBeenCalledWith(
         `watsonx:${modelName}:${prompt}`,
         JSON.stringify(response),
-        { ttl: 300 }
+        { ttl: 300 },
       );
     });
 
@@ -182,7 +182,7 @@ describe('WatsonXProvider', () => {
         get: jest.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
         set: jest.fn(),
       } as any;
-      
+
       jest.mocked(getCache as any).mockResolvedValue(cache);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
 
@@ -209,7 +209,7 @@ describe('WatsonXProvider', () => {
         get: jest.fn().mockResolvedValue(null),
         set: jest.fn(),
       } as any;
-      
+
       jest.mocked(getCache as any).mockResolvedValue(cache);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
 
@@ -230,6 +230,6 @@ describe('WatsonXProvider', () => {
       await expect(provider.callApi(prompt)).rejects.toThrow(
         'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
       );
-    });    
+    });
   });
 });

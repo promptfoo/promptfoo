@@ -252,7 +252,7 @@ export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[
   const map: Record<string, keyof EnvOverrides> = {
     openai: 'OPENAI_API_KEY',
     anthropic: 'ANTHROPIC_API_KEY',
-    watsonx: 'WATSONX_API_KEY'
+    watsonx: 'WATSONX_API_KEY',
   };
 
   return Object.entries(map)
@@ -434,7 +434,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[WatsonX] Llama 3.2, IBM Granite, ...',
         value: [
           'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
-          'watsonx:ibm/granite-13b-chat-v2'
+          'watsonx:ibm/granite-13b-chat-v2',
         ],
       },
     ];
