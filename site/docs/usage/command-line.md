@@ -288,7 +288,7 @@ promptfoo redteam generate --purpose 'Travel agent that helps users plan trips' 
 
 ## `promptfoo redteam eval`
 
-Works the same as [`promptfoo eval`](#promptfoo-eval`), but defaults to loading `redteam.yaml`.
+Works the same as [`promptfoo eval`](#promptfoo-eval), but defaults to loading `redteam.yaml`.
 
 ## `promptfoo redteam report`
 
