@@ -1,11 +1,11 @@
 # WatsonX
 
-
 [IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports several powerful models from the `Granite` and `Llama` series, along with additional models for code generation, multilingual tasks, vision processing, and more.
 
 ### Supported Models
 
 - **Granite Series**
+
   - `granite-20b-multilingual`
   - `granite-34b-code-instruct`
   - `granite-20b-code-instruct`
@@ -15,6 +15,7 @@
   - `granite-7b-lab`
 
 - **Llama Series**
+
   - `llama-3-2-90b-vision-instruct`
   - `llama-3-2-11b-vision-instruct`
   - `llama-guard-3-11b-vision`
@@ -53,26 +54,26 @@ To install the WatsonX provider, use the following steps:
 
 1. Install the necessary dependencies:
 
-    ```bash
+   ```bash
    npm install @ibm-cloud/watsonx-ai ibm-cloud-sdk-core
-    ```
+   ```
 
 2. Set up the necessary environment variables:
 
-    ```bash
-    export WATSONX_API_KEY=your-ibm-cloud-api-key
-    export WATSONX_PROJECT_ID=your-ibm-project-id
-    ```
+   ```bash
+   export WATSONX_API_KEY=your-ibm-cloud-api-key
+   export WATSONX_PROJECT_ID=your-ibm-project-id
+   ```
 
 3. Alternatively, you can configure the API key and project ID directly in the configuration file.
-    ```
-    providers:
-      - id: watsonx:ibm/granite-13b-chat-v2
-      config:
-        apiKey: your-ibm-cloud-api-key
-        projectId: your-ibm-project-id
-        serviceUrl: https://us-south.ml.cloud.ibm.com
-    ```
+   ```
+   providers:
+     - id: watsonx:ibm/granite-13b-chat-v2
+     config:
+       apiKey: your-ibm-cloud-api-key
+       projectId: your-ibm-project-id
+       serviceUrl: https://us-south.ml.cloud.ibm.com
+   ```
 
 ### Usage Examples
 
