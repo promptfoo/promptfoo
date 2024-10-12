@@ -199,20 +199,69 @@ This command will generate test cases for a specific config and write them to a 
 promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test cases for {{location}} must be European cities'
 ```
 
+## `promptfoo redteam init`
+
+Initialize a red teaming project.
+
+| Option        | Description                            | Default |
+| ------------- | -------------------------------------- | ------- |
+| `[directory]` | Directory to initialize the project in | .       |
+
+Example:
+
+```
+promptfoo redteam init my_project
+```
+
+:::danger
+Adversarial testing produces offensive, toxic, and harmful test inputs, and may cause your system to produce harmful outputs.
+:::
+
+For more detail, see [red team configuration](/docs/red-team/configuration/).
+
+## `promptfoo redteam run`
+
+Run the complete red teaming process (init, generate, and evaluate).
+
+| Option                           | Description                                      | Default              |
+| -------------------------------- | ------------------------------------------------ | -------------------- |
+| `-c, --config [path]`            | Path to configuration file                       | promptfooconfig.yaml |
+| `-o, --output [path]`            | Path to output file for generated tests          | redteam.yaml         |
+| `--no-cache`                     | Do not read or write results to disk cache       | false                |
+| `--env-file, --env-path <path>`  | Path to .env file                                |                      |
+| `-j, --max-concurrency <number>` | Maximum number of concurrent API calls           |                      |
+| `--delay <number>`               | Delay in milliseconds between API calls          |                      |
+| `--remote`                       | Force remote inference wherever possible         | false                |
+| `--force`                        | Force generation even if no changes are detected | false                |
+
+Example:
+
+```
+promptfoo redteam run -c custom_config.yaml -o custom_output.yaml
+```
+
 ## `promptfoo redteam generate`
 
-BETA: Generate adversarial test cases to challenge your prompts and models.
+Generate adversarial test cases to challenge your prompts and models.
 
-| Option                  | Description                                                      | Default              |
-| ----------------------- | ---------------------------------------------------------------- | -------------------- |
-| `-c, --config <path>`   | Path to the configuration file                                   | promptfooconfig.yaml |
-| `-o, --output <path>`   | Path to write the generated test cases                           | stdout               |
-| `-w, --write`           | Write the generated test cases directly to the config file       | false                |
-| `--purpose <purpose>`   | Set the system purpose. If not set, inferred from config         |                      |
-| `--injectVar <varname>` | The name of the prompt variable that represents the user's input | `{{query}}`          |
-| `--plugins <plugins>`   | Comma-separated list of plugins to enable                        | all plugins          |
-| `--no-cache`            | Do not read or write results to disk cache                       | false                |
-| `--env-path <path>`     | Path to .env file                                                |                      |
+| Option                           | Description                                                          | Default              |
+| -------------------------------- | -------------------------------------------------------------------- | -------------------- |
+| `-c, --config <path>`            | Path to configuration file                                           | promptfooconfig.yaml |
+| `-o, --output <path>`            | Path to write the generated test cases                               | redteam.yaml         |
+| `-w, --write`                    | Write the generated test cases directly to the config file           | false                |
+| `--purpose <purpose>`            | High-level description of the system's purpose                       | Inferred from config |
+| `--provider <provider>`          | Provider to use for generating adversarial tests                     |                      |
+| `--injectVar <varname>`          | Override the `{{variable}}` that represents user input in the prompt | `prompt`             |
+| `--plugins <plugins>`            | Comma-separated list of plugins to use                               | default              |
+| `--strategies <strategies>`      | Comma-separated list of strategies to use                            | default              |
+| `-n, --num-tests <number>`       | Number of test cases to generate per plugin                          |                      |
+| `--language <language>`          | Specify the language for generated tests                             | English              |
+| `--no-cache`                     | Do not read or write results to disk cache                           | false                |
+| `--env-file, --env-path <path>`  | Path to .env file                                                    |                      |
+| `-j, --max-concurrency <number>` | Maximum number of concurrent API calls                               |                      |
+| `--delay <number>`               | Delay in milliseconds between plugin API calls                       |                      |
+| `--remote`                       | Force remote inference wherever possible                             | false                |
+| `--force`                        | Force generation even if no changes are detected                     | false                |
 
 For example, let's suppose we have the following `promptfooconfig.yaml`:
 
@@ -225,23 +274,38 @@ providers:
   - openai:gpt-4o
 ```
 
-This command will generate adversarial test cases and write them to the file:
+This command will generate adversarial test cases and write them to `redteam.yaml`.
 
 ```sh
-promptfoo redteam generate -w
+promptfoo redteam generate
 ```
 
 This command overrides the system purpose and the variable to inject adversarial user input:
 
 ```sh
-promptfoo redteam generate -w --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
+promptfoo redteam generate --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
 ```
 
-:::danger
-Adversarial testing produces offensive, toxic, and harmful test inputs, and may cause your system to produce harmful outputs.
-:::
+## `promptfoo redteam eval`
 
-While in beta, this implementation requires `OPENAI_API_KEY` to be set.
+Works the same as [`promptfoo eval`](#promptfoo-eval`), but defaults to loading `redteam.yaml`.
+
+## `promptfoo redteam report`
+
+Start a browser UI and open the red teaming report.
+
+| Option                           | Description                                        | Default |
+| -------------------------------- | -------------------------------------------------- | ------- |
+| `[directory]`                    | Directory containing the red teaming configuration | .       |
+| `-p, --port <number>`            | Port number for the server                         | 15500   |
+| `--filter-description <pattern>` | Filter evals by description using a regex pattern  |         |
+| `--env-file, --env-path <path>`  | Path to .env file                                  |         |
+
+Example:
+
+```
+promptfoo redteam report -p 8080
+```
 
 ## ASCII-only outputs
 
