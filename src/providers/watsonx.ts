@@ -139,12 +139,8 @@ export class WatsonXProvider implements ApiProvider {
       this.env?.WATSONX_PROJECT_ID ||
       getEnvString('WATSONX_PROJECT_ID');
     invariant(
-      projectId,
-      'WatsonX project ID is not set. Set the WATSONX_PROJECT_ID environment variable or add `projectId` to the provider config.',
-    );
-    invariant(
       projectId && projectId.trim() !== '',
-      'WatsonX project ID is required and cannot be empty.',
+      'WatsonX project ID is not set. Set the WATSONX_PROJECT_ID environment variable or add `projectId` to the provider config.',
     );
     return projectId;
   }
@@ -172,8 +168,9 @@ export class WatsonXProvider implements ApiProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     const modelId = this.getModelId();
     const projectId = this.getProjectId();
+    const client = this.getClient();
 
-    const cache = await getCache();
+    const cache = getCache();
     const configHash = generateConfigHash(this.options.config);
     const cacheKey = `watsonx:${this.modelName}:${configHash}:${prompt}`;
     const cacheEnabled = isCacheEnabled();
@@ -186,8 +183,6 @@ export class WatsonXProvider implements ApiProvider {
         return JSON.parse(cachedResponse as string) as ProviderResponse;
       }
     }
-
-    const client = this.getClient();
 
     try {
       const textGenRequestParametersModel: TextGenRequestParametersModel = {
