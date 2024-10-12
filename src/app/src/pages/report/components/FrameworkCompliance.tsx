@@ -13,7 +13,12 @@ import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
-import { ALIASED_PLUGIN_MAPPINGS, FRAMEWORK_NAMES } from './constants';
+import {
+  ALIASED_PLUGIN_MAPPINGS,
+  categoryAliases,
+  displayNameOverrides,
+  FRAMEWORK_NAMES,
+} from './constants';
 import { useReportStore } from './store';
 import './FrameworkCompliance.css';
 
@@ -121,7 +126,15 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                                 <ListItemIcon>
                                   <CancelIcon fontSize="small" color="error" />
                                 </ListItemIcon>
-                                <ListItemText primary={plugin} />
+                                <ListItemText
+                                  primary={
+                                    displayNameOverrides[
+                                      plugin as keyof typeof displayNameOverrides
+                                    ] ||
+                                    categoryAliases[plugin as keyof typeof categoryAliases] ||
+                                    plugin
+                                  }
+                                />
                               </ListItem>
                             ))}
                           </List>
