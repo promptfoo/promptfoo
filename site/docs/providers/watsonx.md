@@ -1,26 +1,44 @@
-# WatsonX Documentation
+# WatsonX
 
-## Introduction
 
-Discover the potential of **IBM's WatsonX** in your applications with this provider! This provider seamlessly integrates state-of-the-art large language models (LLMs) into your project, empowering you with the powerful **Granite 13B Chat V2** and cutting-edge **Llama 3.2 Vision Instruct** models.
-
-## Overview
-
-The **WatsonX** provider bridges the gap between your applications, enabling you to harness the capabilities of their powerful LLMs. With **WatsonX**, you can effortlessly tackle a wide range of natural language processing (NLP) tasks, including:
-
-- Chatbots and Conversational agents
-- Content Generation
-- Text Summarization
-- Text Classification and Sentiment Analysis
+[IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports several powerful models from the `Granite` and `Llama` series, along with additional models for code generation, multilingual tasks, vision processing, and more.
 
 ### Supported Models
 
-- **IBM Granite 13B Chat V2**: A versatile conversational model that excels in understanding and generating text across various domains.
-- **Meta Llama 3.2 Vision Instruct**: A groundbreaking model that combines text and vision capabilities, enabling you to work with both text and images seamlessly.
+- **Granite Series**
+  - `granite-20b-multilingual`
+  - `granite-34b-code-instruct`
+  - `granite-20b-code-instruct`
+  - `granite-8b-code-instruct`
+  - `granite-3b-code-instruct`
+  - `granite-8b-japanese`
+  - `granite-7b-lab`
 
-## Setup Instructions
+- **Llama Series**
+  - `llama-3-2-90b-vision-instruct`
+  - `llama-3-2-11b-vision-instruct`
+  - `llama-guard-3-11b-vision`
+  - `llama-3-2-1b-instruct`
+  - `llama-3-2-3b-instruct`
+  - `llama-3-405b-instruct`
+  - `llama-3-1-70b-instruct`
+  - `llama-3-1-8b-instruct`
+  - `llama3-llava-next-8b-hf`
+  - `llama-3-8b-instruct`
+  - `llama-3-70b-instruct`
 
-To start using the WatsonX provider, follow these steps:
+- **Additional Models**
+  - `llama2-13b-dpo-v7`
+  - `allam-1-13b-instruct`
+  - `codellama-34b-instruct`
+  - `mistral-large-2`
+  - `mixtral-8x7b-instruct`
+  - `jais-13b-chat`
+  - `flan-t5-xl-3b`
+  - `flan-t5-xxl-11b`
+  - `flan-ul2-20b`
+  - `elyza-japanese-llama-2-7b-instruct`
+  - `mt0-xxl-13b`
 
 ### Prerequisites
 
@@ -35,26 +53,35 @@ To install the WatsonX provider, use the following steps:
 
 1. Install the necessary dependencies:
 
-   ```bash
+    ```bash
    npm install @ibm-cloud/watsonx-ai ibm-cloud-sdk-core
-   ```
+    ```
 
 2. Set up the necessary environment variables:
 
-   ```bash
-   export WATSONX_API_KEY=your-ibm-cloud-api-key
-   export WATSONX_PROJECT_ID=your-ibm-project-id
-   ```
+    ```bash
+    export WATSONX_API_KEY=your-ibm-cloud-api-key
+    export WATSONX_PROJECT_ID=your-ibm-project-id
+    ```
 
 3. Alternatively, you can configure the API key and project ID directly in the configuration file.
+    ```
+    providers:
+      - id: watsonx:ibm/granite-13b-chat-v2
+      config:
+        apiKey: your-ibm-cloud-api-key
+        projectId: your-ibm-project-id
+        serviceUrl: https://us-south.ml.cloud.ibm.com
+    ```
 
-## Usage Examples
-
-### Basic Usage
+### Usage Examples
 
 Once configured, you can use the WatsonX provider to generate text responses based on prompts. Here’s an example of using the **Granite 13B Chat V2** model to answer a question:
 
 ```yaml
+providers:
+  - watsonx:ibm/granite-13b-chat-v2
+
 prompts:
   - "Answer the following question: '{{question}}'"
 
@@ -64,25 +91,6 @@ tests:
     assert:
       - type: contains
         value: 'Paris'
-```
-
-### Example: Tweet Generation
-
-You can use WatsonX to generate creative content, like tweets:
-
-```yaml
-prompts:
-  - 'Write a tweet about {{topic}}'
-  - 'Write a concise, funny tweet about {{topic}}'
-
-tests:
-  - vars:
-      topic: bananas
-  - vars:
-      topic: avocado toast
-    assert:
-      - type: icontains
-        value: avocado
 ```
 
 ### Example Code for Using WatsonX Provider
@@ -106,35 +114,3 @@ const response = await provider.callApi(prompt);
 
 console.log(response.output); // Should return "Paris"
 ```
-
-### Example Directory
-
-You can add the above YAML files and examples to the `examples/` directory of your project for users to quickly try out different use cases.
-
-## Comparison with Other Providers
-
-### OpenAI vs. WatsonX
-
-| **Feature**                   | **WatsonX**                                                                  | **OpenAI (GPT-4)**                                                                               |
-| ----------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| **Enterprise Security**       | Strong compliance (HIPAA, GDPR) and enterprise-grade security                | Security and compliance, but IBM’s reputation in regulated industries is a significant advantage |
-| **Customization**             | High levels of customization for training and deployment                     | Customization is available but more general-purpose                                              |
-| **Multimodal Capabilities**   | Llama 3.2 Vision Instruct offers text and vision tasks                       | GPT-4 is multimodal, combining text and vision                                                   |
-| **Cost Efficiency**           | Cost-effective for IBM Cloud users with potential for bundled services       | OpenAI has competitive pricing but no enterprise bundling with cloud services                    |
-| **Support**                   | IBM provides dedicated enterprise support and consulting                     | OpenAI provides standard support, more self-service for enterprise needs                         |
-| **IBM Ecosystem Integration** | Seamless integration with other IBM services (Cloud, Watson Discovery, etc.) | OpenAI integrates with various platforms, but not specific to IBM's enterprise suite             |
-
-### Unique Features and Benefits of WatsonX
-
-1. **Enterprise-Grade Security and Compliance**  
-   Ideal for industries requiring compliance with standards like HIPAA and GDPR, WatsonX is tailored for high-security environments.
-2. **Customization and Flexibility**  
-   Fine-tune models to suit your specific data and business needs, giving you more precise control over model behavior.
-3. **Multimodal Capabilities**  
-   WatsonX supports both text and image inputs, expanding its utility for more complex tasks like image description generation.
-4. **Cost Efficiency**  
-   Bundled services for IBM Cloud users reduce costs, making WatsonX a cost-effective solution for enterprise-level AI tasks.
-5. **Superior Customer Support**  
-   IBM’s enterprise-focused support ensures smooth deployment, troubleshooting, and scaling of AI solutions.
-6. **Seamless Integration with IBM Ecosystem**  
-   WatsonX integrates well with other IBM services, providing a unified experience for enterprises already using the IBM ecosystem.
