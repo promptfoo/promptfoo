@@ -1,5 +1,6 @@
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
+import crypto from 'crypto';
 import { IamAuthenticator } from 'ibm-cloud-sdk-core';
 import invariant from 'tiny-invariant';
 import { z } from 'zod';
@@ -9,32 +10,15 @@ import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import type { ProviderOptions } from '../types/providers';
 
-// Interface for provider configuration
-// interface WatsonxGenerationParameters {
-//   apiKey?: string | null;
-//   apiKeyEnvar?: string | null;
-//   serviceUrl?: string;
-//   version?: string;
-//   projectId: string;
-//   modelId: string;
-//   maxNewTokens?: number;
-// }
+interface TextGenRequestParametersModel {
+  max_new_tokens: number;
+}
 
-// interface WatsonxModerations {
-//   TODO: Define moderation parameters here
-// }
-
-// Interface for text generation response
-interface TextGenResponse {
-  model_id: string;
-  model_version: string;
-  created_at: string;
-  results: Array<{
-    generated_text: string;
-    generated_token_count?: number;
-    input_token_count?: number;
-    stop_reason?: string;
-  }>;
+interface TextGenRequestParams {
+  input: string;
+  modelId: string;
+  projectId: string;
+  parameters: TextGenRequestParametersModel;
 }
 
 const ConfigSchema = z.object({
@@ -47,8 +31,21 @@ const ConfigSchema = z.object({
   maxNewTokens: z.number().optional(),
 });
 
-// Helper function to convert API response to ProviderResponse
-function convertResponse(response: TextGenResponse): ProviderResponse {
+const TextGenResponseSchema = z.object({
+  model_id: z.string(),
+  model_version: z.string(),
+  created_at: z.string(),
+  results: z.array(
+    z.object({
+      generated_text: z.string(),
+      generated_token_count: z.number().optional(),
+      input_token_count: z.number().optional(),
+      stop_reason: z.string().optional(),
+    }),
+  ),
+});
+
+function convertResponse(response: z.infer<typeof TextGenResponseSchema>): ProviderResponse {
   const firstResult = response.results && response.results[0];
 
   if (!firstResult) {
@@ -77,12 +74,16 @@ function convertResponse(response: TextGenResponse): ProviderResponse {
   return providerResponse;
 }
 
+function generateConfigHash(config: any): string {
+  return crypto.createHash('md5').update(JSON.stringify(config)).digest('hex');
+}
+
 export class WatsonXProvider implements ApiProvider {
   modelName: string;
   options: ProviderOptions;
   env?: EnvOverrides;
   apiKey: string;
-  client: WatsonXAIClient | undefined;
+  client: WatsonXAIClient;
 
   constructor(modelName: string, options: ProviderOptions) {
     const validationResult = ConfigSchema.safeParse(options.config);
@@ -96,6 +97,12 @@ export class WatsonXProvider implements ApiProvider {
     this.options = options;
     this.env = env;
     this.apiKey = this.getApiKey();
+
+    this.client = WatsonXAI.newInstance({
+      version: this.options.config.version || '2023-05-29',
+      serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
+      authenticator: new IamAuthenticator({ apikey: this.apiKey }),
+    });
   }
 
   id(): string {
@@ -135,6 +142,10 @@ export class WatsonXProvider implements ApiProvider {
       projectId,
       'WatsonX project ID is not set. Set the WATSONX_PROJECT_ID environment variable or add `projectId` to the provider config.',
     );
+    invariant(
+      projectId && projectId.trim() !== '',
+      'WatsonX project ID is required and cannot be empty.',
+    );
     return projectId;
   }
 
@@ -154,15 +165,7 @@ export class WatsonXProvider implements ApiProvider {
     return modelId;
   }
 
-  async getClient(): Promise<WatsonXAIClient> {
-    if (!this.client) {
-      const apiKey = this.getApiKey();
-      this.client = WatsonXAI.newInstance({
-        version: this.options.config.version || '2023-05-29',
-        serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
-        authenticator: new IamAuthenticator({ apikey: apiKey }),
-      });
-    }
+  getClient(): WatsonXAIClient {
     return this.client;
   }
 
@@ -171,12 +174,13 @@ export class WatsonXProvider implements ApiProvider {
     const projectId = this.getProjectId();
 
     const cache = await getCache();
-    const cacheKey = `watsonx:${this.modelName}:${prompt}`;
+    const configHash = generateConfigHash(this.options.config);
+    const cacheKey = `watsonx:${this.modelName}:${configHash}:${prompt}`;
     if (isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(
-          `Watsonx: Returning cached response for prompt "${prompt}": ${cachedResponse}`,
+          `Watsonx: Returning cached response for prompt "${prompt}" with config "${configHash}": ${cachedResponse}`,
         );
         return JSON.parse(cachedResponse as string) as ProviderResponse;
       }
@@ -185,28 +189,34 @@ export class WatsonXProvider implements ApiProvider {
     const client = await this.getClient();
 
     try {
-      const textGenRequestParametersModel = {
+      const textGenRequestParametersModel: TextGenRequestParametersModel = {
         max_new_tokens: this.options.config.maxNewTokens || 100,
       };
 
-      const params = {
+      const params: TextGenRequestParams = {
         input: prompt,
         modelId,
-        projectId: projectId || '',
+        projectId,
         parameters: textGenRequestParametersModel,
       };
 
       const apiResponse = await client.generateText(params);
-      const textGenResponse = apiResponse.result as TextGenResponse;
+      const parsedResponse = TextGenResponseSchema.safeParse(apiResponse.result);
 
-      // console.log('API Response:', JSON.stringify(textGenResponse, null, 2));
+      if (!parsedResponse.success) {
+        logger.error(
+          `Watsonx: Invalid response structure: ${JSON.stringify(parsedResponse.error.errors)}`,
+        );
+        throw new Error(
+          `Invalid API response structure: ${JSON.stringify(parsedResponse.error.errors)}`,
+        );
+      }
 
+      const textGenResponse = parsedResponse.data;
       const providerResponse = convertResponse(textGenResponse);
 
       if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(providerResponse), {
-          ttl: 60 * 5, // Cache for 5 minutes
-        });
+        await cache.set(cacheKey, JSON.stringify(providerResponse));
       }
 
       return providerResponse;
