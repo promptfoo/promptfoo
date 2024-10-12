@@ -48,10 +48,16 @@ export default function Prompts({ onNext, onBack }: PromptsProps) {
         callApi('/redteam/purpose', {
           method: 'POST',
           body: JSON.stringify({ prompts }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
         }),
         callApi('/redteam/entities', {
           method: 'POST',
           body: JSON.stringify({ prompts }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
         }),
       ]);
       const purposeData = await purposeResponse.json();
