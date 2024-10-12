@@ -1,6 +1,7 @@
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { IamAuthenticator } from 'ibm-cloud-sdk-core';
+import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
@@ -105,28 +106,36 @@ export class WatsonXProvider implements ApiProvider {
     return `[Watsonx Provider ${this.modelName}]`;
   }
 
-  getApiKey(): string | undefined {
-    return (
+  getApiKey(): string {
+    const apiKey =
       this.options.config.apiKey ||
       (this.options.config.apiKeyEnvar
         ? process.env[this.options.config.apiKeyEnvar] ||
           this.env?.[this.options.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.WATSONX_API_KEY ||
-      getEnvString('WATSONX_API_KEY')
+      getEnvString('WATSONX_API_KEY');
+    invariant(
+      apiKey,
+      'WatsonX API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
     );
+    return apiKey;
   }
 
-  getProjectId(): string | undefined {
-    return (
+  getProjectId(): string {
+    const projectId =
       this.options.config.projectId ||
       (this.options.config.projectIdEnvar
         ? process.env[this.options.config.projectIdEnvar] ||
           this.env?.[this.options.config.projectIdEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.WATSONX_PROJECT_ID ||
-      getEnvString('WATSONX_PROJECT_ID')
+      getEnvString('WATSONX_PROJECT_ID');
+    invariant(
+      projectId,
+      'WatsonX project ID is not set. Set the WATSONX_PROJECT_ID environment variable or add `projectId` to the provider config.',
     );
+    return projectId;
   }
 
   getModelId(): string {
