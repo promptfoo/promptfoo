@@ -343,7 +343,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                             plugin}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {subCategoryDescriptions[plugin]}
+                          {subCategoryDescriptions[plugin as keyof typeof subCategoryDescriptions]}
                         </Typography>
                       </Box>
                     }
