@@ -89,7 +89,11 @@ describe('WatsonXProvider', () => {
     it('should throw an error if API key is not set', async () => {
       const provider = new WatsonXProvider(modelName, { config: { ...config, apiKey: undefined } });
 
-      jest.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
+      jest.spyOn(provider, 'getApiKey').mockImplementation(() => {
+        throw new Error(
+          'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
+        );
+      });
 
       await expect(provider.getClient()).rejects.toThrow(
         'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -225,7 +229,11 @@ describe('WatsonXProvider', () => {
     it('should throw an error if API key is not set when calling callApi', async () => {
       const provider = new WatsonXProvider(modelName, { config: { ...config, apiKey: undefined } });
 
-      jest.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
+      jest.spyOn(provider, 'getApiKey').mockImplementation(() => {
+        throw new Error(
+          'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
+        );
+      });
 
       await expect(provider.callApi(prompt)).rejects.toThrow(
         'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',

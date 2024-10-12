@@ -81,7 +81,7 @@ export class WatsonXProvider implements ApiProvider {
   modelName: string;
   options: ProviderOptions;
   env?: EnvOverrides;
-  apiKey?: string;
+  apiKey: string;
   client: WatsonXAIClient | undefined;
 
   constructor(modelName: string, options: ProviderOptions) {
@@ -149,18 +149,14 @@ export class WatsonXProvider implements ApiProvider {
       }
       return parts[1];
     }
-    return this.options.config.modelId || this.modelName;
+    const modelId = this.options.config.modelId || this.modelName;
+    invariant(modelId, 'Model ID is required for WatsonX API call.');
+    return modelId;
   }
 
   async getClient(): Promise<WatsonXAIClient> {
     if (!this.client) {
       const apiKey = this.getApiKey();
-      if (!apiKey) {
-        throw new Error(
-          'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
-        );
-      }
-
       this.client = WatsonXAI.newInstance({
         version: this.options.config.version || '2023-05-29',
         serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
@@ -173,14 +169,6 @@ export class WatsonXProvider implements ApiProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     const modelId = this.getModelId();
     const projectId = this.getProjectId();
-    if (!modelId) {
-      throw new Error('Model ID is required for WatsonX API call.');
-    }
-    if (!this.apiKey) {
-      throw new Error(
-        'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
-    }
 
     const cache = await getCache();
     const cacheKey = `watsonx:${this.modelName}:${prompt}`;
