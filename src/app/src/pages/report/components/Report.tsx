@@ -194,12 +194,11 @@ const App: React.FC = () => {
       ? convertResultsToTable(evalData).body
       : (evalData.results as EvaluateSummaryV2).table.body) || [];
 
-  const tools =
-    Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])
-      ? Array.isArray(evalData.config.providers[0].config.tools)
-        ? evalData.config.providers[0].config.tools
-        : [evalData.config.providers[0].config.tools]
-      : [];
+  let tools = [];
+  if (Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])) {
+    const providerTools = evalData.config.providers[0].config.tools;
+    tools = Array.isArray(providerTools) ? providerTools : [providerTools];
+  }
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {
