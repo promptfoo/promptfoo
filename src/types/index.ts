@@ -51,6 +51,7 @@ export const CommandLineOptionsSchema = z.object({
   filterFirstN: z.coerce.number().int().positive().optional(),
   filterPattern: z.string().optional(),
   filterProviders: z.string().optional(),
+  filterTargets: z.string().optional(),
   var: z.record(z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
