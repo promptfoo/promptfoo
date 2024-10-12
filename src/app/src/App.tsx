@@ -13,6 +13,7 @@ import EvalCreatorPage from './pages/eval-creator/page';
 import EvalPage from './pages/eval/page';
 import ProgressPage from './pages/progress/page';
 import PromptsPage from './pages/prompts/page';
+import RedteamSetupPage from './pages/redteam/setup/page';
 import ReportPage from './pages/report/page';
 
 const DEFAULT_ROUTE = import.meta.env.VITE_PUBLIC_HOSTED ? '/setup' : '/eval';
@@ -29,7 +30,10 @@ const router = createBrowserRouter(
       <Route path="/datasets" element={<DatasetsPage />} />
       <Route path="/report" element={<ReportPage />} />
       {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
-        <Route path="/dashboard" element={<DashboardPage />} />
+        <>
+          <Route path="/redteam/setup" element={<RedteamSetupPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+        </>
       )}
     </Route>,
   ]),
