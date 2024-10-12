@@ -186,7 +186,7 @@ export class WatsonXProvider implements ApiProvider {
       }
     }
 
-    const client = await this.getClient();
+    const client = this.getClient();
 
     try {
       const textGenRequestParametersModel: TextGenRequestParametersModel = {
