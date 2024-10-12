@@ -77,6 +77,7 @@ const App: React.FC = () => {
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
 
+  const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
     const fetchEvalById = async (id: string) => {
       const resp = await callApi(`/results/${id}`, {
@@ -86,7 +87,6 @@ const App: React.FC = () => {
       setEvalData(body.data);
     };
 
-    const searchParams = new URLSearchParams(window.location.search);
     if (searchParams) {
       const evalId = searchParams.get('evalId');
       if (evalId) {
@@ -172,7 +172,8 @@ const App: React.FC = () => {
             Report unavailable
           </Typography>
           <Typography variant="body1">
-            The latest evaluation results are not displayable in report format.
+            The {searchParams.get('evalId') ? 'selected' : 'latest'} evaluation results are not
+            displayable in report format.
           </Typography>
           <Typography variant="body1">Please run a red team and try again.</Typography>
         </Paper>
