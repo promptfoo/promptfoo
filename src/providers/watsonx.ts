@@ -1,6 +1,7 @@
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { IamAuthenticator } from 'ibm-cloud-sdk-core';
+import { z } from 'zod';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -34,6 +35,16 @@ interface TextGenResponse {
     stop_reason?: string;
   }>;
 }
+
+const ConfigSchema = z.object({
+  apiKey: z.string().optional(),
+  apiKeyEnvar: z.string().optional(),
+  serviceUrl: z.string().optional(),
+  version: z.string().optional(),
+  projectId: z.string().optional(),
+  modelId: z.string().optional(),
+  maxNewTokens: z.number().optional(),
+});
 
 // Helper function to convert API response to ProviderResponse
 function convertResponse(response: TextGenResponse): ProviderResponse {
@@ -73,8 +84,10 @@ export class WatsonXProvider implements ApiProvider {
   client: WatsonXAIClient | undefined;
 
   constructor(modelName: string, options: ProviderOptions) {
-    if (!options.config) {
-      throw new Error('WatsonXProvider requires a valid config.');
+    const validationResult = ConfigSchema.safeParse(options.config);
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors.map((e) => e.message).join(', ');
+      throw new Error(`WatsonXProvider requires a valid config. Issues: ${errors}`);
     }
 
     const { env } = options;
