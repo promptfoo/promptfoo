@@ -3,8 +3,8 @@ import { WatsonXProvider } from '../../src/providers/watsonx';
 (async () => {
   const apiKey = process.env.WATSONX_API_KEY;
   const projectId = process.env.WATSONX_PROJECT_ID;
-  const modelId = '';
-  const serviceUrl = process.env.WATSONX_SERVICE_URL || 'https://us-south.ml.cloud.ibm.com';
+  const modelId = 'ibm/granite-13b-chat-v2';
+  const serviceUrl = 'https://us-south.ml.cloud.ibm.com';
 
   if (!apiKey || !projectId || !modelId) {
     console.error('Missing required environment variables.');

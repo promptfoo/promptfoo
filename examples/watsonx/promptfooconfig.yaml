@@ -1,5 +1,5 @@
 # Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
-description: 'My eval'
+description: 'WatsonX eval'
 
 prompts:
   - 'Write a funny tweet about {{topic}}'
