@@ -36,6 +36,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-n, --filter-first-n <number>`     | Only run the first N tests                                                      |
 | `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                      |
 | `--filter-providers <providers>`    | Only run tests with these providers                                             |
+| `--filter-targets <targets>`        | Only run tests with these targets                                               |
 | `--grader <provider>`               | Model that will grade outputs                                                   |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                          |
 | `--model-outputs <path>`            | Path to JSON containing list of LLM output strings                              |
