@@ -134,6 +134,11 @@
     "zod-to-json-schema": "^3.23.3"
   },
   "dependencies": {
+    "@adaline/gateway": "^0.22.0",
+    "@adaline/open-router": "^0.6.0",
+    "@adaline/openai": "^0.19.0",
+    "@adaline/together-ai": "^0.6.0",
+    "@adaline/types": "^0.14.0",
     "@anthropic-ai/sdk": "^0.29.0",
     "@apidevtools/json-schema-ref-parser": "^11.7.2",
     "@emotion/react": "^11.13.3",

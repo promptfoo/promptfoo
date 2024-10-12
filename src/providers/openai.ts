@@ -1,3 +1,11 @@
+import { Gateway } from '@adaline/gateway';
+import type {
+  CompleteChatHandlerResponseType,
+  GetEmbeddingsHandlerResponseType,
+} from '@adaline/gateway';
+import { OpenRouter as GatewayOpenRouter } from '@adaline/open-router';
+import { OpenAI as GatewayOpenAI } from '@adaline/openai';
+import { TogetherAI as GatewayTogetherAI } from '@adaline/together-ai';
 import type { Cache } from 'cache-manager';
 import OpenAI from 'openai';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
@@ -292,27 +300,39 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       model: this.modelName,
     };
     let data,
-      cached = false;
-    try {
-      ({ data, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/embeddings`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...this.config.headers,
-          },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
-    } catch (err) {
-      logger.error(`API call error: ${err}`);
-      throw err;
+      cached = false,
+      useGateway = true;
+
+    if (useGateway) {
+      try {
+        ({ data, cached } = await this.callEmbeddingApiGateway(body));
+      } catch {
+        useGateway = false;
+      }
     }
-    logger.debug(`\tOpenAI embeddings API response: ${JSON.stringify(data)}`);
+
+    if (!useGateway) {
+      try {
+        ({ data, cached } = (await fetchWithCache(
+          `${this.getApiUrl()}/embeddings`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.getApiKey()}`,
+              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+              ...this.config.headers,
+            },
+            body: JSON.stringify(body),
+          },
+          REQUEST_TIMEOUT_MS,
+        )) as unknown as any);
+      } catch (err) {
+        logger.error(`API call error: ${err}`);
+        throw err;
+      }
+      logger.debug(`\tOpenAI embeddings API response: ${JSON.stringify(data)}`);
+    }
 
     try {
       const embedding = data?.data?.[0]?.embedding;
@@ -326,6 +346,52 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     } catch (err) {
       logger.error(data.error.message);
       throw err;
+    }
+  }
+
+  async callEmbeddingApiGateway(
+    body: any,
+  ): Promise<{ data: ProviderEmbeddingResponse; cached: boolean }> {
+    try {
+      const gatewayOpenAi = new GatewayOpenAI();
+      if (!gatewayOpenAi.embeddingModelLiterals().includes(this.modelName)) {
+        throw new Error(`Unsupported Gateway OpenAI embedding model: ${this.modelName}`);
+      }
+
+      const gatewayModel = gatewayOpenAi.embeddingModel({
+        modelName: this.modelName,
+        apiKey: this.getApiKey() as string,
+        baseUrl: this.getApiUrl(),
+      });
+
+      const gatewayRequest = gatewayModel.transformModelRequest(body);
+      const gateway = new Gateway({
+        queueOptions: {
+          maxConcurrentTasks: 1,
+          retryCount: 4,
+          retry: {
+            initialDelay: getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000),
+            exponentialFactor: 2,
+          },
+          timeout: REQUEST_TIMEOUT_MS,
+        },
+      });
+      logger.debug(`Calling OpenAI embeddings API via Gateway: ${JSON.stringify(gatewayRequest)}`);
+      const response = (await gateway.getEmbeddings({
+        model: gatewayModel,
+        config: gatewayRequest.config,
+        embeddingRequests: gatewayRequest.embeddingRequests,
+        options: {
+          enableCache: isCacheEnabled(),
+          customHeaders: this.config.headers,
+        },
+      })) as GetEmbeddingsHandlerResponseType;
+      logger.debug(`OpenAI embeddings API via Gateway response: ${JSON.stringify(response)}`);
+      const gatewayResponse = response.provider.response.data;
+      return { data: gatewayResponse, cached: response.cached };
+    } catch (err) {
+      logger.error(`Error calling OpenAI embeddings API via Gateway: ${err}`);
+      throw new Error(`Error calling OpenAI embeddings API via Gateway: ${err}`);
     }
   }
 }
@@ -540,32 +606,49 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.stop ? { stop: this.config.stop } : {}),
       ...(this.config.passthrough || {}),
     };
-    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
     let data,
-      cached = false;
-    try {
-      ({ data, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/chat/completions`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...this.config.headers,
-          },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-      )) as unknown as { data: any; cached: boolean });
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
+      cached = false,
+      useGateway = context?.gateway ? true : false;
+
+    if (body.function_call || this.config.passthrough) {
+      // Gateway does not support function_call or passthrough
+      useGateway = false;
     }
 
-    logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
+    if (useGateway) {
+      try {
+        ({ data, cached } = await this.callApiGateway(body, context));
+      } catch {
+        useGateway = false;
+      }
+    }
+
+    if (!useGateway) {
+      try {
+        logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
+        ({ data, cached } = (await fetchWithCache(
+          `${this.getApiUrl()}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.getApiKey()}`,
+              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+              ...this.config.headers,
+            },
+            body: JSON.stringify(body),
+          },
+          REQUEST_TIMEOUT_MS,
+        )) as unknown as { data: any; cached: boolean });
+        logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
+      } catch (err) {
+        return {
+          error: `API call error: ${String(err)}`,
+        };
+      }
+    }
+
     if (data.error) {
       return {
         error: formatOpenAiError(data),
@@ -650,6 +733,58 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
+    }
+  }
+
+  async callApiGateway(
+    body: any,
+    context?: CallApiContextParams,
+  ): Promise<{ data: ProviderResponse; cached: boolean }> {
+    try {
+      let gatewayModel;
+      if (this.getApiUrl().includes('openrouter.ai')) {
+        const gatewayOpenRouter = new GatewayOpenRouter();
+        gatewayModel = gatewayOpenRouter.chatModel({
+          modelName: this.modelName,
+          apiKey: this.getApiKey() as string,
+        });
+      } else if (this.getApiUrl().includes('together.xyz')) {
+        const gatewayTogetherAI = new GatewayTogetherAI();
+        gatewayModel = gatewayTogetherAI.chatModel({
+          modelName: this.modelName,
+          apiKey: this.getApiKey() as string,
+        });
+      } else {
+        const gatewayOpenAi = new GatewayOpenAI();
+        if (!gatewayOpenAi.chatModelLiterals().includes(this.modelName)) {
+          throw new Error(`Unsupported Gateway OpenAI chat model: ${this.modelName}`);
+        }
+
+        gatewayModel = gatewayOpenAi.chatModel({
+          modelName: this.modelName,
+          apiKey: this.getApiKey() as string,
+          baseUrl: this.getApiUrl(),
+          organization: this.getOrganization(),
+        });
+      }
+
+      const gatewayRequest = gatewayModel.transformModelRequest(body);
+      const response = (await context?.gateway?.completeChat({
+        model: gatewayModel,
+        config: gatewayRequest.config,
+        messages: gatewayRequest.messages,
+        tools: gatewayRequest.tools,
+        options: {
+          enableCache: isCacheEnabled(),
+          customHeaders: this.config.headers,
+        },
+      })) as CompleteChatHandlerResponseType;
+      logger.debug(`OpenAI Chat Completion via Gateway response: ${JSON.stringify(response)}`);
+      const gatewayResponse = response.provider.response.data;
+      return { data: gatewayResponse, cached: response.cached };
+    } catch (err) {
+      logger.debug(`Error calling OpenAI Chat Completion via Gateway: ${err}`);
+      throw new Error(`Error calling OpenAI Chat Completion via Gateway: ${err}`);
     }
   }
 }

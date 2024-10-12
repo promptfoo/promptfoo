@@ -1,3 +1,4 @@
+import type { Gateway } from '@adaline/gateway';
 import type winston from 'winston';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -36,6 +37,7 @@ export interface CallApiContextParams {
   fetchWithCache?: any;
   filters?: NunjucksFilterMap;
   getCache?: any;
+  gateway?: Gateway;
   logger?: winston.Logger;
   originalProvider?: ApiProvider;
   prompt: Prompt;
