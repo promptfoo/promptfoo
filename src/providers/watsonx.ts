@@ -176,7 +176,8 @@ export class WatsonXProvider implements ApiProvider {
     const cache = await getCache();
     const configHash = generateConfigHash(this.options.config);
     const cacheKey = `watsonx:${this.modelName}:${configHash}:${prompt}`;
-    if (isCacheEnabled()) {
+    const cacheEnabled = isCacheEnabled();
+    if (cacheEnabled) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(
@@ -205,7 +206,7 @@ export class WatsonXProvider implements ApiProvider {
 
       if (!parsedResponse.success) {
         logger.error(
-          `Watsonx: Invalid response structure: ${JSON.stringify(parsedResponse.error.errors)}`,
+          `Watsonx: Invalid response structure for response: ${JSON.stringify(apiResponse.result)}, errors: ${JSON.stringify(parsedResponse.error.errors)}`,
         );
         throw new Error(
           `Invalid API response structure: ${JSON.stringify(parsedResponse.error.errors)}`,
