@@ -79,7 +79,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
   return (
     <Card className="framework-compliance-card">
       <CardContent>
-        <Typography variant="h6" mb={2}>
+        <Typography variant="h5" mb={2}>
           Framework Compliance ({compliantFrameworks}/{totalFrameworks})
         </Typography>
         <Grid container spacing={3} className="framework-grid">
