@@ -1,7 +1,8 @@
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { IamAuthenticator } from 'ibm-cloud-sdk-core';
 import { getCache, isCacheEnabled } from '../src/cache';
-import { WatsonXProvider } from '../src/providers/watsonx';
+import { getEnvString } from '../src/envars';
+import { WatsonXProvider, generateConfigHash } from '../src/providers/watsonx';
 
 jest.mock('@ibm-cloud/watsonx-ai', () => ({
   WatsonXAI: {
@@ -23,6 +24,10 @@ jest.mock('../src/logger', () => ({
   error: jest.fn(),
 }));
 
+jest.mock('../src/envars', () => ({
+  getEnvString: jest.fn(),
+}));
+
 describe('WatsonXProvider', () => {
   const modelName = 'test-model';
   const config = {
@@ -39,12 +44,22 @@ describe('WatsonXProvider', () => {
 
   describe('constructor', () => {
     it('should initialize with modelName and config', () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn(),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.modelName).toBe(modelName);
       expect(provider.options.config).toEqual(config);
     });
 
     it('should initialize with default id based on modelName', () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn(),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.id()).toBe(`watsonx:${modelName}`);
     });
@@ -52,6 +67,11 @@ describe('WatsonXProvider', () => {
 
   describe('id', () => {
     it('should return the correct id string', () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn(),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.id()).toBe(`watsonx:${modelName}`);
     });
@@ -59,21 +79,26 @@ describe('WatsonXProvider', () => {
 
   describe('toString', () => {
     it('should return the correct string representation', () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn(),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.toString()).toBe(`[Watsonx Provider ${modelName}]`);
     });
   });
 
   describe('getClient', () => {
-    it('should initialize WatsonXAI client with correct parameters', async () => {
-      const provider = new WatsonXProvider(modelName, { config });
-
-      const mockedWatsonXAIClient = {
+    it('should initialize WatsonXAI client with correct parameters', () => {
+      const mockedWatsonXAIClient: Partial<any> = {
         generateText: jest.fn(),
       };
       jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
 
-      const client = await provider.getClient();
+      const provider = new WatsonXProvider(modelName, { config });
+
+      const client = provider.getClient();
 
       expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
         version: '2023-05-29',
@@ -86,58 +111,53 @@ describe('WatsonXProvider', () => {
       expect(client).toBe(mockedWatsonXAIClient);
     });
 
-    it('should throw an error if API key is not set', async () => {
-      const provider = new WatsonXProvider(modelName, { config: { ...config, apiKey: undefined } });
+    it('should throw an error if API key is not set', () => {
+      jest.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
 
-      jest.spyOn(provider, 'getApiKey').mockImplementation(() => {
-        throw new Error(
-          'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
-        );
-      });
-
-      await expect(provider.getClient()).rejects.toThrow(
-        'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
+      expect(() => {
+        new WatsonXProvider(modelName, { config: { ...config, apiKey: undefined } });
+      }).toThrow(
+        /WatsonX API key is not set\. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config\./,
       );
     });
   });
 
   describe('callApi', () => {
     it('should call generateText with correct parameters and return the correct response', async () => {
-      const provider = new WatsonXProvider(modelName, { config });
-
-      const mockedGenerateText = jest.fn().mockResolvedValue({
-        result: {
-          model_id: 'ibm/test-model',
-          model_version: '1.0.0',
-          created_at: '2023-10-10T00:00:00Z',
-          results: [
-            {
-              generated_text: 'Test response from WatsonX',
-              generated_token_count: 10,
-              input_token_count: 5,
-              stop_reason: 'max_tokens',
-            },
-          ],
-        },
-      });
-
-      const mockedClient = {
-        generateText: mockedGenerateText,
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response from WatsonX',
+                generated_token_count: 10,
+                input_token_count: 5,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
       };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
 
-      jest.spyOn(provider, 'getClient').mockResolvedValue(mockedClient as any);
-
-      const cache = {
+      const cache: Partial<any> = {
         get: jest.fn().mockResolvedValue(null),
         set: jest.fn(),
-      } as any;
+        wrap: jest.fn(),
+        del: jest.fn(),
+        reset: jest.fn(),
+        store: {} as any,
+      };
 
-      jest.mocked(getCache as any).mockResolvedValue(cache);
+      jest.mocked(getCache).mockReturnValue(cache as any);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
 
+      const provider = new WatsonXProvider(modelName, { config });
       const response = await provider.callApi(prompt);
-
-      expect(mockedGenerateText).toHaveBeenCalledWith({
+      expect(mockedWatsonXAIClient.generateText).toHaveBeenCalledWith({
         input: prompt,
         modelId: config.modelId,
         projectId: config.projectId,
@@ -160,15 +180,12 @@ describe('WatsonXProvider', () => {
       });
 
       expect(cache.set).toHaveBeenCalledWith(
-        `watsonx:${modelName}:${prompt}`,
+        `watsonx:${modelName}:${generateConfigHash(config)}:${prompt}`,
         JSON.stringify(response),
-        { ttl: 300 },
       );
     });
 
     it('should return cached response if available', async () => {
-      const provider = new WatsonXProvider(modelName, { config });
-
       const cachedResponse = {
         error: undefined,
         output: 'Cached response',
@@ -182,62 +199,50 @@ describe('WatsonXProvider', () => {
         logProbs: undefined,
       };
 
-      const cache = {
+      const cacheKey = `watsonx:${modelName}:${generateConfigHash(config)}:${prompt}`;
+      const cache: Partial<any> = {
         get: jest.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
         set: jest.fn(),
-      } as any;
+        wrap: jest.fn(),
+        del: jest.fn(),
+        reset: jest.fn(),
+        store: {} as any,
+      };
 
-      jest.mocked(getCache as any).mockResolvedValue(cache);
+      jest.mocked(getCache).mockReturnValue(cache as any);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
 
-      const getClientSpy = jest.spyOn(provider, 'getClient');
-
+      const provider = new WatsonXProvider(modelName, { config });
+      const generateTextSpy = jest.spyOn(provider.getClient(), 'generateText');
       const response = await provider.callApi(prompt);
-
+      expect(cache.get).toHaveBeenCalledWith(cacheKey);
       expect(response).toEqual(cachedResponse);
-
-      expect(getClientSpy).not.toHaveBeenCalled();
+      expect(generateTextSpy).not.toHaveBeenCalled();
     });
 
     it('should handle API errors gracefully', async () => {
-      const provider = new WatsonXProvider(modelName, { config });
-
-      const mockedGenerateText = jest.fn().mockRejectedValue(new Error('API error'));
-      const mockedClient = {
-        generateText: mockedGenerateText,
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn().mockRejectedValue(new Error('API error')),
       };
-
-      jest.spyOn(provider, 'getClient').mockResolvedValue(mockedClient as any);
-
-      const cache = {
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      const cache: Partial<any> = {
         get: jest.fn().mockResolvedValue(null),
         set: jest.fn(),
-      } as any;
+        wrap: jest.fn(),
+        del: jest.fn(),
+        reset: jest.fn(),
+        store: {} as any,
+      };
 
-      jest.mocked(getCache as any).mockResolvedValue(cache);
+      jest.mocked(getCache).mockReturnValue(cache as any);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
-
+      const provider = new WatsonXProvider(modelName, { config });
       const response = await provider.callApi(prompt);
-
       expect(response).toEqual({
         error: 'API call error: Error: API error',
         output: '',
         tokenUsage: {},
       });
-    });
-
-    it('should throw an error if API key is not set when calling callApi', async () => {
-      const provider = new WatsonXProvider(modelName, { config: { ...config, apiKey: undefined } });
-
-      jest.spyOn(provider, 'getApiKey').mockImplementation(() => {
-        throw new Error(
-          'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
-        );
-      });
-
-      await expect(provider.callApi(prompt)).rejects.toThrow(
-        'Watsonx API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
     });
   });
 });

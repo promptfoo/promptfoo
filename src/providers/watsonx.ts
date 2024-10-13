@@ -74,8 +74,26 @@ function convertResponse(response: z.infer<typeof TextGenResponseSchema>): Provi
   return providerResponse;
 }
 
-function generateConfigHash(config: any): string {
-  return crypto.createHash('md5').update(JSON.stringify(config)).digest('hex');
+function sortObject(obj: any): any {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(sortObject);
+  }
+  const sortedKeys = Object.keys(obj)
+    .filter((key) => obj[key] !== undefined)
+    .sort();
+  const result: any = {};
+  sortedKeys.forEach((key) => {
+    result[key] = sortObject(obj[key]);
+  });
+  return result;
+}
+
+export function generateConfigHash(config: any): string {
+  const sortedConfig = sortObject(config);
+  return crypto.createHash('md5').update(JSON.stringify(sortedConfig)).digest('hex');
 }
 
 export class WatsonXProvider implements ApiProvider {
