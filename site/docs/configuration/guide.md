@@ -713,7 +713,7 @@ defaultTest:
 ```python
 import os
 
-def get_transform_vars(vars, context):
+def get_transform(vars, context):
     with open(vars['file_path'], 'r') as file:
         file_content = file.read()
 

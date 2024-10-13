@@ -386,7 +386,7 @@ export async function runAssertion({
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output "${renderedValue}" to ${inverse ? 'not ' : ''}equal "${outputString}"`,
+        : `Expected output "${outputString}" to ${inverse ? 'not ' : ''}equal "${renderedValue}"`,
       assertion,
     };
   }

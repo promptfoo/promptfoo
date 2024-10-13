@@ -95,7 +95,10 @@ export async function doEval(
       failing: cmdObj.filterFailing,
     });
 
-    testSuite.providers = filterProviders(testSuite.providers, cmdObj.filterProviders);
+    testSuite.providers = filterProviders(
+      testSuite.providers,
+      cmdObj.filterProviders || cmdObj.filterTargets,
+    );
 
     const options: EvaluateOptions = {
       showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
@@ -215,7 +218,9 @@ export async function doEval(
     const passRate = (summary.stats.successes / totalTests) * 100;
     logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
     logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
-    logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
+    if (!Number.isNaN(passRate)) {
+      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
+    }
     logger.info(
       `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
     );
@@ -409,7 +414,10 @@ export function evalCommand(
       '--filter-pattern <pattern>',
       'Only run tests whose description matches the regular expression pattern',
     )
-    .option('--filter-providers <providers>', 'Only run tests with these providers')
+    .option(
+      '--filter-providers, --filter-targets <providers>',
+      'Only run tests with these providers (regex match)',
+    )
     .option('--filter-failing <path>', 'Path to json output file')
 
     // Output configuration

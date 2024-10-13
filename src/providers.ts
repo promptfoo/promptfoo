@@ -64,6 +64,7 @@ import {
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
+import { WatsonXProvider } from './providers/watsonx';
 import { WebhookProvider } from './providers/webhook';
 import { WebSocketProvider } from './providers/websocket';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
@@ -222,6 +223,10 @@ export async function loadApiProvider(
     }
   } else if (providerPath.startsWith('voyage:')) {
     ret = new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+  } else if (providerPath.startsWith('watsonx:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new WatsonXProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('bedrock:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
@@ -571,4 +576,5 @@ export default {
   WebhookProvider,
   WebSocketProvider,
   loadApiProvider,
+  WatsonXProvider,
 };

@@ -840,7 +840,9 @@ class Evaluator {
     }
 
     await this.evalRecord.addPrompts(prompts);
-    const providers = await Provider.createMultiple(testSuite.providers);
+    const providers = await Provider.createMultiple(testSuite.providers, {
+      persist: this.evalRecord.persisted,
+    });
     await this.evalRecord.addProviders(providers);
 
     // Finish up
