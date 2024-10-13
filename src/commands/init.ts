@@ -3,12 +3,18 @@ import input from '@inquirer/input';
 import select from '@inquirer/select';
 import type { Command } from 'commander';
 import fs from 'fs/promises';
+import fetch from 'node-fetch';
 import path from 'path';
+import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 
 const EXAMPLES_BASE_URL = `https://api.github.com/repos/promptfoo/promptfoo/contents/examples`;
+const GITHUB_API_BASE = 'https://api.github.com';
+const REPO_OWNER = 'promptfoo';
+const REPO_NAME = 'promptfoo';
+const EXAMPLES_PATH = 'examples';
 
 async function downloadFile(url: string, filePath: string): Promise<void> {
   const response = await fetch(url);
@@ -57,13 +63,51 @@ async function downloadExample(exampleName: string, targetDir: string): Promise<
 }
 
 async function getExamplesList(): Promise<string[]> {
-  // This is a simplified version. In a real implementation, you might want to fetch this list dynamically.
-  return [
-    'simple-test',
-    'claude-vs-gpt',
-    'openai-function-call',
-    // Add more examples here
+  try {
+    const response = await fetch(
+      `${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/contents/${EXAMPLES_PATH}?ref=${VERSION}`,
+      {
+        headers: {
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'promptfoo-cli',
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`GitHub API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as Array<{ name: string; type: string }>;
+
+    // Filter for directories only
+    return data.filter((item) => item.type === 'dir').map((item) => item.name);
+  } catch (error) {
+    logger.error(
+      `Failed to fetch examples list: ${error instanceof Error ? error.message : error}`,
+    );
+    return []; // Return an empty array if fetching fails
+  }
+}
+
+async function selectExample(): Promise<string> {
+  const examples = await getExamplesList();
+  const choices = [
+    { name: 'None (initialize with dummy files)', value: '' },
+    ...examples.map((ex) => ({ name: ex, value: ex })),
+    { name: 'Enter custom example name', value: 'custom' },
   ];
+
+  const selectedExample = await select({
+    message: 'Choose an example to download:',
+    choices,
+  });
+
+  if (selectedExample === 'custom') {
+    return input({ message: 'Enter the name of the example:' });
+  }
+
+  return selectedExample;
 }
 
 export function initCommand(program: Command) {
@@ -95,55 +139,34 @@ export function initCommand(program: Command) {
 
         let exampleName: string | undefined;
 
-        if (cmdObj.example === true || (cmdObj.example === undefined && cmdObj.interactive)) {
-          // --example flag was passed without a value, or we're in interactive mode
-          const examples = await getExamplesList();
-          const choices = [
-            { name: 'None (initialize with dummy files)', value: '' },
-            ...examples.map((ex) => ({ name: ex, value: ex })),
-            { name: 'Enter custom example name', value: 'custom' },
-          ];
-
-          const selectedExample = await select({
-            message: 'Choose an example to download:',
-            choices,
-          });
-
-          if (selectedExample === 'custom') {
-            exampleName = await input({ message: 'Enter the name of the example:' });
-          } else {
-            exampleName = selectedExample;
-          }
+        if (cmdObj.example === true) {
+          exampleName = await selectExample();
         } else if (typeof cmdObj.example === 'string') {
-          // --example flag was passed with a value
           exampleName = cmdObj.example;
         }
 
-        if (exampleName) {
+        let attemptDownload = true;
+        while (attemptDownload && exampleName) {
           const targetDir = path.join(directory || '.', exampleName);
           try {
             await downloadExample(exampleName, targetDir);
             logger.info(`Example '${exampleName}' downloaded successfully to ${targetDir}`);
+            attemptDownload = false;
           } catch (error) {
             logger.error(
               `Failed to download example: ${error instanceof Error ? error.message : error}`,
             );
-
-            // Offer to try again or exit
-            const tryAgain = await confirm({
+            attemptDownload = await confirm({
               message: 'Would you like to try downloading a different example?',
               default: true,
             });
-
-            if (tryAgain) {
-              // Recursively call the action to start over
-              await program.commands
-                .find((cmd) => cmd.name() === 'init')
-                ?.action(directory, cmdObj);
-              return;
+            if (attemptDownload) {
+              exampleName = await selectExample();
             }
           }
-        } else {
+        }
+
+        if (!exampleName) {
           const details = await initializeProject(directory, cmdObj.interactive);
           telemetry.record('command_used', {
             ...details,
