@@ -1,11 +1,16 @@
 import chalk from 'chalk';
+import dedent from 'dedent';
 import fs from 'fs';
-import get from 'lodash.get';
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
 import type { ApiProvider, ProviderOptions } from '../types';
-import dedent from 'dedent';
+
+function getValue<T extends object, K extends string>(obj: T, path: K): any {
+  return path.split('.').reduce((acc: any, key: string) => {
+    return acc && acc[key] !== undefined ? acc[key] : undefined;
+  }, obj);
+}
 
 export async function parsePackageProvider(
   providerPath: string,
@@ -42,7 +47,7 @@ export async function parsePackageProvider(
   }
 
   const module = await importModule(path.join(modulePath, pkg.main));
-  const Provider = get(module, providerName);
+  const Provider = getValue(module, providerName);
 
   if (!Provider) {
     logger.error(dedent`
