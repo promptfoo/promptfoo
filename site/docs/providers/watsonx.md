@@ -18,27 +18,27 @@
 
   - `llama-3-2-90b-vision-instruct`
   - `llama-3-2-11b-vision-instruct`
-  - `llama-guard-3-11b-vision`
-  - `llama-3-2-1b-instruct`
   - `llama-3-2-3b-instruct`
-  - `llama-3-405b-instruct`
+  - `llama-3-2-1b-instruct`
+  - `llama-guard-3-11b-vision`
   - `llama-3-1-70b-instruct`
   - `llama-3-1-8b-instruct`
   - `llama3-llava-next-8b-hf`
-  - `llama-3-8b-instruct`
+  - `llama-3-405b-instruct`
   - `llama-3-70b-instruct`
+  - `llama-3-8b-instruct`
 
 - **Additional Models**
-  - `llama2-13b-dpo-v7`
   - `allam-1-13b-instruct`
   - `codellama-34b-instruct`
-  - `mistral-large-2`
-  - `mixtral-8x7b-instruct`
-  - `jais-13b-chat`
+  - `elyza-japanese-llama-2-7b-instruct`
   - `flan-t5-xl-3b`
   - `flan-t5-xxl-11b`
   - `flan-ul2-20b`
-  - `elyza-japanese-llama-2-7b-instruct`
+  - `jais-13b-chat`
+  - `llama2-13b-dpo-v7`
+  - `mistral-large-2`
+  - `mixtral-8x7b-instruct`
   - `mt0-xxl-13b`
 
 ## Prerequisites
