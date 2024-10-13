@@ -10,7 +10,6 @@ import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 
-const EXAMPLES_BASE_URL = `https://api.github.com/repos/promptfoo/promptfoo/contents/examples`;
 const GITHUB_API_BASE = 'https://api.github.com';
 const REPO_OWNER = 'promptfoo';
 const REPO_NAME = 'promptfoo';
@@ -26,7 +25,7 @@ async function downloadFile(url: string, filePath: string): Promise<void> {
 }
 
 async function downloadDirectory(dirPath: string, targetDir: string): Promise<void> {
-  const url = `${EXAMPLES_BASE_URL}/${dirPath}`;
+  const url = `${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/contents/${EXAMPLES_PATH}/${dirPath}?ref=${VERSION}`;
   const response = await fetch(url, {
     headers: {
       Accept: 'application/vnd.github.v3+json',
