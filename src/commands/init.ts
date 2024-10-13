@@ -157,48 +157,48 @@ async function handleExampleDownload(
   return exampleName;
 }
 
+interface InitCommandOptions {
+  interactive: boolean;
+  example: string | boolean | undefined;
+}
+
 export function initCommand(program: Command) {
   program
     .command('init [directory]')
     .description('Initialize project with dummy files or download an example')
     .option('--no-interactive', 'Do not run in interactive mode')
     .option('--example [name]', 'Download an example from the promptfoo repo')
-    .action(
-      async (
-        directory: string | null,
-        cmdObj: { interactive: boolean; example?: string | boolean },
-      ) => {
-        telemetry.record('command_used', {
-          name: 'init - started',
+    .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
+      telemetry.record('command_used', {
+        name: 'init - started',
+      });
+
+      if (directory === 'redteam' && cmdObj.interactive) {
+        const useRedteam = await confirm({
+          message:
+            'You specified "redteam" as the directory. Did you mean to write "promptfoo redteam init" instead?',
+          default: false,
         });
-
-        if (directory === 'redteam' && cmdObj.interactive) {
-          const useRedteam = await confirm({
-            message:
-              'You specified "redteam" as the directory. Did you mean to write "promptfoo redteam init" instead?',
-            default: false,
-          });
-          if (useRedteam) {
-            logger.warn('Please use "promptfoo redteam init" to initialize a red teaming project.');
-            return;
-          }
+        if (useRedteam) {
+          logger.warn('Please use "promptfoo redteam init" to initialize a red teaming project.');
+          return;
         }
+      }
 
-        const exampleName = await handleExampleDownload(directory, cmdObj.example);
+      const exampleName = await handleExampleDownload(directory, cmdObj.example);
 
-        if (exampleName) {
-          telemetry.record('command_used', {
-            example: exampleName,
-            name: 'init',
-          });
-        } else {
-          const details = await initializeProject(directory, cmdObj.interactive);
-          telemetry.record('command_used', {
-            ...details,
-            name: 'init',
-          });
-        }
-        await telemetry.send();
-      },
-    );
+      if (exampleName) {
+        telemetry.record('command_used', {
+          example: exampleName,
+          name: 'init',
+        });
+      } else {
+        const details = await initializeProject(directory, cmdObj.interactive);
+        telemetry.record('command_used', {
+          ...details,
+          name: 'init',
+        });
+      }
+      await telemetry.send();
+    });
 }
