@@ -52,6 +52,7 @@ providers:
 | [Go](./go.md)                                       | Custom - Go file                           | `file://path/to/your/script.go`                 |
 | [Web Browser](./browser.md)                         | Custom - Automate web browser interactions | `browser`                                       |
 | [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                               | Compatible with OpenAI syntax                   |
+| [WatsonX](./watsonx.md)                             | IBM's WatsonX                              | `watsonx:ibm/granite-13b-chat-v2`               |
 
 ## Provider Syntax
 
