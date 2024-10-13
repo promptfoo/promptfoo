@@ -1,4 +1,4 @@
-import type { Plugin, Strategy } from '../../../../../redteam/constants';
+import type { Strategy } from '../../../../../redteam/constants';
 
 export const riskCategories = {
   'Security Risk': [
@@ -521,3 +521,102 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'owasp:api': 'OWASP API Top 10',
   'mitre:atlas': 'MITRE ATLAS',
 };
+
+export const BASE_PLUGINS = [
+  'contracts',
+  'cross-session-leak',
+  'excessive-agency',
+  'hallucination',
+  'hijacking',
+  'overreliance',
+  'politics',
+] as const;
+export type BasePlugin = (typeof BASE_PLUGINS)[number];
+
+export const ADDITIONAL_PLUGINS = [
+  'ascii-smuggling',
+  'bfla',
+  'bola',
+  'competitors',
+  'debug-access',
+  'imitation',
+  'indirect-prompt-injection',
+  'prompt-extraction',
+  'rbac',
+  'religion',
+  'shell-injection',
+  'sql-injection',
+  'ssrf',
+] as const;
+export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
+
+export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
+  // MLCommons harm categories
+  // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
+  'harmful:violent-crime': 'Violent Crimes',
+  'harmful:non-violent-crime': 'Non-Violent Crimes',
+  'harmful:sex-crime': 'Sex Crimes',
+  'harmful:child-exploitation': 'Child Exploitation',
+  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
+  'harmful:hate': 'Hate',
+  'harmful:self-harm': 'Self-Harm',
+  'harmful:sexual-content': 'Sexual Content',
+
+  // Harmbench taxonomy
+  // https://arxiv.org/pdf/2402.04249
+  'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
+  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
+  'harmful:illegal-drugs': 'Illegal Drugs',
+  'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
+  'harmful:harassment-bullying': 'Harassment & Bullying',
+  'harmful:illegal-activities': 'Illegal Activities - Fraud & scams',
+  'harmful:graphic-content': 'Graphic & age-restricted content',
+  'harmful:unsafe-practices': 'Promotion of unsafe practices',
+  //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
+
+  // Other
+  'harmful:radicalization': 'Radicalization',
+  'harmful:profanity': 'Requests containing profanity',
+  'harmful:insults': 'Insults and personal attacks',
+  //'scam_fraud_creation',
+  //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
+} as const;
+export const REDTEAM_PROVIDER_HARM_PLUGINS = {
+  'harmful:privacy': 'Privacy violations',
+  'harmful:intellectual-property': 'Intellectual Property violation',
+  'harmful:misinformation-disinformation':
+    'Misinformation & Disinformation - Harmful lies and propaganda',
+  'harmful:specialized-advice': 'Specialized Advice - Financial',
+} as const;
+
+export const HARM_PLUGINS = {
+  ...UNALIGNED_PROVIDER_HARM_PLUGINS,
+  ...REDTEAM_PROVIDER_HARM_PLUGINS,
+} as const;
+export type HarmPlugin = keyof typeof HARM_PLUGINS;
+
+export const COLLECTIONS = ['harmful', 'pii', 'default'] as const;
+export type Collection = (typeof COLLECTIONS)[number];
+export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
+export type PIIPlugin = (typeof PII_PLUGINS)[number];
+export const CONFIG_REQUIRED_PLUGINS = ['policy'] as const;
+export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
+
+export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
+  ...COLLECTIONS,
+  ...BASE_PLUGINS,
+  ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]),
+  ...PII_PLUGINS,
+] as const satisfies readonly Plugin[]);
+
+export const ALL_PLUGINS: readonly Plugin[] = [
+  ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS]),
+].sort() as Plugin[];
+
+export type Plugin =
+  | Collection
+  | HarmPlugin
+  | PIIPlugin
+  | BasePlugin
+  | AdditionalPlugin
+  | ConfigRequiredPlugin;
