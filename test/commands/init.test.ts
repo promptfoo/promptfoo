@@ -161,7 +161,6 @@ describe('init command', () => {
       if (!initCmd) {
         throw new Error('initCmd not found');
       }
-      action = initCmd.action as Function;
     });
 
     it('should set up the init command correctly', () => {
