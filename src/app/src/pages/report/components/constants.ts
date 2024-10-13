@@ -1,4 +1,4 @@
-import type { Plugin, Strategy } from '../../../../../redteam/constants';
+import type { Strategy } from '../../../../../redteam/constants';
 
 export const riskCategories = {
   'Security Risk': [
@@ -531,6 +531,7 @@ export const BASE_PLUGINS = [
   'overreliance',
   'politics',
 ] as const;
+export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
   'ascii-smuggling',
@@ -547,6 +548,7 @@ export const ADDITIONAL_PLUGINS = [
   'sql-injection',
   'ssrf',
 ] as const;
+export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   // MLCommons harm categories
@@ -594,8 +596,11 @@ export const HARM_PLUGINS = {
 export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
 export const COLLECTIONS = ['harmful', 'pii', 'default'] as const;
+export type Collection = (typeof COLLECTIONS)[number];
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
+export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export const CONFIG_REQUIRED_PLUGINS = ['policy'] as const;
+export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...COLLECTIONS,
@@ -607,3 +612,11 @@ export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
 export const ALL_PLUGINS: readonly Plugin[] = [
   ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS]),
 ].sort() as Plugin[];
+
+export type Plugin =
+  | Collection
+  | HarmPlugin
+  | PIIPlugin
+  | BasePlugin
+  | AdditionalPlugin
+  | ConfigRequiredPlugin;
