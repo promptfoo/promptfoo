@@ -1,10 +1,13 @@
 import confirm from '@inquirer/confirm';
 import select from '@inquirer/select';
+import chalk from 'chalk';
 import type { Command } from 'commander';
+import dedent from 'dedent';
 import fs from 'fs/promises';
 import fetch from 'node-fetch';
 import path from 'path';
 import { VERSION } from '../constants';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
@@ -98,6 +101,62 @@ export async function selectExample(): Promise<string> {
   return selectedExample;
 }
 
+async function handleExampleDownload(
+  directory: string | null,
+  example: string | boolean | undefined,
+): Promise<string | undefined> {
+  let exampleName: string | undefined;
+
+  if (example === true) {
+    exampleName = await selectExample();
+  } else if (typeof example === 'string') {
+    exampleName = example;
+  }
+
+  let attemptDownload = true;
+  while (attemptDownload && exampleName) {
+    const targetDir = path.join(directory || '.', exampleName);
+    try {
+      await downloadExample(exampleName, targetDir);
+      logger.info(chalk.green(`✅ Example project '${exampleName}' written to: ${targetDir}`));
+      attemptDownload = false;
+    } catch (error) {
+      logger.error(`Failed to download example: ${error instanceof Error ? error.message : error}`);
+      attemptDownload = await confirm({
+        message: 'Would you like to try downloading a different example?',
+        default: true,
+      });
+      if (attemptDownload) {
+        exampleName = await selectExample();
+      }
+    }
+  }
+
+  const isNpx = getEnvString('npm_execpath')?.includes('npx');
+  const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
+  if (directory === '.' || !directory) {
+    logger.info(
+      dedent`View the README file at ${chalk.bold(`${exampleName}/README.md`)} or run 
+        
+        \`${chalk.bold(runCommand)}\` 
+        
+        to get started!`,
+    );
+  } else {
+    logger.info(
+      '\n' +
+        dedent`
+        View the README file at: ${chalk.bold(`${directory}/${exampleName}/README.md`)} or run
+
+        \`${chalk.bold(`cd ${directory}`)}\` and then \`${chalk.bold(runCommand)}\`
+        
+        to get started!`,
+    );
+  }
+
+  return exampleName;
+}
+
 export function initCommand(program: Command) {
   program
     .command('init [directory]')
@@ -125,42 +184,20 @@ export function initCommand(program: Command) {
           }
         }
 
-        let exampleName: string | undefined;
+        const exampleName = await handleExampleDownload(directory, cmdObj.example);
 
-        if (cmdObj.example === true) {
-          exampleName = await selectExample();
-        } else if (typeof cmdObj.example === 'string') {
-          exampleName = cmdObj.example;
+        if (exampleName) {
+          telemetry.record('command_used', {
+            example: exampleName,
+            name: 'init',
+          });
+        } else {
+          const details = await initializeProject(directory, cmdObj.interactive);
+          telemetry.record('command_used', {
+            ...details,
+            name: 'init',
+          });
         }
-
-        let attemptDownload = true;
-        while (attemptDownload && exampleName) {
-          const targetDir = path.join(directory || '.', exampleName);
-          try {
-            await downloadExample(exampleName, targetDir);
-            logger.info(`Example '${exampleName}' downloaded successfully to ${targetDir}`);
-            attemptDownload = false;
-          } catch (error) {
-            logger.error(
-              `Failed to download example: ${error instanceof Error ? error.message : error}`,
-            );
-            attemptDownload = await confirm({
-              message: 'Would you like to try downloading a different example?',
-              default: true,
-            });
-            if (attemptDownload) {
-              exampleName = await selectExample();
-            }
-          }
-        }
-
-        const details = await initializeProject(directory, cmdObj.interactive);
-        telemetry.record('command_used', {
-          ...details,
-          ...(exampleName && { example: exampleName }),
-          name: 'init',
-        });
-
         await telemetry.send();
       },
     );
