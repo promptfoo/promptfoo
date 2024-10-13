@@ -36,9 +36,7 @@ export async function downloadDirectory(dirPath: string, targetDir: string): Pro
   if (!response.ok) {
     throw new Error(`Failed to fetch directory contents: ${response.statusText}`);
   }
-  console.log(response);
   const contents = await response.json();
-  console.log(contents);
 
   for (const item of contents) {
     const itemPath = path.join(targetDir, item.name);
