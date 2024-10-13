@@ -15,7 +15,7 @@ const REPO_OWNER = 'promptfoo';
 const REPO_NAME = 'promptfoo';
 const EXAMPLES_PATH = 'examples';
 
-async function downloadFile(url: string, filePath: string): Promise<void> {
+export async function downloadFile(url: string, filePath: string): Promise<void> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.statusText}`);
@@ -24,7 +24,7 @@ async function downloadFile(url: string, filePath: string): Promise<void> {
   await fs.writeFile(filePath, content);
 }
 
-async function downloadDirectory(dirPath: string, targetDir: string): Promise<void> {
+export async function downloadDirectory(dirPath: string, targetDir: string): Promise<void> {
   const url = `${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/contents/${EXAMPLES_PATH}/${dirPath}?ref=${VERSION}`;
   const response = await fetch(url, {
     headers: {
@@ -36,8 +36,9 @@ async function downloadDirectory(dirPath: string, targetDir: string): Promise<vo
   if (!response.ok) {
     throw new Error(`Failed to fetch directory contents: ${response.statusText}`);
   }
-
+  console.log(response);
   const contents = await response.json();
+  console.log(contents);
 
   for (const item of contents) {
     const itemPath = path.join(targetDir, item.name);
@@ -50,7 +51,7 @@ async function downloadDirectory(dirPath: string, targetDir: string): Promise<vo
   }
 }
 
-async function downloadExample(exampleName: string, targetDir: string): Promise<void> {
+export async function downloadExample(exampleName: string, targetDir: string): Promise<void> {
   try {
     await fs.mkdir(targetDir, { recursive: true });
     await downloadDirectory(exampleName, targetDir);
@@ -61,7 +62,7 @@ async function downloadExample(exampleName: string, targetDir: string): Promise<
   }
 }
 
-async function getExamplesList(): Promise<string[]> {
+export async function getExamplesList(): Promise<string[]> {
   try {
     const response = await fetch(
       `${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/contents/${EXAMPLES_PATH}?ref=${VERSION}`,
@@ -89,7 +90,7 @@ async function getExamplesList(): Promise<string[]> {
   }
 }
 
-async function selectExample(): Promise<string> {
+export async function selectExample(): Promise<string> {
   const examples = await getExamplesList();
   const choices = [
     { name: 'None (initialize with dummy files)', value: '' },
