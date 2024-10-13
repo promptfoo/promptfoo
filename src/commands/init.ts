@@ -1,5 +1,4 @@
 import confirm from '@inquirer/confirm';
-import input from '@inquirer/input';
 import select from '@inquirer/select';
 import type { Command } from 'commander';
 import fs from 'fs/promises';
@@ -11,9 +10,6 @@ import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 
 const GITHUB_API_BASE = 'https://api.github.com';
-const REPO_OWNER = 'promptfoo';
-const REPO_NAME = 'promptfoo';
-const EXAMPLES_PATH = 'examples';
 
 export async function downloadFile(url: string, filePath: string): Promise<void> {
   const response = await fetch(url);
@@ -25,7 +21,7 @@ export async function downloadFile(url: string, filePath: string): Promise<void>
 }
 
 export async function downloadDirectory(dirPath: string, targetDir: string): Promise<void> {
-  const url = `${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/contents/${EXAMPLES_PATH}/${dirPath}?ref=${VERSION}`;
+  const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${VERSION}`;
   const response = await fetch(url, {
     headers: {
       Accept: 'application/vnd.github.v3+json',
@@ -63,7 +59,7 @@ export async function downloadExample(exampleName: string, targetDir: string): P
 export async function getExamplesList(): Promise<string[]> {
   try {
     const response = await fetch(
-      `${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/contents/${EXAMPLES_PATH}?ref=${VERSION}`,
+      `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples?ref=${VERSION}`,
       {
         headers: {
           Accept: 'application/vnd.github.v3+json',
@@ -93,18 +89,12 @@ export async function selectExample(): Promise<string> {
   const choices = [
     { name: 'None (initialize with dummy files)', value: '' },
     ...examples.map((ex) => ({ name: ex, value: ex })),
-    { name: 'Enter custom example name', value: 'custom' },
   ];
 
   const selectedExample = await select({
     message: 'Choose an example to download:',
     choices,
   });
-
-  if (selectedExample === 'custom') {
-    return input({ message: 'Enter the name of the example:' });
-  }
-
   return selectedExample;
 }
 
@@ -113,7 +103,7 @@ export function initCommand(program: Command) {
     .command('init [directory]')
     .description('Initialize project with dummy files or download an example')
     .option('--no-interactive', 'Do not run in interactive mode')
-    .option('--example [name]', 'Download a specific example')
+    .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(
       async (
         directory: string | null,
@@ -164,13 +154,12 @@ export function initCommand(program: Command) {
           }
         }
 
-        if (!exampleName) {
-          const details = await initializeProject(directory, cmdObj.interactive);
-          telemetry.record('command_used', {
-            ...details,
-            name: 'init',
-          });
-        }
+        const details = await initializeProject(directory, cmdObj.interactive);
+        telemetry.record('command_used', {
+          ...details,
+          ...(exampleName && { example: exampleName }),
+          name: 'init',
+        });
 
         await telemetry.send();
       },
