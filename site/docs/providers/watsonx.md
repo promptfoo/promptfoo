@@ -2,7 +2,7 @@
 
 [IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports several powerful models from the `Granite` and `Llama` series, along with additional models for code generation, multilingual tasks, vision processing, and more.
 
-### Supported Models
+## Supported Models
 
 - **Granite Series**
 
@@ -41,32 +41,33 @@
   - `elyza-japanese-llama-2-7b-instruct`
   - `mt0-xxl-13b`
 
-### Prerequisites
+## Prerequisites
 
 Before integrating the WatsonX provider, ensure you have:
 
 1. **IBM Cloud Account**: You need an IBM Cloud account to get API access to WatsonX models.
 2. **API Keys and Project ID**: Retrieve your API key, project ID, and service URL from your IBM Cloud account.
 
-### Installation
+## Installation
 
 To install the WatsonX provider, use the following steps:
 
 1. Install the necessary dependencies:
 
-   ```bash
+   ```sh
    npm install @ibm-cloud/watsonx-ai ibm-cloud-sdk-core
    ```
 
 2. Set up the necessary environment variables:
 
-   ```bash
+   ```sh
    export WATSONX_API_KEY=your-ibm-cloud-api-key
    export WATSONX_PROJECT_ID=your-ibm-project-id
    ```
 
 3. Alternatively, you can configure the API key and project ID directly in the configuration file.
-   ```
+
+   ```yaml
    providers:
      - id: watsonx:ibm/granite-13b-chat-v2
      config:
@@ -92,26 +93,4 @@ tests:
     assert:
       - type: contains
         value: 'Paris'
-```
-
-### Example Code for Using WatsonX Provider
-
-Here’s an example of using WatsonX models in JavaScript:
-
-```js
-import { WatsonXProvider } from './providers/watsonx';
-
-const provider = new WatsonXProvider('ibm/granite-13b-chat-v2', {
-  config: {
-    apiKey: process.env.WATSONX_API_KEY,
-    projectId: process.env.WATSONX_PROJECT_ID,
-    serviceUrl: 'https://us-south.ml.cloud.ibm.com',
-    maxNewTokens: 50,
-  },
-});
-
-const prompt = 'What is the capital of France?';
-const response = await provider.callApi(prompt);
-
-console.log(response.output); // Should return "Paris"
 ```
