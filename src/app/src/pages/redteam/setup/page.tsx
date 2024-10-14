@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CrispChat from '@app/components/CrispChat';
 import CloseIcon from '@mui/icons-material/Close';
 import DescriptionIcon from '@mui/icons-material/Description';
 import { Box, Tabs, Tab, IconButton, Drawer, Typography, Fab, Zoom } from '@mui/material';
@@ -187,6 +188,7 @@ export default function GeneratePage() {
           </Box>
         </Drawer>
       </Content>
+      {/*
       <Zoom in={!yamlPreviewOpen} unmountOnExit>
         <StyledFab color="primary" onClick={toggleYamlPreview} aria-label="toggle yaml preview">
           <DescriptionIcon />
@@ -197,7 +199,9 @@ export default function GeneratePage() {
           <CloseIcon />
         </StyledFab>
       </Zoom>
+      */}
       <Setup open={setupModalOpen} onClose={closeSetupModal} />
+      <CrispChat />
     </Root>
   );
 }
