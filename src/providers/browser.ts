@@ -1,4 +1,4 @@
-import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
+import { type Page, type ElementHandle, type BrowserContext, type Frame } from 'playwright';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
@@ -64,7 +64,7 @@ export class BrowserProvider implements ApiProvider {
         this.config,
       )}`,
     );
-    this.defaultTimeout = this.config.timeoutMs || 30000; // Default 30 seconds timeout
+    this.defaultTimeout = this.config.timeoutMs || 30000;
     this.headless = this.config.headless ?? true;
   }
 
@@ -155,6 +155,29 @@ export class BrowserProvider implements ApiProvider {
 
     logger.debug(`Executing headless action: ${actionType}`);
 
+    // Add a helper method to get the target element (either in main page or iframe)
+    const getTargetElement = async (selector: string): Promise<ElementHandle | null> => {
+      console.log('Searching in main page', page.url());
+      const element = await this.waitForSelector(page, selector, 10);
+      if (element) {
+        return element;
+      }
+
+      // If not found in main page, search in iframes
+      const frames = page.frames();
+      for (const frame of frames) {
+        console.log('Searching in iframe', frame.url());
+        const content = await frame.content();
+        console.log('Content', content);
+        const frameElement = await this.waitForSelector(frame, selector, 10);
+        if (frameElement) {
+          return frameElement;
+        }
+      }
+
+      return null;
+    };
+
     switch (actionType) {
       case 'navigate':
         invariant(renderedArgs.url, `Expected headless action to have a url when using 'navigate'`);
@@ -167,8 +190,12 @@ export class BrowserProvider implements ApiProvider {
           `Expected headless action to have a selector when using 'click'`,
         );
         logger.debug(`Waiting for and clicking on ${renderedArgs.selector}`);
-        await this.waitForSelector(page, renderedArgs.selector);
-        await page.click(renderedArgs.selector);
+        const clickElement = await getTargetElement(renderedArgs.selector);
+        if (clickElement) {
+          await clickElement.click();
+        } else if (!renderedArgs.strict) {
+          throw new Error(`Element not found: ${renderedArgs.selector}`);
+        }
         break;
       case 'type':
         invariant(renderedArgs.text, `Expected headless action to have a text when using 'type'`);
@@ -177,35 +204,38 @@ export class BrowserProvider implements ApiProvider {
           `Expected headless action to have a selector when using 'type'`,
         );
         logger.debug(`Waiting for and typing into ${renderedArgs.selector}: ${renderedArgs.text}`);
-        await this.waitForSelector(page, renderedArgs.selector);
+        const typeElement = await getTargetElement(renderedArgs.selector);
+        if (typeElement) {
+          if (typeof renderedArgs.text === 'string') {
+            // Handle special characters
+            const specialKeys = {
+              '<enter>': 'Enter',
+              '<tab>': 'Tab',
+              '<escape>': 'Escape',
+            };
 
-        if (typeof renderedArgs.text === 'string') {
-          // Handle special characters
-          const specialKeys = {
-            '<enter>': 'Enter',
-            '<tab>': 'Tab',
-            '<escape>': 'Escape',
-          };
-
-          for (const [placeholder, key] of Object.entries(specialKeys)) {
-            const lowerText = renderedArgs.text.toLowerCase();
-            if (lowerText.includes(placeholder)) {
-              const parts = lowerText.split(placeholder);
-              for (let i = 0; i < parts.length; i++) {
-                if (parts[i]) {
-                  await page.fill(renderedArgs.selector, parts[i]);
+            for (const [placeholder, key] of Object.entries(specialKeys)) {
+              const lowerText = renderedArgs.text.toLowerCase();
+              if (lowerText.includes(placeholder)) {
+                const parts = lowerText.split(placeholder);
+                for (let i = 0; i < parts.length; i++) {
+                  if (parts[i]) {
+                    await typeElement.fill(parts[i]);
+                  }
+                  if (i < parts.length - 1) {
+                    await typeElement.press(key);
+                  }
                 }
-                if (i < parts.length - 1) {
-                  await page.press(renderedArgs.selector, key);
-                }
+                return;
               }
-              return;
             }
           }
-        }
 
-        // If no special characters, use the original fill method
-        await page.fill(renderedArgs.selector, renderedArgs.text);
+          // If no special characters, use the original fill method
+          await typeElement.fill(renderedArgs.text);
+        } else {
+          throw new Error(`Element not found: ${renderedArgs.selector}`);
+        }
         break;
       case 'screenshot':
         invariant(
@@ -227,16 +257,17 @@ export class BrowserProvider implements ApiProvider {
         );
         invariant(name, `Expected headless action to have a name when using 'extract'`);
         logger.debug(`Waiting for and extracting content from ${renderedArgs.selector}`);
-        await this.waitForSelector(page, renderedArgs.selector);
-        const extractedContent = await page.$eval(
-          renderedArgs.selector,
-          (el: any) => el.textContent,
-        );
-        logger.debug(`Extracted content from ${renderedArgs.selector}: ${extractedContent}`);
-        if (name) {
-          extracted[name] = extractedContent;
+        const extractElement = await getTargetElement(renderedArgs.selector);
+        if (extractElement) {
+          const extractedContent = await extractElement.textContent();
+          logger.debug(`Extracted content from ${renderedArgs.selector}: ${extractedContent}`);
+          if (name) {
+            extracted[name] = extractedContent;
+          } else {
+            throw new Error('Expected headless action to have a name when using `extract`');
+          }
         } else {
-          throw new Error('Expected headless action to have a name when using `extract`');
+          throw new Error(`Element not found: ${renderedArgs.selector}`);
         }
         break;
       case 'wait':
@@ -257,9 +288,16 @@ export class BrowserProvider implements ApiProvider {
     }
   }
 
-  private async waitForSelector(page: Page, selector: string): Promise<ElementHandle | null> {
+  private async waitForSelector(
+    pageOrFrame: Page | Frame,
+    selector: string,
+    timeout?: number,
+  ): Promise<ElementHandle | null> {
     try {
-      return await page.waitForSelector(selector, { timeout: this.defaultTimeout });
+      return await pageOrFrame.waitForSelector(selector, {
+        state: 'attached',
+        timeout: timeout || this.defaultTimeout,
+      });
     } catch {
       logger.warn(`Timeout waiting for selector: ${selector}`);
       return null;
