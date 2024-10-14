@@ -475,6 +475,62 @@ describe('combineConfigs', () => {
     );
     consoleSpy.mockRestore();
   });
+
+  it('should only set redteam config when at least one individual config has redteam settings', async () => {
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(
+        JSON.stringify({
+          description: 'Config without redteam',
+          providers: ['provider1'],
+        }),
+      )
+      .mockReturnValueOnce(
+        JSON.stringify({
+          description: 'Config with redteam',
+          providers: ['provider2'],
+          redteam: {
+            plugins: ['plugin1'],
+            strategies: ['strategy1'],
+          },
+        }),
+      )
+      .mockReturnValueOnce(
+        JSON.stringify({
+          description: 'Another config without redteam',
+          providers: ['provider3'],
+        }),
+      );
+
+    const result = await combineConfigs(['config1.json', 'config2.json', 'config3.json']);
+
+    expect(result.redteam).toBeDefined();
+    expect(result.redteam).toEqual({
+      plugins: ['plugin1'],
+      strategies: ['strategy1'],
+    });
+  });
+
+  it('should not set redteam config when no individual configs have redteam settings', async () => {
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(
+        JSON.stringify({
+          description: 'Config without redteam',
+          providers: ['provider1'],
+        }),
+      )
+      .mockReturnValueOnce(
+        JSON.stringify({
+          description: 'Another config without redteam',
+          providers: ['provider2'],
+        }),
+      );
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+
+    expect(result.redteam).toBeUndefined();
+  });
 });
 
 describe('dereferenceConfig', () => {
