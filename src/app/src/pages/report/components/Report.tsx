@@ -12,13 +12,14 @@ import Modal from '@mui/material/Modal';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import type {
-  EvaluateResult,
-  ResultsFile,
-  SharedResults,
-  GradingResult,
-  ResultLightweightWithLabel,
-  EvaluateSummaryV2,
+import {
+  type EvaluateResult,
+  type ResultsFile,
+  type SharedResults,
+  type GradingResult,
+  type ResultLightweightWithLabel,
+  type EvaluateSummaryV2,
+  isProviderOptions,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import FrameworkCompliance from './FrameworkCompliance';
@@ -28,6 +29,7 @@ import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import TestSuites from './TestSuites';
+import ToolsDialog from './ToolsDialog';
 import { categoryAliasesReverse, type categoryAliases } from './constants';
 import './Report.css';
 
@@ -76,6 +78,7 @@ const App: React.FC = () => {
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
+  const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
 
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
@@ -190,6 +193,12 @@ const App: React.FC = () => {
     (evalData.version >= 4
       ? convertResultsToTable(evalData).body
       : (evalData.results as EvaluateSummaryV2).table.body) || [];
+
+  let tools = [];
+  if (Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])) {
+    const providerTools = evalData.config.providers[0].config.tools;
+    tools = Array.isArray(providerTools) ? providerTools : [providerTools];
+  }
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {
@@ -342,6 +351,18 @@ const App: React.FC = () => {
                 style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
               />
             )}
+            {tools.length > -1 && (
+              <Chip
+                size="small"
+                label={
+                  <>
+                    <strong>Tools:</strong> {tools.length} available
+                  </>
+                }
+                onClick={() => setIsToolsDialogOpen(true)}
+                style={{ cursor: 'pointer' }}
+              />
+            )}
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} />
@@ -411,6 +432,11 @@ const App: React.FC = () => {
           </List>
         </Box>
       </Modal>
+      <ToolsDialog
+        open={isToolsDialogOpen}
+        onClose={() => setIsToolsDialogOpen(false)}
+        tools={tools}
+      />
     </Container>
   );
 };
