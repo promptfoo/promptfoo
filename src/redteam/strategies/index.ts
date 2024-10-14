@@ -6,10 +6,10 @@ import { addBase64Encoding } from './base64';
 import { addCrescendo } from './crescendo';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
+import { addMathPrompt } from './mathprompt';
 import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
-import { addMathPrompt } from './mathprompt';
 
 export interface Strategy {
   key: string;
