@@ -102,11 +102,13 @@ const DrawerHeader = styled(Box)(({ theme }) => ({
   justifyContent: 'flex-start',
 }));
 
+/*
 const StyledFab = styled(Fab)(({ theme }) => ({
   position: 'fixed',
   bottom: theme.spacing(2),
   right: theme.spacing(2),
 }));
+*/
 
 export default function GeneratePage() {
   const [value, setValue] = useState(0);
