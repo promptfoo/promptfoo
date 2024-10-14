@@ -9,6 +9,7 @@ import { addLeetspeak } from './leetspeak';
 import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
+import { addMathPrompt } from './mathprompt';
 
 export interface Strategy {
   key: string;
@@ -92,6 +93,15 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
+  {
+    key: 'mathprompt',
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding MathPrompt encoding to all test cases');
+      const newTestCases = await addMathPrompt(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} MathPrompt encoded test cases`);
+      return newTestCases;
+    },
+  },
 ];
 
 export function validateStrategies(strategies: RedteamStrategyObject[]): void {
@@ -102,9 +112,8 @@ export function validateStrategies(strategies: RedteamStrategyObject[]): void {
     const validStrategiesString = Strategies.map((s) => s.key).join(', ');
     const invalidStrategiesString = invalidStrategies.map((s) => s.id).join(', ');
     logger.error(
-      dedent`Invalid strategy(s): ${invalidStrategiesString}. 
-        
-        ${chalk.green(`Valid strategies are: ${validStrategiesString}`)}`,
+      dedent`Invalid strategy(s): ${invalidStrategiesString}.
+                  ${chalk.green(`Valid strategies are: ${validStrategiesString}`)}`,
     );
     process.exit(1);
   }
