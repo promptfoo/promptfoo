@@ -3,6 +3,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, CallApiContextParams } from '../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { CHAT_MODELS } from './googleShared';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -73,14 +74,12 @@ class PalmGenericProvider implements ApiProvider {
 }
 
 export class PalmChatProvider extends PalmGenericProvider {
-  static CHAT_MODELS = ['chat-bison-001', 'gemini-pro', 'gemini-pro-vision'];
-
   constructor(
     modelName: string,
     options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (!PalmChatProvider.CHAT_MODELS.includes(modelName)) {
-      logger.warn(`Using unknown Google chat model: ${modelName}`);
+    if (!CHAT_MODELS.includes(modelName)) {
+      logger.debug(`Using unknown Google chat model: ${modelName}`);
     }
     super(modelName, options);
   }
