@@ -814,6 +814,36 @@ describe('resolveConfigs', () => {
       }),
     );
   });
+
+  it('should not use default config when configs are provided', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {
+      prompts: ['default prompt'],
+      defaultTest: {
+        vars: {
+          defaultVar: 'default value',
+        },
+      },
+      redteam: {
+        strategies: ['default strategy'],
+      },
+    };
+
+    jest.mocked(readConfig).mockResolvedValue({
+      prompts: ['config prompt'],
+      providers: ['openai:gpt-4'],
+    });
+
+    jest.mocked(globSync).mockReturnValue(['config.json']);
+
+    const { config } = await resolveConfigs(cmdObj, defaultConfig);
+
+    expect(config.prompts).toEqual(['config prompt']);
+    expect(config.providers).toEqual(['openai:gpt-4']);
+    expect(config.prompts).not.toEqual(defaultConfig.prompts);
+    expect(config.redteam).toBeUndefined();
+    expect(config.defaultTest).toBeUndefined();
+  });
 });
 
 describe('readConfig', () => {
