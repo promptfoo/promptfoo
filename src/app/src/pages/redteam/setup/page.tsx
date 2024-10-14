@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import CrispChat from '@app/components/CrispChat';
 import CloseIcon from '@mui/icons-material/Close';
-import DescriptionIcon from '@mui/icons-material/Description';
-import { Box, Tabs, Tab, IconButton, Drawer, Typography, Fab, Zoom } from '@mui/material';
+import { Box, Tabs, Tab, IconButton, Drawer, Typography, Fab } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import Plugins from './components/Plugins';
 import Prompts from './components/Prompts';
