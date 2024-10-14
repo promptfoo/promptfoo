@@ -1,6 +1,7 @@
 /// <reference types="vitest" />
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import type { PluginOption } from 'vite';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
@@ -30,7 +31,7 @@ export default defineConfig({
     port: 3000,
   },
   base: './',
-  plugins: [react(), nodePolyfills()],
+  plugins: [react(), nodePolyfills()] as PluginOption[],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
