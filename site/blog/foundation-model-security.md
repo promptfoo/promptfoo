@@ -27,7 +27,7 @@ Base models, which haven't undergone alignment, fine-tuning, or Reinforcement Le
 
 ## Assessing Foundation Model Risk
 
-An LLM’s resilience to security and safety vulnerabilities is typically refined during RLFH, which will train the model to refuse harmful requests, accept benign requests, and behave as intended. Model developers must balance a fine line between creating versatile models that can be used for broader purposes, but may be more vulnerable to jailbreaking attacks, or models that are resistant to attacks but less flexible.
+An LLM’s resilience to security and safety vulnerabilities is typically refined during RLHF, which will train the model to refuse harmful requests, accept benign requests, and behave as intended. Model developers must balance a fine line between creating versatile models that can be used for broader purposes, but may be more vulnerable to jailbreaking attacks, or models that are resistant to attacks but less flexible.
 
 You can gain a sense of an LLM’s performance and security through its system model cards. Model cards will provide useful information about an LLM’s performance, the type of data it was trained on (and its cutoff date), and any safety evaluations that took place. For example, [Llama 3.2](https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/MODEL_CARD.md)’s model card outlines its evaluations against CBRNE (Chemical, Biological, Radiological, Nuclear, and Explosive Weapons), child safety, and cyber attacks. You can view similar cards for OpenAI’s [latest o1 model](https://openai.com/index/openai-o1-system-card/) and Anthropic’s [Claude 3 model family](https://docs.anthropic.com/en/docs/resources/model-card).
 
