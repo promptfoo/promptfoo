@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
+import CrispChat from '@app/components/CrispChat';
 import CloseIcon from '@mui/icons-material/Close';
-import DescriptionIcon from '@mui/icons-material/Description';
-import { Box, Tabs, Tab, IconButton, Drawer, Typography, Fab, Zoom } from '@mui/material';
+import { Box, Tabs, Tab, IconButton, Drawer, Typography } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import Plugins from './components/Plugins';
 import Prompts from './components/Prompts';
@@ -102,11 +102,13 @@ const DrawerHeader = styled(Box)(({ theme }) => ({
   justifyContent: 'flex-start',
 }));
 
+/*
 const StyledFab = styled(Fab)(({ theme }) => ({
   position: 'fixed',
   bottom: theme.spacing(2),
   right: theme.spacing(2),
 }));
+*/
 
 export default function GeneratePage() {
   const [value, setValue] = useState(0);
@@ -187,6 +189,7 @@ export default function GeneratePage() {
           </Box>
         </Drawer>
       </Content>
+      {/*
       <Zoom in={!yamlPreviewOpen} unmountOnExit>
         <StyledFab color="primary" onClick={toggleYamlPreview} aria-label="toggle yaml preview">
           <DescriptionIcon />
@@ -197,7 +200,9 @@ export default function GeneratePage() {
           <CloseIcon />
         </StyledFab>
       </Zoom>
+      */}
       <Setup open={setupModalOpen} onClose={closeSetupModal} />
+      <CrispChat />
     </Root>
   );
 }
