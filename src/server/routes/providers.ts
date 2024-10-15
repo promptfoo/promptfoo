@@ -66,7 +66,7 @@ providersRouter.post('/test', async (req, res) => {
 
     res.json({ test_result: data, provider_response: result }).status(200);
   } catch (e) {
-    console.error('Error calling agent helper', e);
+    logger.error('[POST /providers/test] Error calling agent helper', e);
     res.status(200).json({
       test_result: {
         error:

@@ -91,12 +91,12 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     };
   } | null>(null);
   const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
-  const [bodyIsJson, setBodyIsJson] = useState(
+  const [isJsonContentType, setIsJsonContentType] = useState(
     selectedTarget.config.headers &&
       selectedTarget.config.headers['Content-Type'] === 'application/json',
   );
   const [requestBody, setRequestBody] = useState(
-    bodyIsJson ? JSON.stringify(selectedTarget.config.body) : selectedTarget.config.body,
+    isJsonContentType ? JSON.stringify(selectedTarget.config.body) : selectedTarget.config.body,
   );
 
   useEffect(() => {
@@ -147,7 +147,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         selectedTarget.config.headers?.[header].toLowerCase().includes('application/json'),
     );
 
-    setBodyIsJson(hasJsonContentType);
+    setIsJsonContentType(hasJsonContentType);
   }, [selectedTarget]);
 
   const updateCustomTarget = (field: string, value: any) => {
@@ -163,7 +163,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
       } else if (field === 'body') {
         updatedTarget.config.body = value;
         setBodyError(null);
-        if (bodyIsJson) {
+        if (isJsonContentType) {
           try {
             const parsedBody = JSON.parse(value.trim());
             updatedTarget.config.body = parsedBody;

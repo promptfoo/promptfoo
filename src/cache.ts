@@ -86,7 +86,7 @@ export async function fetchWithCache<T = any>(
       if (!response.ok) {
         if (responseText == '') {
           errorResponse = JSON.stringify(
-            `Failed to fetch: ${response.status}: ${response.statusText}`,
+            `Empty Response: ${response.status}: ${response.statusText}`,
           );
         } else {
           errorResponse = data;
