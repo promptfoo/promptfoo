@@ -6,12 +6,12 @@ import {
   RouterProvider,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
-import RedteamDashboardPage from './pages/redteam/dashboard/page';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
 import EvalPage from './pages/eval/page';
 import ProgressPage from './pages/progress/page';
 import PromptsPage from './pages/prompts/page';
+import RedteamDashboardPage from './pages/redteam/dashboard/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
 import ReportPage from './pages/report/page';
 
