@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import InfoIcon from '@mui/icons-material/Info';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import {
   Typography,
@@ -15,6 +18,16 @@ import {
   Link,
   useTheme,
   TextareaAutosize,
+  Alert,
+  CircularProgress,
+  Paper,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import { IconButton } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material/Select';
@@ -66,6 +79,25 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     updateConfig('target', value);
   };
   const [urlError, setUrlError] = useState<string | null>(null);
+  const [bodyError, setBodyError] = useState<string | null>(null);
+  const [testingTarget, setTestingTarget] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message: string;
+    suggestions?: string[];
+    providerResponse?: {
+      raw: string;
+      output: string;
+    };
+  } | null>(null);
+  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
+  const [isJsonContentType, setIsJsonContentType] = useState(
+    selectedTarget.config.headers &&
+      selectedTarget.config.headers['Content-Type'] === 'application/json',
+  );
+  const [requestBody, setRequestBody] = useState(
+    isJsonContentType ? JSON.stringify(selectedTarget.config.body) : selectedTarget.config.body,
+  );
 
   useEffect(() => {
     updateConfig('target', selectedTarget);
@@ -106,6 +138,18 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     }
   };
 
+  useEffect(() => {
+    setTestingEnabled(selectedTarget.id === 'http');
+
+    const hasJsonContentType = Object.keys(selectedTarget.config.headers || {}).some(
+      (header) =>
+        header.toLowerCase() === 'content-type' &&
+        selectedTarget.config.headers?.[header].toLowerCase().includes('application/json'),
+    );
+
+    setIsJsonContentType(hasJsonContentType);
+  }, [selectedTarget]);
+
   const updateCustomTarget = (field: string, value: any) => {
     if (typeof selectedTarget === 'object') {
       const updatedTarget = { ...selectedTarget } as ProviderOptions;
@@ -116,9 +160,25 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         } else {
           setUrlError('Please enter a valid HTTP URL (http:// or https://)');
         }
-      } else if (field in updatedTarget.config) {
+      } else if (field === 'body') {
+        updatedTarget.config.body = value;
+        setBodyError(null);
+        if (isJsonContentType) {
+          try {
+            const parsedBody = JSON.parse(value.trim());
+            updatedTarget.config.body = parsedBody;
+            setBodyError(null);
+          } catch {
+            setBodyError('Invalid JSON');
+          }
+        }
+        if (!value.includes('{{prompt}}')) {
+          setBodyError('Request body must contain {{prompt}}');
+        }
+      } else {
         (updatedTarget.config as any)[field] = value;
       }
+
       setSelectedTarget(updatedTarget);
     }
   };
@@ -173,6 +233,56 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
       const key = Object.keys(updatedHeaders)[index];
       delete updatedHeaders[key];
       updateCustomTarget('headers', updatedHeaders);
+    }
+  };
+
+  const handleTestTarget = async () => {
+    setTestingTarget(true);
+    setTestResult(null);
+    try {
+      const response = await callApi('/providers/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(selectedTarget),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const data = await response.json();
+
+      const result = data.test_result;
+      if (result.error) {
+        setTestResult({
+          success: false,
+          message: result.error,
+          providerResponse: data.provider_response,
+        });
+      } else if (result.changes_needed) {
+        setTestResult({
+          success: false,
+          message: result.changes_needed_reason,
+          suggestions: result.changes_needed_suggestions,
+          providerResponse: data.provider_response,
+        });
+      } else {
+        setTestResult({
+          success: true,
+          message: 'Target configuration is valid!',
+          providerResponse: data.provider_response,
+        });
+      }
+    } catch (error) {
+      console.error('Error testing target:', error);
+      setTestResult({
+        success: false,
+        message: 'An error occurred while testing the target.',
+      });
+    } finally {
+      setTestingTarget(false);
     }
   };
 
@@ -267,6 +377,9 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                 margin="normal"
                 error={!!urlError}
                 helperText={urlError}
+                autoFocus
+                placeholder="https://example.com/api/chat"
+                required
               />
               <FormControl fullWidth margin="normal">
                 <InputLabel id="method-label">Method</InputLabel>
@@ -317,8 +430,11 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
               <TextField
                 fullWidth
                 label="Request body"
-                value={selectedTarget.config.body}
+                value={requestBody}
+                error={!!bodyError}
+                helperText={bodyError}
                 onChange={(e) => {
+                  setRequestBody(e.target.value);
                   updateCustomTarget('body', e.target.value);
                 }}
                 margin="normal"
@@ -385,6 +501,87 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           </Box>
         )}
       </Box>
+
+      {testingEnabled && (
+        <Box mt={4}>
+          <Typography variant="h6" gutterBottom>
+            Test Target Configuration
+          </Typography>
+          <Button
+            variant="outlined"
+            onClick={handleTestTarget}
+            disabled={testingTarget || !selectedTarget.config.url}
+            startIcon={testingTarget ? <CircularProgress size={20} /> : null}
+          >
+            {testingTarget ? 'Testing...' : 'Test Target'}
+          </Button>
+          {!selectedTarget.config.url && (
+            <Typography variant="body1" sx={{ mt: 1, color: 'red' }}>
+              Please enter a valid URL to test the target.
+            </Typography>
+          )}
+
+          {testResult && (
+            <Box mt={2}>
+              <Alert severity={testResult.success ? 'success' : 'error'}>
+                {testResult.message}
+              </Alert>
+              <Accordion sx={{ mt: 2 }}>
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  aria-controls="provider-response-content"
+                  id="provider-response-header"
+                >
+                  <Typography>Provider Response Details</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Raw Result:
+                  </Typography>
+                  <Paper
+                    elevation={0}
+                    sx={{ p: 2, bgcolor: 'grey.100', maxHeight: '200px', overflow: 'auto' }}
+                  >
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {JSON.stringify(testResult.providerResponse?.raw, null, 2)}
+                    </pre>
+                  </Paper>
+                  <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
+                    Parsed Result:
+                  </Typography>
+                  <Paper
+                    elevation={0}
+                    sx={{ p: 2, bgcolor: 'grey.100', maxHeight: '200px', overflow: 'auto' }}
+                  >
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {JSON.stringify(testResult.providerResponse?.output, null, 2)}
+                    </pre>
+                  </Paper>
+                </AccordionDetails>
+              </Accordion>
+              {testResult.suggestions && (
+                <Box mt={2}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Suggestions:
+                  </Typography>
+                  <Paper elevation={1} sx={{ p: 2, bgcolor: 'grey.100' }}>
+                    <List>
+                      {testResult.suggestions.map((suggestion, index) => (
+                        <ListItem key={index}>
+                          <ListItemIcon>
+                            <InfoIcon color="primary" />
+                          </ListItemIcon>
+                          <ListItemText primary={suggestion} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Paper>
+                </Box>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4 }}>
         <Button

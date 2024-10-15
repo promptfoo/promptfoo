@@ -205,6 +205,7 @@ export class HttpProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'text',
+        context?.debug,
       );
     } catch (err) {
       return {
@@ -212,6 +213,10 @@ export class HttpProvider implements ApiProvider {
       };
     }
     logger.debug(`\tHTTP response: ${response.data}`);
+    const ret: ProviderResponse = {};
+    if (context?.debug) {
+      ret.raw = response.data;
+    }
 
     const rawText = response.data as string;
     let parsedData;
@@ -220,11 +225,14 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
-
-    const parsedOutput = (await this.responseParser)(parsedData, rawText);
-    return {
-      output: parsedOutput.output || parsedOutput,
-    };
+    try {
+      const parsedOutput = (await this.responseParser)(parsedData, rawText);
+      ret.output = parsedOutput.output || parsedOutput;
+      return ret;
+    } catch (err) {
+      ret.error = `Error parsing response: ${String(err)}`;
+      return ret;
+    }
   }
 
   private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
