@@ -17,7 +17,6 @@ import RedteamDashboardPage from './pages/redteam/dashboard/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
 import ReportPage from './pages/report/page';
 
-const DEFAULT_ROUTE = import.meta.env.VITE_PUBLIC_HOSTED ? '/setup' : '/eval';
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
 const useAuth = () => {
@@ -56,15 +55,16 @@ const ProtectedRoutes = () => (
 const router = createBrowserRouter(
   createRoutesFromElements([
     <Route path="/" element={<PageShell />}>
-      <Route index element={<Navigate to={DEFAULT_ROUTE} replace />} />
+      <Route index element={<Navigate to={'/eval'} replace />} />
+      <Route path="/datasets" element={<DatasetsPage />} />
       <Route path="/eval" element={<EvalPage />} />
       <Route path="/eval/:evalId" element={<EvalPage />} />
-      <Route path="/prompts" element={<PromptsPage />} />
-      <Route path="/setup" element={<EvalCreatorPage />} />
       <Route path="/progress" element={<ProgressPage />} />
-      <Route path="/datasets" element={<DatasetsPage />} />
-      <Route path="/report" element={<ReportPage />} />
+      <Route path="/prompts" element={<PromptsPage />} />
+      <Route path="/report" element={<Navigate to="/redteam/report" replace />} />
+      <Route path="/setup" element={<EvalCreatorPage />} />
       <Route element={<ProtectedRoutes />}>
+        <Route path="/redteam/report" element={<ReportPage />} />
         <Route path="/redteam/dashboard" element={<RedteamDashboardPage />} />
         <Route path="/redteam/setup" element={<RedteamSetupPage />} />
       </Route>

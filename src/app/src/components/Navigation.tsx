@@ -4,16 +4,7 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
-import {
-  AppBar,
-  Toolbar,
-  Button,
-  IconButton,
-  Menu,
-  MenuItem,
-  Box,
-  Tooltip,
-} from '@mui/material';
+import { AppBar, Toolbar, Button, IconButton, Menu, MenuItem, Box, Tooltip } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
