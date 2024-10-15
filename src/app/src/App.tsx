@@ -65,10 +65,8 @@ const router = createBrowserRouter(
       <Route path="/datasets" element={<DatasetsPage />} />
       <Route path="/report" element={<ReportPage />} />
       <Route element={<ProtectedRoutes />}>
+        <Route path="/redteam/dashboard" element={<RedteamDashboardPage />} />
         <Route path="/redteam/setup" element={<RedteamSetupPage />} />
-        {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
-          <Route path="/redteam/dashboard" element={<RedteamDashboardPage />} />
-        )}
       </Route>
     </Route>,
   ]),
