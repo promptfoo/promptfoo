@@ -510,11 +510,16 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           <Button
             variant="outlined"
             onClick={handleTestTarget}
-            disabled={testingTarget}
+            disabled={testingTarget || !selectedTarget.config.url}
             startIcon={testingTarget ? <CircularProgress size={20} /> : null}
           >
             {testingTarget ? 'Testing...' : 'Test Target'}
           </Button>
+          {!selectedTarget.config.url && (
+            <Typography variant="body1" sx={{ mt: 1, color: 'red' }}>
+              Please enter a valid URL to test the target.
+            </Typography>
+          )}
 
           {testResult && (
             <Box mt={2}>
