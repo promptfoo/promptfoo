@@ -73,7 +73,9 @@ function NewDropdown() {
     setAnchorEl(null);
   };
 
-  const isActive = ['/setup', '/redteam'].some((route) => location.pathname.startsWith(route));
+  const isActive = ['/setup', '/redteam/setup'].some((route) =>
+    location.pathname.startsWith(route),
+  );
 
   return (
     <>
@@ -100,7 +102,7 @@ function NewDropdown() {
         <MenuItem onClick={handleClose} component={Link} to="/setup">
           Eval
         </MenuItem>
-        <MenuItem onClick={handleClose} component={Link} to="/redteam">
+        <MenuItem onClick={handleClose} component={Link} to="/redteam/setup">
           Redteam
         </MenuItem>
       </Menu>
