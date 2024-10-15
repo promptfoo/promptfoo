@@ -3,7 +3,7 @@ import {
   riskCategories,
   riskCategorySeverityMap,
   Severity,
-} from '@app/pages/report/components/constants';
+} from '@app/pages/redteam/report/components/constants';
 
 export function calculateTrend(current: number, previous: number, increaseIsBad: boolean) {
   const difference = current - previous;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Severity } from '@app/pages/report/components/constants';
+import { Severity } from '@app/pages/redteam/report/components/constants';
 import { Paper, Typography } from '@mui/material';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import type { Plugin } from '@app/pages/report/components/constants';
+import type { Plugin } from '@app/pages/redteam/report/components/constants';
 import {
   COLLECTIONS,
   HARM_PLUGINS,
@@ -17,7 +17,7 @@ import {
   displayNameOverrides,
   categoryAliases,
   subCategoryDescriptions,
-} from '@app/pages/report/components/constants';
+} from '@app/pages/redteam/report/components/constants';
 import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
