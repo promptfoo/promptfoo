@@ -62,6 +62,8 @@ const router = createBrowserRouter(
       <Route path="/progress" element={<ProgressPage />} />
       <Route path="/prompts" element={<PromptsPage />} />
       <Route path="/report" element={<Navigate to="/redteam/report" replace />} />
+      <Route path="/results" element={<Navigate to="/eval" replace />} />
+      <Route path="/results/:evalId" element={<Navigate to="/eval/:evalId" replace />} />
       <Route path="/setup" element={<EvalCreatorPage />} />
       <Route element={<ProtectedRoutes />}>
         <Route path="/redteam/report" element={<ReportPage />} />
