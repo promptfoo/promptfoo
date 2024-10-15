@@ -13,7 +13,6 @@ import {
   MenuItem,
   Box,
   Tooltip,
-  Stack,
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import ApiSettingsModal from './ApiSettingsModal';

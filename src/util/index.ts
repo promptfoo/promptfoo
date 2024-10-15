@@ -777,6 +777,8 @@ export async function deleteEval(evalId: string) {
 export async function deleteAllEvals(): Promise<void> {
   const db = getDb();
   await db.transaction(async (tx) => {
+    await tx.delete(evalResultsTable).run();
+    await tx.delete(evalsToProvidersTable).run();
     await tx.delete(evalsToPromptsTable).run();
     await tx.delete(evalsToDatasetsTable).run();
     await tx.delete(evalsToTagsTable).run();

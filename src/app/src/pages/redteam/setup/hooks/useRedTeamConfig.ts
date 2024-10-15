@@ -11,16 +11,13 @@ interface RedTeamConfigState {
 export const DEFAULT_HTTP_TARGET: ProviderOptions = {
   id: 'http',
   config: {
-    url: 'https://example.com/api/chat',
+    url: '',
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(
-      {
-        message: '{{prompt}}',
-      },
-      null,
-      2,
-    ),
+    // @ts-ignore
+    body: {
+      message: '{{prompt}}',
+    },
   },
 };
 

@@ -65,6 +65,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
+      undefined,
     );
   });
 
@@ -109,6 +110,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
+      undefined,
     );
   });
 
@@ -159,6 +161,7 @@ describe('HttpProvider', () => {
       },
       expect.any(Number),
       'text',
+      undefined,
     );
   });
 
@@ -183,6 +186,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
+      undefined,
     );
   });
 
@@ -229,6 +233,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
+      undefined,
     );
   });
 

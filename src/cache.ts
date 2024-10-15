@@ -84,7 +84,13 @@ export async function fetchWithCache<T = any>(
     try {
       const data = JSON.stringify(format === 'json' ? JSON.parse(responseText) : responseText);
       if (!response.ok) {
-        errorResponse = data;
+        if (responseText == '') {
+          errorResponse = JSON.stringify(
+            `Empty Response: ${response.status}: ${response.statusText}`,
+          );
+        } else {
+          errorResponse = data;
+        }
         // Don't cache error responses
         return;
       }
