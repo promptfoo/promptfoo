@@ -1,5 +1,5 @@
 import { runDbMigrations } from '../../src/migrate';
-import { getSummaryofLatestEvals } from '../../src/models/eval';
+import Eval, { getSummaryofLatestEvals } from '../../src/models/eval';
 import EvalFactory from '../factories/evalFactory';
 
 describe('evaluator', () => {
@@ -29,6 +29,20 @@ describe('evaluator', () => {
           numTests: 2,
         }),
       );
+    });
+  });
+
+  describe('delete', () => {
+    it('should delete an evaluation', async () => {
+      const eval1 = await EvalFactory.create();
+
+      const eval_ = await Eval.findById(eval1.id);
+      expect(eval_).toBeDefined();
+
+      await eval1.delete();
+
+      const eval_2 = await Eval.findById(eval1.id);
+      expect(eval_2).toBeUndefined();
     });
   });
 });
