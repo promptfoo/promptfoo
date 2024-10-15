@@ -21,6 +21,7 @@ describe('providersRouter', () => {
         changes_needed_reason: 'Test reason',
         changes_needed_suggestions: ['Test suggestion 1', 'Test suggestion 2'],
       }),
+      ok: true,
     } as unknown as Response);
     const testProvider = {
       id: 'http://example.com/api',

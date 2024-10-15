@@ -42,14 +42,12 @@ providersRouter.post('/test', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        task: 'http-provider-setup',
         config: provider,
         providerResponse: result.raw,
         parsedResponse: result.output,
         error: result.error,
       }),
     });
-    const data = await response.json();
     if (!response.ok) {
       res.status(200).json({
         test_result: {
@@ -60,6 +58,8 @@ providersRouter.post('/test', async (req, res) => {
       });
       return;
     }
+
+    const data = await response.json();
 
     res.json({ test_result: data, provider_response: result }).status(200);
   } catch (e) {
