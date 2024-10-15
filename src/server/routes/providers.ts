@@ -50,11 +50,27 @@ providersRouter.post('/test', async (req, res) => {
       }),
     });
     const data = await response.json();
+    if (!response.ok) {
+      res.status(200).json({
+        test_result: {
+          error:
+            'Error evaluating the results of your configuration. Manually review the provider results below.',
+        },
+        provider_response: result,
+      });
+      return;
+    }
 
     res.json({ test_result: data, provider_response: result }).status(200);
   } catch (e) {
     console.error('Error calling agent helper', e);
-    res.status(500).json({ error: 'Error calling agent helper' });
+    res.status(200).json({
+      test_result: {
+        error:
+          'Error evaluating the results of your configuration. Manually review the provider results below.',
+      },
+      provider_response: result,
+    });
     return;
   }
 });

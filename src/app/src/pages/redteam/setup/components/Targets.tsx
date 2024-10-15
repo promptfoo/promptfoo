@@ -255,7 +255,13 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
       const data = await response.json();
 
       const result = data.test_result;
-      if (result.changes_needed) {
+      if (result.error) {
+        setTestResult({
+          success: false,
+          message: result.error,
+          providerResponse: data.provider_response,
+        });
+      } else if (result.changes_needed) {
         setTestResult({
           success: false,
           message: result.changes_needed_reason,
@@ -373,6 +379,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                 helperText={urlError}
                 autoFocus
                 placeholder="https://example.com/api/chat"
+                required
               />
               <FormControl fullWidth margin="normal">
                 <InputLabel id="method-label">Method</InputLabel>
