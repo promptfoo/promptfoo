@@ -18,7 +18,7 @@ const LogoWrapper = styled(Box)(({ theme }) => ({
 const LogoText = styled(Typography)(({ theme }) => ({
   fontFamily: '"Inter", sans-serif',
   fontWeight: 600,
-  fontSize: '0.8rem',
+  fontSize: '1rem',
   color: theme.palette.text.primary,
   letterSpacing: '0.02em',
   marginLeft: theme.spacing(1),

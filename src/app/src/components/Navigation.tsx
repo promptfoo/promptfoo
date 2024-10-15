@@ -74,7 +74,7 @@ function NewDropdown() {
         endIcon={<ArrowDropDownIcon />}
         className={isActive ? 'active' : ''}
       >
-        New
+        Create
       </NavButton>
       <Menu
         anchorEl={anchorEl}
@@ -140,7 +140,7 @@ export default function Navigation({
                 </IconButton>
               </Tooltip>
             )}
-            <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+            <DarkMode onToggleDarkMode={onToggleDarkMode} />
           </NavSection>
         </NavToolbar>
       </StyledAppBar>
