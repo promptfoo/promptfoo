@@ -1,6 +1,9 @@
 import React from 'react';
 import type { StandaloneEval } from '@/../../../util';
-import { categoryAliases, displayNameOverrides } from '@app/pages/report/components/constants';
+import {
+  categoryAliases,
+  displayNameOverrides,
+} from '@app/pages/redteam/report/components/constants';
 import Box from '@mui/material/Box';
 import LinearProgress from '@mui/material/LinearProgress';
 import List from '@mui/material/List';

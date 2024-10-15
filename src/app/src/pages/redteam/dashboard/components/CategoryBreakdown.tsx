@@ -4,7 +4,7 @@ import {
   riskCategories,
   displayNameOverrides,
   subCategoryDescriptions,
-} from '@app/pages/report/components/constants';
+} from '@app/pages/redteam/report/components/constants';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';

@@ -4,7 +4,7 @@ import {
   categoryAliases,
   riskCategories,
   riskCategorySeverityMap,
-} from '@app/pages/report/components/constants';
+} from '@app/pages/redteam/report/components/constants';
 import { callApi } from '@app/utils/api';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';

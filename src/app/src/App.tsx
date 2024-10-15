@@ -12,8 +12,8 @@ import EvalPage from './pages/eval/page';
 import ProgressPage from './pages/progress/page';
 import PromptsPage from './pages/prompts/page';
 import RedteamDashboardPage from './pages/redteam/dashboard/page';
+import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
-import ReportPage from './pages/report/page';
 
 const DEFAULT_ROUTE = import.meta.env.VITE_PUBLIC_HOSTED ? '/setup' : '/eval';
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';

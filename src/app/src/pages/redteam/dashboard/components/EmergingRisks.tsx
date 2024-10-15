@@ -3,7 +3,7 @@ import {
   categoryAliases,
   displayNameOverrides,
   subCategoryDescriptions,
-} from '@app/pages/report/components/constants';
+} from '@app/pages/redteam/report/components/constants';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';

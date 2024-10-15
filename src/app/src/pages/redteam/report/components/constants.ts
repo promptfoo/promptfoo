@@ -1,4 +1,4 @@
-import type { Strategy } from '../../../../../redteam/constants';
+import type { Strategy } from '../../../../../../redteam/constants';
 
 export const riskCategories = {
   'Security Risk': [

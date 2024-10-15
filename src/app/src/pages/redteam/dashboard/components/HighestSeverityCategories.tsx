@@ -3,7 +3,7 @@ import {
   categoryAliases,
   displayNameOverrides,
   Severity,
-} from '@app/pages/report/components/constants';
+} from '@app/pages/redteam/report/components/constants';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
