@@ -24,6 +24,7 @@ redteam:
     - id: 'custom'
       filePath: './path/to/your/custom-plugin.json'
 ```
+
 The custom plugin JSON file should have the following structure:
 
 ```json
@@ -45,7 +46,6 @@ Both the generator and grader can use Nunjucks templating for dynamic content.
 ## Implementation Details
 
 The Custom Plugin is implemented in the `CustomPlugin` class:
-
 
 ```40:63:promptfoo/src/redteam/plugins/custom.ts
   private definition: CustomPluginDefinition;
@@ -73,9 +73,7 @@ The Custom Plugin is implemented in the `CustomPlugin` class:
 }
 ```
 
-
 The plugin uses a schema to validate the custom plugin definition:
-
 
 ```11:15:promptfoo/src/redteam/plugins/custom.ts
   .object({
@@ -84,7 +82,6 @@ The plugin uses a schema to validate the custom plugin definition:
   })
   .strict();
 ```
-
 
 ## Best Practices
 
