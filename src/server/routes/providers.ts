@@ -17,6 +17,7 @@ providersRouter.post('/test', async (req, res) => {
     return;
   }
 
+  // Instantiate the provider from the JSON config
   // @ts-ignore
   const loadedProviders = await loadApiProviders([provider], { env: {}, basePath: '' });
   const loadedProvider = loadedProviders[0];
@@ -25,6 +26,7 @@ providersRouter.post('/test', async (req, res) => {
     return;
   }
 
+  // Call the provider with the test prompt
   const result = await loadedProvider.callApi('Hello, world!', {
     debug: true,
     prompt: { raw: 'Hello, world!', label: 'Hello, world!' },
@@ -36,6 +38,7 @@ providersRouter.post('/test', async (req, res) => {
 
   const HOST = process.env.PROMPTFOO_CLOUD_API_URL || 'https://api.promptfoo.app';
   try {
+    // Call the the agent helper to evaluate the results of the provider
     const response = await fetch(`${HOST}/providers/test`, {
       method: 'POST',
       headers: {
