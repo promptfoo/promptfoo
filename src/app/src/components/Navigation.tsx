@@ -119,15 +119,11 @@ export default function Navigation({
         <NavToolbar>
           <NavSection>
             <Logo />
-            {!import.meta.env.VITE_PUBLIC_NO_BROWSING && (
-              <>
-                <NewDropdown />
-                <NavLink href="/eval" label="Evals" />
-                <NavLink href="/prompts" label="Prompts" />
-                <NavLink href="/datasets" label="Datasets" />
-                <NavLink href="/progress" label="Progress" />
-              </>
-            )}
+            <NavLink href="/setup" label="Create" />
+            <NavLink href="/eval" label="Evals" />
+            <NavLink href="/prompts" label="Prompts" />
+            <NavLink href="/datasets" label="Datasets" />
+            <NavLink href="/progress" label="Progress" />
           </NavSection>
           <NavSection>
             <IconButton onClick={handleModalToggle} color="inherit">
