@@ -46,7 +46,7 @@
 Before integrating the WatsonX provider, ensure you have:
 
 1. **IBM Cloud Account**: You need an IBM Cloud account to get API access to WatsonX models.
-2. **API Keys and Project ID**: Retrieve your API key, project ID, and service URL from your IBM Cloud account.
+2. **API Keys or Bearer Token, and Project ID**: Retrieve your API key, bearer token (if using bearer token) and project ID from your IBM Cloud account.
 
 ## Installation
 
@@ -61,7 +61,10 @@ To install the WatsonX provider, use the following steps:
 2. Set up the necessary environment variables:
 
    ```sh
-   export WATSONX_API_KEY=your-ibm-cloud-api-key
+   export WATSONX_AI_APIKEY=your-ibm-cloud-api-key
+   OR
+   export WATSONX_AI_BEARER_TOKEN=your-ibm-cloud-bearer-token
+
    export WATSONX_PROJECT_ID=your-ibm-project-id
    ```
 
@@ -71,7 +74,7 @@ To install the WatsonX provider, use the following steps:
    providers:
      - id: watsonx:ibm/granite-13b-chat-v2
      config:
-       apiKey: your-ibm-cloud-api-key
+       apiKey: your-ibm-cloud-api-key # replace with apiBearerToken if you are using bearer token instead of apikey
        projectId: your-ibm-project-id
        serviceUrl: https://us-south.ml.cloud.ibm.com
    ```
@@ -82,7 +85,7 @@ Once configured, you can use the WatsonX provider to generate text responses bas
 
 ```yaml
 providers:
-  - watsonx:ibm/granite-13b-chat-v2
+  - watsonx:ibm/granite-13b-chat-v2 # for Meta models, use watsonx:meta-llama/llama-3-2-1b-instruct
 
 prompts:
   - "Answer the following question: '{{question}}'"
