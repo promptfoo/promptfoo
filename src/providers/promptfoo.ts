@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import { fetchWithRetries } from '../fetch';
+import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { REMOTE_GENERATION_URL } from '../redteam/constants';
 import type {
@@ -42,6 +43,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
     const body = {
       purpose: this.purpose,
       harmCategory: this.harmCategory,
+      email: getUserEmail(),
     };
 
     try {
@@ -113,6 +115,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       prompt,
       step: context?.prompt.label,
       task: this.options.task,
+      email: getUserEmail(),
     };
 
     try {
