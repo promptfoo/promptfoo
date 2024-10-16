@@ -431,9 +431,9 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: '[WatsonX] Llama 3.2, IBM Granite, ...',
-         value: [
-         'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
-         'watsonx:ibm/granite-13b-chat-v2',
+        value: [
+          'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
+          'watsonx:ibm/granite-13b-chat-v2',
         ],
       },
     ];
