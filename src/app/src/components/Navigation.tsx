@@ -75,6 +75,7 @@ export default function Navigation({
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
             <NavLink href="/progress" label="Progress" />
+            <NavLink href="https://promptfoo.dev/careers" label="Careers" />
           </NavSection>
           <NavSection>
             <IconButton onClick={handleModalToggle} color="inherit">
