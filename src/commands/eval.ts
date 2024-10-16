@@ -455,8 +455,7 @@ export function evalCommand(
     .option('--description <description>', 'Description of the eval run')
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
-
-    .action(async (opts: EvalCommandOptions) => {
+    .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
         validatedOpts = EvalCommandSchema.parse(opts);
@@ -468,6 +467,9 @@ export function evalCommand(
         `);
         process.exitCode = 1;
         return;
+      }
+      if (command.args.length > 0) {
+        logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
       }
 
       if (validatedOpts.help) {
