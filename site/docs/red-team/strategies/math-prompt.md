@@ -52,3 +52,4 @@ The Math Prompt strategy highlights a significant gap in current AI safety mecha
 The Math Prompt strategy ensures that your system is robust enough to handle not only natural language threats but also adversarial inputs that are disguised using abstract symbolic representations.
 
 For more details, refer to the research paper ["Math Prompts: Eliciting Harmful Behavior in LLMs through Symbolic Mathematics"](https://arxiv.org/abs/2409.11445).
+
