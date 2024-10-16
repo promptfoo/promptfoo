@@ -469,9 +469,7 @@ export function evalCommand(
         return;
       }
       if (command.args.length > 0) {
-        logger.warn(
-          `Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`,
-        );
+        logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
       }
 
       if (validatedOpts.help) {
