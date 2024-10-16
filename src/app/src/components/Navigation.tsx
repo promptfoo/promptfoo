@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
+import type { LinkProps } from 'react-router-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
-import { AppBar, Toolbar, Button, IconButton, Menu, MenuItem, Box, Tooltip } from '@mui/material';
+import type { ButtonProps } from '@mui/material';
+import { AppBar, Toolbar, Button, IconButton, Box, Tooltip } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
@@ -12,7 +13,7 @@ import InfoModal from './InfoModal';
 import Logo from './Logo';
 import './Navigation.css';
 
-const NavButton = styled(Button)(({ theme }) => ({
+const NavButton = styled(Button)<ButtonProps & LinkProps>(({ theme }) => ({
   color: theme.palette.text.primary,
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
@@ -47,56 +48,6 @@ function NavLink({ href, label }: { href: string; label: string }) {
     <NavButton component={Link} to={href} className={isActive ? 'active' : ''}>
       {label}
     </NavButton>
-  );
-}
-
-function NewDropdown() {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-  const location = useLocation();
-
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const isActive = ['/setup', '/redteam/setup'].some((route) =>
-    location.pathname.startsWith(route),
-  );
-
-  return (
-    <>
-      <NavButton
-        onClick={handleClick}
-        endIcon={<ArrowDropDownIcon />}
-        className={isActive ? 'active' : ''}
-      >
-        Create
-      </NavButton>
-      <Menu
-        anchorEl={anchorEl}
-        open={open}
-        onClose={handleClose}
-        PaperProps={{
-          elevation: 0,
-          sx: {
-            overflow: 'visible',
-            filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
-            mt: 1.5,
-          },
-        }}
-      >
-        <MenuItem onClick={handleClose} component={Link} to="/setup">
-          Eval
-        </MenuItem>
-        <MenuItem onClick={handleClose} component={Link} to="/redteam/setup">
-          Redteam
-        </MenuItem>
-      </Menu>
-    </>
   );
 }
 
