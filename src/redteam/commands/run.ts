@@ -21,6 +21,8 @@ interface RedteamRunOptions {
   delay?: number;
   remote?: boolean;
   force?: boolean;
+  filterProviders?: string;
+  filterTargets?: string;
 }
 
 async function doRedteamRun(options: RedteamRunOptions) {
@@ -58,6 +60,8 @@ async function doRedteamRun(options: RedteamRunOptions) {
       config: [redteamPath],
       cache: true, // Enable caching
       write: true, // Write results to database
+      filterProviders: options.filterProviders,
+      filterTargets: options.filterTargets,
     } as Partial<CommandLineOptions & Command>,
     defaultConfig,
     redteamPath,
@@ -89,6 +93,10 @@ export function redteamRunCommand(program: Command) {
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
+    .option(
+      '--filter-providers, --filter-targets <providers>',
+      'Only run tests with these providers (regex match)',
+    )
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
       telemetry.record('command_used', {
