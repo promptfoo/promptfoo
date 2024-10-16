@@ -1,5 +1,5 @@
 ---
-sidebar_label: Math Prompt
+sidebar_label: Math Prompt 
 ---
 
 #Math Prompt Strategy
