@@ -373,16 +373,18 @@ export async function runAssertion({
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
-    renderedValue = await Promise.all(renderedValue.map(async (v) => {
-      if (typeof v === 'string') {
-        if (v.startsWith('file://')) {
-          return await processFileReference(v);
-        } else {
-          return nunjucks.renderString(v, test.vars || {});
+    renderedValue = await Promise.all(
+      renderedValue.map(async (v) => {
+        if (typeof v === 'string') {
+          if (v.startsWith('file://')) {
+            return await processFileReference(v);
+          } else {
+            return nunjucks.renderString(v, test.vars || {});
+          }
         }
-      }
-      return v;
-    }));
+        return v;
+      }),
+    );
   }
 
   // Transform test
