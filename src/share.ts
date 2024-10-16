@@ -167,7 +167,7 @@ export async function createShareableUrl(
   let fullUrl = SHARE_VIEW_BASE_URL;
   if (cloudConfig.isEnabled()) {
     appBaseUrl = cloudConfig.getAppUrl();
-    fullUrl = `${appBaseUrl}/results/${evalId}`;
+    fullUrl = `${appBaseUrl}/eval/${evalId}`;
   } else {
     const appBaseUrl =
       typeof evalRecord.config.sharing === 'object'
