@@ -270,6 +270,21 @@ export async function isSql(
   };
 }
 
+async function processFileReference(fileRef: string): Promise<any> {
+  const basePath = cliState.basePath || '';
+  const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
+
+  if (filePath.endsWith('.json')) {
+    return JSON.parse(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));
+  } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+    return yaml.load(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));
+  } else if (filePath.endsWith('.txt')) {
+    return fs.readFileSync(path.resolve(basePath, filePath), 'utf8').trim();
+  } else {
+    throw new Error(`Unsupported file type: ${filePath}`);
+  }
+}
+
 export async function runAssertion({
   prompt,
   provider,
@@ -349,25 +364,25 @@ export async function runAssertion({
             assertion,
           };
         }
-      } else if (filePath.endsWith('.json')) {
-        renderedValue = JSON.parse(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));
-      } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
-        renderedValue = yaml.load(
-          fs.readFileSync(path.resolve(basePath, filePath), 'utf8'),
-        ) as object;
-      } else if (filePath.endsWith('.txt')) {
-        // Trim to remove trailing newline
-        renderedValue = fs.readFileSync(path.resolve(basePath, filePath), 'utf8').trim();
       } else {
-        throw new Error(`Unsupported file type: ${filePath}`);
+        renderedValue = await processFileReference(renderedValue);
       }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
-    // Unpack the array
-    renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
+    // Process each element in the array
+    renderedValue = await Promise.all(renderedValue.map(async (v) => {
+      if (typeof v === 'string') {
+        if (v.startsWith('file://')) {
+          return await processFileReference(v);
+        } else {
+          return nunjucks.renderString(v, test.vars || {});
+        }
+      }
+      return v;
+    }));
   }
 
   // Transform test
