@@ -270,16 +270,15 @@ export async function isSql(
   };
 }
 
-async function processFileReference(fileRef: string): Promise<any> {
+export async function processFileReference(fileRef: string): Promise<any> {
   const basePath = cliState.basePath || '';
   const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
-
-  if (filePath.endsWith('.json')) {
-    return JSON.parse(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));
-  } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
-    return yaml.load(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));
-  } else if (filePath.endsWith('.txt')) {
-    return fs.readFileSync(path.resolve(basePath, filePath), 'utf8').trim();
+  const fileContent = fs.readFileSync(filePath, 'utf8');
+  const extension = path.extname(filePath);
+  if (['.json', '.yaml', '.yml'].includes(extension)) {
+    return yaml.load(fileContent);
+  } else if (extension === '.txt') {
+    return fileContent.trim();
   } else {
     throw new Error(`Unsupported file type: ${filePath}`);
   }
