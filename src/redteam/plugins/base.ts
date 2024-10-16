@@ -260,7 +260,7 @@ export abstract class RedteamGraderBase {
     });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 
-    let suggestions;
+    let suggestions: ResultSuggestion[] | undefined;
     if (!grade.pass) {
       // TODO(ian): Need to pass in the user input only
       suggestions = this.getSuggestions({ test, rawPrompt: prompt, renderedValue });

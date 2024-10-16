@@ -39,7 +39,7 @@ const ToolsDialog: React.FC<ToolsDialogProps> = ({ open, onClose, tools }) => {
         <List>
           {tools.map((tool, index) => (
             <ListItem key={index}>
-              {tool.type === 'function' && tool.function ? (
+              {tool?.type === 'function' && tool.function ? (
                 <ListItemText
                   primary={tool.function.name}
                   secondary={
