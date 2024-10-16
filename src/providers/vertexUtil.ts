@@ -1,4 +1,5 @@
 import type { GoogleAuth } from 'google-auth-library';
+import logger from '../logger';
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -102,6 +103,16 @@ export function maybeCoerceToGeminiFormat(contents: any) {
       },
     };
     coerced = true;
+  } else if (typeof contents === 'string') {
+    contents = {
+      role: 'user',
+      parts: {
+        text: contents,
+      },
+    };
+    coerced = true;
+  } else {
+    logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
   }
   return { contents, coerced };
 }
