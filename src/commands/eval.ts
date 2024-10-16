@@ -470,7 +470,7 @@ export function evalCommand(
       }
       if (command.args.length > 0) {
         logger.warn(
-          `unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]} or --config ${command.args[0]}?`,
+          `Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`,
         );
       }
 
