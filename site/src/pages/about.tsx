@@ -26,7 +26,7 @@ const AboutPage = () => {
                 About Us
               </Typography>
               <Typography variant="body1" paragraph>
-                We are security and engineering practioners who have scaled generative AI products
+                We are security and engineering practitioners who have scaled generative AI products
                 100s of millions of users. We're building the tools that we wished we had when we
                 were on the front lines.
               </Typography>
