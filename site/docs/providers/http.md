@@ -38,7 +38,31 @@ tests:
       language: 'French'
 ```
 
-If not specified, HTTP POST with content-type application/json is assumed.
+If not specified, HTTP POST with content-type application/json is assumed if the body is an object or array.
+
+`body` can be a string or a JSON object. If the body is a string, it will be sent as a raw request body and you may have to specify a `Content-Type` header. If the body is an object, then content type is automatically set to `application/json`.
+
+### JSON Example
+
+```yaml
+providers:
+  - id: https
+    config:
+      body:
+        model: '{{model}}'
+        translate: '{{language}}'
+```
+
+### Form-data Example
+
+```yaml
+providers:
+  - id: https
+    config:
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+      body: 'model={{model}}&translate={{language}}'
+```
 
 ## Sending a raw HTTP request
 
