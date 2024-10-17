@@ -108,7 +108,7 @@ jobs:
         id: eval
         run: |
           npm install
-          npm run local -- eval -c .github/workflows/files/promptfooconfig.yaml --share
+          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:3000 run local -- eval -c .github/workflows/files/promptfooconfig.yaml --share
 
       - name: Test that the eval results are uploaded
         run: |
