@@ -20,9 +20,11 @@ export const pythonPromptFunction = async (
   context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
+    config?: Record<string, any>;
   },
 ) => {
   invariant(context.provider?.id, 'provider.id is required');
+  logger.warn(`context: ${JSON.stringify(context, null, 2)}`);
   const transformedContext: PromptFunctionContext = {
     vars: context.vars,
     provider: {
@@ -30,6 +32,7 @@ export const pythonPromptFunction = async (
         typeof context.provider?.id === 'function' ? context.provider?.id() : context.provider?.id,
       label: context.provider?.label,
     },
+    config: context.config ?? {},
   };
 
   return runPython(filePath, functionName, [transformedContext]);
@@ -46,6 +49,7 @@ export const pythonPromptFunctionLegacy = async (
   context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
+    config?: Record<string, any>;
   },
 ): Promise<string> => {
   invariant(context?.provider?.id, 'provider.id is required');
@@ -56,6 +60,7 @@ export const pythonPromptFunctionLegacy = async (
         typeof context.provider?.id === 'function' ? context.provider?.id() : context.provider?.id,
       label: context.provider?.label,
     },
+    config: context.config ?? {}, 
   };
   const options: PythonShellOptions = {
     mode: 'text',
@@ -83,13 +88,15 @@ export function processPythonFile(
   const fileContent = fs.readFileSync(filePath, 'utf-8');
   const label =
     prompt.label ?? (functionName ? `${filePath}:${functionName}` : `${filePath}: ${fileContent}`);
+  logger.warn(`Processing Python file ${filePath} with function ${functionName}`);
+  logger.warn(`config: ${JSON.stringify(prompt.config, null, 2)}`);
   return [
     {
       raw: fileContent,
       label,
       function: functionName
-        ? (context) => pythonPromptFunction(filePath, functionName, context)
-        : (context) => pythonPromptFunctionLegacy(filePath, context),
+        ? (context) => pythonPromptFunction(filePath, functionName, { ...context, config: prompt.config })
+        : (context) => pythonPromptFunctionLegacy(filePath, { ...context, config: prompt.config }),
       config: prompt.config,
     },
   ];
