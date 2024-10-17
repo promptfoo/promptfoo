@@ -270,6 +270,20 @@ export async function isSql(
   };
 }
 
+export function processFileReference(fileRef: string): object | string {
+  const basePath = cliState.basePath || '';
+  const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
+  const fileContent = fs.readFileSync(filePath, 'utf8');
+  const extension = path.extname(filePath);
+  if (['.json', '.yaml', '.yml'].includes(extension)) {
+    return yaml.load(fileContent) as object;
+  } else if (extension === '.txt') {
+    return fileContent.trim();
+  } else {
+    throw new Error(`Unsupported file type: ${filePath}`);
+  }
+}
+
 export async function runAssertion({
   prompt,
   provider,
@@ -349,25 +363,24 @@ export async function runAssertion({
             assertion,
           };
         }
-      } else if (filePath.endsWith('.json')) {
-        renderedValue = JSON.parse(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));
-      } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
-        renderedValue = yaml.load(
-          fs.readFileSync(path.resolve(basePath, filePath), 'utf8'),
-        ) as object;
-      } else if (filePath.endsWith('.txt')) {
-        // Trim to remove trailing newline
-        renderedValue = fs.readFileSync(path.resolve(basePath, filePath), 'utf8').trim();
       } else {
-        throw new Error(`Unsupported file type: ${filePath}`);
+        renderedValue = processFileReference(renderedValue);
       }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
-    // Unpack the array
-    renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
+    // Process each element in the array
+    renderedValue = renderedValue.map((v) => {
+      if (typeof v === 'string') {
+        if (v.startsWith('file://')) {
+          return processFileReference(v);
+        }
+        return nunjucks.renderString(v, test.vars || {});
+      }
+      return v;
+    });
   }
 
   // Transform test

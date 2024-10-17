@@ -51,10 +51,6 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     useStore.persist.rehydrate();
   }, []);
 
-  if (import.meta.env.VITE_PUBLIC_NO_BROWSING) {
-    return null;
-  }
-
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
     const varRegex = /{{\s*(\w+)\s*}}/g;
     const varsSet = new Set<string>();

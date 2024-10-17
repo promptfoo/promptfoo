@@ -6,6 +6,7 @@ import { addBase64Encoding } from './base64';
 import { addCrescendo } from './crescendo';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
+import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
@@ -89,6 +90,15 @@ export const Strategies: Strategy[] = [
       logger.debug('Adding multilingual test cases');
       const newTestCases = await addMultilingual(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} multilingual test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'math-prompt',
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding MathPrompt encoding to all test cases');
+      const newTestCases = await addMathPrompt(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} MathPrompt encoded test cases`);
       return newTestCases;
     },
   },

@@ -209,7 +209,7 @@ Initialize a red teaming project.
 
 Example:
 
-```
+```sh
 promptfoo redteam init my_project
 ```
 
@@ -236,7 +236,7 @@ Run the complete red teaming process (init, generate, and evaluate).
 
 Example:
 
-```
+```sh
 promptfoo redteam run -c custom_config.yaml -o custom_output.yaml
 ```
 
@@ -303,7 +303,7 @@ Start a browser UI and open the red teaming report.
 
 Example:
 
-```
+```sh
 promptfoo redteam report -p 8080
 ```
 

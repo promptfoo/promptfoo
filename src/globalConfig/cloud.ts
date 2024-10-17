@@ -4,6 +4,25 @@ import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 const API_HOST = process.env.API_HOST || 'https://api.promptfoo.app';
 
+interface CloudUser {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface CloudOrganization {
+  id: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface CloudApp {
+  url: string;
+}
+
 export class CloudConfig {
   private config: {
     appUrl: string;
@@ -69,7 +88,10 @@ export class CloudConfig {
     };
   }
 
-  async validateAndSetApiToken(token: string, apiHost: string): Promise<void> {
+  async validateAndSetApiToken(
+    token: string,
+    apiHost: string,
+  ): Promise<{ user: CloudUser; organization: CloudOrganization; app: CloudApp }> {
     const response = await fetchWithProxy(`${apiHost}/users/me`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -90,6 +112,12 @@ export class CloudConfig {
     logger.info(`User: ${user.email}`);
     logger.info(`Organization: ${organization.name}`);
     logger.info(`Access the app at ${app.url}`);
+
+    return {
+      user,
+      organization,
+      app,
+    };
   }
 }
 

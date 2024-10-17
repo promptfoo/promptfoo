@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import type { LinkProps } from 'react-router-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
 import { AppBar, Toolbar, Button, IconButton, Menu, MenuItem, Box, Tooltip } from '@mui/material';
+import type { ButtonProps } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
@@ -12,7 +14,7 @@ import InfoModal from './InfoModal';
 import Logo from './Logo';
 import './Navigation.css';
 
-const NavButton = styled(Button)(({ theme }) => ({
+const NavButton = styled(Button)<ButtonProps & LinkProps>(({ theme }) => ({
   color: theme.palette.text.primary,
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
@@ -119,15 +121,12 @@ export default function Navigation({
         <NavToolbar>
           <NavSection>
             <Logo />
-            {!import.meta.env.VITE_PUBLIC_NO_BROWSING && (
-              <>
-                <NewDropdown />
-                <NavLink href="/eval" label="Evals" />
-                <NavLink href="/prompts" label="Prompts" />
-                <NavLink href="/datasets" label="Datasets" />
-                <NavLink href="/progress" label="Progress" />
-              </>
-            )}
+            <NewDropdown />
+            <NavLink href="/eval" label="Evals" />
+            <NavLink href="/prompts" label="Prompts" />
+            <NavLink href="/datasets" label="Datasets" />
+            <NavLink href="/progress" label="Progress" />
+            <NavLink href="https://promptfoo.dev/careers" label="Careers" />
           </NavSection>
           <NavSection>
             <IconButton onClick={handleModalToggle} color="inherit">

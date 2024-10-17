@@ -1,14 +1,25 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
+import { useColorMode } from '@docusaurus/theme-common';
 import { Typography, Grid, Box, Container, Avatar, Divider } from '@mui/material';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 
-const AboutPage = () => {
+const AboutPageContent = () => {
+  const { colorMode } = useColorMode();
+
+  const theme = React.useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode: colorMode === 'dark' ? 'dark' : 'light',
+        },
+      }),
+    [colorMode],
+  );
+
   return (
-    <Layout
-      title="About Promptfoo | AI Security Experts"
-      description="Learn about Promptfoo's mission to secure AI applications and our team of industry veterans."
-    >
+    <ThemeProvider theme={theme}>
       <Container maxWidth="lg">
         <Box py={8}>
           <Typography variant="h2" component="h2" align="center" gutterBottom fontWeight="bold">
@@ -156,7 +167,9 @@ const AboutPage = () => {
                   <Typography
                     variant="body2"
                     color="text.secondary"
-                    sx={{ whiteSpace: 'pre-line' }}
+                    sx={{
+                      whiteSpace: 'pre-line',
+                    }}
                   >
                     {investor.description}
                   </Typography>
@@ -198,6 +211,17 @@ const AboutPage = () => {
           </Link>
         </Box>
       </Container>
+    </ThemeProvider>
+  );
+};
+
+const AboutPage = () => {
+  return (
+    <Layout
+      title="About Promptfoo | AI Security Experts"
+      description="Learn about Promptfoo's mission to secure AI applications and our team of industry veterans."
+    >
+      <AboutPageContent />
     </Layout>
   );
 };

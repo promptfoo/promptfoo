@@ -225,3 +225,45 @@ jobs:
 
       - name: Run Integration Tests
         run: npm run test:integration -- --ci --coverage --maxWorkers=2
+
+  share-test:
+    name: Share Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run local server
+        run: |
+          npm run build
+          PROMPTFOO_CONFIG_DIR=~/tmp LOG_LEVEL=DEBUG API_PORT=8500 node dist/src/server/index.js &
+
+      - name: run promptfoo eval
+        id: eval
+        run: |
+          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
+
+      - name: Test that the eval results are uploaded
+        run: |
+          response=$(curl -s http://localhost:8500/api/results)
+          echo "Response: $response"
+
+          # Use jq to extract the array length
+          count=$(echo "$response" | jq '.data | length')
+          echo "Array Length: $count"
+
+          # Check if the count is exactly 1
+          if [ "$count" -ne 1 ]; then
+            echo "Error: Expected 1 entry, but got $count"
+            exit 1
+          fi
+
+      - name: Share to cloud
+        run: |
+          if [ -n "${{ secrets.PROMPTFOO_STAGING_API_KEY }}" ]; then
+            node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
+            node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
+          fi

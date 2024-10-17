@@ -43,43 +43,50 @@ export function authCommand(program: Command) {
       '-h,--host <host>',
       'The host of the promptfoo instance. This needs to be the url of the API if different from the app url.',
     )
-    .action(async (cmdObj: { orgId: string; host: string }) => {
+    .option('-k, --api-key <apiKey>', 'Login using an API key.')
+    .action(async (cmdObj: { orgId: string; host: string; apiKey: string }) => {
+      let token: string | undefined;
+      const apiHost = cmdObj.host || cloudConfig.getApiHost();
+
       try {
-        const email = await promptForEmail();
+        if (cmdObj.apiKey) {
+          token = cmdObj.apiKey;
+        } else {
+          const email = await promptForEmail();
 
-        // Send login request
-        const apiHost = cmdObj.host || cloudConfig.getApiHost();
+          // Send login request
 
-        const loginResponse = await fetchWithProxy(`${apiHost}/users/login?fromCLI=true`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, organizationId: cmdObj.orgId }),
-        });
+          const loginResponse = await fetchWithProxy(`${apiHost}/users/login?fromCLI=true`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, organizationId: cmdObj.orgId }),
+          });
 
-        if (!loginResponse.ok) {
-          throw new Error('Failed to send login request: ' + loginResponse.statusText);
+          if (!loginResponse.ok) {
+            throw new Error('Failed to send login request: ' + loginResponse.statusText);
+          }
+
+          logger.info(
+            chalk.green(
+              `A login link has been sent to ${email}. Click the link to login and then copy your authentication token.`,
+            ),
+          );
+
+          logger.info(
+            chalk.yellow(
+              "If you did not get an email it's because the user does not exist or your not part of the the organization specified.",
+            ),
+          );
+
+          // Prompt for token
+          token = await promptForToken();
         }
-
-        logger.info(
-          chalk.green(
-            `A login link has been sent to ${email}. Click the link to login and then copy your authentication token.`,
-          ),
-        );
-
-        logger.info(
-          chalk.yellow(
-            "If you did not get an email it's because the user does not exist or your not part of the the organization specified.",
-          ),
-        );
-
-        // Prompt for token
-        const token = await promptForToken();
-        await cloudConfig.validateAndSetApiToken(token, apiHost);
+        const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost);
 
         // Store token in global config
-        setUserEmail(email);
+        setUserEmail(user.email);
 
         telemetry.record('command_used', {
           name: 'auth login',
