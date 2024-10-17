@@ -16,7 +16,7 @@ export default class Provider {
       if (opts?.persist) {
         const db = getDb();
         let results = await db.select().from(providerTable).where(eq(providerTable.id, id));
-        let providerResult: { id: string; providerId: string; config: Record<string, any> };
+        let providerResult: { id: string; providerId: string; label: string | null };
         if (results.length > 0) {
           providerResult = results[0];
         } else {
@@ -25,15 +25,15 @@ export default class Provider {
             .values({
               id,
               providerId: provider.id(),
-              config: provider.config || {},
+              label: provider.label,
             })
             .onConflictDoNothing()
             .returning();
           providerResult = results[0];
         }
-        ret.push(new Provider(providerResult.id, providerResult.providerId, providerResult.config));
+        ret.push(new Provider(providerResult.id, providerResult.providerId, providerResult.label));
       } else {
-        ret.push(new Provider(id, provider.id(), provider.config || {}));
+        ret.push(new Provider(id, provider.id(), provider.label));
       }
     }
     return ret;
@@ -42,10 +42,10 @@ export default class Provider {
   constructor(
     public id: string,
     public providerId: string,
-    public config: Record<string, any>,
+    public label: string | null = null,
   ) {
     this.id = id;
     this.providerId = providerId;
-    this.config = config;
+    this.label = label;
   }
 }
