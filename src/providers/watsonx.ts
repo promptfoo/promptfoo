@@ -406,11 +406,11 @@ export class WatsonXProvider implements ApiProvider {
         ? process.env[this.options.config.projectIdEnvar] ||
           this.env?.[this.options.config.projectIdEnvar as keyof EnvOverrides]
         : undefined) ||
-      this.env?.WATSONX_PROJECT_ID ||
-      getEnvString('WATSONX_PROJECT_ID');
+      this.env?.WATSONX_AI_PROJECT_ID ||
+      getEnvString('WATSONX_AI_PROJECT_ID');
     invariant(
       projectId && projectId.trim() !== '',
-      'WatsonX project ID is not set. Set the WATSONX_PROJECT_ID environment variable or add `projectId` to the provider config.',
+      'WatsonX project ID is not set. Set the WATSONX_AI_PROJECT_ID environment variable or add `projectId` to the provider config.',
     );
     return projectId;
   }

@@ -43,10 +43,16 @@
 
 ## Prerequisites
 
-Before integrating the WatsonX provider, ensure you have:
+Before integrating the WatsonX provider, ensure you have the following:
 
-1. **IBM Cloud Account**: You need an IBM Cloud account to get API access to WatsonX models.
-2. **API Keys or Bearer Token, and Project ID**: Retrieve your API key, bearer token (if using bearer token) and project ID from your IBM Cloud account.
+1. **IBM Cloud Account**: You will need an IBM Cloud account to obtain API access to WatsonX models.
+
+2. **API Key or Bearer Token, and Project ID**:
+   - **API Key**: You can retrieve your API key by logging in to your [IBM Cloud Account](https://cloud.ibm.com) and navigating to the "API Keys" section.
+   - **Bearer Token**: To obtain a bearer token, follow [this guide](https://cloud.ibm.com/docs/account?topic=account-iamtoken_from_apikey).
+   - **Project ID**: To find your Project ID, log in to IBM WatsonX Prompt Lab, select your project, and locate the project ID in the provided `curl` command.
+
+Make sure you have either the API key or bearer token, along with the project ID, before proceeding.
 
 ## Installation
 
@@ -62,10 +68,18 @@ To install the WatsonX provider, use the following steps:
 
    ```sh
    export WATSONX_AI_APIKEY=your-ibm-cloud-api-key
-   OR
-   export WATSONX_AI_BEARER_TOKEN=your-ibm-cloud-bearer-token
+   ```
 
-   export WATSONX_PROJECT_ID=your-ibm-project-id
+   or
+
+   ```
+   export WATSONX_AI_BEARER_TOKEN=your-ibm-cloud-bearer-token
+   ```
+
+   then
+
+   ```
+   export WATSONX_AI_PROJECT_ID=your-ibm-project-id
    ```
 
 3. Alternatively, you can configure the API key and project ID directly in the configuration file.
