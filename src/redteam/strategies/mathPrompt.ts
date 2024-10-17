@@ -26,7 +26,7 @@ export async function generateMathPrompt(
   try {
     const batchSize = 8;
     const concurrency = 10;
-    const batches = [];
+    const batches: TestCase[][] = [];
     for (let i = 0; i < testCases.length; i += batchSize) {
       batches.push(testCases.slice(i, i + batchSize));
     }
@@ -120,7 +120,7 @@ export async function addMathPrompt(
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
-  if (shouldGenerateRemote() && false) {
+  if (shouldGenerateRemote()) {
     const mathPromptTestCases = await generateMathPrompt(testCases, injectVar, config);
     if (mathPromptTestCases.length > 0) {
       return mathPromptTestCases;
