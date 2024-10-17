@@ -244,7 +244,7 @@ jobs:
       - name: run promptfoo eval
         id: eval
         run: |
-          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500npm node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
+          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
 
       - name: Test that the eval results are uploaded
         run: |
@@ -260,3 +260,8 @@ jobs:
             echo "Error: Expected 1 entry, but got $count"
             exit 1
           fi
+
+      - name: Share to cloud
+        run: |
+          node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
+          node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
