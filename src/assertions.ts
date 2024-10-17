@@ -270,13 +270,13 @@ export async function isSql(
   };
 }
 
-export async function processFileReference(fileRef: string): Promise<any> {
+export function processFileReference(fileRef: string): object | string {
   const basePath = cliState.basePath || '';
   const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
   const fileContent = fs.readFileSync(filePath, 'utf8');
   const extension = path.extname(filePath);
   if (['.json', '.yaml', '.yml'].includes(extension)) {
-    return yaml.load(fileContent);
+    return yaml.load(fileContent) as object;
   } else if (extension === '.txt') {
     return fileContent.trim();
   } else {
@@ -364,7 +364,7 @@ export async function runAssertion({
           };
         }
       } else {
-        renderedValue = await processFileReference(renderedValue);
+        renderedValue = processFileReference(renderedValue);
       }
     } else {
       // It's a normal string value
@@ -372,18 +372,15 @@ export async function runAssertion({
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
-    renderedValue = await Promise.all(
-      renderedValue.map(async (v) => {
-        if (typeof v === 'string') {
-          if (v.startsWith('file://')) {
-            return await processFileReference(v);
-          } else {
-            return nunjucks.renderString(v, test.vars || {});
-          }
+    renderedValue = renderedValue.map((v) => {
+      if (typeof v === 'string') {
+        if (v.startsWith('file://')) {
+          return processFileReference(v);
         }
-        return v;
-      }),
-    );
+        return nunjucks.renderString(v, test.vars || {});
+      }
+      return v;
+    });
   }
 
   // Transform test
