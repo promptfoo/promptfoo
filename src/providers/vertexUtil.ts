@@ -93,14 +93,24 @@ export interface Palm2ApiResponse {
   ];
 }
 
-const GeminiFormatSchema = z.object({
-  role: z.string(),
-  parts: z.object({
-    text: z.string(),
-  }),
+const PartSchema = z.object({
+  text: z.string().optional(),
+  inline_data: z
+    .object({
+      mime_type: z.string(),
+      data: z.string(),
+    })
+    .optional(),
 });
 
-type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
+const ContentSchema = z.object({
+  role: z.enum(['user', 'model']).optional(),
+  parts: z.array(PartSchema),
+});
+
+const GeminiFormatSchema = z.array(ContentSchema);
+
+export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
 
 export function maybeCoerceToGeminiFormat(contents: any): {
   contents: GeminiFormat;
@@ -111,32 +121,40 @@ export function maybeCoerceToGeminiFormat(contents: any): {
 
   if (parseResult.success) {
     return {
-      contents,
+      contents: parseResult.data,
       coerced,
     };
   }
 
-  if (Array.isArray(contents) && typeof contents[0]?.content === 'string') {
-    // This looks like an OpenAI chat prompt. Convert it to a compatible format
-    contents = {
-      role: 'user',
-      parts: {
-        text: contents.map((item) => item.content).join(''),
+  let coercedContents: GeminiFormat;
+
+  if (typeof contents === 'string') {
+    coercedContents = [
+      {
+        parts: [{ text: contents }],
       },
-    };
+    ];
     coerced = true;
-  } else if (typeof contents === 'string') {
-    contents = {
-      role: 'user',
-      parts: {
-        text: contents,
-      },
-    };
+  } else if (
+    Array.isArray(contents) &&
+    contents.every((item) => typeof item.content === 'string')
+  ) {
+    // This looks like an OpenAI chat format
+    coercedContents = contents.map((item) => ({
+      role: item.role as 'user' | 'model' | undefined,
+      parts: [{ text: item.content }],
+    }));
+    coerced = true;
+  } else if (typeof contents === 'object' && 'parts' in contents) {
+    // This might be a single content object
+    coercedContents = [contents as z.infer<typeof ContentSchema>];
     coerced = true;
   } else {
     logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
+    throw new Error('Unable to coerce to Gemini format');
   }
-  return { contents, coerced };
+
+  return { contents: coercedContents, coerced };
 }
 
 let cachedAuth: GoogleAuth | undefined;

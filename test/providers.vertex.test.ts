@@ -64,9 +64,11 @@ describe('VertexChatProvider.callGeminiApi', () => {
       ],
     };
 
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
     jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
-        request: jest.fn().mockResolvedValue(mockResponse),
+        request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
@@ -81,6 +83,16 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 5,
         completion: 5,
       },
+    });
+
+    expect(vertexUtil.getGoogleClient).toHaveBeenCalledWith();
+    expect(mockRequest).toHaveBeenCalledWith({
+      url: expect.any(String),
+      method: 'POST',
+      data: expect.objectContaining({
+        contents: [{ parts: { text: 'test prompt' }, role: 'user' }],
+      }),
+      timeout: expect.any(Number),
     });
   });
 
@@ -153,12 +165,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
 describe('maybeCoerceToGeminiFormat', () => {
   it('should return unmodified content if it matches GeminiFormat', () => {
-    const input = {
-      role: 'user',
-      parts: {
-        text: 'Hello, Gemini!',
+    const input = [
+      {
+        role: 'user',
+        parts: [{ text: 'Hello, Gemini!' }],
       },
-    };
+    ];
     const result = vertexUtil.maybeCoerceToGeminiFormat(input);
     expect(result).toEqual({
       contents: input,
@@ -167,13 +179,25 @@ describe('maybeCoerceToGeminiFormat', () => {
   });
 
   it('should coerce OpenAI chat format to GeminiFormat', () => {
-    const input = [{ content: 'Hello' }, { content: ', ' }, { content: 'Gemini!' }];
-    const expected = {
-      role: 'user',
-      parts: {
-        text: 'Hello, Gemini!',
+    const input = [
+      { role: 'user', content: 'Hello' },
+      { role: 'user', content: ', ' },
+      { role: 'user', content: 'Gemini!' },
+    ];
+    const expected = [
+      {
+        role: 'user',
+        parts: [{ text: 'Hello' }],
       },
-    };
+      {
+        role: 'user',
+        parts: [{ text: ', ' }],
+      },
+      {
+        role: 'user',
+        parts: [{ text: 'Gemini!' }],
+      },
+    ];
     const result = vertexUtil.maybeCoerceToGeminiFormat(input);
     expect(result).toEqual({
       contents: expected,
@@ -183,12 +207,11 @@ describe('maybeCoerceToGeminiFormat', () => {
 
   it('should coerce string input to GeminiFormat', () => {
     const input = 'Hello, Gemini!';
-    const expected = {
-      role: 'user',
-      parts: {
-        text: 'Hello, Gemini!',
+    const expected = [
+      {
+        parts: [{ text: 'Hello, Gemini!' }],
       },
-    };
+    ];
     const result = vertexUtil.maybeCoerceToGeminiFormat(input);
     expect(result).toEqual({
       contents: expected,
@@ -196,10 +219,12 @@ describe('maybeCoerceToGeminiFormat', () => {
     });
   });
 
-  it('should log a warning for unknown formats', () => {
+  it('should log a warning and throw an error for unknown formats', () => {
     const loggerSpy = jest.spyOn(logger, 'warn');
     const input = { unknownFormat: 'test' };
-    vertexUtil.maybeCoerceToGeminiFormat(input);
-    expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini:${JSON.stringify(input)}`);
+    expect(() => vertexUtil.maybeCoerceToGeminiFormat(input)).toThrow(
+      'Unable to coerce to Gemini format',
+    );
+    expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini: ${JSON.stringify(input)}`);
   });
 });
