@@ -37,24 +37,24 @@ function getStrategyIdFromMetric(metric: string): string | null {
   const parts = metric.split('/');
   const metricSuffix = parts[1];
   if (metricSuffix) {
-    if (metricSuffix === 'Iterative') {
-      return 'jailbreak';
-    } else if (metricSuffix === 'IterativeTree') {
-      return 'jailbreak:tree';
+    if (metricSuffix === 'Base64') {
+      return 'base64';
     } else if (metricSuffix === 'Crescendo') {
       return 'crescendo';
     } else if (metricSuffix === 'Injection') {
       return 'prompt-injection';
-    } else if (metricSuffix === 'Rot13') {
-      return 'rot13';
-    } else if (metricSuffix === 'Base64') {
-      return 'base64';
+    } else if (metricSuffix === 'Iterative') {
+      return 'jailbreak';
+    } else if (metricSuffix === 'IterativeTree') {
+      return 'jailbreak:tree';
     } else if (metricSuffix === 'Leetspeak') {
       return 'leetspeak';
+    } else if (metricSuffix.startsWith('MathPrompt')) {
+      return 'math-prompt';
     } else if (metricSuffix.startsWith('Multilingual')) {
       return 'multilingual';
-    } else if (metricSuffix.startsWith('Mathprompt')) {
-      return 'mathprompt';
+    } else if (metricSuffix === 'Rot13') {
+      return 'rot13';
     }
   }
   return null;

@@ -26,7 +26,7 @@ export async function generateMathPrompt(
   try {
     const batchSize = 8;
     const concurrency = 10;
-    const batches = [];
+    const batches: TestCase[][] = [];
     for (let i = 0; i < testCases.length; i += batchSize) {
       batches.push(testCases.slice(i, i + batchSize));
     }
@@ -49,7 +49,7 @@ export async function generateMathPrompt(
 
     await async.forEachOfLimit(batches, concurrency, async (batch, index) => {
       const payload = {
-        task: 'mathprompt',
+        task: 'math-prompt',
         testCases: batch,
         injectVar,
         config,
