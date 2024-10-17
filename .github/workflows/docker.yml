@@ -108,7 +108,7 @@ jobs:
         id: eval
         run: |
           npm install
-          npm run local -- eval -c .github/workflows/files/promptfooconfig.yml --share
+          npm run local -- eval -c .github/workflows/files/promptfooconfig.yaml --share
 
       - name: Test that the eval results are uploaded
         run: |
