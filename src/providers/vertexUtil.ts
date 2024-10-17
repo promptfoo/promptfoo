@@ -1,5 +1,4 @@
 import type { GoogleAuth } from 'google-auth-library';
-import logger from '../logger';
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
