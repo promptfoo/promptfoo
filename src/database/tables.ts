@@ -24,7 +24,7 @@ import type {
 export const providers = sqliteTable('providers', {
   id: text('id').primaryKey(),
   providerId: text('provider_id').notNull(),
-  config: text('options', { mode: 'json' }).$type<Record<string, any>>().notNull(),
+  label: text('label'),
 });
 
 // ------------ Prompts ------------
@@ -35,7 +35,7 @@ export const promptsTable = sqliteTable(
     id: text('id').primaryKey(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`cast(unixepoch() as int)`),
+      .default(sql`CURRENT_TIMESTAMP`),
     prompt: text('prompt').notNull(),
   },
   (table) => ({
@@ -66,7 +66,7 @@ export const evalsTable = sqliteTable(
     id: text('id').primaryKey(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`cast(unixepoch() as int)`),
+      .default(sql`CURRENT_TIMESTAMP`),
     author: text('author'),
     description: text('description'),
     results: text('results', { mode: 'json' }).$type<EvaluateSummaryV2 | object>().notNull(),
@@ -85,10 +85,10 @@ export const evalResultsTable = sqliteTable(
     id: text('id').primaryKey(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`cast(unixepoch() as int)`),
+      .default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at')
       .notNull()
-      .default(sql`cast(unixepoch() as int)`),
+      .default(sql`CURRENT_TIMESTAMP`),
     evalId: text('eval_id')
       .notNull()
       .references(() => evalsTable.id),
@@ -212,7 +212,7 @@ export const datasetsTable = sqliteTable(
     tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`cast(unixepoch() as int)`),
+      .default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({
     createdAtIdx: index('datasets_created_at_idx').on(table.createdAt),
@@ -282,7 +282,7 @@ export const llmOutputs = sqliteTable(
     id: text('id')
       .notNull()
       .unique(),
-    createdAt: integer('created_at').notNull().default(sql`cast(unixepoch() as int)`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     evalId: text('eval_id')
       .notNull()
       .references(() => evals.id),
