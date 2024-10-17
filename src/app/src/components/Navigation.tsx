@@ -14,7 +14,7 @@ import InfoModal from './InfoModal';
 import Logo from './Logo';
 import './Navigation.css';
 
-const NavButton = styled(Button)<ButtonProps & LinkProps>(({ theme }) => ({
+const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
   color: theme.palette.text.primary,
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
