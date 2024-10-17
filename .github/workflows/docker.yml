@@ -6,12 +6,12 @@
 
 name: Test and Publish Multi-arch Docker Image
 run-name: |
-  ${{ github.event_name == 'release' && 'Release' || 
-      github.event_name == 'workflow_dispatch' && 'Manual' || 
-      github.event_name == 'pull_request' && 'PR' || 
-      'Push' }} 
-  Docker build for ${{ github.ref_name }} 
-  ${{ github.event_name == 'pull_request' && format('(PR #{0})', github.event.number) || '' }} 
+  ${{ github.event_name == 'release' && 'Release' ||
+      github.event_name == 'workflow_dispatch' && 'Manual' ||
+      github.event_name == 'pull_request' && 'PR' ||
+      'Push' }}
+  Docker build for ${{ github.ref_name }}
+  ${{ github.event_name == 'pull_request' && format('(PR #{0})', github.event.number) || '' }}
   by @${{ github.actor }}
 
 on:
@@ -101,6 +101,30 @@ jobs:
           # If health check did not pass after retries, exit with an error
           if [ -z "$HEALTH_CHECK_PASS" ]; then
             echo -e "\nHealth check failed after multiple attempts" >&2
+            exit 1
+          fi
+
+      - name: run promptfoo eval
+        id: eval
+        env:
+          PROMPTFOO_REMOTE_API_BASE_URL: http://localhost:3000
+          PROMPTFOO_SHARING_APP_BASE_URL: http://localhost:3000
+        run: |
+          npm install
+          npm run local -- eval -c .github/workflows/files/promptfooconfig.yaml --share
+
+      - name: Test that the eval results are uploaded
+        run: |
+          response=$(curl -s http://localhost:3000/api/results)
+          echo "Response: $response"
+
+          # Use jq to extract the array length
+          count=$(echo "$response" | jq '.data | length')
+          echo "Array Length: $count"
+
+          # Check if the count is exactly 1
+          if [ "$count" -ne 1 ]; then
+            echo "Error: Expected 1 entry, but got $count"
             exit 1
           fi
 
