@@ -142,6 +142,8 @@ To reference an external file, use the `file://` prefix:
 assert:
   - type: javascript
     value: file://relative/path/to/script.js
+    config:
+      maximumOutputSize: 10
 ```
 
 The Javascript file must export an assertion function. Here's an example:
@@ -149,6 +151,14 @@ The Javascript file must export an assertion function. Here's an example:
 ```js
 module.exports = (output, context) => {
   return output.length > 10;
+};
+```
+
+This is an example of an assertion that uses data from a configuration defined in the assertion's YML file:
+
+```js
+module.exports = (output, context) => {
+  return output.length <= context.config.maximumOutputSize;
 };
 ```
 

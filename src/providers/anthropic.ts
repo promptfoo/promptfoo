@@ -4,7 +4,7 @@ import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
-import { parseChatPrompt } from './shared';
+import { calculateCost } from './shared';
 
 const ANTHROPIC_MODELS = [
   ...['claude-instant-1.2'].map((model) => ({
@@ -110,56 +110,64 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
     .join('\n\n');
 }
 
-interface AnthropicMessageInput {
-  role: 'user' | 'assistant' | 'system';
-  content: string | Array<Anthropic.ImageBlockParam | Anthropic.TextBlockParam>;
-  cache_control?: { type: 'ephemeral' };
-}
+export function parseMessages(messages: string): {
+  system?: Anthropic.TextBlockParam[];
+  extractedMessages: Anthropic.MessageParam[];
+} {
+  const lines = messages
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line);
+  let system: Anthropic.TextBlockParam[] | undefined;
+  const extractedMessages: Anthropic.MessageParam[] = [];
+  let currentRole: 'user' | 'assistant' | null = null;
+  let currentContent: string[] = [];
 
-export function parseMessages(messages: string) {
-  // We need to be able to handle the 'system' role prompts that
-  // are in the style of OpenAI's chat prompts.
-  // As a result, AnthropicMessageInput is the same as Anthropic.MessageParam
-  // just with the system role added on
-  const chats = parseChatPrompt<AnthropicMessageInput[]>(messages, [
-    { role: 'user' as const, content: messages },
-  ]);
-  // Convert from OpenAI to Anthropic format
-  const systemMessage = chats.find((m) => m.role === 'system')?.content;
-  const system = typeof systemMessage === 'string' ? systemMessage : undefined;
-  const extractedMessages: Anthropic.MessageParam[] = chats
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => {
-      const role = m.role as 'user' | 'assistant';
-      if (typeof m.content === 'string') {
-        const content = [{ type: 'text' as const, text: m.content }];
-        return { role, content };
-      } else {
-        const content = [...m.content];
-        return { role, content };
-      }
+  const pushMessage = () => {
+    if (currentRole && currentContent.length > 0) {
+      extractedMessages.push({
+        role: currentRole,
+        content: [{ type: 'text', text: currentContent.join('\n') }],
+      });
+      currentContent = [];
+    }
+  };
+
+  for (const line of lines) {
+    if (line.startsWith('system:')) {
+      system = [{ type: 'text', text: line.slice(7).trim() }];
+    } else if (line.startsWith('user:') || line.startsWith('assistant:')) {
+      pushMessage();
+      currentRole = line.startsWith('user:') ? 'user' : 'assistant';
+      currentContent.push(line.slice(line.indexOf(':') + 1).trim());
+    } else if (currentRole) {
+      currentContent.push(line);
+    } else {
+      // If no role is set, assume it's a user message
+      currentRole = 'user';
+      currentContent.push(line);
+    }
+  }
+
+  pushMessage();
+
+  if (extractedMessages.length === 0 && !system) {
+    extractedMessages.push({
+      role: 'user',
+      content: [{ type: 'text', text: messages.trim() }],
     });
+  }
+
   return { system, extractedMessages };
 }
 
-export function calculateCost(
+export function calculateAnthropicCost(
   modelName: string,
   config: AnthropicMessageOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = ANTHROPIC_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  return calculateCost(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
 }
 
 export class AnthropicMessagesProvider implements ApiProvider {
@@ -232,7 +240,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
             output: outputFromMessage(parsedCachedResponse),
             tokenUsage: {},
           };
-        } catch (err) {
+        } catch {
           // Could be an old cache item, which was just the text content from TextBlock.
           return {
             output: cachedResponse,
@@ -260,7 +268,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
       return {
         output: outputFromMessage(response),
         tokenUsage: getTokenUsage(response, false),
-        cost: calculateCost(
+        cost: calculateAnthropicCost(
           this.modelName,
           this.config,
           response.usage?.input_tokens,

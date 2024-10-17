@@ -1,8 +1,34 @@
+import dedent from 'dedent';
+import path from 'path';
 import { fetchWithCache } from '../src/cache';
-import { HttpProvider, processBody } from '../src/providers/http';
+import { importModule } from '../src/esm';
+import { HttpProvider, processBody, createResponseParser } from '../src/providers/http';
+import { maybeLoadFromExternalFile } from '../src/util';
 
 jest.mock('../src/cache', () => ({
   fetchWithCache: jest.fn(),
+}));
+
+jest.mock('../src/util', () => ({
+  ...jest.requireActual('../src/util'),
+  maybeLoadFromExternalFile: jest.fn((input) => input),
+}));
+
+jest.mock('../src/esm', () => ({
+  importModule: jest.fn(async (modulePath: string, functionName?: string) => {
+    const mockModule = {
+      default: jest.fn((data) => data.defaultField),
+      parseResponse: jest.fn((data) => data.specificField),
+    };
+    if (functionName) {
+      return mockModule[functionName as keyof typeof mockModule];
+    }
+    return mockModule;
+  }),
+}));
+
+jest.mock('../src/cliState', () => ({
+  basePath: '/mock/base/path',
 }));
 
 describe('HttpProvider', () => {
@@ -22,7 +48,10 @@ describe('HttpProvider', () => {
         responseParser: (data: any) => data.result,
       },
     });
-    const mockResponse = { data: { result: 'response text' }, cached: false };
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      cached: false,
+    };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test prompt');
@@ -35,7 +64,8 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: 'test prompt' }),
       }),
       expect.any(Number),
-      'json',
+      'text',
+      undefined,
     );
   });
 
@@ -57,12 +87,13 @@ describe('HttpProvider', () => {
     });
   });
 
-  it('should use custom method and headers', async () => {
+  it('should use custom method/headers/queryParams', async () => {
     provider = new HttpProvider(mockUrl, {
       config: {
-        method: 'GET',
+        method: 'PATCH',
         headers: { Authorization: 'Bearer token' },
         body: { key: '{{ prompt }}' },
+        queryParams: { foo: 'bar' },
         responseParser: (data: any) => data,
       },
     });
@@ -71,20 +102,22 @@ describe('HttpProvider', () => {
 
     await provider.callApi('test prompt');
     expect(fetchWithCache).toHaveBeenCalledWith(
-      mockUrl,
+      `${mockUrl}?foo=bar`,
       expect.objectContaining({
-        method: 'GET',
+        method: 'PATCH',
         headers: { Authorization: 'Bearer token' },
         body: JSON.stringify({ key: 'test prompt' }),
       }),
       expect.any(Number),
-      'json',
+      'text',
+      undefined,
     );
   });
 
   const testCases = [
     { parser: (data: any) => data.custom, expected: 'parsed' },
     { parser: 'json.result', expected: 'parsed' },
+    { parser: 'text', expected: JSON.stringify({ result: 'parsed', custom: 'parsed' }) },
   ];
 
   testCases.forEach(({ parser, expected }) => {
@@ -95,7 +128,10 @@ describe('HttpProvider', () => {
           responseParser: parser,
         },
       });
-      const mockResponse = { data: { result: 'parsed', custom: 'parsed' }, cached: false };
+      const mockResponse = {
+        data: JSON.stringify({ result: 'parsed', custom: 'parsed' }),
+        cached: false,
+      };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -124,7 +160,8 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: 'test prompt' }),
       },
       expect.any(Number),
-      'json',
+      'text',
+      undefined,
     );
   });
 
@@ -148,7 +185,8 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: { key: 'value' } }),
       }),
       expect.any(Number),
-      'json',
+      'text',
+      undefined,
     );
   });
 
@@ -171,6 +209,158 @@ describe('HttpProvider', () => {
     });
     expect(provider.id()).toBe(mockUrl);
     expect(provider.toString()).toBe(`[HTTP Provider ${mockUrl}]`);
+  });
+
+  it('should handle GET requests with query parameters', async () => {
+    provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        queryParams: {
+          q: '{{ prompt }}',
+          foo: 'bar',
+        },
+        responseParser: (data: any) => data,
+      },
+    });
+    const mockResponse = { data: 'response data', cached: false };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      `${mockUrl}?q=test+prompt&foo=bar`,
+      expect.objectContaining({
+        method: 'GET',
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+    );
+  });
+
+  describe('raw request', () => {
+    it('should handle a basic GET raw request', async () => {
+      const rawRequest = dedent`
+        GET /api/data HTTP/1.1
+        Host: example.com
+        User-Agent: TestAgent/1.0
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          responseParser: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'http://example.com/api/data',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            'user-agent': 'TestAgent/1.0',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+      );
+      expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it('should handle a POST raw request with body and variable substitution', async () => {
+      const rawRequest = dedent`
+        POST /api/submit HTTP/1.1
+        Host: example.com
+        Content-Type: application/json
+
+        {"data": "{{prompt}}"}
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          responseParser: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'received' }),
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test data');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/submit',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            'content-type': 'application/json',
+          }),
+          body: '{"data": "test data"}',
+        }),
+        expect.any(Number),
+        'text',
+      );
+      expect(result.output).toEqual({ result: 'received' });
+    });
+
+    it('should load raw request from file if file:// prefix is used', async () => {
+      const filePath = 'file://path/to/request.txt';
+      const fileContent = dedent`
+        GET /api/data HTTP/1.1
+        Host: example.com
+      `;
+      jest.mocked(maybeLoadFromExternalFile).mockReturnValueOnce(fileContent);
+
+      const provider = new HttpProvider('https', {
+        config: {
+          request: filePath,
+          responseParser: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(filePath);
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/data',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+      );
+      expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it('should throw an error for invalid raw requests', async () => {
+      const provider = new HttpProvider('http', {
+        config: {
+          request: 'yo mama',
+        },
+      });
+      await expect(provider.callApi('test prompt')).rejects.toThrow(
+        'Error parsing raw HTTP request',
+      );
+    });
   });
 
   describe('processBody', () => {
@@ -244,5 +434,129 @@ describe('HttpProvider', () => {
         jsonArray: [1, 2, 'test prompt'],
       });
     });
+  });
+
+  describe('createResponseParser', () => {
+    it('should handle function parser', async () => {
+      const functionParser = (data: any) => data.result;
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          body: { key: 'value' },
+          responseParser: functionParser,
+        },
+      });
+
+      const mockResponse = { data: JSON.stringify({ result: 'success' }), cached: false };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe('success');
+    });
+
+    it('should handle file:// parser with JavaScript file', async () => {
+      const mockParser = jest.fn((data, text) => text.toUpperCase());
+      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+      const parser = await createResponseParser('file://custom-parser.js');
+      const result = parser({ customField: 'parsed' }, 'parsed');
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'custom-parser.js'),
+        undefined,
+      );
+      expect(result).toBe('PARSED');
+    });
+
+    it('should throw error for unsupported parser type', async () => {
+      await expect(createResponseParser(123 as any)).rejects.toThrow(
+        "Unsupported response parser type: number. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.",
+      );
+    });
+
+    it('should handle string parser', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          body: { key: 'value' },
+          responseParser: 'json.result',
+        },
+      });
+
+      const mockResponse = { data: JSON.stringify({ result: 'parsed' }), cached: false };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe('parsed');
+    });
+
+    it('should handle file:// parser with specific function name', async () => {
+      const mockParser = jest.fn((data, text) => data.specificField);
+      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+      const parser = await createResponseParser('file://custom-parser.js:parseResponse');
+      const result = parser({ specificField: 'parsed' }, '');
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'custom-parser.js'),
+        'parseResponse',
+      );
+      expect(result).toBe('parsed');
+    });
+
+    it('should throw error for malformed file:// parser', async () => {
+      jest.mocked(importModule).mockResolvedValueOnce({});
+
+      await expect(createResponseParser('file://invalid-parser.js')).rejects.toThrow(
+        /Response parser malformed: .*invalid-parser\.js must export a function or have a default export as a function/,
+      );
+    });
+
+    it('should return default parser when no parser is provided', async () => {
+      const parser = await createResponseParser(undefined);
+      const result = parser({ key: 'value' }, 'raw text');
+      expect(result.output).toEqual({ key: 'value' });
+    });
+
+    it('should handle response parser file with default export', async () => {
+      const mockParser = jest.fn((data) => data.defaultField);
+      jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+      const parser = await createResponseParser('file://default-parser.js');
+      const result = parser({ defaultField: 'parsed' }, '');
+
+      expect(result).toBe('parsed');
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'default-parser.js'),
+        undefined,
+      );
+    });
+  });
+
+  it('should use default parser when no parser is provided', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+      },
+    });
+    const mockResponse = {
+      data: JSON.stringify({ key: 'value' }),
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test prompt');
+    expect(result.output).toEqual({ key: 'value' });
+  });
+
+  it('should handle response parser returning an object', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        body: { key: 'value' },
+        responseParser: (json: any, text: string) => ({ custom: json.result }),
+      },
+    });
+
+    const mockResponse = { data: JSON.stringify({ result: 'success' }), cached: false };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test prompt');
+    expect(result.output).toEqual({ custom: 'success' });
   });
 });

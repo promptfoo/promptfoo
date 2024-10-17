@@ -1,6 +1,8 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
+import type { RedteamAssertionTypes, RedteamFileConfig } from '../redteam/types';
+import { isJavascriptFile } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import {
   ApiProviderSchema,
@@ -11,12 +13,11 @@ import {
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
-import type { RedteamAssertionTypes, RedteamFileConfig } from './redteam';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
 export * from './prompts';
 export * from './providers';
-export * from './redteam';
+export * from '../redteam/types';
 export * from './shared';
 
 export const CommandLineOptionsSchema = z.object({
@@ -27,9 +28,9 @@ export const CommandLineOptionsSchema = z.object({
   output: z.array(z.string()),
 
   // Shared with EvaluateOptions
-  maxConcurrency: z.string(),
-  repeat: z.string(),
-  delay: z.string(),
+  maxConcurrency: z.coerce.number().int().positive().optional(),
+  repeat: z.coerce.number().int().positive().optional(),
+  delay: z.coerce.number().int().nonnegative().default(0),
 
   // Command line only
   vars: z.string().optional(),
@@ -39,7 +40,7 @@ export const CommandLineOptionsSchema = z.object({
   modelOutputs: z.string().optional(),
   verbose: z.boolean().optional(),
   grader: z.string().optional(),
-  tableCellMaxLength: z.string().optional(),
+  tableCellMaxLength: z.coerce.number().int().positive().optional(),
   write: z.boolean().optional(),
   cache: z.boolean().optional(),
   table: z.boolean().optional(),
@@ -47,16 +48,17 @@ export const CommandLineOptionsSchema = z.object({
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
   filterFailing: z.string().optional(),
-  filterFirstN: z.string().optional(),
+  filterFirstN: z.coerce.number().int().positive().optional(),
   filterPattern: z.string().optional(),
   filterProviders: z.string().optional(),
+  filterTargets: z.string().optional(),
   var: z.record(z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
 
-  envFile: z.string().optional(),
+  envPath: z.string().optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
@@ -102,6 +104,7 @@ export const OutputConfigSchema = z.object({
    */
   postprocess: z.string().optional(),
   transform: z.string().optional(),
+  transformVars: z.string().optional(),
 
   // The name of the variable to store the output of this test case
   storeOutputAs: z.string().optional(),
@@ -118,8 +121,8 @@ export interface RunEvalOptions {
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions: EvaluateOptions;
 
-  rowIndex: number;
-  colIndex: number;
+  testIdx: number;
+  promptIdx: number;
   repeatIndex: number;
 }
 
@@ -156,6 +159,15 @@ export const CompletedPromptSchema = PromptSchema.extend({
       totalLatencyMs: z.number(),
       tokenUsage: TokenUsageSchema,
       namedScores: z.record(z.string(), z.number()),
+      namedScoresCount: z.record(z.string(), z.number()),
+      redteam: z
+        .object({
+          pluginPassCount: z.record(z.string(), z.number()),
+          pluginFailCount: z.record(z.string(), z.number()),
+          strategyPassCount: z.record(z.string(), z.number()),
+          strategyFailCount: z.record(z.string(), z.number()),
+        })
+        .optional(),
       cost: z.number(),
     })
     .optional(),
@@ -178,21 +190,28 @@ export interface PromptWithMetadata {
 }
 
 export interface EvaluateResult {
+  id?: string; // on the new version 2, this is stored per-result
+  description?: string; // on the new version 2, this is stored per-result
+  promptIdx: number; // on the new version 2, this is stored per-result
+  testIdx: number; // on the new version 2, this is stored per-result
+  testCase: AtomicTestCase; // on the new version 2, this is stored per-result
+  promptId: string; // on the new version 2, this is stored per-result
   provider: Pick<ProviderOptions, 'id' | 'label'>;
   prompt: Prompt;
   vars: Record<string, string | object>;
   response?: ProviderResponse;
-  error?: string;
+  error?: string | null;
   success: boolean;
   score: number;
   latencyMs: number;
-  gradingResult?: GradingResult;
+  gradingResult?: GradingResult | null;
   namedScores: Record<string, number>;
   cost?: number;
   metadata?: Record<string, any>;
 }
 
 export interface EvaluateTableOutput {
+  id: string;
   pass: boolean;
   score: number;
   namedScores: Record<string, number>;
@@ -201,7 +220,7 @@ export interface EvaluateTableOutput {
   latencyMs: number;
   provider?: string;
   tokenUsage?: Partial<TokenUsage>;
-  gradingResult?: GradingResult;
+  gradingResult?: GradingResult | null;
   cost: number;
   metadata?: Record<string, any>;
 }
@@ -227,12 +246,26 @@ export interface EvaluateStats {
   tokenUsage: Required<TokenUsage>;
 }
 
-export interface EvaluateSummary {
+export interface EvaluateSummaryV3 {
+  version: 3;
+  timestamp: string;
+  results: EvaluateResult[];
+  prompts: CompletedPrompt[];
+  stats: EvaluateStats;
+}
+
+export interface EvaluateSummaryV2 {
   version: number;
   timestamp: string;
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;
+}
+
+export interface ResultSuggestion {
+  type: string;
+  action: 'replace-prompt';
+  value: string;
 }
 
 export interface GradingResult {
@@ -259,6 +292,16 @@ export interface GradingResult {
 
   // User comment
   comment?: string;
+
+  // Actions for the user to take
+  suggestions?: ResultSuggestion[];
+
+  // Additional info
+  metadata?: {
+    pluginId?: string;
+    strategyId?: string;
+    [key: string]: any;
+  };
 }
 
 export function isGradingResult(result: any): result is GradingResult {
@@ -280,6 +323,7 @@ export function isGradingResult(result: any): result is GradingResult {
 
 export const BaseAssertionTypesSchema = z.enum([
   'answer-relevance',
+  'classifier',
   'contains-all',
   'contains-any',
   'contains-json',
@@ -351,6 +395,10 @@ export const AssertionSchema = z.object({
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
+
+  // An external mapping of arbitrary strings to values that is passed
+  // to the assertion for custom javascript asserts
+  config: z.record(z.string(), z.any()).optional(),
 
   // The threshold value, only applicable for similarity (cosine distance)
   threshold: z.number().optional(),
@@ -446,6 +494,8 @@ export const TestCaseSchema = z.object({
           disableVarExpansion: z.boolean().optional(),
           // If true, do not include an implicit `_conversation` variable in the prompt.
           disableConversationVar: z.boolean().optional(),
+          // If true, run this without concurrency no matter what
+          runSerially: z.boolean().optional(),
         }),
       ),
     )
@@ -555,7 +605,37 @@ export const TestSuiteSchema = z.object({
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Extensions that are called at various plugin points
-  extensions: z.array(z.string()).optional(),
+  extensions: z
+    .array(
+      z
+        .string()
+        .refine((value) => value.startsWith('file://'), {
+          message: 'Extension must start with file://',
+        })
+        .refine(
+          (value) => {
+            const parts = value.split(':');
+            return parts.length === 3 && parts.every((part) => part.trim() !== '');
+          },
+          {
+            message: 'Extension must be of the form file://path/to/file.py:function_name',
+          },
+        )
+        .refine(
+          (value) => {
+            const parts = value.split(':');
+            return (
+              (parts[1].endsWith('.py') || isJavascriptFile(parts[1])) &&
+              (parts.length === 3 || parts.length === 2)
+            );
+          },
+          {
+            message:
+              'Extension must be a python (.py) or javascript (.js, .ts, .mjs, .cjs, etc.) file followed by a colon and function name',
+          },
+        ),
+    )
+    .optional(),
 
   // Redteam configuration - used only when generating redteam tests
   redteam: z.custom<RedteamFileConfig>().optional(),
@@ -648,7 +728,7 @@ export interface EvalWithMetadata {
   id: string;
   date: Date;
   config: Partial<UnifiedConfig>;
-  results: EvaluateSummary;
+  results: EvaluateSummaryV3;
   description?: string;
 }
 
@@ -670,10 +750,10 @@ export interface SharedResults {
 export interface ResultsFile {
   version: number;
   createdAt: string;
-  results: EvaluateSummary;
+  results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   author: string | null;
-
+  prompts?: CompletedPrompt[];
   // Included by readResult() in util.
   datasetId?: string | null;
 }
@@ -692,7 +772,7 @@ export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
-  results: EvaluateSummary;
+  results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
 }
@@ -702,7 +782,7 @@ export interface Job {
   status: 'in-progress' | 'complete';
   progress: number;
   total: number;
-  result: EvaluateSummary | null;
+  result: EvaluateSummaryV3 | EvaluateSummaryV2 | null;
 }
 
 // used for writing eval results

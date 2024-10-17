@@ -48,7 +48,7 @@ import {
   type TestCase,
   isGradingResult,
 } from './types';
-import { isJavascriptFile } from './util';
+import { isJavascriptFile } from './util/file';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
@@ -229,7 +229,7 @@ export async function isSql(
   try {
     sqlParser.astify(outputString, opt);
     pass = !inverse;
-  } catch (err) {
+  } catch {
     pass = inverse;
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
@@ -268,6 +268,20 @@ export async function isSql(
     reason: pass ? 'Assertion passed' : failureReasons.join(' '),
     assertion,
   };
+}
+
+export function processFileReference(fileRef: string): object | string {
+  const basePath = cliState.basePath || '';
+  const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
+  const fileContent = fs.readFileSync(filePath, 'utf8');
+  const extension = path.extname(filePath);
+  if (['.json', '.yaml', '.yml'].includes(extension)) {
+    return yaml.load(fileContent) as object;
+  } else if (extension === '.txt') {
+    return fileContent.trim();
+  } else {
+    throw new Error(`Unsupported file type: ${filePath}`);
+  }
 }
 
 export async function runAssertion({
@@ -313,6 +327,7 @@ export async function runAssertion({
     vars: test.vars || {},
     test,
     logProbs,
+    ...(assertion.config ? { config: assertion.config } : {}),
   };
 
   // Render assertion values
@@ -348,25 +363,24 @@ export async function runAssertion({
             assertion,
           };
         }
-      } else if (filePath.endsWith('.json')) {
-        renderedValue = JSON.parse(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));
-      } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
-        renderedValue = yaml.load(
-          fs.readFileSync(path.resolve(basePath, filePath), 'utf8'),
-        ) as object;
-      } else if (filePath.endsWith('.txt')) {
-        // Trim to remove trailing newline
-        renderedValue = fs.readFileSync(path.resolve(basePath, filePath), 'utf8').trim();
       } else {
-        throw new Error(`Unsupported file type: ${filePath}`);
+        renderedValue = processFileReference(renderedValue);
       }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
-    // Unpack the array
-    renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
+    // Process each element in the array
+    renderedValue = renderedValue.map((v) => {
+      if (typeof v === 'string') {
+        if (v.startsWith('file://')) {
+          return processFileReference(v);
+        }
+        return nunjucks.renderString(v, test.vars || {});
+      }
+      return v;
+    });
   }
 
   // Transform test
@@ -385,7 +399,7 @@ export async function runAssertion({
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output "${renderedValue}" to ${inverse ? 'not ' : ''}equal "${outputString}"`,
+        : `Expected output "${outputString}" to ${inverse ? 'not ' : ''}equal "${renderedValue}"`,
       assertion,
     };
   }
@@ -395,7 +409,7 @@ export async function runAssertion({
     try {
       parsedJson = JSON.parse(outputString);
       pass = !inverse;
-    } catch (err) {
+    } catch {
       pass = inverse;
     }
 
@@ -785,6 +799,18 @@ export async function runAssertion({
         return ret;
       }
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
+
+      /**
+       * Removes trailing newline from the rendered value.
+       * This is necessary for handling multi-line string literals in YAML
+       * that are defined on a single line in the YAML file.
+       *
+       * @example
+       * value: |
+       *   output === 'true'
+       */
+      renderedValue = renderedValue.trimEnd();
+
       let result: boolean | number | GradingResult;
       if (typeof valueFromScript === 'undefined') {
         const functionBody = renderedValue.includes('\n')
@@ -1144,7 +1170,7 @@ ${
         if (parsedPrompt && parsedPrompt.length > 0) {
           prompt = parsedPrompt[parsedPrompt.length - 1].content;
         }
-      } catch (err) {
+      } catch {
         // Ignore error
       }
     }
@@ -1276,7 +1302,7 @@ ${
     if (!assertion.threshold) {
       throw new Error('Latency assertion must have a threshold in milliseconds');
     }
-    if (!latencyMs) {
+    if (latencyMs === undefined) {
       throw new Error(
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
       );
@@ -1360,7 +1386,7 @@ ${
     const grader = getGraderById(baseType);
     invariant(grader, `Unknown promptfoo grader: ${baseType}`);
     invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
-    const { grade, rubric } = await grader.getResult(
+    const { grade, rubric, suggestions } = await grader.getResult(
       prompt,
       outputString,
       test,
@@ -1373,6 +1399,12 @@ ${
         value: rubric,
       },
       ...grade,
+      suggestions,
+      metadata: {
+        // Pass through all test metadata for redteam
+        ...test.metadata,
+        ...grade.metadata,
+      },
     };
   }
 

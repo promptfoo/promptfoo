@@ -1,5 +1,4 @@
 import invariant from 'tiny-invariant';
-import { fetchWithCache } from './cache';
 import cliState from './cliState';
 import logger from './logger';
 import {
@@ -17,9 +16,8 @@ import {
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
-import { REQUEST_TIMEOUT_MS } from './providers/shared';
-import { REMOTE_GENERATION_URL } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/util';
+import { doRemoteGrading } from './remoteGrading';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -33,10 +31,11 @@ import type {
   ProviderType,
   ApiModerationProvider,
 } from './types';
+import { maybeLoadFromExternalFile } from './util';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 
-const nunjucks = getNunjucksEngine();
+const nunjucks = getNunjucksEngine(undefined, false, true);
 
 function cosineSimilarity(vecA: number[], vecB: number[]) {
   if (vecA.length !== vecB.length) {
@@ -178,42 +177,6 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
   };
 }
 
-type RemoteGradingPayload = {
-  task: string;
-  [key: string]: unknown;
-};
-
-async function doRemoteGrading(
-  payload: RemoteGradingPayload,
-): Promise<Omit<GradingResult, 'assertion'>> {
-  try {
-    const body = JSON.stringify(payload);
-    logger.debug(`Performing remote grading: ${body}`);
-    const { data } = await fetchWithCache(
-      REMOTE_GENERATION_URL,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body,
-      },
-      REQUEST_TIMEOUT_MS,
-    );
-
-    const { result } = data as { result: GradingResult };
-    logger.debug(`Got remote grading result: ${JSON.stringify(result)}`);
-    return {
-      pass: result.pass,
-      score: result.score,
-      reason: result.reason,
-      tokensUsed: result.tokensUsed,
-    };
-  } catch (error) {
-    return fail(`Could not perform remote grading: ${error}`);
-  }
-}
-
 export async function matchesSimilarity(
   expected: string,
   output: string,
@@ -222,13 +185,17 @@ export async function matchesSimilarity(
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (cliState.config?.redteam && shouldGenerateRemote()) {
-    return doRemoteGrading({
-      task: 'similar',
-      expected,
-      output,
-      threshold,
-      inverse,
-    });
+    try {
+      return doRemoteGrading({
+        task: 'similar',
+        expected,
+        output,
+        threshold,
+        inverse,
+      });
+    } catch (error) {
+      return fail(`Could not perform remote grading: ${error}`);
+    }
   }
 
   const finalProvider = (await getAndCheckProvider(
@@ -369,7 +336,11 @@ export function renderLlmRubricPrompt(
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
 ) {
-  const rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
+  let rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
+
+  // Load from external file if the rubricPrompt starts with 'file://'
+  rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
+
   invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
   return nunjucks.renderString(rubricPrompt, {
     output: JSON.stringify(llmOutput).slice(1, -1),
@@ -390,7 +361,7 @@ export async function matchesLlmRubric(
     );
   }
 
-  if (cliState.config?.redteam && shouldGenerateRemote()) {
+  if (!grading.rubricPrompt && cliState.config?.redteam && shouldGenerateRemote()) {
     return doRemoteGrading({
       task: 'llm-rubric',
       rubric,
@@ -399,8 +370,6 @@ export async function matchesLlmRubric(
     });
   }
 
-  const rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
-  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
   const prompt = renderLlmRubricPrompt(rubric, llmOutput, grading, vars);
 
   const defaultProviders = await getDefaultProviders();

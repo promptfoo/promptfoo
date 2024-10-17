@@ -8,7 +8,8 @@ import { importModule } from './esm';
 import logger from './logger';
 import { runPython } from './python/pythonUtils';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
-import { isJavascriptFile, renderVarsInObject } from './util';
+import { renderVarsInObject } from './util';
+import { isJavascriptFile } from './util/file';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
@@ -83,13 +84,17 @@ export async function renderPrompt(
           varName,
           basePrompt,
           vars,
-        ])) as { output?: string; error?: string };
+        ])) as { output?: any; error?: string };
         if (pythonScriptOutput.error) {
           throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
         }
         if (!pythonScriptOutput.output) {
           throw new Error(`Python script ${filePath} did not return any output`);
         }
+        invariant(
+          typeof pythonScriptOutput.output === 'string',
+          `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
+        );
         vars[varName] = pythonScriptOutput.output.trim();
       } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
         vars[varName] = JSON.stringify(
@@ -170,7 +175,7 @@ export async function renderPrompt(
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
-  } catch (err) {
+  } catch {
     return nunjucks.renderString(basePrompt, vars);
   }
 }

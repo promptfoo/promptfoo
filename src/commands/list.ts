@@ -1,9 +1,11 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import logger from '../logger';
+import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
 import telemetry from '../telemetry';
-import { getEvals, getPrompts, getTestCases, printBorder, setupEnv, sha256 } from '../util';
+import { getPrompts, getTestCases, printBorder, setupEnv } from '../util';
+import { sha256 } from '../util/createHash';
 
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');
@@ -11,23 +13,28 @@ export function listCommand(program: Command) {
   listCommand
     .command('evals')
     .description('List evaluations.')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of evals to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list evals',
       });
       await telemetry.send();
 
-      const evals = await getEvals(Number(cmdObj.n) || undefined);
-      const tableData = evals.map((evl) => ({
-        'Eval ID': evl.id,
-        Description: evl.description || '',
-        Prompts: evl.results.table.head.prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', '),
-        Vars: evl.results.table.head.vars.map((v) => v).join(', '),
-      }));
+      const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
+
+      const vars = await EvalQueries.getVarsFromEvals(evals);
+
+      const tableData = evals.map((evl) => {
+        const prompts = evl.getPrompts();
+        return {
+          'Eval ID': evl.id,
+          Description: evl.description || '',
+          Prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', ') || '',
+          Vars: vars[evl.id]?.join(', ') || '',
+        };
+      });
 
       logger.info(wrapTable(tableData));
       printBorder();
@@ -43,11 +50,10 @@ export function listCommand(program: Command) {
   listCommand
     .command('prompts')
     .description('List prompts used')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of prompts to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list prompts',
       });
@@ -76,11 +82,10 @@ export function listCommand(program: Command) {
   listCommand
     .command('datasets')
     .description('List datasets used')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of datasets to display')
     .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list datasets',
       });

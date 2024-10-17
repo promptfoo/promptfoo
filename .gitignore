@@ -7,9 +7,13 @@ scratch
 node_modules
 dist
 .aider*
+.local
 
 __pycache__
 
 # jest
 .coverage
 .ruff_cache
+
+# IDE
+.idea/

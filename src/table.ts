@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from './constants';
-import type { EvaluateSummary } from './types';
+import type { EvaluateTable } from './types';
 
 function ellipsize(str: string, maxLen: number) {
   if (str.length > maxLen) {
@@ -10,8 +10,12 @@ function ellipsize(str: string, maxLen: number) {
   return str;
 }
 
-export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250, maxRows = 25) {
-  const head = summary.table.head;
+export function generateTable(
+  evaluateTable: EvaluateTable,
+  tableCellMaxLength = 250,
+  maxRows = 25,
+) {
+  const head = evaluateTable.head;
   const headLength = head.prompts.length + head.vars.length;
   const table = new Table({
     head: [
@@ -26,7 +30,7 @@ export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250
     },
   });
   // Skip first row (header) and add the rest. Color PASS/FAIL
-  for (const row of summary.table.body.slice(0, maxRows)) {
+  for (const row of evaluateTable.body.slice(0, maxRows)) {
     table.push([
       ...row.vars.map((v) => ellipsize(v, tableCellMaxLength)),
       ...row.outputs.map(({ pass, score, text }) => {
@@ -51,6 +55,9 @@ export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250
 }
 
 export function wrapTable(rows: Record<string, string | number>[]) {
+  if (rows.length === 0) {
+    return 'No data to display';
+  }
   const head = Object.keys(rows[0]);
   const table = new Table({
     head,

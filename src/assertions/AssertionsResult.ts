@@ -70,6 +70,14 @@ export class AssertionsResult {
       this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score;
     }
 
+    if (result.namedScores) {
+      Object.entries(result.namedScores).forEach(([metricName, score]) => {
+        if (metricName !== metric) {
+          this.namedScores[metricName] = (this.namedScores[metricName] || 0) + score;
+        }
+      });
+    }
+
     if (result.tokensUsed) {
       this.tokensUsed.total += result.tokensUsed.total || 0;
       this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
@@ -93,7 +101,7 @@ export class AssertionsResult {
       return this.result;
     }
 
-    const score = this.totalScore / this.totalWeight;
+    const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
     let pass = !this.failedReason;
 
     let reason = this.failedReason ? this.failedReason : 'All assertions passed';

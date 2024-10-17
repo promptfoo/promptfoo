@@ -58,6 +58,17 @@ We particularly welcome contributions in the following areas:
    npm run build
    ```
 
+6. Run the project:
+
+   ```sh
+   npm run dev
+   ```
+
+   This will run the express server on port 15500 and the web UI on port 3000.
+   Both the API and UI will be automatically reloaded when you make changes.
+
+   Note: The developement experience is a little bit different than how it runs in production. In development, the web UI is served using a Vite server. In all other environments, the front end is built and served as a static site via the Express server.
+
 If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or join our [Discord community](https://discord.gg/gHPS9jjfbs) for guidance.
 
 ## Development Workflow
@@ -137,7 +148,7 @@ To build the project:
 npm run build
 ```
 
-For continuous building during development:
+For continuous building of the api during development:
 
 ```sh
 npm run build:watch
@@ -153,6 +164,8 @@ We recommend using `npm link` to link your local `promptfoo` package to the glob
 npm link
 promptfoo --help
 ```
+
+We recommend running `npm run build:watch` in a separate terminal while you are working on the CLI. This will automatically build the CLI when you make changes.
 
 Alternatively, you can run the CLI directly:
 
@@ -179,19 +192,35 @@ tests:
 
 ## Adding a New Provider
 
-Please refer to our [Custom API Provider Docs](/docs/providers/custom-api/) for details on how to implement a custom TypeScript provider.
+Providers are defined in TypeScript. We also provide language bindings for Python and Go. To contribute a new provider:
+
+1. Ensure your provider doesn't already exist in promptfoo and fits its scope. For OpenAI-compatible providers, you may be able to re-use the openai provider and override the base URL and other settings. If your provider is OpenAI compatible, feel free to skip to step 4.
+
+2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as a peer dependency with `npm install --save-peer`.
+
+3. Write unit tests in `test/providers.yourProviderName.test.ts` and create an example in the `examples/` directory.
+
+4. Document your provider in `site/docs/providers/yourProviderName.md`, including a description, setup instructions, configuration options, and usage examples. You can also add examples to the `examples/` directory. Consider writing a guide comparing your provider to others or highlighting unique features or benefits.
+
+5. Update `src/providers/index.ts` and `site/docs/providers/index.md` to include your new provider. Update `src/envars.ts` to include any new environment variables your provider may need.
+
+6. Ensure all tests pass (`npm test`) and fix any linting issues (`npm run lint`).
 
 ## Contributing to the Web UI
 
-The web UI is written as a [Next.js](https://nextjs.org/) app. It is exported as a static site and hosted by a local express server when bundled.
+The web UI is written as a React app. It is exported as a static site and hosted by a local express server when bundled.
 
 To run the web UI in dev mode:
 
 ```sh
-npm run local:web
+npm run dev
 ```
 
-This will host the web UI at http://localhost:3000. This allows you to hack on the Next.js app quickly (with fast refresh) but does not cover all features (such as running evals from a web browser) because that relies on a separate server process.
+This will host the web UI at http://localhost:3000. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
+
+```sh
+npm run dev:web
+```
 
 To test the entire thing end-to-end, we recommend building the entire project and linking it to promptfoo:
 

@@ -1,6 +1,9 @@
+import { randomUUID } from 'crypto';
 import glob from 'glob';
 import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
+import { runDbMigrations } from '../src/migrate';
+import Eval from '../src/models/eval';
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
@@ -11,22 +14,7 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  promises: {
-    readFile: jest.fn(),
-  },
-}));
-
 jest.mock('../src/esm');
-jest.mock('../src/database', () => ({
-  getDb: jest.fn(),
-}));
 jest.mock('../src/logger');
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
@@ -35,6 +23,14 @@ jest.mock('../src/evaluatorHelpers', () => ({
 
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
+  callApi: jest.fn().mockResolvedValue({
+    output: 'Test output',
+    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+  }),
+};
+
+const mockApiProvider2: ApiProvider = {
+  id: jest.fn().mockReturnValue('test-provider-2'),
   callApi: jest.fn().mockResolvedValue({
     output: 'Test output',
     tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
@@ -62,6 +58,10 @@ function toPrompt(text: string): Prompt {
 }
 
 describe('evaluator', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -80,8 +80,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -102,8 +103,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -124,8 +126,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -146,8 +149,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -168,8 +172,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
     expect(summary.stats.successes).toBe(4);
@@ -190,8 +195,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
@@ -207,8 +213,9 @@ describe('evaluator', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -224,8 +231,9 @@ describe('evaluator', () => {
       providers: [mockApiProvider, mockApiProvider, mockApiProvider],
       prompts: [toPrompt('Test prompt')],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
     expect(summary.stats.successes).toBe(3);
@@ -251,8 +259,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -276,8 +285,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -301,8 +311,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -326,8 +337,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -356,8 +368,9 @@ describe('evaluator', () => {
         },
       },
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -386,8 +399,9 @@ describe('evaluator', () => {
         },
       },
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -406,8 +420,9 @@ describe('evaluator', () => {
         },
       },
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -433,8 +448,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -468,8 +484,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiJsonProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -502,13 +519,74 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe('Transformed: Original output');
+  });
+
+  it('evaluate with vars transform', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Hello {{ name }}, your age is {{ age }}')],
+      tests: [
+        {
+          vars: { name: 'Alice', age: 30 },
+        },
+        {
+          vars: { name: 'Bob', age: 25 },
+          options: {
+            transformVars: '{ ...vars, age: vars.age + 5 }',
+          },
+        },
+      ],
+      defaultTest: {
+        options: {
+          transformVars: '{ ...vars, name: vars.name.toUpperCase() }',
+        },
+      },
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary).toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 2,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            prompt: expect.objectContaining({
+              raw: 'Hello ALICE, your age is 30',
+              label: 'Hello {{ name }}, your age is {{ age }}',
+            }),
+            response: expect.objectContaining({
+              output: 'Test output',
+            }),
+          }),
+          expect.objectContaining({
+            // NOTE: test overrides defaultTest transform. Bob not BOB
+            prompt: expect.objectContaining({
+              raw: 'Hello Bob, your age is 30',
+            }),
+            response: expect.objectContaining({
+              output: 'Test output',
+            }),
+            vars: {
+              name: 'Bob',
+              age: 30,
+            },
+          }),
+        ]),
+      }),
+    );
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
   it('evaluate with provider transform and test transform', async () => {
@@ -544,8 +622,11 @@ describe('evaluator', () => {
         },
       ],
     };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
-    await expect(evaluate(testSuite, {})).resolves.toEqual(
+    expect(summary).toEqual(
       expect.objectContaining({
         stats: expect.objectContaining({
           successes: 1,
@@ -577,8 +658,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -614,8 +696,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary).toMatchObject({
@@ -674,8 +757,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
@@ -732,8 +816,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
     expect(summary.stats.successes).toBe(4);
@@ -794,10 +879,10 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const result = await evaluate(testSuite, {});
-
-    expect(result).toMatchObject({
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary).toMatchObject({
       stats: {
         successes: 2,
         failures: 0,
@@ -820,7 +905,7 @@ describe('evaluator', () => {
       ]),
     });
 
-    expect(result.table.body[0].test.metadata).toEqual({
+    expect(summary.results[0].testCase.metadata).toEqual({
       defaultKey: 'defaultValue',
       configKey: 'configValue',
       testKey: 'testValue',
@@ -842,10 +927,10 @@ describe('evaluator', () => {
         },
       ],
     };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
 
-    const summary = await evaluate(testSuite, {});
-
-    expect(summary.table.body[0].test.metadata).toEqual({
+    expect(evalRecord.results[0].testCase.metadata).toEqual({
       defaultKey: 'defaultValue',
       testKey: 'testValue',
     });
@@ -874,8 +959,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
@@ -919,46 +1005,44 @@ describe('evaluator', () => {
         'unlabeled-provider-id': ['prompt2'],
       },
     };
-
-    await expect(evaluate(testSuite, {})).resolves.toEqual(
-      expect.objectContaining({
-        stats: expect.objectContaining({
-          successes: 2,
-          failures: 0,
-        }),
-        results: [
-          expect.objectContaining({
-            provider: expect.objectContaining({
-              id: 'labeled-provider-id',
-              label: 'Labeled Provider',
-            }),
-            response: expect.objectContaining({
-              output: 'Labeled Provider Output',
-            }),
-          }),
-          expect.objectContaining({
-            provider: expect.objectContaining({
-              id: 'unlabeled-provider-id',
-              label: undefined,
-            }),
-            response: expect.objectContaining({
-              output: 'Unlabeled Provider Output',
-            }),
-          }),
-        ],
-        table: expect.objectContaining({
-          head: expect.objectContaining({
-            prompts: [
-              expect.objectContaining({
-                provider: 'Labeled Provider',
-              }),
-              expect.objectContaining({
-                provider: 'unlabeled-provider-id',
-              }),
-            ],
-          }),
-        }),
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary).toMatchObject({
+      stats: expect.objectContaining({
+        successes: 2,
+        failures: 0,
       }),
+      results: [
+        expect.objectContaining({
+          provider: expect.objectContaining({
+            id: 'labeled-provider-id',
+            label: 'Labeled Provider',
+          }),
+          response: expect.objectContaining({
+            output: 'Labeled Provider Output',
+          }),
+        }),
+        expect.objectContaining({
+          provider: expect.objectContaining({
+            id: 'unlabeled-provider-id',
+            label: undefined,
+          }),
+          response: expect.objectContaining({
+            output: 'Unlabeled Provider Output',
+          }),
+        }),
+      ],
+    });
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: 'Labeled Provider',
+        }),
+        expect.objectContaining({
+          provider: 'unlabeled-provider-id',
+        }),
+      ]),
     );
 
     expect(mockLabeledProvider.callApi).toHaveBeenCalledTimes(1);
@@ -978,8 +1062,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -1014,8 +1099,9 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -1050,22 +1136,17 @@ describe('evaluator', () => {
         },
       ],
     };
-
-    await expect(evaluate(testSuite, {})).resolves.toEqual(
-      expect.objectContaining({
-        stats: expect.objectContaining({
-          successes: 1,
-          failures: 0,
-        }),
-        results: expect.arrayContaining([
-          expect.objectContaining({
-            response: expect.objectContaining({
-              output: 'Postprocess: Provider: Original output',
-            }),
-          }),
-        ]),
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary).toMatchObject({
+      stats: expect.objectContaining({
+        successes: 1,
+        failures: 0,
       }),
-    );
+    });
+    expect(summary.results[0].response?.output).toBe('Postprocess: Provider: Original output');
+
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
   });
 
@@ -1097,21 +1178,22 @@ describe('evaluator', () => {
         },
       ],
     };
-    await expect(evaluate(testSuite, {})).resolves.toEqual(
-      expect.objectContaining({
-        stats: expect.objectContaining({
-          successes: 1,
-          failures: 0,
-        }),
-        results: expect.arrayContaining([
-          expect.objectContaining({
-            response: expect.objectContaining({
-              output: 'Transform: Provider: Original output',
-            }),
-          }),
-        ]),
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary).toMatchObject({
+      stats: expect.objectContaining({
+        successes: 1,
+        failures: 0,
       }),
-    );
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          response: expect.objectContaining({
+            output: 'Transform: Provider: Original output',
+          }),
+        }),
+      ]),
+    });
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
   });
 
@@ -1129,8 +1211,9 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(0);
     expect(summary.stats.failures).toBe(1);
@@ -1154,8 +1237,9 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -1200,8 +1284,9 @@ describe('evaluator', () => {
       ],
       tests: [{ vars: { problem: '8x + 31 = 2' } }],
     };
-
-    const summary = await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -1249,12 +1334,11 @@ describe('evaluator', () => {
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
     mockedRunExtensionHook.mockClear();
-
-    await evaluate(testSuite, {});
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
 
     // Check if runExtensionHook was called 4 times (beforeAll, beforeEach, afterEach, afterAll)
     expect(mockedRunExtensionHook).toHaveBeenCalledTimes(4);
-
     // Check beforeAll call
     expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
       1,
@@ -1314,6 +1398,22 @@ describe('evaluator', () => {
         suite: testSuite,
       }),
     );
+  });
+
+  it('should handle multiple providers', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider, mockApiProvider2],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(summary.stats.failures).toBe(0);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockApiProvider2.callApi).toHaveBeenCalledTimes(1);
   });
 });
 

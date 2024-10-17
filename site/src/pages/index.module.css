@@ -6,7 +6,7 @@
 }
 
 .heroBanner h1 {
-  font-size: 4rem;
+  font-size: 3.5rem;
   margin-bottom: 2rem;
 }
 
@@ -61,6 +61,12 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+}
+
+.walkthroughHeading {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
 }
 
 .walkthroughDescription {

@@ -1,0 +1,1 @@
+ALTER TABLE `eval_results` RENAME COLUMN `test_case_idx` TO `test_idx`;

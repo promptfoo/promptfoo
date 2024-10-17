@@ -244,7 +244,6 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly injectVar: string;
 
   constructor(readonly config: Record<string, string | object>) {
-    logger.debug(`RedteamIterativeProvider config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
@@ -266,7 +265,7 @@ class RedteamIterativeProvider implements ApiProvider {
       vars: context.vars,
       redteamProvider: await loadRedteamProvider({
         provider: this.redteamProvider,
-        preferSmallModel: true,
+        preferSmallModel: false,
         jsonOnly: true,
       }),
       targetProvider: context.originalProvider,

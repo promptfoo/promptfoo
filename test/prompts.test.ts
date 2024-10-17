@@ -262,7 +262,7 @@ describe('readPrompts', () => {
     - role: user
       content:
         - type: text
-          text: "What’s in this image?"
+          text: "What's in this image?"
         - type: image_url
           image_url:
             url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
@@ -283,7 +283,7 @@ describe('readPrompts', () => {
     - role: user
       content:
         - type: text
-          text: "What’s in this image?"
+          text: "What's in this image?"
         - type: image_url
           image_url:
             url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
@@ -456,6 +456,23 @@ describe('readPrompts', () => {
     await expect(readPrompts('non-existent-file.txt*')).resolves.toEqual([
       { raw: 'non-existent-file.txt*', label: 'non-existent-file.txt*' },
     ]);
+  });
+
+  it('should handle a prompt with a function', async () => {
+    const promptWithFunction: Partial<Prompt> = {
+      raw: 'dummy raw text',
+      label: 'Function Prompt',
+      function: jest.fn().mockResolvedValue('Hello, world!'),
+    };
+
+    await expect(readPrompts([promptWithFunction])).resolves.toEqual([
+      {
+        raw: 'dummy raw text',
+        label: 'Function Prompt',
+        function: expect.any(Function),
+      },
+    ]);
+    expect(promptWithFunction.function).not.toHaveBeenCalled();
   });
 });
 

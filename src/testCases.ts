@@ -14,6 +14,7 @@ import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
+import telemetry from './telemetry';
 import type {
   CsvRow,
   TestCase,
@@ -31,7 +32,7 @@ import { extractVariablesFromTemplates } from './util/templates';
 function parseJson(json: string): any | undefined {
   try {
     return JSON.parse(json);
-  } catch (err) {
+  } catch {
     return undefined;
   }
 }
@@ -66,17 +67,29 @@ export async function readStandaloneTestsFile(
 ): Promise<TestCase[]> {
   // This function is confusingly named - it reads a CSV, JSON, or YAML file of
   // TESTS or test equivalents.
-  const resolvedVarsPath = path.resolve(basePath, varsPath);
-  const fileExtension = parsePath(varsPath).ext.slice(1);
+  const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
+  const fileExtension = parsePath(resolvedVarsPath).ext.slice(1);
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'csv tests file - google sheet',
+    });
     rows = await fetchCsvFromGoogleSheet(varsPath);
   } else if (fileExtension === 'csv') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'csv tests file - local',
+    });
     rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true });
   } else if (fileExtension === 'json') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'json tests file',
+    });
     rows = parseJson(fs.readFileSync(resolvedVarsPath, 'utf-8'));
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'yaml tests file',
+    });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   }
 
@@ -173,6 +186,7 @@ export async function readTests(
         testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
         testCases = await _deref(testCases, testFile);
       } else if (testFile.endsWith('.json')) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         testCases = await _deref(require(testFile), testFile);
       } else {
         throw new Error(`Unsupported file type for test file: ${testFile}`);
@@ -358,7 +372,10 @@ export async function synthesize({
   invariant(typeof resp.output !== 'undefined', 'resp.output must be defined');
   const output = typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
   const respObjects = extractJsonObjects(output);
-  invariant(respObjects.length === 1, 'Expected exactly one JSON object in the response');
+  invariant(
+    respObjects.length === 1,
+    `Expected exactly one JSON object in the response for personas, got ${respObjects.length}`,
+  );
   const personas = (respObjects[0] as { personas: string[] }).personas;
   logger.debug(
     `Generated ${personas.length} persona${personas.length === 1 ? '' : 's'}:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
@@ -410,7 +427,7 @@ export async function synthesize({
 
     invariant(
       personaResponseObjects.length === 1,
-      `Expected exactly one JSON object in the response for persona ${persona}`,
+      `Expected exactly one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
     );
     const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
     logger.debug(`Received ${parsed.vars.length} test cases`);

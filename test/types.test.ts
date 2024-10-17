@@ -3,12 +3,14 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import path from 'path';
 import { z } from 'zod';
+import type { TestSuite } from '../src/types';
 import {
   AssertionSchema,
   BaseAssertionTypesSchema,
   isGradingResult,
   VarsSchema,
   TestSuiteConfigSchema,
+  TestSuiteSchema,
 } from '../src/types';
 
 describe('AssertionSchema', () => {
@@ -28,7 +30,7 @@ describe('AssertionSchema', () => {
       value: 'expected value',
       threshold: 0.8,
       weight: 2,
-      provider: 'openai:gpt-3.5-turbo',
+      provider: 'openai:gpt-4o-mini',
       rubricPrompt: 'Custom rubric prompt',
       metric: 'similarity_score',
       transform: 'toLowerCase()',
@@ -172,15 +174,92 @@ describe('TestSuiteConfigSchema', () => {
   });
 
   for (const file of configFiles) {
-    const relativePath = path.relative(rootDir, file);
-    it(`should validate ${relativePath}`, async () => {
+    it(`should validate ${path.relative(rootDir, file)}`, async () => {
       const configContent = fs.readFileSync(file, 'utf8');
       const config = yaml.load(configContent);
-      const result = TestSuiteConfigSchema.safeParse(config);
-      if (!result.success) {
-        console.error(`Validation failed for ${file}:`, result.error);
-      }
+      // Redteam has some aliases that are not part of validation.
+      // https://promptfoo.slack.com/archives/C075591T82G/p1726543510276649?thread_ts=1726459997.469519&cid=C075591T82G
+      // One day once we've moved these aliases into the zod validator, we can remove this.
+      const result = TestSuiteConfigSchema.extend({
+        targets: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
+        providers: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
+      })
+        .refine(
+          (data) => {
+            const hasTargets = Boolean(data.targets);
+            const hasProviders = Boolean(data.providers);
+            return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+          },
+          {
+            message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+          },
+        )
+        .safeParse(config);
       expect(result.success).toBe(true);
     });
   }
+});
+
+describe('TestSuiteSchema', () => {
+  const baseTestSuite: TestSuite = {
+    providers: [
+      {
+        id: () => 'mock-provider',
+        callApi: () => Promise.resolve({}),
+      },
+    ],
+    prompts: [{ raw: 'Hello, world!', label: 'mock-prompt' }],
+  };
+
+  describe('extensions field', () => {
+    it('should accept valid Python extension paths', () => {
+      const validExtensions = [
+        'file://path/to/file.py:function_name',
+        'file://./relative/path.py:function_name',
+        'file:///absolute/path.py:function_name',
+      ];
+
+      validExtensions.forEach((extension) => {
+        const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it('should accept valid JavaScript extension paths', () => {
+      const validExtensions = [
+        'file://path/to/file.js:function_name',
+        'file://./relative/path.ts:function_name',
+        'file:///absolute/path.mjs:function_name',
+        'file://path/to/file.cjs:function_name',
+      ];
+
+      validExtensions.forEach((extension) => {
+        const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it.each([
+      ['path/to/file.py:function_name', 'Missing file:// prefix'],
+      ['file://path/to/file.txt:function_name', 'Invalid file extension'],
+      ['file://path/to/file.py', 'Missing function name'],
+      ['file://path/to/file.py:', 'Empty function name'],
+      ['file://:function_name', 'Missing file path'],
+      ['file://path/to/file.py:function_name:extra_arg', 'Extra argument'],
+    ])('should reject invalid extension path: %s (%s)', (extension, reason) => {
+      const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].message).toMatch(/Extension must/);
+    });
+
+    it('should allow extensions field to be optional', () => {
+      const result = TestSuiteSchema.safeParse({ ...baseTestSuite });
+      expect(result.success).toBe(true);
+    });
+
+    it('should allow an empty array of extensions', () => {
+      const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [] });
+      expect(result.success).toBe(true);
+    });
+  });
 });

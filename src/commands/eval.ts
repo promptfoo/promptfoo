@@ -2,13 +2,17 @@ import chalk from 'chalk';
 import chokidar from 'chokidar';
 import type { Command } from 'commander';
 import dedent from 'dedent';
+import fs from 'fs';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
+import { z } from 'zod';
+import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
-import { resolveConfigs } from '../config';
-import { getEnvFloat, getEnvInt } from '../envars';
+import cliState from '../cliState';
+import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
+import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
 import { generateTable } from '../table';
@@ -21,25 +25,34 @@ import type {
   UnifiedConfig,
 } from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
+import { CommandLineOptionsSchema } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
 import {
   migrateResultsFromFileSystemToDatabase,
   printBorder,
   setupEnv,
   writeMultipleOutputs,
-  writeOutput,
-  writeResultsToDatabase,
 } from '../util';
+import { loadDefaultConfig } from '../util/config/default';
+import { resolveConfigs } from '../util/config/load';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 
+const EvalCommandSchema = CommandLineOptionsSchema.extend({
+  help: z.boolean().optional(),
+  interactiveProviders: z.boolean().optional(),
+  remote: z.boolean().optional(),
+}).partial();
+
+type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+
 export async function doEval(
-  cmdObj: CommandLineOptions & Command,
+  cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
 ) {
-  setupEnv(cmdObj.envFile);
+  setupEnv(cmdObj.envPath);
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
@@ -56,8 +69,9 @@ export async function doEval(
     if (cmdObj.verbose) {
       setLogLevel('debug');
     }
-    const iterations = Number.parseInt(cmdObj.repeat || '', 10);
-    const repeat = !Number.isNaN(iterations) && iterations > 0 ? iterations : 1;
+    const iterations = cmdObj.repeat ?? Number.NaN;
+    const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;
+
     if (!cmdObj.cache || repeat > 1) {
       logger.info('Cache is disabled.');
       disableCache();
@@ -65,8 +79,8 @@ export async function doEval(
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
-    let maxConcurrency = Number.parseInt(cmdObj.maxConcurrency || '', 10);
-    const delay = Number.parseInt(cmdObj.delay || '', 0);
+    let maxConcurrency = cmdObj.maxConcurrency;
+    const delay = cmdObj.delay ?? 0;
 
     if (delay > 0) {
       maxConcurrency = 1;
@@ -81,12 +95,14 @@ export async function doEval(
       failing: cmdObj.filterFailing,
     });
 
-    testSuite.providers = filterProviders(testSuite.providers, cmdObj.filterProviders);
+    testSuite.providers = filterProviders(
+      testSuite.providers,
+      cmdObj.filterProviders || cmdObj.filterTargets,
+    );
 
     const options: EvaluateOptions = {
       showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
-      maxConcurrency:
-        !Number.isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
+      maxConcurrency,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       ...evaluateOptions,
@@ -116,31 +132,37 @@ export async function doEval(
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
+      const validationError = fromError(testSuiteSchema.error);
       logger.warn(
         chalk.yellow(dedent`
       TestSuite Schema Validation Error:
-      
-        ${JSON.stringify(testSuiteSchema.error.format())}
-      
+
+        ${validationError.toString()}
+
       Please review your promptfooconfig.yaml configuration.`),
       );
     }
 
-    const summary = await evaluate(testSuite, {
+    const evalRecord = cmdObj.write
+      ? await Eval.create(config, testSuite.prompts)
+      : new Eval(config);
+    await evaluate(testSuite, evalRecord, {
       ...options,
       eventSource: 'cli',
     });
 
     const shareableUrl =
-      cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
+      cmdObj.share && config.sharing ? await createShareableUrl(evalRecord) : null;
 
+    const summary = await evalRecord.toEvaluateSummary();
+    const table = await evalRecord.getTable();
     if (cmdObj.table && getLogLevel() !== 'debug') {
       // Output CLI table
-      const table = generateTable(summary, Number.parseInt(cmdObj.tableCellMaxLength || '', 10));
+      const outputTable = generateTable(table);
 
-      logger.info('\n' + table.toString());
-      if (summary.table.body.length > 25) {
-        const rowsLeft = summary.table.body.length - 25;
+      logger.info('\n' + outputTable.toString());
+      if (table.body.length > 25) {
+        const rowsLeft = table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
       }
     } else if (summary.stats.failures !== 0) {
@@ -153,23 +175,24 @@ export async function doEval(
 
     await migrateResultsFromFileSystemToDatabase();
 
-    let evalId: string | null = null;
-    if (cmdObj.write) {
-      evalId = await writeResultsToDatabase(summary, config);
+    if (getEnvBool('PROMPTFOO_LIGHTWEIGHT_RESULTS')) {
+      const outputPath = config.outputPath;
+      config = { outputPath };
+      summary.results = [];
+      table.head.vars = [];
+      for (const row of table.body) {
+        row.vars = [];
+      }
     }
 
     const { outputPath } = config;
-    if (outputPath) {
-      // Write output to file
-      if (typeof outputPath === 'string') {
-        await writeOutput(outputPath, evalId, summary, config, shareableUrl);
-      } else if (Array.isArray(outputPath)) {
-        await writeMultipleOutputs(outputPath, evalId, summary, config, shareableUrl);
-      }
-      logger.info(chalk.yellow(`Writing output to ${outputPath}`));
+    const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    );
+    if (paths.length) {
+      await writeMultipleOutputs(paths, evalRecord, shareableUrl);
+      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
-
-    telemetry.maybeShowNotice();
 
     printBorder();
     if (cmdObj.write) {
@@ -195,7 +218,9 @@ export async function doEval(
     const passRate = (summary.stats.successes / totalTests) * 100;
     logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
     logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
-    logger.debug(`Pass Rate: ${passRate.toFixed(2)}%`);
+    if (!Number.isNaN(passRate)) {
+      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
+    }
     logger.info(
       `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
     );
@@ -300,33 +325,65 @@ export function evalCommand(
   program: Command,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
-  evaluateOptions: EvaluateOptions,
 ) {
-  program
+  const evaluateOptions: EvaluateOptions = {};
+  if (defaultConfig.evaluateOptions) {
+    evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
+    evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
+    evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
+  }
+
+  const evalCmd = program
     .command('eval')
     .description('Evaluate prompts')
+
+    // Core configuration
+    .option(
+      '-c, --config <paths...>',
+      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
+    )
+    .option('--env-file, --env-path <path>', 'Path to .env file')
+
+    // Input sources
+    .option('-a, --assertions <path>', 'Path to assertions file')
     .option('-p, --prompts <paths...>', 'Paths to prompt files (.txt)')
     .option(
       '-r, --providers <name or path...>',
       'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
     )
-    .option(
-      '-c, --config <paths...>',
-      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
-    )
-    .option(
-      // TODO(ian): Remove `vars` for v1
-      '-v, --vars, -t, --tests <path>',
-      'Path to CSV with test cases',
-      defaultConfig?.commandLineOptions?.vars,
-    )
-    .option('-a, --assertions <path>', 'Path to assertions file')
-    .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
     .option('-t, --tests <path>', 'Path to CSV with test cases')
     .option(
-      '-o, --output <paths...>',
-      'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
+      '-v, --vars <path>',
+      'Path to CSV with test cases (alias for --tests)',
+      defaultConfig?.commandLineOptions?.vars,
     )
+    .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
+
+    // Prompt modification
+    .option(
+      '--prompt-prefix <path>',
+      'This prefix is prepended to every prompt',
+      defaultConfig.defaultTest?.options?.prefix,
+    )
+    .option(
+      '--prompt-suffix <path>',
+      'This suffix is append to every prompt',
+      defaultConfig.defaultTest?.options?.suffix,
+    )
+    .option(
+      '--var <key=value>',
+      'Set a variable in key=value format',
+      (value, previous) => {
+        const [key, val] = value.split('=');
+        if (!key || val === undefined) {
+          throw new Error('--var must be specified in key=value format.');
+        }
+        return { ...previous, [key]: val };
+      },
+      {},
+    )
+
+    // Execution control
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -345,75 +402,82 @@ export function evalCommand(
       defaultConfig.evaluateOptions?.delay ? String(defaultConfig.evaluateOptions.delay) : '0',
     )
     .option(
-      '--table-cell-max-length <number>',
-      'Truncate console table cells to this length',
-      '250',
-    )
-    .option(
-      '--suggest-prompts <number>',
-      'Generate N new prompts and append them to the prompt list',
-    )
-    .option(
-      '--prompt-prefix <path>',
-      'This prefix is prepended to every prompt',
-      defaultConfig.defaultTest?.options?.prefix,
-    )
-    .option(
-      '--prompt-suffix <path>',
-      'This suffix is append to every prompt',
-      defaultConfig.defaultTest?.options?.suffix,
-    )
-    .option(
-      '--no-write',
-      'Do not write results to promptfoo directory',
-      defaultConfig?.commandLineOptions?.write,
-    )
-    .option(
       '--no-cache',
       'Do not read or write results to disk cache',
-      // TODO(ian): Remove commandLineOptions.cache in v1
       defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
     )
-    .option('--no-progress-bar', 'Do not show progress bar')
-    .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
-    .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
-    .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
-    .option(
-      '--grader <provider>',
-      'Model that will grade outputs',
-      defaultConfig?.commandLineOptions?.grader,
-    )
-    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
-    .option('-w, --watch', 'Watch for changes in config and re-run')
-    .option('--env-file <path>', 'Path to .env file')
+    .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
+
+    // Filtering and subset selection
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')
     .option(
       '--filter-pattern <pattern>',
       'Only run tests whose description matches the regular expression pattern',
     )
-    .option('--filter-providers <providers>', 'Only run tests with these providers')
+    .option(
+      '--filter-providers, --filter-targets <providers>',
+      'Only run tests with these providers (regex match)',
+    )
     .option('--filter-failing <path>', 'Path to json output file')
+
+    // Output configuration
     .option(
-      '--var <key=value>',
-      'Set a variable in key=value format',
-      (value, previous: Record<string, string> = {}) => {
-        const [key, val] = value.split('=');
-        if (!key || val === undefined) {
-          throw new Error('--var must be specified in key=value format.');
-        }
-        previous[key] = val;
-        return previous;
-      },
-      {},
+      '-o, --output <paths...>',
+      'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
     )
+    .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
+    .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
+    .option(
+      '--table-cell-max-length <number>',
+      'Truncate console table cells to this length',
+      '250',
+    )
+    .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
+    .option(
+      '--no-write',
+      'Do not write results to promptfoo directory',
+      defaultConfig?.commandLineOptions?.write,
+    )
+
+    // Additional features
+    .option(
+      '--grader <provider>',
+      'Model that will grade outputs',
+      defaultConfig?.commandLineOptions?.grader,
+    )
+    .option(
+      '--suggest-prompts <number>',
+      'Generate N new prompts and append them to the prompt list',
+    )
+    .option('-w, --watch', 'Watch for changes in config and re-run')
+
+    // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
-    .option(
-      '--interactive-providers',
-      'Run providers interactively, one at a time',
-      defaultConfig?.evaluateOptions?.interactiveProviders,
-    )
-    .action((opts) => {
-      if (opts.interactiveProviders) {
+    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
+    .option('--no-progress-bar', 'Do not show progress bar')
+    .action(async (opts: EvalCommandOptions, command: Command) => {
+      let validatedOpts: z.infer<typeof EvalCommandSchema>;
+      try {
+        validatedOpts = EvalCommandSchema.parse(opts);
+      } catch (err) {
+        const validationError = fromError(err);
+        logger.error(dedent`
+        Invalid command options:
+        ${validationError.toString()}
+        `);
+        process.exitCode = 1;
+        return;
+      }
+      if (command.args.length > 0) {
+        logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
+      }
+
+      if (validatedOpts.help) {
+        evalCmd.help();
+        return;
+      }
+
+      if (validatedOpts.interactiveProviders) {
         logger.warn(
           chalk.yellow(dedent`
           Warning: The --interactive-providers option has been removed.
@@ -425,7 +489,11 @@ export function evalCommand(
         process.exit(2);
       }
 
-      for (const maybeFilePath of opts.output ?? []) {
+      if (validatedOpts.remote) {
+        cliState.remote = true;
+      }
+
+      for (const maybeFilePath of validatedOpts.output ?? []) {
         const { data: extension } = OutputFileExtension.safeParse(
           maybeFilePath.split('.').pop()?.toLowerCase(),
         );
@@ -434,6 +502,35 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
       }
-      doEval(opts, defaultConfig, defaultConfigPath, evaluateOptions);
+
+      if (validatedOpts.config !== undefined) {
+        const configPaths: string[] = Array.isArray(validatedOpts.config)
+          ? validatedOpts.config
+          : [validatedOpts.config];
+        for (const configPath of configPaths) {
+          if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
+            const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
+              await loadDefaultConfig(configPath);
+            if (newConfigPath) {
+              validatedOpts.config = validatedOpts.config.filter(
+                (path: string) => path !== configPath,
+              );
+              validatedOpts.config.push(newConfigPath);
+              defaultConfig = { ...defaultConfig, ...dirConfig };
+            } else {
+              logger.warn(`No configuration file found in directory: ${configPath}`);
+            }
+          }
+        }
+      }
+
+      doEval(
+        validatedOpts as Partial<CommandLineOptions & Command>,
+        defaultConfig,
+        defaultConfigPath,
+        evaluateOptions,
+      );
     });
+
+  return evalCmd;
 }

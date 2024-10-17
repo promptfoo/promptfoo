@@ -162,7 +162,7 @@ npx promptfoo@latest eval -o results.csv
 
 The comparison will provide you with a side-by-side performance view of Mixtral, GPT-4o-mini, and GPT-4o based on your test cases. Use this data to make informed decisions about which LLM best suits your application.
 
-Contrast this with public benchmarks from the [Chatbot Arena](https://arena.lmsys.org/) leaderboard:
+Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai/) leaderboard:
 
 | Model                      | Arena rating | MT-bench score |
 | -------------------------- | ------------ | -------------- |

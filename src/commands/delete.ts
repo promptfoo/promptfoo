@@ -30,10 +30,9 @@ export function deleteCommand(program: Command) {
   const deleteCommand = program
     .command('delete <id>')
     .description('Delete various resources')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (id: string, cmdObj: { envPath?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'delete',
       });
@@ -51,10 +50,9 @@ export function deleteCommand(program: Command) {
     .description(
       'Delete an evaluation by ID. Use "latest" to delete the most recent evaluation, or "all" to delete all evaluations.',
     )
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (evalId, cmdObj) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'delete eval',
         evalId,

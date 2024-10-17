@@ -7,5 +7,5 @@ promptfoo eval
 Here's the full command:
 
 ```
-promptfoo eval --prompts prompts.txt --tests tests.csv --providers openai:gpt-3.5-turbo
+promptfoo eval --prompts prompts.txt --tests tests.csv --providers openai:gpt-4o-mini
 ```

@@ -1,4 +1,5 @@
 import type { GoogleAuth } from 'google-auth-library';
+import logger from '../logger';
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -102,6 +103,16 @@ export function maybeCoerceToGeminiFormat(contents: any) {
       },
     };
     coerced = true;
+  } else if (typeof contents === 'string') {
+    contents = {
+      role: 'user',
+      parts: {
+        text: contents,
+      },
+    };
+    coerced = true;
+  } else {
+    logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
   }
   return { contents, coerced };
 }
@@ -113,7 +124,7 @@ export async function getGoogleClient() {
     try {
       const importedModule = await import('google-auth-library');
       GoogleAuth = importedModule.GoogleAuth;
-    } catch (err) {
+    } catch {
       throw new Error(
         'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
       );
@@ -131,7 +142,7 @@ export async function hasGoogleDefaultCredentials() {
   try {
     await getGoogleClient();
     return true;
-  } catch (err) {
+  } catch {
     return false;
   }
 }

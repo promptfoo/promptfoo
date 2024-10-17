@@ -70,9 +70,14 @@ jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
+jest.mock('path', () => ({
+  ...jest.requireActual('path'),
+  resolve: jest.fn(jest.requireActual('path').resolve),
+  extname: jest.fn(jest.requireActual('path').extname),
+}));
 
 jest.mock('../src/cliState', () => ({
-  basePath: '/config_path',
+  basePath: '/base/path',
 }));
 jest.mock('../src/matchers', () => {
   const actual = jest.requireActual('../src/matchers');
@@ -141,7 +146,7 @@ describe('runAssertions', () => {
 
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test,
       providerResponse: { output },
     });
@@ -152,17 +157,17 @@ describe('runAssertions', () => {
   });
 
   it('should fail when any assertion fails', async () => {
-    const output = 'Different output';
+    const output = 'Actual output';
 
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test,
       providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "Expected output" to equal "Different output"',
+      reason: 'Expected output "Actual output" to equal "Expected output"',
     });
   });
 
@@ -171,20 +176,20 @@ describe('runAssertions', () => {
 
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test,
       providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "Expected output" to equal "{"key":"value"}"',
+      reason: 'Expected output "{"key":"value"}" to equal "Expected output"',
     });
   });
 
   it('should fail when combined score is less than threshold', async () => {
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test: {
         threshold: 0.5,
         assert: [
@@ -211,7 +216,7 @@ describe('runAssertions', () => {
   it('should pass when combined score is greater than threshold', async () => {
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test: {
         threshold: 0.25,
         assert: [
@@ -237,7 +242,7 @@ describe('runAssertions', () => {
 
   describe('assert-set', () => {
     const prompt = 'Some prompt';
-    const provider = new OpenAiChatCompletionProvider('gpt-4');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
 
     it('assert-set success', async () => {
       const output = 'Expected output';
@@ -268,7 +273,7 @@ describe('runAssertions', () => {
     });
 
     it('assert-set failure', async () => {
-      const output = 'Expected output';
+      const output = 'Actual output';
       const test: AtomicTestCase = {
         assert: [
           {
@@ -276,7 +281,7 @@ describe('runAssertions', () => {
             assert: [
               {
                 type: 'equals',
-                value: 'Something different',
+                value: 'Expected output',
               },
             ],
           },
@@ -291,7 +296,7 @@ describe('runAssertions', () => {
       });
       expect(result).toMatchObject({
         pass: false,
-        reason: 'Expected output "Something different" to equal "Expected output"',
+        reason: 'Expected output "Actual output" to equal "Expected output"',
       });
     });
 
@@ -618,6 +623,14 @@ describe('runAssertion', () => {
     value: 'output.length * 10',
   };
 
+  const javascriptBooleanAssertionWithConfig: Assertion = {
+    type: 'javascript',
+    value: 'output.length <= context.config.maximumOutputSize',
+    config: {
+      maximumOutputSize: 20,
+    },
+  };
+
   const javascriptStringAssertionWithNumberAndThreshold: Assertion = {
     type: 'javascript',
     value: 'output.length * 10',
@@ -649,7 +662,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: equalityAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -661,18 +674,18 @@ describe('runAssertion', () => {
   });
 
   it('should fail when the equality assertion fails', async () => {
-    const output = 'Different output';
+    const output = 'Actual output';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: equalityAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "Expected output" to equal "Different output"',
+      reason: 'Expected output "Actual output" to equal "Expected output"',
     });
   });
 
@@ -689,7 +702,7 @@ describe('runAssertion', () => {
       assertion: notEqualsAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -705,7 +718,7 @@ describe('runAssertion', () => {
       assertion: notEqualsAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -717,14 +730,14 @@ describe('runAssertion', () => {
     const output = { key: 'value' };
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: equalityAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "Expected output" to equal "{"key":"value"}"',
+      reason: 'Expected output "{"key":"value"}" to equal "Expected output"',
     });
   });
 
@@ -733,7 +746,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: equalityAssertionWithObject,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -749,14 +762,14 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: equalityAssertionWithObject,
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "{"key":"value"}" to equal "{"key":"not value"}"',
+      reason: 'Expected output "{"key":"not value"}" to equal "{"key":"value"}"',
     });
   });
 
@@ -768,11 +781,11 @@ describe('runAssertion', () => {
 
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
-    const output = '{"key": "value"}';
+    const output = '{"key":"value"}';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -792,11 +805,11 @@ describe('runAssertion', () => {
 
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
-    const output = '{"key": "not value"}';
+    const output = '{"key":"not value"}';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -804,16 +817,16 @@ describe('runAssertion', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
     expect(result).toMatchObject({
       pass: false,
-      reason: 'Expected output "{"key":"value"}" to equal "{"key": "not value"}"',
+      reason: 'Expected output "{"key":"not value"}" to equal "{"key":"value"}"',
     });
   });
 
   it('should pass when the is-json assertion passes', async () => {
-    const output = '{"key": "value"}';
+    const output = '{"key":"value"}';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isJsonAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -829,7 +842,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isJsonAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -845,7 +858,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -861,7 +874,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -877,7 +890,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isJsonAssertionWithSchemaYamlString,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -893,7 +906,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isJsonAssertionWithSchemaYamlString,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -919,7 +932,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: { type: 'is-json', value: schemaWithFormat },
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -946,7 +959,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: { type: 'is-json', value: schemaWithFormat },
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -988,7 +1001,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1029,7 +1042,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1046,7 +1059,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1062,7 +1075,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1078,7 +1091,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: notIsSqlAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1094,7 +1107,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: notIsSqlAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1110,7 +1123,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertionWithDatabase,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1126,7 +1139,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertionWithDatabase,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1142,7 +1155,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1158,7 +1171,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1174,7 +1187,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1190,7 +1203,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1206,7 +1219,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1222,7 +1235,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1238,7 +1251,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1254,7 +1267,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1270,7 +1283,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: {
         type: 'contains-sql',
       },
@@ -1288,7 +1301,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: {
         type: 'contains-sql',
       },
@@ -1306,7 +1319,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: {
         type: 'contains-sql',
       },
@@ -1324,7 +1337,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: {
         type: 'contains-sql',
       },
@@ -1341,7 +1354,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: {
         type: 'contains-sql',
       },
@@ -1359,7 +1372,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1376,23 +1389,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: containsJsonAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-    });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
-
-  it('should pass when the contains-json assertion passes with valid and invalid json', async () => {
-    const output = 'There is an extra opening bracket \n\n { {"key": "value"} \n\n blah blah';
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1408,7 +1405,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1424,7 +1421,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: containsJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1440,7 +1437,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: containsJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1480,7 +1477,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1521,7 +1518,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1538,7 +1535,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: containsJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1557,7 +1554,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: javascriptStringAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1573,7 +1570,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: javascriptStringAssertionWithNumber,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1585,12 +1582,46 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should pass when javascript returns an output string that is smaller than the maximum size threshold', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1.0,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when javascript returns an output string that is larger than the maximum size threshold', async () => {
+    const output = 'Expected output with some extra characters';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Custom function returned false'),
+    });
+  });
+
   it('should pass when javascript returns a number above threshold', async () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: javascriptStringAssertionWithNumberAndThreshold,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1607,7 +1638,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: javascriptStringAssertionWithNumberAndThreshold,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1629,7 +1660,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1646,7 +1677,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: javascriptStringAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1666,7 +1697,7 @@ describe('runAssertion', () => {
     };
     const result: GradingResult = await runAssertion({
       prompt: 'variable value',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion,
       test: { vars: { foo: 'Expected output' } } as AtomicTestCase,
       providerResponse: { output },
@@ -1686,7 +1717,7 @@ describe('runAssertion', () => {
     };
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: javascriptStringAssertionWithVars,
       test: { vars: { foo: 'bar' } } as AtomicTestCase,
       providerResponse: { output },
@@ -1706,7 +1737,7 @@ describe('runAssertion', () => {
     };
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: javascriptStringAssertionWithVars,
       test: { vars: { foo: 'bar' } } as AtomicTestCase,
       providerResponse: { output },
@@ -1723,7 +1754,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: javascriptFunctionAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1740,7 +1771,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: javascriptFunctionFailAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -1760,7 +1791,7 @@ describe('runAssertion', () => {
       assertion: javascriptMultilineStringAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1776,7 +1807,7 @@ describe('runAssertion', () => {
       assertion: javascriptMultilineStringAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1797,7 +1828,7 @@ describe('runAssertion', () => {
       assertion: notContainsAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1813,7 +1844,7 @@ describe('runAssertion', () => {
       assertion: notContainsAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1835,7 +1866,7 @@ describe('runAssertion', () => {
       assertion: containsLowerAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1851,7 +1882,7 @@ describe('runAssertion', () => {
       assertion: containsLowerAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1873,7 +1904,7 @@ describe('runAssertion', () => {
       assertion: notContainsLowerAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1889,7 +1920,7 @@ describe('runAssertion', () => {
       assertion: notContainsLowerAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1911,7 +1942,7 @@ describe('runAssertion', () => {
       assertion: containsAnyAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1927,7 +1958,7 @@ describe('runAssertion', () => {
       assertion: containsAnyAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1946,7 +1977,7 @@ describe('runAssertion', () => {
       },
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1965,7 +1996,7 @@ describe('runAssertion', () => {
       },
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1987,7 +2018,7 @@ describe('runAssertion', () => {
       assertion: containsAllAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -2003,7 +2034,7 @@ describe('runAssertion', () => {
       assertion: containsAllAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -2022,7 +2053,7 @@ describe('runAssertion', () => {
       },
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -2041,7 +2072,7 @@ describe('runAssertion', () => {
       },
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -2064,7 +2095,7 @@ describe('runAssertion', () => {
       assertion: containsRegexAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -2080,7 +2111,7 @@ describe('runAssertion', () => {
       assertion: containsRegexAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -2102,7 +2133,7 @@ describe('runAssertion', () => {
       assertion: notContainsRegexAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -2118,7 +2149,7 @@ describe('runAssertion', () => {
       assertion: notContainsRegexAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -2149,7 +2180,7 @@ describe('runAssertion', () => {
       assertion: webhookAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -2173,7 +2204,7 @@ describe('runAssertion', () => {
       assertion: webhookAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -2198,7 +2229,7 @@ describe('runAssertion', () => {
       assertion: webhookAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -2221,7 +2252,7 @@ describe('runAssertion', () => {
       assertion: rougeNAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -2237,7 +2268,7 @@ describe('runAssertion', () => {
       assertion: rougeNAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -2259,7 +2290,7 @@ describe('runAssertion', () => {
       assertion: startsWithAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -2275,7 +2306,7 @@ describe('runAssertion', () => {
       assertion: startsWithAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: false,
@@ -2314,7 +2345,7 @@ describe('runAssertion', () => {
       assertion,
       test,
       providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
     });
     expect(result).toMatchObject({
       pass: true,
@@ -2334,7 +2365,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: levenshteinAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -2350,7 +2381,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: levenshteinAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -2408,7 +2439,7 @@ describe('runAssertion', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
         assertion: fileAssertion,
         test: {} as AtomicTestCase,
         providerResponse: { output },
@@ -2430,7 +2461,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
     const mockFn = jest.fn((output: string) => output === 'Expected output');
 
-    jest.doMock(path.resolve('/config_path/path/to/assert.js'), () => mockFn, { virtual: true });
+    jest.doMock(path.resolve('/base/path/path/to/assert.js'), () => mockFn, { virtual: true });
 
     const fileAssertion: Assertion = {
       type: 'javascript',
@@ -2439,7 +2470,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: fileAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -2471,7 +2502,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: pythonAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -2543,7 +2574,7 @@ describe('runAssertion', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
         assertion: pythonAssertion,
         test: {} as AtomicTestCase,
         providerResponse: { output },
@@ -2595,7 +2626,7 @@ describe('runAssertion', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
         assertion: fileAssertion,
         test: {} as AtomicTestCase,
         providerResponse: { output },
@@ -2631,7 +2662,7 @@ describe('runAssertion', () => {
     };
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion: fileAssertion,
       test: {} as AtomicTestCase,
       providerResponse: { output },
@@ -2654,7 +2685,7 @@ describe('runAssertion', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
         assertion: {
           type: 'latency',
           threshold: 100,
@@ -2674,7 +2705,7 @@ describe('runAssertion', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
         assertion: {
           type: 'latency',
           threshold: 100,
@@ -2695,7 +2726,7 @@ describe('runAssertion', () => {
       await expect(
         runAssertion({
           prompt: 'Some prompt',
-          provider: new OpenAiChatCompletionProvider('gpt-4'),
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
           assertion: {
             type: 'latency',
             threshold: 100,
@@ -2706,6 +2737,63 @@ describe('runAssertion', () => {
       ).rejects.toThrow(
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
       );
+    });
+
+    it('should pass when the latency is 0ms', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
+        latencyMs: 0,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should throw an error when threshold is not provided', async () => {
+      const output = 'Expected output';
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion: {
+            type: 'latency',
+          },
+          latencyMs: 50,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        }),
+      ).rejects.toThrow('Latency assertion must have a threshold in milliseconds');
+    });
+
+    it('should handle latency equal to threshold', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
+        latencyMs: 100,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
   });
 
@@ -3667,6 +3755,100 @@ describe('runAssertion', () => {
           providerResponse: { output: { some: 'object' } },
         }),
       ).rejects.toThrow('context-faithfulness assertion type must have a string output');
+    });
+  });
+
+  describe('file references', () => {
+    it('should handle file reference in string value', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'file://expected_output.txt',
+      };
+
+      const expectedContent = 'Expected output';
+      jest.mocked(fs.readFileSync).mockReturnValue(expectedContent);
+      jest.mocked(path.resolve).mockReturnValue('/base/path/expected_output.txt');
+      jest.mocked(path.extname).mockReturnValue('.txt');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/expected_output.txt', 'utf8');
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle file references in array values', async () => {
+      const assertion: Assertion = {
+        type: 'contains-any',
+        value: ['The expected output', 'string output', 'file://my_expected_output.txt'],
+      };
+
+      const fileContent = 'file content';
+      jest.mocked(fs.readFileSync).mockReturnValue(fileContent);
+      jest.mocked(path.resolve).mockReturnValue('/base/path/my_expected_output.txt');
+      jest.mocked(path.extname).mockReturnValue('.txt');
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'file content' },
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          pass: true,
+        }),
+      );
+      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/my_expected_output.txt', 'utf8');
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'string output' },
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          pass: true,
+        }),
+      );
+    });
+
+    it('should handle file reference in object value', async () => {
+      const assertion: Assertion = {
+        type: 'is-json',
+        value: 'file://schema.json',
+      };
+
+      const schemaContent = JSON.stringify({
+        type: 'object',
+        properties: {
+          key: { type: 'string' },
+        },
+      });
+      jest.mocked(fs.readFileSync).mockReturnValue(schemaContent);
+      jest.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+      jest.mocked(path.extname).mockReturnValue('.json');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: '{"key": "value"}' },
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
+      expect(result.pass).toBe(true);
     });
   });
 });

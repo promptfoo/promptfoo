@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import cliState from '../src/cliState';
 import { getAndCheckProvider, getGradingProvider, matchesClassification } from '../src/matchers';
 import {
   matchesSimilarity,
@@ -13,6 +16,7 @@ import { ANSWER_RELEVANCY_GENERATE, CONTEXT_RECALL, CONTEXT_RELEVANCE } from '..
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
 import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai';
+import * as remoteGrading from '../src/remoteGrading';
 import type {
   GradingConfig,
   ProviderResponse,
@@ -22,8 +26,32 @@ import type {
 } from '../src/types';
 import { TestGrader } from './utils';
 
+jest.mock('../src/database', () => ({
+  getDb: jest.fn().mockImplementation(() => {
+    throw new TypeError('The "original" argument must be of type function. Received undefined');
+  }),
+}));
 jest.mock('../src/esm');
 jest.mock('../src/logger');
+jest.mock('../src/cliState');
+jest.mock('../src/remoteGrading', () => ({
+  doRemoteGrading: jest.fn(),
+}));
+jest.mock('../src/redteam/util', () => ({
+  shouldGenerateRemote: jest.fn().mockReturnValue(true),
+}));
+jest.mock('proxy-agent', () => ({
+  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+}));
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
+jest.mock('better-sqlite3');
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  readFileSync: jest.fn(),
+  existsSync: jest.fn(),
+}));
 
 const Grader = new TestGrader();
 
@@ -187,9 +215,40 @@ describe('matchesSimilarity', () => {
       await matchesSimilarity(expected, output, threshold, false, grading);
     }).rejects.toThrow('API call failed');
   });
+
+  it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const expected = 'Expected {{ var }}';
+    const output = 'Output {{ var }}';
+    const threshold = 0.8;
+    const grading: GradingConfig = {
+      provider: DefaultEmbeddingProvider,
+    };
+
+    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      embedding: [1, 2, 3],
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await matchesSimilarity(expected, output, threshold, false, grading);
+
+    expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith('Expected {{ var }}');
+    expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith('Output {{ var }}');
+
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
+  });
 });
 
 describe('matchesLlmRubric', () => {
+  const mockFilePath = path.join('path', 'to', 'external', 'rubric.txt');
+  const mockFileContent = 'This is an external rubric prompt';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+  });
+
   it('should pass when the grading provider returns a passing result', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -275,6 +334,124 @@ describe('matchesLlmRubric', () => {
     expect(mockCallApi).toHaveBeenCalledWith('Grading prompt');
 
     mockCallApi.mockRestore();
+  });
+
+  it('should load rubric prompt from external file when specified', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockFilePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(fs.existsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
+    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
+      'utf8',
+    );
+    expect(grading.provider.callApi).toHaveBeenCalledWith(expect.stringContaining(mockFileContent));
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+      },
+    });
+  });
+
+  it('should throw an error when the external file is not found', async () => {
+    jest.mocked(fs.existsSync).mockReturnValue(false);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockFilePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(rubric, llmOutput, grading)).rejects.toThrow(
+      'File does not exist',
+    );
+
+    expect(fs.existsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
+    );
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(grading.provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should not call remote when rubric prompt is overridden, even if redteam is enabled', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: 'Custom prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    // Give it a redteam config
+    cliState.config = { redteam: {} };
+
+    await matchesLlmRubric(rubric, llmOutput, grading);
+
+    const { doRemoteGrading } = remoteGrading;
+    expect(doRemoteGrading).not.toHaveBeenCalled();
+
+    expect(grading.provider.callApi).toHaveBeenCalledWith(expect.stringContaining('Custom prompt'));
+  });
+
+  it('should call remote when redteam is enabled and rubric prompt is not overridden', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    // Give it a redteam config
+    cliState.config = { redteam: {} };
+
+    await matchesLlmRubric(rubric, llmOutput, grading);
+
+    const { doRemoteGrading } = remoteGrading;
+    expect(doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+    });
+
+    expect(grading.provider.callApi).not.toHaveBeenCalled();
   });
 });
 
@@ -376,6 +553,35 @@ describe('matchesFactuality', () => {
       'An error occurred',
     );
   });
+
+  it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const input = 'Input {{ var }}';
+    const expected = 'Expected {{ var }}';
+    const output = 'Output {{ var }}';
+    const grading: GradingConfig = {
+      provider: DefaultGradingProvider,
+    };
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: '(A) The submitted answer is correct.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await matchesFactuality(input, expected, output, grading);
+
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Input {{ var }}'),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Expected {{ var }}'),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Output {{ var }}'),
+    );
+
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
+  });
 });
 
 describe('matchesClosedQa', () => {
@@ -453,7 +659,7 @@ describe('matchesClosedQa', () => {
       try {
         JSON.parse(prompt);
         isJson = true;
-      } catch (err) {
+      } catch {
         isJson = false;
       }
       return Promise.resolve({
@@ -474,17 +680,46 @@ describe('matchesClosedQa', () => {
     });
     expect(isJson).toBeTruthy();
   });
+
+  it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const input = 'Input {{ var }}';
+    const expected = 'Expected {{ var }}';
+    const output = 'Output {{ var }}';
+    const grading: GradingConfig = {
+      provider: DefaultGradingProvider,
+    };
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'Y',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await matchesClosedQa(input, expected, output, grading);
+
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Input {{ var }}'),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Expected {{ var }}'),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Output {{ var }}'),
+    );
+
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
+  });
 });
 
 describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {
     const provider = await getGradingProvider(
       'text',
-      'openai:chat:gpt-3.5-turbo-foobar',
+      'openai:chat:gpt-4o-mini-foobar',
       DefaultGradingProvider,
     );
     // ok for this not to match exactly when the string is parsed
-    expect(provider?.id()).toBe('openai:gpt-3.5-turbo-foobar');
+    expect(provider?.id()).toBe('openai:gpt-4o-mini-foobar');
   });
 
   it('should return the correct provider when provider is an ApiProvider', async () => {
@@ -498,14 +733,14 @@ describe('getGradingProvider', () => {
 
   it('should return the correct provider when provider is ProviderOptions', async () => {
     const providerOptions = {
-      id: 'openai:chat:gpt-3.5-turbo-foobar',
+      id: 'openai:chat:gpt-4o-mini-foobar',
       config: {
         apiKey: 'abc123',
         temperature: 3.1415926,
       },
     };
     const provider = await getGradingProvider('text', providerOptions, DefaultGradingProvider);
-    expect(provider?.id()).toBe('openai:chat:gpt-3.5-turbo-foobar');
+    expect(provider?.id()).toBe('openai:chat:gpt-4o-mini-foobar');
   });
 
   it('should return the default provider when provider is not provided', async () => {

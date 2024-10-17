@@ -8,6 +8,7 @@ const mockedFetch = jest.mocked(fetch);
 const mockedFetchResponse = (ok: boolean, response: object) => {
   return {
     ok,
+    status: 200,
     text: () => Promise.resolve(JSON.stringify(response)),
     headers: {
       get: (name: string) => {

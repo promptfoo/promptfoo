@@ -2,24 +2,47 @@
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,
   "cSpell.words": [
+    "Andreessen",
     "apidevtools",
+    "CBRNE",
+    "chatcompletion",
     "cybercrime",
     "Dedup",
     "deduped",
+    "Envar",
     "envars",
     "Evals",
+    "exfiltration",
+    "globbed",
     "Groq",
+    "jailbreaking",
+    "leaderboard",
+    "logprobs",
+    "Mateo",
     "mitigations",
     "openai",
     "overreliance",
     "OWASP",
+    "Probs",
     "promptfoo",
     "promptfooconfig",
     "rawlist",
     "redteam",
+    "RLHF",
+    "roleplay",
     "TEMPLATING",
     "TESTCASE",
-    "unindented"
+    "transpiling",
+    "unindented",
+    "uuidv"
   ],
-  "jest.jestCommandLine": "npm run test --"
+  "jest.jestCommandLine": "npm run test --",
+  "eslint.workingDirectories": [
+    {
+      "mode": "auto"
+    }
+  ],
+  "[shellscript]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format"
+  }
 }

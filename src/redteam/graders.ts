@@ -1,8 +1,10 @@
-import type { RedteamModelGrader } from './plugins/base';
+import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
+import type { RedteamGraderBase } from './plugins/base';
 import { BflaGrader } from './plugins/bfla';
 import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { ContractsGrader } from './plugins/contracts';
+import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
@@ -16,11 +18,14 @@ import { PolicyViolationGrader } from './plugins/policy';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RbacGrader } from './plugins/rbac';
+import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 
 export const GRADERS = {
+  'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
+  'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
@@ -30,6 +35,7 @@ export const GRADERS = {
   'promptfoo:redteam:hijacking': new HijackingGrader(),
   'promptfoo:redteam:policy': new PolicyViolationGrader(),
   'promptfoo:redteam:politics': new PoliticsGrader(),
+  'promptfoo:redteam:religion': new ReligionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
@@ -71,6 +77,6 @@ export const GRADERS = {
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
 };
 
-export function getGraderById(id: string): RedteamModelGrader | undefined {
+export function getGraderById(id: string): RedteamGraderBase | undefined {
   return GRADERS[id as keyof typeof GRADERS];
 }

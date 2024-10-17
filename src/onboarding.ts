@@ -1,14 +1,16 @@
 import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
-import rawlist from '@inquirer/rawlist';
+import select from '@inquirer/select';
 import chalk from 'chalk';
+import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
-import { redteamInit } from './commands/redteam/init';
 import { getEnvString } from './envars';
 import logger from './logger';
+import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventValue } from './telemetry';
+import type { EnvOverrides } from './types';
 import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
@@ -110,8 +112,10 @@ def call_api(prompt, options, context):
     # The prompt is the final prompt string after the variables have been processed.
     # Custom logic to process the prompt goes here.
     # For instance, you might call an external API or run some computations.
+    # TODO: Replace with actual LLM API implementation.
+    def call_llm(prompt):
+        return f"Stub response for prompt: {prompt}"
     output = call_llm(prompt)
-
 
     # The result should be a dictionary with at least an 'output' field.
     result = {
@@ -238,6 +242,28 @@ function recordOnboardingStep(step: string, properties: Record<string, EventValu
   });
 }
 
+/**
+ * Iterate through user choices and determine if the user has selected a provider that needs an API key
+ * but has not set and API key in their environment.
+ */
+export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[]): string[] {
+  const ids = providerChoices.map((c) => (typeof c === 'object' ? (c as any).id : c));
+
+  const map: Record<string, keyof EnvOverrides> = {
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+  };
+
+  return Object.entries(map)
+    .filter(([prefix, key]) => ids.some((id) => id.startsWith(prefix)) && !getEnvString(key))
+    .map(
+      ([prefix, key]) => dedent`
+    ${chalk.bold(`Warning: ${key} environment variable is not set.`)}
+    Please set this environment variable like: export ${key}=<my-api-key>
+  `,
+    );
+}
+
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
   console.clear();
 
@@ -281,7 +307,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     recordOnboardingStep('start');
 
     // Choose use case
-    action = await rawlist({
+    action = await select({
       message: 'What would you like to do?',
       choices: [
         { name: 'Not sure yet', value: 'compare' },
@@ -308,7 +334,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
     language = 'not_sure';
     if (action === 'rag' || action === 'agent') {
-      language = await rawlist({
+      language = await select({
         message: 'What programming language are you developing the app in?',
         choices: [
           { name: 'Not sure yet', value: 'not_sure' },
@@ -373,7 +399,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: 'Local Python script',
-        value: ['python:provider.py'],
+        value: ['file://provider.py'],
       },
       {
         name: 'Local Javascript script',
@@ -403,14 +429,27 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[Ollama] Llama 3, Mixtral, ...',
         value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
       },
+      {
+        name: '[WatsonX] Llama 3.2, IBM Granite, ...',
+        value: [
+          'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
+          'watsonx:ibm/granite-13b-chat-v2',
+        ],
+      },
     ];
-    const providerChoices: (string | object)[] = await checkbox({
-      message: 'Which model providers would you like to use? (press enter to skip)',
-      choices,
-      loop: false,
-      required: true,
-      pageSize: process.stdout.rows - 6,
-    });
+
+    /**
+     * The potential of the object type here is given by the agent action conditional
+     * for openai as a value choice
+     */
+    const providerChoices: (string | object)[] = (
+      await checkbox({
+        message: 'Which model providers would you like to use?',
+        choices,
+        loop: false,
+        pageSize: process.stdout.rows - 6,
+      })
+    ).flat();
 
     recordOnboardingStep('choose providers', {
       value: providerChoices.map((choice) =>
@@ -418,30 +457,42 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       ),
     });
 
+    // Tell the user if they have providers selected without relevant API keys set in env.
+    reportProviderAPIKeyWarnings(providerChoices).forEach((warningText) =>
+      logger.warn(warningText),
+    );
+
     if (providerChoices.length > 0) {
-      const flatProviders = providerChoices.flat();
-      if (flatProviders.length > 3) {
+      if (providerChoices.length > 3) {
         providers.push(
           ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
         );
       } else {
-        providers.push(...flatProviders);
+        providers.push(...providerChoices);
       }
 
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
+        providerChoices.some(
+          (choice) =>
+            typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
+        )
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.js'), JAVASCRIPT_PROVIDER);
         logger.info('⌛ Wrote provider.js');
       }
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
+        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.sh'), BASH_PROVIDER);
         logger.info('⌛ Wrote provider.sh');
       }
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
+        providerChoices.some(
+          (choice) =>
+            typeof choice === 'string' &&
+            (choice.startsWith('python:') ||
+              (choice.startsWith('file://') && choice.endsWith('.py'))),
+        )
       ) {
         fs.writeFileSync(path.join(process.cwd(), directory, 'provider.py'), PYTHON_PROVIDER);
         logger.info('⌛ Wrote provider.py');

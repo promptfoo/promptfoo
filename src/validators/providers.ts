@@ -102,9 +102,10 @@ export const ApiProviderSchema = z.object({
   label: z.custom<ProviderLabel>().optional(),
   transform: z.string().optional(),
   delay: z.number().optional(),
+  config: z.any().optional(),
 });
 
-const ProviderResponseSchema = z.object({
+export const ProviderResponseSchema = z.object({
   cached: z.boolean().optional(),
   cost: z.number().optional(),
   error: z.string().optional(),
@@ -119,19 +120,19 @@ const ProviderResponseSchema = z.object({
   tokenUsage: TokenUsageSchema.optional(),
 });
 
-const ProviderEmbeddingResponseSchema = z.object({
+export const ProviderEmbeddingResponseSchema = z.object({
   error: z.string().optional(),
   embedding: z.array(z.number()).optional(),
   tokenUsage: TokenUsageSchema.partial().optional(),
 });
 
-const ProviderSimilarityResponseSchema = z.object({
+export const ProviderSimilarityResponseSchema = z.object({
   error: z.string().optional(),
   similarity: z.number().optional(),
   tokenUsage: TokenUsageSchema.partial().optional(),
 });
 
-const ProviderClassificationResponseSchema = z.object({
+export const ProviderClassificationResponseSchema = z.object({
   error: z.string().optional(),
   classification: z.record(z.number()).optional(),
 });

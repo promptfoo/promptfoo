@@ -34,7 +34,7 @@ Promptfoo supports a wide range of LLM providers, including:
 1. OpenAI (GPT-4o, GPT-3.5)
 2. Anthropic (Claude)
 3. Google (PaLM, Gemini)
-4. Amazon Bedrock
+4. Amazon Bedrock (Claude, Llama)
 5. Azure OpenAI
 6. Replicate
 7. Hugging Face

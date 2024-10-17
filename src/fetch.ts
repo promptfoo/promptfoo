@@ -44,23 +44,28 @@ export function fetchWithTimeout(
 }
 
 function isRateLimited(response: Response): boolean {
-  // This check helps make sure we set up tests correctly.
+  // These checks helps make sure we set up tests correctly.
   invariant(response.headers, 'Response headers are missing');
+  invariant(response.status, 'Response status is missing');
 
-  return response.headers.get('X-RateLimit-Remaining') === '0';
+  return response.headers.get('X-RateLimit-Remaining') === '0' || response.status === 429;
 }
 
 async function handleRateLimit(response: Response): Promise<void> {
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
+  const retryAfter = response.headers.get('Retry-After');
+
+  let waitTime = 60_000; // Default wait time of 60 seconds
+
   if (rateLimitReset) {
     const resetTime = new Date(Number.parseInt(rateLimitReset) * 1000);
     const now = new Date();
-    const waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
-    await new Promise((resolve) => setTimeout(resolve, waitTime));
-  } else {
-    // If no reset time is provided, wait for a default time
-    await new Promise((resolve) => setTimeout(resolve, 60_000));
+    waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
+  } else if (retryAfter) {
+    waitTime = Number.parseInt(retryAfter) * 1000;
   }
+
+  await new Promise((resolve) => setTimeout(resolve, waitTime));
 }
 
 export async function fetchWithRetries(
@@ -81,19 +86,19 @@ export async function fetchWithRetries(
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
+      if (response && isRateLimited(response)) {
+        logger.debug(
+          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${retries}`,
+        );
+        await handleRateLimit(response);
+        continue;
+      }
+
       return response;
     } catch (error) {
       lastError = error;
       const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
       await new Promise((resolve) => setTimeout(resolve, waitTime));
-    }
-
-    if (response && isRateLimited(response)) {
-      logger.debug(
-        `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${retries}`,
-      );
-      await handleRateLimit(response);
-      continue;
     }
   }
   throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
