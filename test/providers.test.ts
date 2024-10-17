@@ -1286,6 +1286,13 @@ config:
     expect(provider.id()).toBe('mistralai/mistral-medium');
   });
 
+  it('loadApiProvider with github', async () => {
+    const provider = await loadApiProvider('github:gpt-4o-mini');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    // Intentionally openai, because it's just a wrapper around openai
+    expect(provider.id()).toBe('gpt-4o-mini');
+  });
+
   it('loadApiProvider with voyage', async () => {
     const provider = await loadApiProvider('voyage:voyage-2');
     expect(provider).toBeInstanceOf(VoyageEmbeddingProvider);
