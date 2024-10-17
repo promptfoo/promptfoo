@@ -26,15 +26,12 @@ const router = createBrowserRouter(
       <Route path="/eval/:evalId" element={<EvalPage />} />
       <Route path="/progress" element={<ProgressPage />} />
       <Route path="/prompts" element={<PromptsPage />} />
-      <Route path="/report" element={<Navigate to="/redteam/report" replace />} />
-      <Route path="/results" element={<Navigate to="/eval" replace />} />
-      <Route path="/results/:evalId" element={<Navigate to="/eval/:evalId" replace />} />
-      <Route path="/setup" element={<EvalCreatorPage />} />
       <Route path="/redteam/setup" element={<RedteamSetupPage />} />
-      <Route path="/redteam/report" element={<ReportPage />} />
+      <Route path="/report" element={<ReportPage />} />
+      <Route path="/setup" element={<EvalCreatorPage />} />
       {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
         <>
-          <Route path="/redteam/dashboard" element={<RedteamDashboardPage />} />
+          <Route path="/dashboard" element={<RedteamDashboardPage />} />
         </>
       )}
     </Route>,
