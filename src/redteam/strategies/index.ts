@@ -9,6 +9,7 @@ import { addLeetspeak } from './leetspeak';
 import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
+import { addMathPrompt } from './mathprompt';
 
 export interface Strategy {
   key: string;
