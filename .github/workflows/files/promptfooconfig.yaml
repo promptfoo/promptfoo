@@ -4,6 +4,8 @@ providers:
   - id: echo
     config:
       label: 'test'
+tags:
+  env: 'ci'
 
 prompts:
   - 'Summarize this: {{text}}'
