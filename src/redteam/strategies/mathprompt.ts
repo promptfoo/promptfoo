@@ -49,7 +49,7 @@ export async function generateMathPrompt(
 
     await async.forEachOfLimit(batches, concurrency, async (batch, index) => {
       const payload = {
-        task: 'mathprompt',
+        task: 'math-prompt',
         testCases: batch,
         injectVar,
         config,

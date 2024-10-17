@@ -6,7 +6,7 @@ import { addBase64Encoding } from './base64';
 import { addCrescendo } from './crescendo';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
-import { addMathPrompt } from './mathprompt';
+import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
@@ -94,7 +94,7 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    key: 'mathprompt',
+    key: 'math-prompt',
     action: async (testCases, injectVar, config) => {
       logger.debug('Adding MathPrompt encoding to all test cases');
       const newTestCases = await addMathPrompt(testCases, injectVar, config);

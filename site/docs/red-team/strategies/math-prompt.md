@@ -10,7 +10,7 @@ Use it in your promptfooconfig.yaml like this:
 
 ```yaml
 strategies:
-  - mathprompt
+  - math-prompt
 ```
 
 ## Background
