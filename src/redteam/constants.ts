@@ -371,6 +371,7 @@ export const ADDITIONAL_STRATEGIES = [
   'leetspeak',
   'crescendo',
   'multilingual',
+  'mathprompt'
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
