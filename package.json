@@ -180,7 +180,7 @@
     "opener": "^1.5.2",
     "proxy-agent": "^6.4.0",
     "python-shell": "^5.0.0",
-    "replicate": "^0.34.1",
+    "replicate": "^1.0.1",
     "rfdc": "^1.4.1",
     "semver": "^7.6.3",
     "socket.io": "^4.8.0",
