@@ -40,7 +40,7 @@ tests:
 
 If not specified, HTTP POST with content-type application/json is assumed if the body is an object or array.
 
-The body can be a string or a JSON object. If the body is a string, it will be sent as the raw request body. If the body is a JSON object, it will be sent as a JSON body. If body is an object, the conten type header MUST be application/json.
+`body` can be a string or a JSON object. If the body is a string, it will be sent as a raw request body and you may have to specify a `Content-Type` header. If the body is an object, then content type is automatically set to `application/json`.
 
 ### JSON Example
 
