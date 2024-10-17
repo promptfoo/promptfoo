@@ -96,7 +96,7 @@ export const updateCitation = async (): Promise<void> => {
   let citation: Citation;
   try {
     citation = yaml.load(fs.readFileSync(citationPath, 'utf8')) as Citation;
-  } catch (error) {
+  } catch {
     citation = createDefaultCitation(packageJson);
   }
   citation['version'] = packageJson.version;
