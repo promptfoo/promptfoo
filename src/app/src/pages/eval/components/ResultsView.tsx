@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
@@ -136,27 +137,31 @@ export default function ResultsView({
   };
 
   const handleShareButtonClick = async () => {
-    setShareLoading(true);
-
-    try {
-      const response = await callApi('/results/share', {
-        method: 'POST',
-        body: JSON.stringify({ id: currentEvalId }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      const { url } = await response.json();
-      if (response.ok) {
-        setShareUrl(url);
-        setShareModalOpen(true);
-      } else {
+    if (IS_RUNNING_LOCALLY) {
+      setShareLoading(true);
+      try {
+        const response = await callApi('/results/share', {
+          method: 'POST',
+          body: JSON.stringify({ id: currentEvalId }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        const { url } = await response.json();
+        if (response.ok) {
+          setShareUrl(url);
+          setShareModalOpen(true);
+        } else {
+          alert('Sorry, something went wrong.');
+        }
+      } catch {
         alert('Sorry, something went wrong.');
+      } finally {
+        setShareLoading(false);
       }
-    } catch {
-      alert('Sorry, something went wrong.');
-    } finally {
-      setShareLoading(false);
+    } else {
+      setShareUrl(`${window.location.host}/eval/?evalId=${currentEvalId}`);
+      setShareModalOpen(true);
     }
   };
 
