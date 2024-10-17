@@ -2,8 +2,6 @@ import {
   createBrowserRouter,
   createRoutesFromElements,
   Navigate,
-  useLocation,
-  Outlet,
   Route,
   RouterProvider,
 } from 'react-router-dom';
@@ -19,39 +17,6 @@ import RedteamSetupPage from './pages/redteam/setup/page';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
-const useAuth = () => {
-  return {
-    user: true,
-    isLoading: false,
-    organization: true,
-  };
-};
-
-export const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isLoading, organization } = useAuth();
-  const location = useLocation();
-
-  if (isLoading) {
-    return <div></div>;
-  }
-
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  if (!organization) {
-    return <Navigate to="/organization/new" state={{ from: location }} replace />;
-  }
-
-  return <>{children}</>;
-};
-
-const ProtectedRoutes = () => (
-  <RequireAuth>
-    <Outlet />
-  </RequireAuth>
-);
-
 const router = createBrowserRouter(
   createRoutesFromElements([
     <Route path="/" element={<PageShell />}>
@@ -65,11 +30,13 @@ const router = createBrowserRouter(
       <Route path="/results" element={<Navigate to="/eval" replace />} />
       <Route path="/results/:evalId" element={<Navigate to="/eval/:evalId" replace />} />
       <Route path="/setup" element={<EvalCreatorPage />} />
-      <Route element={<ProtectedRoutes />}>
-        <Route path="/redteam/report" element={<ReportPage />} />
-        <Route path="/redteam/dashboard" element={<RedteamDashboardPage />} />
-        <Route path="/redteam/setup" element={<RedteamSetupPage />} />
-      </Route>
+      <Route path="/redteam/setup" element={<RedteamSetupPage />} />
+      <Route path="/redteam/report" element={<ReportPage />} />
+      {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
+        <>
+          <Route path="/redteam/dashboard" element={<RedteamDashboardPage />} />
+        </>
+      )}
     </Route>,
   ]),
   { basename },
