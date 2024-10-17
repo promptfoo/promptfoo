@@ -111,8 +111,6 @@ export function maybeCoerceToGeminiFormat(contents: any) {
       },
     };
     coerced = true;
-  } else {
-    logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
   }
   return { contents, coerced };
 }
