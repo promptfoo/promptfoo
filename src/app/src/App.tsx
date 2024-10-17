@@ -21,17 +21,17 @@ const router = createBrowserRouter(
   createRoutesFromElements([
     <Route path="/" element={<PageShell />}>
       <Route index element={<Navigate to={'/eval'} replace />} />
+      <Route path="/datasets" element={<DatasetsPage />} />
       <Route path="/eval" element={<EvalPage />} />
       <Route path="/eval/:evalId" element={<EvalPage />} />
-      <Route path="/prompts" element={<PromptsPage />} />
-      <Route path="/setup" element={<EvalCreatorPage />} />
       <Route path="/progress" element={<ProgressPage />} />
-      <Route path="/datasets" element={<DatasetsPage />} />
+      <Route path="/prompts" element={<PromptsPage />} />
+      <Route path="/redteam/setup" element={<RedteamSetupPage />} />
       <Route path="/report" element={<ReportPage />} />
+      <Route path="/setup" element={<EvalCreatorPage />} />
       {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
         <>
           <Route path="/dashboard" element={<RedteamDashboardPage />} />
-          <Route path="/redteam/setup" element={<RedteamSetupPage />} />
         </>
       )}
     </Route>,
