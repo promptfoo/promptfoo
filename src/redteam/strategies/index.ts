@@ -10,6 +10,7 @@ import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
+import {addGoat} from "./goat";
 
 export interface Strategy {
   key: string;
@@ -99,6 +100,15 @@ export const Strategies: Strategy[] = [
       logger.debug('Adding MathPrompt encoding to all test cases');
       const newTestCases = await addMathPrompt(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} MathPrompt encoded test cases`);
+      return newTestCases;
+    },
+  },
+    {
+    key: 'goat',
+    action: async (testCases, injectVar) => {
+      logger.debug('Adding GOAT to all test cases');
+      const newTestCases = addGoat(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} GOAT test cases`);
       return newTestCases;
     },
   },

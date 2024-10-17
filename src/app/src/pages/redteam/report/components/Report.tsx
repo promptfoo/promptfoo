@@ -41,7 +41,9 @@ function getStrategyIdFromMetric(metric: string): string | null {
       return 'base64';
     } else if (metricSuffix === 'Crescendo') {
       return 'crescendo';
-    } else if (metricSuffix === 'Injection') {
+    } else if (metricSuffix === 'Goat') {
+      return 'goat';
+    }else if (metricSuffix === 'Injection') {
       return 'prompt-injection';
     } else if (metricSuffix === 'Iterative') {
       return 'jailbreak';

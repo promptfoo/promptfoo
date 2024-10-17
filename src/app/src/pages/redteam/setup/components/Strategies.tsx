@@ -70,6 +70,12 @@ const availableStrategies: Strategy[] = [
     description:
       'Creates a branching structure of prompts to explore AI constraints systematically.',
   },
+  {
+    id: 'goat',
+    name: 'GOAT (Generative Offensive Agent Tester)',
+    description:
+      'Simulates adversarial conversations using multiple attack techniques to identify vulnerabilities.',
+  },
 ];
 
 const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];

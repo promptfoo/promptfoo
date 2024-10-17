@@ -197,6 +197,7 @@ export const displayNameOverrides = {
   competitors: 'Competitor Endorsements',
   contracts: 'Unsupervised Contracts',
   crescendo: 'Multi-turn',
+  goat: 'Generative Offensive Agent Tester',
   'cross-session-leak': 'Cross-Session Leak',
   'debug-access': 'Debug Access',
   'excessive-agency': 'Excessive Agency',
