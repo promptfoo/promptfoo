@@ -69,7 +69,10 @@ export class CloudConfig {
     };
   }
 
-  async validateAndSetApiToken(token: string, apiHost: string): Promise<void> {
+  async validateAndSetApiToken(
+    token: string,
+    apiHost: string,
+  ): Promise<{ user: any; organization: any; app: any }> {
     const response = await fetchWithProxy(`${apiHost}/users/me`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -90,6 +93,12 @@ export class CloudConfig {
     logger.info(`User: ${user.email}`);
     logger.info(`Organization: ${organization.name}`);
     logger.info(`Access the app at ${app.url}`);
+
+    return {
+      user,
+      organization,
+      app,
+    };
   }
 }
 
