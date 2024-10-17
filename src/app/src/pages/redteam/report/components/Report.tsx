@@ -53,6 +53,8 @@ function getStrategyIdFromMetric(metric: string): string | null {
       return 'leetspeak';
     } else if (metricSuffix.startsWith('Multilingual')) {
       return 'multilingual';
+    } else if (metricSuffix.startsWith('Mathprompt')) {
+      return 'mathprompt';
     }
   }
   return null;
