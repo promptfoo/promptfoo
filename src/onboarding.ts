@@ -429,6 +429,13 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[Ollama] Llama 3, Mixtral, ...',
         value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
       },
+      {
+        name: '[WatsonX] Llama 3.2, IBM Granite, ...',
+        value: [
+          'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
+          'watsonx:ibm/granite-13b-chat-v2',
+        ],
+      },
     ];
 
     /**

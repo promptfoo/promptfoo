@@ -1,7 +1,8 @@
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
-import { IamAuthenticator } from 'ibm-cloud-sdk-core';
+import { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
 import { getCache, isCacheEnabled } from '../src/cache';
-import { getEnvString } from '../src/envars';
+import * as envarsModule from '../src/envars';
+import logger from '../src/logger';
 import { WatsonXProvider, generateConfigHash } from '../src/providers/watsonx';
 
 jest.mock('@ibm-cloud/watsonx-ai', () => ({
@@ -12,6 +13,7 @@ jest.mock('@ibm-cloud/watsonx-ai', () => ({
 
 jest.mock('ibm-cloud-sdk-core', () => ({
   IamAuthenticator: jest.fn(),
+  BearerTokenAuthenticator: jest.fn(),
 }));
 
 jest.mock('../src/cache', () => ({
@@ -22,10 +24,12 @@ jest.mock('../src/cache', () => ({
 jest.mock('../src/logger', () => ({
   debug: jest.fn(),
   error: jest.fn(),
+  info: jest.fn(),
 }));
 
 jest.mock('../src/envars', () => ({
   getEnvString: jest.fn(),
+  getEnvInt: jest.fn(),
 }));
 
 describe('WatsonXProvider', () => {
@@ -52,6 +56,7 @@ describe('WatsonXProvider', () => {
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.modelName).toBe(modelName);
       expect(provider.options.config).toEqual(config);
+      expect(logger.info).toHaveBeenCalledWith('Using IAM Authentication.');
     });
 
     it('should initialize with default id based on modelName', () => {
@@ -111,14 +116,56 @@ describe('WatsonXProvider', () => {
       expect(client).toBe(mockedWatsonXAIClient);
     });
 
-    it('should throw an error if API key is not set', () => {
-      jest.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
+    it('should throw an error if neither API key nor Bearer Token is set', () => {
+      jest.spyOn(envarsModule, 'getEnvString').mockReturnValue(undefined as any);
 
       expect(() => {
-        new WatsonXProvider(modelName, { config: { ...config, apiKey: undefined } });
+        new WatsonXProvider(modelName, {
+          config: { ...config, apiKey: undefined, apiBearerToken: undefined },
+        });
       }).toThrow(
-        /WatsonX API key is not set\. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config\./,
+        /Authentication credentials not provided\. Please set either `WATSONX_AI_APIKEY` for IAM Authentication or `WATSONX_AI_BEARER_TOKEN` for Bearer Token Authentication\./,
       );
+    });
+  });
+
+  describe('constructor with Bearer Token', () => {
+    it('should use Bearer Token Authentication when apiKey is not provided', () => {
+      const bearerTokenConfig = {
+        ...config,
+        apiKey: undefined,
+        apiBearerToken: 'test-bearer-token',
+      };
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn(),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const provider = new WatsonXProvider(modelName, { config: bearerTokenConfig });
+      expect(logger.info).toHaveBeenCalledWith('Using Bearer Token Authentication.');
+      expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
+        version: '2023-05-29',
+        serviceUrl: 'https://us-south.ml.cloud.ibm.com',
+        authenticator: expect.any(BearerTokenAuthenticator),
+      });
+      expect(provider.getClient()).toBe(mockedWatsonXAIClient);
+    });
+
+    it('should prefer API Key Authentication over Bearer Token Authentication when both are provided', () => {
+      const dualAuthConfig = { ...config, apiBearerToken: 'test-bearer-token' };
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn(),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const provider = new WatsonXProvider(modelName, { config: dualAuthConfig });
+      expect(logger.info).toHaveBeenCalledWith('Using IAM Authentication.');
+      expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
+        version: '2023-05-29',
+        serviceUrl: 'https://us-south.ml.cloud.ibm.com',
+        authenticator: expect.any(IamAuthenticator),
+      });
+      expect(provider.getClient()).toBe(mockedWatsonXAIClient);
     });
   });
 
@@ -243,6 +290,7 @@ describe('WatsonXProvider', () => {
         output: '',
         tokenUsage: {},
       });
+      expect(logger.error).toHaveBeenCalledWith('Watsonx: API call error: Error: API error');
     });
   });
 });
