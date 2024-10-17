@@ -262,6 +262,7 @@ jobs:
           fi
 
       - name: Share to cloud
+        if: ${{ secrets.PROMPTFOO_STAGING_API_KEY != '' }}
         run: |
           node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
           node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
