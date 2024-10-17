@@ -120,7 +120,7 @@ export async function addMathPrompt(
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
-  if (shouldGenerateRemote()) {
+  if (shouldGenerateRemote() && false) {
     const mathPromptTestCases = await generateMathPrompt(testCases, injectVar, config);
     if (mathPromptTestCases.length > 0) {
       return mathPromptTestCases;
