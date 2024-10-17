@@ -106,9 +106,12 @@ jobs:
 
       - name: run promptfoo eval
         id: eval
+        env:
+          PROMPTFOO_REMOTE_API_BASE_URL: http://localhost:3000
+          PROMPTFOO_SHARING_APP_BASE_URL: http://localhost:3000
         run: |
           npm install
-          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:3000 run local -- eval -c .github/workflows/files/promptfooconfig.yaml --share
+          npm run local -- eval -c .github/workflows/files/promptfooconfig.yaml --share
 
       - name: Test that the eval results are uploaded
         run: |
