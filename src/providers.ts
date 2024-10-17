@@ -201,6 +201,17 @@ export async function loadApiProvider(
         apiKeyEnvar: 'OPENROUTER_API_KEY',
       },
     });
+  } else if (providerPath.startsWith('github:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://models.inference.ai.azure.com',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      },
+    });
   } else if (providerPath.startsWith('portkey:')) {
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':');
