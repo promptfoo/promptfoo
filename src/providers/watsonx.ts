@@ -1,7 +1,7 @@
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import crypto from 'crypto';
-import { IamAuthenticator } from 'ibm-cloud-sdk-core';
+import { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
 import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { getCache, isCacheEnabled } from '../cache';
@@ -9,6 +9,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import type { ProviderOptions } from '../types/providers';
+import { calculateCost } from './shared';
 
 interface TextGenRequestParametersModel {
   max_new_tokens: number;
@@ -24,6 +25,8 @@ interface TextGenRequestParams {
 const ConfigSchema = z.object({
   apiKey: z.string().optional(),
   apiKeyEnvar: z.string().optional(),
+  apiBearerToken: z.string().optional(),
+  apiBearerTokenEnvar: z.string().optional(),
   serviceUrl: z.string().optional(),
   version: z.string().optional(),
   projectId: z.string().optional(),
@@ -44,6 +47,226 @@ const TextGenResponseSchema = z.object({
     }),
   ),
 });
+
+const WATSONX_MODELS = [
+  {
+    id: 'ibm/granite-20b-multilingual',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'ibm/granite-13b-chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'ibm/granite-13b-instruct',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'ibm/granite-34b-code-instruct',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'ibm/granite-20b-code-instruct',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'ibm/granite-8b-code-instruct',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'ibm/granite-3b-code-instruct',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'ibm/granite-8b-japanese',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'ibm/granite-7b-lab',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-3-2-11b-vision-instruct',
+    cost: {
+      input: 0.35 / 1e6,
+      output: 0.35 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-3-2-90b-vision-instruct',
+    cost: {
+      input: 2.0 / 1e6,
+      output: 2.0 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-3-2-11b-vision-instruct',
+    cost: {
+      input: 0.35 / 1e6,
+      output: 0.35 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-guard-3-11b-vision',
+    cost: {
+      input: 0.35 / 1e6,
+      output: 0.35 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-3-2-1b-instruct',
+    cost: {
+      input: 0.1 / 1e6,
+      output: 0.1 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-3-2-3b-instruct',
+    cost: {
+      input: 0.15 / 1e6,
+      output: 0.15 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-3-1-70b-instruct',
+    cost: {
+      input: 1.8 / 1e6,
+      output: 1.8 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-3-1-8b-instruct',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-3-405b-instruct',
+    cost: {
+      input: 5.0 / 1e6,
+      output: 16.0 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-3-8b-instruct',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'meta-llama/llama-3-70b-instruct',
+    cost: {
+      input: 1.8 / 1e6,
+      output: 1.8 / 1e6,
+    },
+  },
+  {
+    id: 'mindsandcompany/llama2-13b-dpo-v7-korean',
+    cost: {
+      input: 1.8 / 1e6,
+      output: 1.8 / 1e6,
+    },
+  },
+  {
+    id: 'sdaia/allam-1-13b-instruct',
+    cost: {
+      input: 1.8 / 1e6,
+      output: 1.8 / 1e6,
+    },
+  },
+  {
+    id: 'meta/codellama-34b-instruct',
+    cost: {
+      input: 1.8 / 1e6,
+      output: 1.8 / 1e6,
+    },
+  },
+  {
+    id: 'mistral/mistral-large-2',
+    cost: {
+      input: 10.0 / 1e6,
+      output: 10.0 / 1e6,
+    },
+  },
+  {
+    id: 'mistral/mixtal-8x7b-instruct',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'core42/jais-13b-chat-arabic',
+    cost: {
+      input: 1.8 / 1e6,
+      output: 1.8 / 1e6,
+    },
+  },
+  {
+    id: 'google/flan-t5-xl-3b',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  },
+  {
+    id: 'google/flan-t5-xxl-11b',
+    cost: {
+      input: 1.8 / 1e6,
+      output: 1.8 / 1e6,
+    },
+  },
+  {
+    id: 'google/flan-ul2-20b',
+    cost: {
+      input: 5.0 / 1e6,
+      output: 5.0 / 1e6,
+    },
+  },
+  {
+    id: 'elyza/elyza-japanese-llama-2-7b-instruct',
+    cost: {
+      input: 1.8 / 1e6,
+      output: 1.8 / 1e6,
+    },
+  },
+  {
+    id: 'bigscience/mt0-xxl-13b',
+    cost: {
+      input: 1.8 / 1e6,
+      output: 1.8 / 1e6,
+    },
+  },
+];
 
 function convertResponse(response: z.infer<typeof TextGenResponseSchema>): ProviderResponse {
   const firstResult = response.results && response.results[0];
@@ -96,11 +319,19 @@ export function generateConfigHash(config: any): string {
   return crypto.createHash('md5').update(JSON.stringify(sortedConfig)).digest('hex');
 }
 
+export function calculateWatsonXCost(
+  modelName: string,
+  config: any,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  return calculateCost(modelName, config, promptTokens, completionTokens, WATSONX_MODELS);
+}
+
 export class WatsonXProvider implements ApiProvider {
   modelName: string;
   options: ProviderOptions;
   env?: EnvOverrides;
-  apiKey: string;
   client: WatsonXAIClient;
 
   constructor(modelName: string, options: ProviderOptions) {
@@ -110,16 +341,19 @@ export class WatsonXProvider implements ApiProvider {
       throw new Error(`WatsonXProvider requires a valid config. Issues: ${errors}`);
     }
 
+    const validatedConfig = validationResult.data;
+
     const { env } = options;
     this.modelName = modelName;
     this.options = options;
     this.env = env;
-    this.apiKey = this.getApiKey();
+
+    const authenticator = this.getAuth(validatedConfig);
 
     this.client = WatsonXAI.newInstance({
       version: this.options.config.version || '2023-05-29',
       serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
-      authenticator: new IamAuthenticator({ apikey: this.apiKey }),
+      authenticator,
     });
   }
 
@@ -131,20 +365,38 @@ export class WatsonXProvider implements ApiProvider {
     return `[Watsonx Provider ${this.modelName}]`;
   }
 
-  getApiKey(): string {
+  getAuth(
+    validatedConfig: z.infer<typeof ConfigSchema>,
+  ): IamAuthenticator | BearerTokenAuthenticator {
     const apiKey =
-      this.options.config.apiKey ||
-      (this.options.config.apiKeyEnvar
-        ? process.env[this.options.config.apiKeyEnvar] ||
-          this.env?.[this.options.config.apiKeyEnvar as keyof EnvOverrides]
+      validatedConfig.apiKey ||
+      (validatedConfig.apiKeyEnvar
+        ? process.env[validatedConfig.apiKeyEnvar] ||
+          this.env?.[validatedConfig.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
-      this.env?.WATSONX_API_KEY ||
-      getEnvString('WATSONX_API_KEY');
-    invariant(
-      apiKey,
-      'WatsonX API key is not set. Set the WATSONX_API_KEY environment variable or add `apiKey` to the provider config.',
-    );
-    return apiKey;
+      this.env?.WATSONX_AI_APIKEY ||
+      getEnvString('WATSONX_AI_APIKEY');
+
+    const bearerToken =
+      validatedConfig.apiBearerToken ||
+      (validatedConfig.apiBearerTokenEnvar
+        ? process.env[validatedConfig.apiBearerTokenEnvar] ||
+          this.env?.[validatedConfig.apiBearerTokenEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.WATSONX_AI_BEARER_TOKEN ||
+      getEnvString('WATSONX_AI_BEARER_TOKEN');
+
+    if (apiKey) {
+      logger.info('Using IAM Authentication.');
+      return new IamAuthenticator({ apikey: apiKey });
+    } else if (bearerToken) {
+      logger.info('Using Bearer Token Authentication.');
+      return new BearerTokenAuthenticator({ bearerToken });
+    } else {
+      throw new Error(
+        'Authentication credentials not provided. Please set either `WATSONX_AI_APIKEY` for IAM Authentication or `WATSONX_AI_BEARER_TOKEN` for Bearer Token Authentication.',
+      );
+    }
   }
 
   getProjectId(): string {
@@ -154,11 +406,11 @@ export class WatsonXProvider implements ApiProvider {
         ? process.env[this.options.config.projectIdEnvar] ||
           this.env?.[this.options.config.projectIdEnvar as keyof EnvOverrides]
         : undefined) ||
-      this.env?.WATSONX_PROJECT_ID ||
-      getEnvString('WATSONX_PROJECT_ID');
+      this.env?.WATSONX_AI_PROJECT_ID ||
+      getEnvString('WATSONX_AI_PROJECT_ID');
     invariant(
       projectId && projectId.trim() !== '',
-      'WatsonX project ID is not set. Set the WATSONX_PROJECT_ID environment variable or add `projectId` to the provider config.',
+      'WatsonX project ID is not set. Set the WATSONX_AI_PROJECT_ID environment variable or add `projectId` to the provider config.',
     );
     return projectId;
   }
@@ -228,6 +480,13 @@ export class WatsonXProvider implements ApiProvider {
 
       const textGenResponse = parsedResponse.data;
       const providerResponse = convertResponse(textGenResponse);
+
+      providerResponse.cost = calculateWatsonXCost(
+        this.modelName,
+        this.options.config,
+        providerResponse.tokenUsage?.prompt,
+        providerResponse.tokenUsage?.completion,
+      );
 
       if (isCacheEnabled()) {
         await cache.set(cacheKey, JSON.stringify(providerResponse));
