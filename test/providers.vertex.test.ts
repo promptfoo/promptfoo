@@ -1,5 +1,6 @@
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 import { getCache, isCacheEnabled } from '../src/cache';
+import logger from '../src/logger';
 import { VertexChatProvider } from '../src/providers/vertex';
 import * as vertexUtil from '../src/providers/vertexUtil';
 
@@ -147,5 +148,58 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(response).toEqual({
       error: 'Error 400: Bad Request',
     });
+  });
+});
+
+describe('maybeCoerceToGeminiFormat', () => {
+  it('should return unmodified content if it matches GeminiFormat', () => {
+    const input = {
+      role: 'user',
+      parts: {
+        text: 'Hello, Gemini!',
+      },
+    };
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+    expect(result).toEqual({
+      contents: input,
+      coerced: false,
+    });
+  });
+
+  it('should coerce OpenAI chat format to GeminiFormat', () => {
+    const input = [{ content: 'Hello' }, { content: ', ' }, { content: 'Gemini!' }];
+    const expected = {
+      role: 'user',
+      parts: {
+        text: 'Hello, Gemini!',
+      },
+    };
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+    expect(result).toEqual({
+      contents: expected,
+      coerced: true,
+    });
+  });
+
+  it('should coerce string input to GeminiFormat', () => {
+    const input = 'Hello, Gemini!';
+    const expected = {
+      role: 'user',
+      parts: {
+        text: 'Hello, Gemini!',
+      },
+    };
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+    expect(result).toEqual({
+      contents: expected,
+      coerced: true,
+    });
+  });
+
+  it('should log a warning for unknown formats', () => {
+    const loggerSpy = jest.spyOn(logger, 'warn');
+    const input = { unknownFormat: 'test' };
+    vertexUtil.maybeCoerceToGeminiFormat(input);
+    expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini:${JSON.stringify(input)}`);
   });
 });
