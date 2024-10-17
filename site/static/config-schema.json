@@ -205,9 +205,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   },
                   {
@@ -227,10 +225,7 @@
                       },
                       "config": {}
                     },
-                    "required": [
-                      "raw",
-                      "label"
-                    ],
+                    "required": ["raw", "label"],
                     "additionalProperties": false
                   }
                 ]
@@ -389,10 +384,7 @@
                                   "type": "number"
                                 }
                               },
-                              "required": [
-                                "type",
-                                "assert"
-                              ],
+                              "required": ["type", "assert"],
                               "additionalProperties": false
                             },
                             {
@@ -457,10 +449,7 @@
                                           "type": "string"
                                         }
                                       },
-                                      "required": [
-                                        "role",
-                                        "content"
-                                      ],
+                                      "required": ["role", "content"],
                                       "additionalProperties": false
                                     }
                                   }
@@ -599,10 +588,7 @@
                     }
                   }
                 },
-                "required": [
-                  "config",
-                  "tests"
-                ],
+                "required": ["config", "tests"],
                 "additionalProperties": false
               }
             ]
@@ -692,10 +678,7 @@
                 ]
               }
             },
-            "required": [
-              "name",
-              "value"
-            ],
+            "required": ["name", "value"],
             "additionalProperties": false
           }
         },
@@ -863,10 +846,7 @@
           "additionalProperties": false
         }
       },
-      "required": [
-        "providers",
-        "prompts"
-      ],
+      "required": ["providers", "prompts"],
       "additionalProperties": false
     }
   },
