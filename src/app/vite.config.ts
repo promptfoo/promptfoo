@@ -24,7 +24,7 @@ export default defineConfig({
   server: {
     port: 3000,
   },
-  base: './',
+  base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [react(), nodePolyfills()] as PluginOption[],
   resolve: {
     alias: {
