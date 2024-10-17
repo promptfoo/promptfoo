@@ -51,6 +51,7 @@
     "format": "prettier -w .",
     "format:check": "prettier --check .",
     "db:migrate": "npx tsx src/migrate.ts",
+    "citation:generate": "ts-node scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
     "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json",
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
