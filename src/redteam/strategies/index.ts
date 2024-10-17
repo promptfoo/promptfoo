@@ -92,6 +92,15 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
+  {
+    key: 'mathprompt',
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding MathPrompt encoding to all test cases');
+      const newTestCases = await addMathPrompt(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} MathPrompt encoded test cases`);
+      return newTestCases;
+    },
+  },
 ];
 
 export function validateStrategies(strategies: RedteamStrategyObject[]): void {
