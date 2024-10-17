@@ -1,4 +1,5 @@
 import type { GoogleAuth } from 'google-auth-library';
+import { z } from 'zod';
 import logger from '../logger';
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
@@ -92,10 +93,31 @@ export interface Palm2ApiResponse {
   ];
 }
 
-export function maybeCoerceToGeminiFormat(contents: any) {
+const GeminiFormatSchema = z.object({
+  role: z.string(),
+  parts: z.object({
+    text: z.string(),
+  }),
+});
+
+type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
+
+export function maybeCoerceToGeminiFormat(contents: any): {
+  contents: GeminiFormat;
+  coerced: boolean;
+} {
   let coerced = false;
-  if (Array.isArray(contents) && typeof contents[0].content === 'string') {
-    // This looks like an OpenAI chat prompt.  Convert it to a compatible format
+  const parseResult = GeminiFormatSchema.safeParse(contents);
+
+  if (parseResult.success) {
+    return {
+      contents,
+      coerced,
+    };
+  }
+
+  if (Array.isArray(contents) && typeof contents[0]?.content === 'string') {
+    // This looks like an OpenAI chat prompt. Convert it to a compatible format
     contents = {
       role: 'user',
       parts: {
@@ -112,7 +134,7 @@ export function maybeCoerceToGeminiFormat(contents: any) {
     };
     coerced = true;
   } else {
-    logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
+    logger.warn(`Unknown format for Gemini:\n${JSON.stringify(contents)}`);
   }
   return { contents, coerced };
 }
