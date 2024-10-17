@@ -112,7 +112,7 @@ jobs:
 
       - name: Test that the eval results are uploaded
         run: |
-          response=$(curl -s http://localhost:3400/api/results)
+          response=$(curl -s http://localhost:3000/api/results)
           echo "Response: $response"
 
           # Use jq to extract the array length
