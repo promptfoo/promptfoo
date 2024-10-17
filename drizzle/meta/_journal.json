@@ -57,6 +57,13 @@
       "when": 1727991120763,
       "tag": "0007_cloudy_wong",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1729202208526,
+      "tag": "0008_broad_boomer",
+      "breakpoints": true
     }
   ]
 }
