@@ -184,12 +184,15 @@ export class VertexChatProvider extends VertexGenericProvider {
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
-    let contents: any = parseChatPrompt(prompt, {
-      role: 'user',
-      parts: {
-        text: prompt,
+    let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(
+      prompt,
+      {
+        role: 'user',
+        parts: {
+          text: prompt,
+        },
       },
-    });
+    );
     const { contents: updatedContents, coerced }: { contents: GeminiFormat; coerced: boolean } =
       maybeCoerceToGeminiFormat(contents);
     if (coerced) {
