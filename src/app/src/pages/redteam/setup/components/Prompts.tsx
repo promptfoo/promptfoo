@@ -4,22 +4,20 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import {
-  Typography,
-  TextField,
-  Button,
-  Box,
-  IconButton,
-  Stack,
-  Grid,
-  Tooltip,
-  Switch,
-  FormControlLabel,
-} from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
+import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import { useDebouncedCallback } from 'use-debounce';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig.ts';
-import Entities from './EntitiesPicker.tsx';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import Entities from './EntitiesPicker';
 
 interface PromptsProps {
   onNext: () => void;
