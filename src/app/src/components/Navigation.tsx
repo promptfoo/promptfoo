@@ -2,10 +2,18 @@ import React, { useState } from 'react';
 import type { LinkProps } from 'react-router-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
-import type { ButtonProps } from '@mui/material';
-import { AppBar, Toolbar, Button, IconButton, Box, Tooltip } from '@mui/material';
+import AppBar from '@mui/material/AppBar';
+import Box from '@mui/material/Box';
+import type { ButtonProps } from '@mui/material/Button';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import Toolbar from '@mui/material/Toolbar';
+import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
@@ -13,7 +21,7 @@ import InfoModal from './InfoModal';
 import Logo from './Logo';
 import './Navigation.css';
 
-const NavButton = styled(Button)<ButtonProps & LinkProps>(({ theme }) => ({
+const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
   color: theme.palette.text.primary,
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
@@ -51,6 +59,56 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
+function Dropdown() {
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+  const location = useLocation();
+
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const isActive = ['/setup', '/redteam/setup'].some((route) =>
+    location.pathname.startsWith(route),
+  );
+
+  return (
+    <>
+      <NavButton
+        onClick={handleClick}
+        endIcon={<ArrowDropDownIcon />}
+        className={isActive ? 'active' : ''}
+      >
+        Create
+      </NavButton>
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        PaperProps={{
+          elevation: 0,
+          sx: {
+            overflow: 'visible',
+            filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
+            mt: 1.5,
+          },
+        }}
+      >
+        <MenuItem onClick={handleClose} component={Link} to="/setup">
+          Eval
+        </MenuItem>
+        <MenuItem onClick={handleClose} component={Link} to="/redteam/setup">
+          Redteam
+        </MenuItem>
+      </Menu>
+    </>
+  );
+}
+
 export default function Navigation({
   darkMode,
   onToggleDarkMode,
@@ -70,7 +128,7 @@ export default function Navigation({
         <NavToolbar>
           <NavSection>
             <Logo />
-            <NavLink href="/setup" label="Create" />
+            <Dropdown />
             <NavLink href="/eval" label="Evals" />
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
