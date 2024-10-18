@@ -541,10 +541,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.stop ? { stop: this.config.stop } : {}),
       ...(this.config.passthrough || {}),
     };
-    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
-
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiUrl()}/chat/completions`,
@@ -581,10 +579,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           tokenUsage: getTokenUsage(data, cached),
         };
       }
-
       let output = '';
       if (message.content && (message.function_call || message.tool_calls)) {
         output = message;
+        if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+          output = message;
+        }
+
+        if (message.function_call && Object.keys(message.function_call).length > 0) {
+          output = message;
+        }
+        output = message.content;
       } else if (message.content === null) {
         output = message.function_call || message.tool_calls;
       } else {

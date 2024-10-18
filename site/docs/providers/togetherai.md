@@ -8,7 +8,7 @@ Here's an example of how to configure the provider to use the `meta-llama/Llama-
 
 ```yaml
 providers:
-  - id: togetherai:meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo
+  - id: togetherai:meta-llama/Llama-3.2-1B-Vision-Instruct-Turbo
     config:
       temperature: 0.7
       apiKeyEnvar: TOGETHER_API_KEY
@@ -27,4 +27,4 @@ providers:
 
 If no model type is specified, it defaults to the chat completion type.
 
-For more information on the available models and API usage, refer to the [Together AI documentation](https://docs.together.ai/docs/inference-models).
+For more information on the available models and API usage, refer to the [Together AI documentation](https://docs.together.ai/docs/chat-models).
