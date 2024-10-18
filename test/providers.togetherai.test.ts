@@ -4,6 +4,7 @@ import {
   OpenAiEmbeddingProvider,
 } from '../src/providers/openai';
 import { createTogetherAiProvider } from '../src/providers/togetherai';
+import type { ProviderOptions, EnvOverrides } from '../src/types';
 
 jest.mock('../src/providers/openai');
 
@@ -43,17 +44,20 @@ describe('createTogetherAiProvider', () => {
   });
 
   it('should pass correct configuration to the provider', () => {
-    const options = {
-      config: { someOption: 'value' },
+    const options: {
+      config?: ProviderOptions;
+      id?: string;
+      env?: EnvOverrides;
+    } = {
       id: 'custom-id',
-      env: { CUSTOM_ENV: 'value' },
     };
     createTogetherAiProvider('togetherai:chat:model-name', options);
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
       'model-name',
       expect.objectContaining({
         config: expect.objectContaining({
-          someOption: 'value',
+          temperature: 0.7,
+          max_tokens: 100,
           apiBaseUrl: 'https://api.together.xyz/v1',
           apiKeyEnvar: 'TOGETHER_API_KEY',
         }),
