@@ -33,7 +33,7 @@ import {
   setupEnv,
   writeMultipleOutputs,
 } from '../util';
-import { loadDefaultConfig } from '../util/config/default';
+import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
@@ -64,6 +64,31 @@ export async function doEval(
       watch: Boolean(cmdObj.watch),
     });
     await telemetry.send();
+
+    // Reload default config - because it may have changed.
+    if (defaultConfigPath) {
+      const configDir = path.dirname(defaultConfigPath);
+      const configName = path.basename(defaultConfigPath, path.extname(defaultConfigPath));
+      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName);
+      defaultConfig = newDefaultConfig;
+    }
+
+    if (cmdObj.config !== undefined) {
+      const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
+      for (const configPath of configPaths) {
+        if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
+          const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
+            await loadDefaultConfig(configPath);
+          if (newConfigPath) {
+            cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
+            cmdObj.config.push(newConfigPath);
+            defaultConfig = { ...defaultConfig, ...dirConfig };
+          } else {
+            logger.warn(`No configuration file found in directory: ${configPath}`);
+          }
+        }
+      }
+    }
 
     // Misc settings
     if (cmdObj.verbose) {
@@ -289,6 +314,7 @@ export async function doEval(
             printBorder();
             logger.info(`File change detected: ${path}`);
             printBorder();
+            clearConfigCache();
             await runEvaluation();
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
@@ -501,27 +527,6 @@ export function evalCommand(
           extension,
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
-      }
-
-      if (validatedOpts.config !== undefined) {
-        const configPaths: string[] = Array.isArray(validatedOpts.config)
-          ? validatedOpts.config
-          : [validatedOpts.config];
-        for (const configPath of configPaths) {
-          if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
-            const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-              await loadDefaultConfig(configPath);
-            if (newConfigPath) {
-              validatedOpts.config = validatedOpts.config.filter(
-                (path: string) => path !== configPath,
-              );
-              validatedOpts.config.push(newConfigPath);
-              defaultConfig = { ...defaultConfig, ...dirConfig };
-            } else {
-              logger.warn(`No configuration file found in directory: ${configPath}`);
-            }
-          }
-        }
       }
 
       doEval(
