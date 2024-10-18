@@ -30,6 +30,8 @@ import promptfoo from '../index';
 import logger from '../logger';
 import Eval from '../models/eval';
 import EvalResult from '../models/evalResult';
+import type { TelemetryEventTypes } from '../telemetry';
+import telemetry from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
   getPrompts,
@@ -314,6 +316,28 @@ export function createApp() {
   });
 
   app.use('/api/providers', providersRouter);
+
+  app.post('/api/telemetry', async (req, res) => {
+    try {
+      const { eventName, properties } = req.body;
+
+      if (!eventName || typeof eventName !== 'string') {
+        res.status(400).json({ error: 'Invalid eventName' });
+        return;
+      }
+
+      if (!properties || typeof properties !== 'object') {
+        res.status(400).json({ error: 'Invalid properties' });
+        return;
+      }
+
+      await telemetry.recordAndSend(eventName as TelemetryEventTypes, properties);
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('Error proxying telemetry request:', error);
+      res.status(500).json({ error: 'Failed to process telemetry request' });
+    }
+  });
 
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.

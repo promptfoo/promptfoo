@@ -1,9 +1,11 @@
+import { useEffect } from 'react';
 import {
   createBrowserRouter,
   createRoutesFromElements,
   Navigate,
   Route,
   RouterProvider,
+  useLocation,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
 import DatasetsPage from './pages/datasets/page';
@@ -14,30 +16,60 @@ import PromptsPage from './pages/prompts/page';
 import RedteamDashboardPage from './pages/redteam/dashboard/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
+import { callApi } from './utils/api';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
+
+function TelemetryTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const recordPageView = async () => {
+      try {
+        await callApi('/telemetry', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            eventName: 'webui_page_view',
+            properties: { path: location.pathname },
+          }),
+        });
+      } catch (error) {
+        console.error('Failed to record page view:', error);
+      }
+    };
+    recordPageView();
+  }, [location]);
+
+  return null;
+}
 
 const router = createBrowserRouter(
   createRoutesFromElements([
     <Route path="/" element={<PageShell />}>
-      <Route index element={<Navigate to={'/eval'} replace />} />
-      <Route path="/datasets" element={<DatasetsPage />} />
-      <Route path="/eval" element={<EvalPage />} />
-      <Route path="/eval/:evalId" element={<EvalPage />} />
-      <Route path="/progress" element={<ProgressPage />} />
-      <Route path="/prompts" element={<PromptsPage />} />
-      <Route path="/redteam/setup" element={<RedteamSetupPage />} />
-      <Route path="/report" element={<ReportPage />} />
-      <Route path="/setup" element={<EvalCreatorPage />} />
-      {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
-        <>
-          <Route path="/dashboard" element={<RedteamDashboardPage />} />
-        </>
-      )}
+      <Route element={<TelemetryTracker />}>
+        <Route index element={<Navigate to={'/eval'} replace />} />
+        <Route path="/datasets" element={<DatasetsPage />} />
+        <Route path="/eval" element={<EvalPage />} />
+        <Route path="/eval/:evalId" element={<EvalPage />} />
+        <Route path="/progress" element={<ProgressPage />} />
+        <Route path="/prompts" element={<PromptsPage />} />
+        <Route path="/redteam/setup" element={<RedteamSetupPage />} />
+        <Route path="/report" element={<ReportPage />} />
+        <Route path="/setup" element={<EvalCreatorPage />} />
+        {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
+          <>
+            <Route path="/dashboard" element={<RedteamDashboardPage />} />
+          </>
+        )}
+      </Route>
     </Route>,
   ]),
   { basename },
 );
+
 function App() {
   return <RouterProvider router={router} />;
 }

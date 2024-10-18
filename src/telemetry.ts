@@ -10,12 +10,13 @@ type TelemetryEvent = {
   properties: Record<string, EventValue>;
 };
 
-type TelemetryEventTypes =
+export type TelemetryEventTypes =
   | 'eval_ran'
   | 'assertion_used'
   | 'command_used'
   | 'funnel'
-  | 'feature_used';
+  | 'feature_used'
+  | 'webui_page_view';
 
 const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
