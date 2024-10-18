@@ -34,7 +34,8 @@
     "TESTCASE",
     "transpiling",
     "unindented",
-    "uuidv"
+    "uuidv",
+    "webui"
   ],
   "jest.jestCommandLine": "npm run test --",
   "eslint.workingDirectories": [

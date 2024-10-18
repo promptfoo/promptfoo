@@ -6,8 +6,10 @@ import {
   Route,
   RouterProvider,
   useLocation,
+  Outlet,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
+import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
 import EvalPage from './pages/eval/page';
@@ -16,41 +18,25 @@ import PromptsPage from './pages/prompts/page';
 import RedteamDashboardPage from './pages/redteam/dashboard/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
-import { callApi } from './utils/api';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
 function TelemetryTracker() {
   const location = useLocation();
+  const { recordEvent } = useTelemetry();
 
   useEffect(() => {
-    const recordPageView = async () => {
-      try {
-        await callApi('/telemetry', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            eventName: 'webui_page_view',
-            properties: { path: location.pathname },
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to record page view:', error);
-      }
-    };
-    recordPageView();
-  }, [location]);
+    recordEvent('webui_page_view', { path: location.pathname });
+  }, [location, recordEvent]);
 
-  return null;
+  return <Outlet />;
 }
 
 const router = createBrowserRouter(
-  createRoutesFromElements([
+  createRoutesFromElements(
     <Route path="/" element={<PageShell />}>
       <Route element={<TelemetryTracker />}>
-        <Route index element={<Navigate to={'/eval'} replace />} />
+        <Route index element={<Navigate to="/eval" replace />} />
         <Route path="/datasets" element={<DatasetsPage />} />
         <Route path="/eval" element={<EvalPage />} />
         <Route path="/eval/:evalId" element={<EvalPage />} />
@@ -60,13 +46,11 @@ const router = createBrowserRouter(
         <Route path="/report" element={<ReportPage />} />
         <Route path="/setup" element={<EvalCreatorPage />} />
         {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
-          <>
-            <Route path="/dashboard" element={<RedteamDashboardPage />} />
-          </>
+          <Route path="/dashboard" element={<RedteamDashboardPage />} />
         )}
       </Route>
     </Route>,
-  ]),
+  ),
   { basename },
 );
 
