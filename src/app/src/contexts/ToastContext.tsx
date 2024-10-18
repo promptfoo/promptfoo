@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState } from 'react';
-import type { AlertColor } from '@mui/material';
-import { Snackbar, Alert } from '@mui/material';
+import type { ReactNode } from 'react';
+import type { AlertColor } from '@mui/material/Alert';
+import Alert from '@mui/material/Alert';
+import Snackbar from '@mui/material/Snackbar';
 
 interface ToastContextType {
   showToast: (message: string, severity?: AlertColor) => void;

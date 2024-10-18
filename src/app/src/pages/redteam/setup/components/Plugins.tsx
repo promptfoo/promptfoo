@@ -24,23 +24,21 @@ import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
-import {
-  Typography,
-  Box,
-  Button,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Checkbox,
-  TextField,
-  Card,
-  CardContent,
-  Grid,
-  FormControlLabel,
-  Paper,
-  Collapse,
-  IconButton,
-} from '@mui/material';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Checkbox from '@mui/material/Checkbox';
+import Collapse from '@mui/material/Collapse';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
+import Paper from '@mui/material/Paper';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 import PresetCard from './PresetCard';

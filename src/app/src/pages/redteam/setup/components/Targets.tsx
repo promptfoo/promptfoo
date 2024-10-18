@@ -5,32 +5,30 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import {
-  Typography,
-  TextField,
-  Stack,
-  Button,
-  Box,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Link,
-  useTheme,
-  TextareaAutosize,
-  Alert,
-  CircularProgress,
-  Paper,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@mui/material';
-import { IconButton } from '@mui/material';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import FormControl from '@mui/material/FormControl';
+import IconButton from '@mui/material/IconButton';
+import InputLabel from '@mui/material/InputLabel';
+import Link from '@mui/material/Link';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
+import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import TextareaAutosize from '@mui/material/TextareaAutosize';
+import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import {
   DEFAULT_HTTP_TARGET,
   PROMPT_EXAMPLE,
@@ -53,8 +51,6 @@ const predefinedTargets = [
   { value: 'anthropic:claude-3-5-sonnet-20240620', label: 'Anthropic Claude 3.5 Sonnet' },
   { value: 'anthropic:claude-3-opus-20240307', label: 'Anthropic Claude 3 Opus' },
   { value: 'vertex:gemini-pro', label: 'Google Vertex AI Gemini Pro' },
-  //{ value: 'javascript', label: 'Custom JavaScript Provider' },
-  //{ value: 'python', label: 'Custom Python Provider' },
 ];
 
 const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean => {

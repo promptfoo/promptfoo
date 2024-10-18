@@ -1,7 +1,12 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
-import { Typography, Grid, Box, Container, Avatar, Divider } from '@mui/material';
+import Avatar from '@mui/material/Avatar';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
+import Typography from '@mui/material/Typography';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 
