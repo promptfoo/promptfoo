@@ -581,7 +581,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       let output = '';
       if (message.content && (message.function_call || message.tool_calls)) {
-        output = message;
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
           output = message.content;
         }
