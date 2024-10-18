@@ -1,5 +1,9 @@
-import { OpenAiChatCompletionProvider, OpenAiCompletionProvider, OpenAiEmbeddingProvider } from './openai';
 import type { ApiProvider, ProviderOptions, EnvOverrides } from '../types';
+import {
+  OpenAiChatCompletionProvider,
+  OpenAiCompletionProvider,
+  OpenAiEmbeddingProvider,
+} from './openai';
 
 export function createTogetherAiProvider(
   providerPath: string,
@@ -7,7 +11,7 @@ export function createTogetherAiProvider(
     config?: ProviderOptions;
     id?: string;
     env?: EnvOverrides;
-  } = {}
+  } = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
   const togetherAiConfig = {
@@ -34,4 +38,3 @@ export function createTogetherAiProvider(
     return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
   }
 }
-
