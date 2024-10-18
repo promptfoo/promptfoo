@@ -50,7 +50,7 @@ async function handlePrompt(id: string) {
       'Fail count': evl.metrics?.testFailCount || '-',
     });
   }
-  logger.info(wrapTable(table));
+  logger.info(String(wrapTable(table)));
   printBorder();
   logger.info(
     `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
@@ -74,7 +74,7 @@ async function handleEval(id: string) {
   invariant(table, 'Could not generate table');
   const { prompts, vars } = table.head;
 
-  logger.info(generateTable(table, 100, 25));
+  logger.info(String(generateTable(table, 100, 25)));
   if (table.body.length > 25) {
     const rowsLeft = table.body.length - 25;
     logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
@@ -130,7 +130,7 @@ async function handleDataset(id: string) {
       'Fail count': prompt.prompt.metrics?.testFailCount || '-',
     });
   }
-  logger.info(wrapTable(table));
+  logger.info(String(wrapTable(table)));
   printBorder();
   logger.info(
     `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,

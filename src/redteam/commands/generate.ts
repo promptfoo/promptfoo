@@ -128,8 +128,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
     logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
   } catch (error) {
-    logger.error('Error logging plugins and strategies. One did not have a valid id.');
-    logger.error(error);
+    logger.error(`Error logging plugins and strategies. One did not have a valid id: ${error}`);
   }
 
   const config = {
@@ -360,7 +359,7 @@ export function redteamGenerateCommand(
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
-          logger.error('An unexpected error occurred:', error);
+          logger.error(`An unexpected error occurred: ${error}`);
         }
         process.exit(1);
       }

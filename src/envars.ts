@@ -3,6 +3,7 @@ import type { EnvOverrides } from './types';
 // Define the supported environment variables and their types
 export type EnvVars = {
   LOG_LEVEL?: 'error' | 'warn' | 'info' | 'debug';
+  DB_LOG_LEVEL?: 'error' | 'warn' | 'info' | 'debug';
   NEXT_PUBLIC_PROMPTFOO_BASE_URL?: string;
   NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
   PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY?: number;

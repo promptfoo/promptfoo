@@ -7,7 +7,7 @@ import { getConfigDirectoryPath } from '../util/config/manage';
 
 class DrizzleLogWriter implements LogWriter {
   write(message: string) {
-    logger.debug(`Drizzle: ${message}`);
+    logger.debug(`Drizzle: ${message}`, 'database');
   }
 }
 

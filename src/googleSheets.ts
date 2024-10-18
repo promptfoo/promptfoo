@@ -10,7 +10,7 @@ async function checkGoogleSheetAccess(url: string) {
       return { public: false, status: response.status };
     }
   } catch (error) {
-    logger.error('Error checking sheet access:', error);
+    logger.error(`Error checking sheet access: ${error}`);
     return { public: false };
   }
 }

@@ -279,12 +279,14 @@ export function createApp() {
     const CLOUD_FUNCTION_URL =
       process.env.PROMPTFOO_REMOTE_GENERATION_URL || 'https://api.promptfoo.dev/v1/generate';
 
-    logger.debug(`Received ${task} task request:`, {
-      method: req.method,
-      url: req.url,
-      body: req.body,
-      // headers: req.headers,
-    });
+    logger.debug(
+      `Received ${task} task request: ${JSON.stringify({
+        method: req.method,
+        url: req.url,
+        body: req.body,
+        // headers: req.headers,
+      })}`,
+    );
 
     try {
       logger.debug(`Sending request to cloud function: ${CLOUD_FUNCTION_URL}`);
@@ -308,7 +310,7 @@ export function createApp() {
       logger.debug(`Received response from cloud function:`, data);
       res.json(data);
     } catch (error) {
-      logger.error(`Error in ${task} task:`, error);
+      logger.error(`Error in ${task} task: ${error}`);
       res.status(500).json({ error: `Failed to process ${task} task` });
     }
   });

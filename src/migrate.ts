@@ -13,7 +13,7 @@ export async function runDbMigrations() {
     logger.debug(`Running migrations from ${migrationsFolder}...`);
     await migrate(db, { migrationsFolder });
   } catch (error) {
-    logger.error('Error running database migrations:', error);
+    logger.error(`Error running database migrations: ${error}`);
   }
 }
 

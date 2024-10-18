@@ -1,4 +1,5 @@
 import type winston from 'winston';
+import { ContextLogger } from '../logger';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
@@ -36,7 +37,7 @@ export interface CallApiContextParams {
   fetchWithCache?: any;
   filters?: NunjucksFilterMap;
   getCache?: any;
-  logger?: winston.Logger;
+  logger?: ContextLogger;
   originalProvider?: ApiProvider;
   prompt: Prompt;
   vars: Record<string, string | object>;
