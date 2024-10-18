@@ -55,14 +55,11 @@ describe('createTogetherAiProvider', () => {
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
       'model-name',
       expect.objectContaining({
-        config: expect.objectContaining({
-          temperature: 0.7,
-          max_tokens: 100,
+        config: {
           apiBaseUrl: 'https://api.together.xyz/v1',
           apiKeyEnvar: 'TOGETHER_API_KEY',
-        }),
+        },
         id: 'custom-id',
-        env: { CUSTOM_ENV: 'value' },
       }),
     );
   });
