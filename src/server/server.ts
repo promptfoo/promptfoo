@@ -153,7 +153,6 @@ export function createApp() {
     }
   });
 
-  // @ts-ignore
   app.post('/api/eval/:evalId/results/:id/rating', async (req, res) => {
     const { id } = req.params;
     const gradingResult = req.body as GradingResult;
@@ -164,7 +163,7 @@ export function createApp() {
     result.score = gradingResult.score;
 
     await result.save();
-    return res.json(result);
+    res.json(result);
   });
 
   app.post('/api/eval', async (req, res) => {
