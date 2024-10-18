@@ -5,8 +5,15 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
-import { AppBar, Toolbar, Button, IconButton, Menu, MenuItem, Box, Tooltip } from '@mui/material';
-import type { ButtonProps } from '@mui/material';
+import AppBar from '@mui/material/AppBar';
+import Box from '@mui/material/Box';
+import type { ButtonProps } from '@mui/material/Button';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import Toolbar from '@mui/material/Toolbar';
+import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
@@ -52,7 +59,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-function NewDropdown() {
+function Dropdown() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const location = useLocation();
@@ -121,7 +128,7 @@ export default function Navigation({
         <NavToolbar>
           <NavSection>
             <Logo />
-            <NewDropdown />
+            <Dropdown />
             <NavLink href="/eval" label="Evals" />
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
