@@ -1293,6 +1293,14 @@ config:
     expect(provider.id()).toBe('gpt-4o-mini');
   });
 
+  it('loadApiProvider with togetherai', async () => {
+    const provider = await loadApiProvider(
+      'togetherai:chat:meta/meta-llama/Meta-Llama-3-8B-Instruct',
+    );
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('meta/meta-llama/Meta-Llama-3-8B-Instruct');
+  });
+
   it('loadApiProvider with voyage', async () => {
     const provider = await loadApiProvider('voyage:voyage-2');
     expect(provider).toBeInstanceOf(VoyageEmbeddingProvider);
