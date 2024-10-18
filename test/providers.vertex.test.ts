@@ -1,5 +1,6 @@
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 import { getCache, isCacheEnabled } from '../src/cache';
+import logger from '../src/logger';
 import { VertexChatProvider } from '../src/providers/vertex';
 import * as vertexUtil from '../src/providers/vertexUtil';
 
@@ -63,9 +64,11 @@ describe('VertexChatProvider.callGeminiApi', () => {
       ],
     };
 
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
     jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
-        request: jest.fn().mockResolvedValue(mockResponse),
+        request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
@@ -80,6 +83,16 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 5,
         completion: 5,
       },
+    });
+
+    expect(vertexUtil.getGoogleClient).toHaveBeenCalledWith();
+    expect(mockRequest).toHaveBeenCalledWith({
+      url: expect.any(String),
+      method: 'POST',
+      data: expect.objectContaining({
+        contents: [{ parts: { text: 'test prompt' }, role: 'user' }],
+      }),
+      timeout: expect.any(Number),
     });
   });
 
@@ -147,5 +160,73 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(response).toEqual({
       error: 'Error 400: Bad Request',
     });
+  });
+});
+
+describe('maybeCoerceToGeminiFormat', () => {
+  it('should return unmodified content if it matches GeminiFormat', () => {
+    const input = [
+      {
+        role: 'user',
+        parts: [{ text: 'Hello, Gemini!' }],
+      },
+    ];
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+    expect(result).toEqual({
+      contents: input,
+      coerced: false,
+    });
+  });
+
+  it('should coerce OpenAI chat format to GeminiFormat', () => {
+    const input = [
+      { role: 'user', content: 'Hello' },
+      { role: 'user', content: ', ' },
+      { role: 'user', content: 'Gemini!' },
+    ];
+    const expected = [
+      {
+        role: 'user',
+        parts: [{ text: 'Hello' }],
+      },
+      {
+        role: 'user',
+        parts: [{ text: ', ' }],
+      },
+      {
+        role: 'user',
+        parts: [{ text: 'Gemini!' }],
+      },
+    ];
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+    expect(result).toEqual({
+      contents: expected,
+      coerced: true,
+    });
+  });
+
+  it('should coerce string input to GeminiFormat', () => {
+    const input = 'Hello, Gemini!';
+    const expected = [
+      {
+        parts: [{ text: 'Hello, Gemini!' }],
+      },
+    ];
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+    expect(result).toEqual({
+      contents: expected,
+      coerced: true,
+    });
+  });
+
+  it('should log a warning and return the input for unknown formats', () => {
+    const loggerSpy = jest.spyOn(logger, 'warn');
+    const input = { unknownFormat: 'test' };
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+    expect(result).toEqual({
+      contents: input,
+      coerced: false,
+    });
+    expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini: ${JSON.stringify(input)}`);
   });
 });
