@@ -1,6 +1,7 @@
 import React from 'react';
 import { Severity } from '@app/pages/redteam/report/components/constants';
-import { Paper, Typography } from '@mui/material';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface IssuesBySeverityProps {

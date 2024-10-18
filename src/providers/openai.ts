@@ -37,14 +37,14 @@ const OPENAI_CHAT_MODELS = [
       output: 12 / 1e6,
     },
   })),
-  ...['gpt-4o-2024-08-06'].map((model) => ({
+  ...['gpt-4o', 'gpt-4o-2024-08-06'].map((model) => ({
     id: model,
     cost: {
       input: 2.5 / 1e6,
       output: 10 / 1e6,
     },
   })),
-  ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
+  ...['gpt-4o-2024-05-13'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1000000,
@@ -430,6 +430,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         REQUEST_TIMEOUT_MS,
       )) as unknown as any);
     } catch (err) {
+      logger.error(`API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -560,6 +561,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         REQUEST_TIMEOUT_MS,
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
+      logger.error(`API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -1034,6 +1036,7 @@ export class OpenAiModerationProvider
         input: assistantResponse,
       });
     } catch (err) {
+      logger.error(`API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,
       };

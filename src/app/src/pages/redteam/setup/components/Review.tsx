@@ -1,5 +1,12 @@
 import React from 'react';
-import { Chip, Typography, TextField, Box, Button, Grid, Paper, Divider } from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';

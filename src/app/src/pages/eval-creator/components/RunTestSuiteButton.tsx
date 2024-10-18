@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { Button, CircularProgress } from '@mui/material';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 
 const RunTestSuiteButton: React.FC = () => {
   const navigate = useNavigate();

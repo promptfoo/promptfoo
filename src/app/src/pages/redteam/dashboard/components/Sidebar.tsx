@@ -4,7 +4,9 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import HelpIcon from '@mui/icons-material/Help';
 import MenuIcon from '@mui/icons-material/Menu';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { Box, Button, Drawer } from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Drawer from '@mui/material/Drawer';
 
 interface SidebarProps {
   sidebarOpen: boolean;

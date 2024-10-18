@@ -1,18 +1,17 @@
+import React from 'react';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ForumIcon from '@mui/icons-material/Forum';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  Link,
-  Typography,
-} from '@mui/material';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Link from '@mui/material/Link';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 
 const links: { icon: React.ReactNode; text: string; href: string }[] = [
   {
