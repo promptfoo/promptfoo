@@ -219,12 +219,14 @@ describe('maybeCoerceToGeminiFormat', () => {
     });
   });
 
-  it('should log a warning and throw an error for unknown formats', () => {
+  it('should log a warning and return the input for unknown formats', () => {
     const loggerSpy = jest.spyOn(logger, 'warn');
     const input = { unknownFormat: 'test' };
-    expect(() => vertexUtil.maybeCoerceToGeminiFormat(input)).toThrow(
-      'Unable to coerce to Gemini format',
-    );
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+    expect(result).toEqual({
+      contents: input,
+      coerced: false,
+    });
     expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini: ${JSON.stringify(input)}`);
   });
 });

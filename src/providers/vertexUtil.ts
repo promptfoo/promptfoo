@@ -151,7 +151,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     coerced = true;
   } else {
     logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
-    throw new Error('Unable to coerce to Gemini format');
+    return { contents: contents as GeminiFormat, coerced: false };
   }
 
   return { contents: coercedContents, coerced };
