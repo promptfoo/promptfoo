@@ -47,6 +47,7 @@ import {
   writeResultsToDatabase,
 } from '../util';
 import { providersRouter } from './routes/providers';
+import { TelemetryEventSchema } from '../telemetry';
 
 // Running jobs
 const evalJobs = new Map<string, Job>();
@@ -319,22 +320,19 @@ export function createApp() {
 
   app.post('/api/telemetry', async (req, res) => {
     try {
-      const { eventName, properties } = req.body;
+      const result = TelemetryEventSchema.omit({ packageVersion: true }).safeParse(req.body);
 
-      if (!eventName || typeof eventName !== 'string') {
-        res.status(400).json({ error: 'Invalid eventName' });
+      if (!result.success) {
+        res.status(400).json({ error: 'Invalid request body', details: result.error.format() });
         return;
       }
 
-      if (!properties || typeof properties !== 'object') {
-        res.status(400).json({ error: 'Invalid properties' });
-        return;
-      }
+      const { event, properties } = result.data;
 
-      await telemetry.recordAndSend(eventName as TelemetryEventTypes, properties);
+      await telemetry.recordAndSend(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
-      console.error('Error proxying telemetry request:', error);
+      console.error('Error processing telemetry request:', error);
       res.status(500).json({ error: 'Failed to process telemetry request' });
     }
   });

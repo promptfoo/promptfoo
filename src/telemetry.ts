@@ -1,22 +1,24 @@
+import { z } from 'zod';
 import packageJson from '../package.json';
 import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
 import logger from './logger';
 
-export type EventValue = string | number | boolean | string[];
-type TelemetryEvent = {
-  event: string;
-  packageVersion: string;
-  properties: Record<string, EventValue>;
-};
-
-export type TelemetryEventTypes =
-  | 'eval_ran'
-  | 'assertion_used'
-  | 'command_used'
-  | 'funnel'
-  | 'feature_used'
-  | 'webui_page_view';
+export const TelemetryEventSchema = z.object({
+  event: z.enum([
+    'eval_ran',
+    'assertion_used',
+    'command_used',
+    'funnel',
+    'feature_used',
+    'webui_page_view',
+  ]),
+  packageVersion: z.string(),
+  properties: z.record(z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
+});
+export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
+export type TelemetryEventTypes = TelemetryEvent['event'];
+export type EventValue = TelemetryEvent['properties'];
 
 const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
@@ -46,11 +48,18 @@ export class Telemetry {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
-      this.events.push({
+      const event: TelemetryEvent = {
         event: eventName,
         packageVersion: packageJson.version,
         properties,
-      });
+      };
+      
+      const result = TelemetryEventSchema.safeParse(event);
+      if (result.success) {
+        this.events.push(result.data);
+      } else {
+        logger.warn(`Invalid telemetry event: ${result.error}`);
+      }
     }
   }
 
@@ -62,11 +71,7 @@ export class Telemetry {
     } else {
       const eventKey = JSON.stringify({ eventName, properties });
       if (!this.recordedEvents.has(eventKey)) {
-        this.events.push({
-          event: eventName,
-          packageVersion: packageJson.version,
-          properties,
-        });
+        this.record(eventName, properties);
         this.recordedEvents.add(eventKey);
       }
     }
