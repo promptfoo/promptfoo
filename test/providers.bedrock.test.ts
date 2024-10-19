@@ -76,22 +76,42 @@ describe('AwsBedrockGenericProvider', () => {
     });
   });
 
-  it('should throw an error if NodeHttpHandler dependency is missing for proxy', async () => {
-    process.env.HTTP_PROXY = 'http://localhost:8080';
-    process.env.HTTPS_PROXY = 'https://localhost:8080';
+  it('should create Bedrock instance with credentials', async () => {
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', {
+          config: {
+            region: 'us-east-1',
+            accessKeyId: 'test-access-key',
+            secretAccessKey: 'test-secret-key',
+          },
+        });
+      }
+    })();
+    await provider.getBedrockInstance();
 
-    jest.doMock('@smithy/node-http-handler', () => {
-      throw new Error('Missing dependency');
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      credentials: {
+        accessKeyId: 'test-access-key',
+        secretAccessKey: 'test-secret-key',
+      },
     });
+  });
 
+  it('should not include credentials if not provided', async () => {
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
         super('test-model', { config: { region: 'us-east-1' } });
       }
     })();
+    await provider.getBedrockInstance();
 
-    await expect(provider.getBedrockInstance()).rejects.toThrow(
-      'The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.',
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+    });
+    expect(BedrockRuntime).not.toHaveBeenCalledWith(
+      expect.objectContaining({ credentials: expect.anything() }),
     );
   });
 
@@ -221,6 +241,42 @@ describe('AwsBedrockGenericProvider', () => {
     it('should throw an error for API errors', () => {
       const mockErrorResponse = { error: 'API Error' };
       expect(() => modelHandler.output(mockErrorResponse)).toThrow('AI21 API error: API Error');
+    });
+  });
+
+  describe('getCredentials', () => {
+    it('should return credentials if accessKeyId and secretAccessKey are provided', () => {
+      const provider = new (class extends AwsBedrockGenericProvider {
+        constructor() {
+          super('test-model', {
+            config: {
+              accessKeyId: 'test-access-key',
+              secretAccessKey: 'test-secret-key',
+            },
+          });
+        }
+      })();
+
+      const credentials = provider.getCredentials();
+      expect(credentials).toEqual({
+        accessKeyId: 'test-access-key',
+        secretAccessKey: 'test-secret-key',
+      });
+    });
+
+    it('should return undefined if accessKeyId or secretAccessKey is missing', () => {
+      const provider = new (class extends AwsBedrockGenericProvider {
+        constructor() {
+          super('test-model', {
+            config: {
+              accessKeyId: 'test-access-key',
+            },
+          });
+        }
+      })();
+
+      const credentials = provider.getCredentials();
+      expect(credentials).toBeUndefined();
     });
   });
 });
