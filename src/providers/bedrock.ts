@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import dedent from 'dedent';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
@@ -18,6 +19,8 @@ import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
   region?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
 }
 
 interface TextGenerationOptions {
@@ -229,7 +232,7 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
     return '';
   }
 
-  let formattedPrompt = '<s>';
+  let formattedPrompt = ' ';
   let systemMessageIncluded = false;
 
   for (let i = 0; i < messages.length; i++) {
@@ -238,25 +241,25 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
     switch (message.role) {
       case 'system':
         if (!systemMessageIncluded) {
-          formattedPrompt += `[INST] <<SYS>>\n${message.content.trim()}\n<</SYS>>\n\n`;
+          formattedPrompt += `  <<SYS>>\n${message.content.trim()}\n<</SYS>>\n\n`;
           systemMessageIncluded = true;
         }
         break;
 
       case 'user':
         if (i === 0 && !systemMessageIncluded) {
-          formattedPrompt += `[INST] ${message.content.trim()} [/INST]`;
+          formattedPrompt += `  ${message.content.trim()}  `;
         } else if (i === 0 && systemMessageIncluded) {
-          formattedPrompt += `${message.content.trim()} [/INST]`;
+          formattedPrompt += `${message.content.trim()}  `;
         } else if (i > 0 && messages[i - 1].role === 'assistant') {
-          formattedPrompt += `<s>[INST] ${message.content.trim()} [/INST]`;
+          formattedPrompt += `  ${message.content.trim()}  `;
         } else {
-          formattedPrompt += `${message.content.trim()} [/INST]`;
+          formattedPrompt += `${message.content.trim()}  `;
         }
         break;
 
       case 'assistant':
-        formattedPrompt += ` ${message.content.trim()} </s>`;
+        formattedPrompt += ` ${message.content.trim()}  `;
         break;
 
       default:
@@ -663,6 +666,16 @@ export abstract class AwsBedrockGenericProvider {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
   }
 
+  getCredentials(): AwsCredentialIdentity | undefined {
+    if (this.config.accessKeyId && this.config.secretAccessKey) {
+      return {
+        accessKeyId: this.config.accessKeyId,
+        secretAccessKey: this.config.secretAccessKey,
+      };
+    }
+    return undefined;
+  }
+
   async getBedrockInstance() {
     if (!this.bedrock) {
       let handler;
@@ -682,8 +695,10 @@ export abstract class AwsBedrockGenericProvider {
       }
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
+        const credentials = this.getCredentials();
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
+          ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
         });
         this.bedrock = bedrock;

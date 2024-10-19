@@ -38,6 +38,8 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
          region: 'us-west-2'
          temperature: 0.7
          max_tokens: 256
+         accessKeyId: YOUR_ACCESS_KEY_ID
+         secretAccessKey: YOUR_SECRET_ACCESS_KEY
    ```
 
 ## Example
