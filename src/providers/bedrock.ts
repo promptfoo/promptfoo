@@ -18,8 +18,8 @@ import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
-  region?: string;
   accessKeyId?: string;
+  region?: string;
   secretAccessKey?: string;
 }
 
@@ -232,7 +232,7 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
     return '';
   }
 
-  let formattedPrompt = ' ';
+  let formattedPrompt = '<s>';
   let systemMessageIncluded = false;
 
   for (let i = 0; i < messages.length; i++) {
@@ -241,25 +241,25 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
     switch (message.role) {
       case 'system':
         if (!systemMessageIncluded) {
-          formattedPrompt += `  <<SYS>>\n${message.content.trim()}\n<</SYS>>\n\n`;
+          formattedPrompt += `[INST] <<SYS>>\n${message.content.trim()}\n<</SYS>>\n\n`;
           systemMessageIncluded = true;
         }
         break;
 
       case 'user':
         if (i === 0 && !systemMessageIncluded) {
-          formattedPrompt += `  ${message.content.trim()}  `;
+          formattedPrompt += `[INST] ${message.content.trim()} [/INST]`;
         } else if (i === 0 && systemMessageIncluded) {
-          formattedPrompt += `${message.content.trim()}  `;
+          formattedPrompt += `${message.content.trim()} [/INST]`;
         } else if (i > 0 && messages[i - 1].role === 'assistant') {
-          formattedPrompt += `  ${message.content.trim()}  `;
+          formattedPrompt += `<s>[INST] ${message.content.trim()} [/INST]`;
         } else {
-          formattedPrompt += `${message.content.trim()}  `;
+          formattedPrompt += `${message.content.trim()} [/INST]`;
         }
         break;
 
       case 'assistant':
-        formattedPrompt += ` ${message.content.trim()}  `;
+        formattedPrompt += ` ${message.content.trim()} </s>`;
         break;
 
       default:
