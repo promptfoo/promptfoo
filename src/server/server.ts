@@ -11,6 +11,7 @@ import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
+import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION } from '../constants';
 import { getDbSignalPath } from '../database';
@@ -319,15 +320,15 @@ export function createApp() {
 
   app.post('/api/telemetry', async (req, res) => {
     try {
-      const result = TelemetryEventSchema.omit({ packageVersion: true }).safeParse(req.body);
+      const result = TelemetryEventSchema.safeParse(req.body);
 
       if (!result.success) {
-        res.status(400).json({ error: 'Invalid request body', details: result.error.format() });
+        res
+          .status(400)
+          .json({ error: 'Invalid request body', details: fromError(result.error).toString() });
         return;
       }
-
       const { event, properties } = result.data;
-
       await telemetry.recordAndSend(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
