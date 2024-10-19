@@ -89,11 +89,16 @@ export async function loadApiProvider(
     options?: ProviderOptions;
     basePath?: string;
     env?: EnvOverrides;
+    forRedteam?: boolean;
   } = {},
 ): Promise<ApiProvider> {
-  const { options = {}, basePath, env } = context;
+  console.log(`loadApiProvider(${providerPath}, ${JSON.stringify(context)})`);
+  const { options = {}, basePath, env, forRedteam } = context;
+  console.log('options', options);
+  invariant(!forRedteam || options.targetId, 'targetId is required for redteam evaluations');
   const providerOptions: ProviderOptions = {
     id: options.id,
+    targetId: options.targetId,
     config: {
       ...options.config,
       basePath,
@@ -489,6 +494,7 @@ export async function loadApiProvider(
   ret.transform = options.transform;
   ret.delay = options.delay;
   ret.label ||= getNunjucksEngine().renderString(options.label || '', {});
+  ret.targetId = options.targetId;
   return ret;
 }
 
@@ -498,11 +504,12 @@ export async function loadApiProviders(
     basePath?: string;
     env?: EnvOverrides;
   } = {},
+  forRedteam?: boolean,
 ): Promise<ApiProvider[]> {
   const { basePath } = options;
   const env = options.env || cliState.config?.env;
   if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths, { basePath, env })];
+    return [await loadApiProvider(providerPaths, { basePath, env, forRedteam })];
   } else if (typeof providerPaths === 'function') {
     return [
       {
@@ -514,7 +521,7 @@ export async function loadApiProviders(
     return Promise.all(
       providerPaths.map((provider, idx) => {
         if (typeof provider === 'string') {
-          return loadApiProvider(provider, { basePath, env });
+          return loadApiProvider(provider, { basePath, env, forRedteam });
         } else if (typeof provider === 'function') {
           return {
             id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
@@ -526,13 +533,14 @@ export async function loadApiProviders(
             options: provider,
             basePath,
             env,
+            forRedteam,
           });
         } else {
           // List of { id: string, config: ProviderConfig } objects
           const id = Object.keys(provider)[0];
           const providerObject = (provider as ProviderOptionsMap)[id];
           const context = { ...providerObject, id: providerObject.id || id };
-          return loadApiProvider(id, { options: context, basePath, env });
+          return loadApiProvider(id, { options: context, basePath, env, forRedteam });
         }
       }),
     );

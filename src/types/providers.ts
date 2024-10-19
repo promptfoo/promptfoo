@@ -11,6 +11,11 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
+export type Target = {
+  id: TargetId;
+};
+
+export type TargetId = string;
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
@@ -25,6 +30,7 @@ export interface ModerationFlag {
 export interface ProviderOptions {
   id?: ProviderId;
   label?: ProviderLabel;
+  targetId?: TargetId;
   config?: any;
   prompts?: string[];
   transform?: string;
@@ -53,6 +59,7 @@ export interface ApiProvider {
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   label?: ProviderLabel;
+  targetId?: TargetId;
   transform?: string;
   delay?: number;
   config?: any;

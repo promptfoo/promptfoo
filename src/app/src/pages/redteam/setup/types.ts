@@ -14,6 +14,7 @@ export interface Config {
 export interface ProviderOptions {
   id: string;
   label?: string;
+  targetId: string;
   config: {
     type?: 'http' | 'websocket';
     url?: string;
