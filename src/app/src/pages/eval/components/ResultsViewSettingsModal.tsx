@@ -1,4 +1,3 @@
-import React, { useState, useCallback, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -11,38 +10,6 @@ import Slider from '@mui/material/Slider';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useStore as useResultsViewStore } from './store';
-
-const MemoizedSlider = React.memo(
-  ({
-    value,
-    onChange,
-    onChangeCommitted,
-  }: {
-    value: number;
-    onChange: (event: Event | React.SyntheticEvent, value: number | number[]) => void;
-    onChangeCommitted: (event: Event | React.SyntheticEvent, value: number | number[]) => void;
-  }) => (
-    <Slider
-      min={25}
-      max={1001}
-      value={value}
-      onChange={onChange}
-      onChangeCommitted={onChangeCommitted}
-      marks={[
-        { value: 25, label: '25' },
-        { value: 1001, label: 'Unlimited' },
-      ]}
-      sx={{
-        '& .MuiSlider-markLabel[data-index="0"]': {
-          transform: 'translateX(0%)',
-        },
-        '& .MuiSlider-markLabel[data-index="1"]': {
-          transform: 'translateX(-100%)',
-        },
-      }}
-    />
-  ),
-);
 
 interface SettingsModalProps {
   open: boolean;
@@ -66,28 +33,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
     showPassFail,
     setShowPassFail,
   } = useResultsViewStore();
-
-  const [localMaxTextLength, setLocalMaxTextLength] = useState(
-    maxTextLength === Number.POSITIVE_INFINITY ? 1001 : maxTextLength,
-  );
-
-  const handleSliderChange = useCallback((_, value: number | number[]) => {
-    setLocalMaxTextLength(value as number);
-  }, []);
-
-  const handleSliderChangeCommitted = useCallback(
-    (_, value: number | number[]) => {
-      const newValue = value === 1001 ? Number.POSITIVE_INFINITY : (value as number);
-      setMaxTextLength(newValue);
-    },
-    [setMaxTextLength],
-  );
-
-  const maxTextLengthDisplay = useMemo(
-    () => (localMaxTextLength === 1001 ? 'Unlimited' : localMaxTextLength),
-    [localMaxTextLength],
-  );
-
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Table View Settings</DialogTitle>
@@ -176,11 +121,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
           </Tooltip>
         </Box>
         <Box maxWidth="sm">
-          <Typography mt={2}>Max text length: {maxTextLengthDisplay}</Typography>
-          <MemoizedSlider
-            value={localMaxTextLength}
-            onChange={handleSliderChange}
-            onChangeCommitted={handleSliderChangeCommitted}
+          <Typography mt={2}>Max text length: {maxTextLength}</Typography>
+          <Slider
+            min={25}
+            max={1000}
+            value={maxTextLength}
+            onChange={(_, val: number | number[]) => setMaxTextLength(val as number)}
           />
         </Box>
       </DialogContent>
@@ -191,4 +137,4 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
   );
 };
 
-export default React.memo(SettingsModal);
+export default SettingsModal;
