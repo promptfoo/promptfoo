@@ -14,7 +14,7 @@ import type {
 } from '../types';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
-import type { GeminiErrorResponse, Palm2ApiResponse } from './vertexUtil';
+import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
 import {
   getGoogleClient,
   maybeCoerceToGeminiFormat,
@@ -184,13 +184,17 @@ export class VertexChatProvider extends VertexGenericProvider {
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
-    let contents = parseChatPrompt(prompt, {
-      role: 'user',
-      parts: {
-        text: prompt,
+    let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(
+      prompt,
+      {
+        role: 'user',
+        parts: {
+          text: prompt,
+        },
       },
-    });
-    const { contents: updatedContents, coerced } = maybeCoerceToGeminiFormat(contents);
+    );
+    const { contents: updatedContents, coerced }: { contents: GeminiFormat; coerced: boolean } =
+      maybeCoerceToGeminiFormat(contents);
     if (coerced) {
       logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
       contents = updatedContents;
@@ -209,10 +213,9 @@ export class VertexChatProvider extends VertexGenericProvider {
         }
       }
     }
-
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
-      contents,
+      contents: contents as GeminiFormat,
       generationConfig: {
         context: this.config.context,
         examples: this.config.examples,
