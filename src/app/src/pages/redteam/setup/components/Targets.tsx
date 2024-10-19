@@ -74,6 +74,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   const setSelectedTarget = (value: ProviderOptions) => {
     updateConfig('target', value);
   };
+  console.log(config);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [bodyError, setBodyError] = useState<string | null>(null);
   const [testingTarget, setTestingTarget] = useState(false);
@@ -107,7 +108,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         value === 'javascript'
           ? 'file://path/to/custom_provider.js'
           : 'file://path/to/custom_provider.py';
-      setSelectedTarget({ id: filePath, config: {} });
+      setSelectedTarget({ id: filePath, config: {}, targetId: filePath });
       updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'http') {
@@ -117,6 +118,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     } else if (value === 'websocket') {
       setSelectedTarget({
         id: 'websocket',
+        targetId: 'websocket',
         config: {
           type: 'websocket',
           url: 'wss://example.com/ws',
@@ -128,7 +130,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
       updateConfig('prompts', ['{{prompt}}']);
       updateConfig('purpose', '');
     } else {
-      setSelectedTarget({ id: value, config: {} });
+      setSelectedTarget({ id: value, targetId: value, config: {} });
       updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     }
@@ -171,6 +173,8 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         if (!value.includes('{{prompt}}')) {
           setBodyError('Request body must contain {{prompt}}');
         }
+      } else if (field === 'targetId') {
+        updatedTarget.targetId = value;
       } else {
         (updatedTarget.config as any)[field] = value;
       }
@@ -305,8 +309,26 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3 }}>
           Select a Target
         </Typography>
+        <TextField
+          fullWidth
+          sx={{ mb: 2 }}
+          label="Target Name"
+          value={selectedTarget.targetId}
+          placeholder="e.g. 'customer-service-agent'"
+          onChange={(e) => updateCustomTarget('targetId', e.target.value)}
+          margin="normal"
+          required
+          autoFocus
+        />
+
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
+          The target name will be used to report vulnerabilities. Make sure it's meaningful and
+          re-use it when generating new redteam configs for the same target. Eg:
+          'customer-service-agent', 'compliance-bot'
+        </Typography>
+
         <FormControl fullWidth>
-          <InputLabel id="predefined-target-label">Target</InputLabel>
+          <InputLabel id="predefined-target-label">Target Type</InputLabel>
           <Select
             labelId="predefined-target-label"
             value={selectedTarget.id}
@@ -373,7 +395,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                 margin="normal"
                 error={!!urlError}
                 helperText={urlError}
-                autoFocus
                 placeholder="https://example.com/api/chat"
                 required
               />
