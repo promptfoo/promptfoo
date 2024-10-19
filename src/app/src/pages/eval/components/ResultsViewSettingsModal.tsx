@@ -71,12 +71,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
     maxTextLength === Number.POSITIVE_INFINITY ? 1001 : maxTextLength,
   );
 
-  const handleSliderChange = useCallback((_, value: number | number[]) => {
-    setLocalMaxTextLength(value as number);
-  }, []);
+  const handleSliderChange = useCallback(
+    (_event: Event | React.SyntheticEvent, value: number | number[]) => {
+      setLocalMaxTextLength(value as number);
+    },
+    [],
+  );
 
   const handleSliderChangeCommitted = useCallback(
-    (_, value: number | number[]) => {
+    (_event: Event | React.SyntheticEvent, value: number | number[]) => {
       const newValue = value === 1001 ? Number.POSITIVE_INFINITY : (value as number);
       setMaxTextLength(newValue);
     },
