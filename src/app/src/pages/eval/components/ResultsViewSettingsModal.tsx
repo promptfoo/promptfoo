@@ -124,9 +124,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
           <Typography mt={2}>Max text length: {maxTextLength}</Typography>
           <Slider
             min={25}
-            max={1000}
+            max={1001}
             value={maxTextLength}
-            onChange={(_, val: number | number[]) => setMaxTextLength(val as number)}
+            onChange={(_, val: number | number[]) =>
+              setMaxTextLength(val === 1001 ? Number.POSITIVE_INFINITY : (val as number))
+            }
           />
         </Box>
       </DialogContent>
