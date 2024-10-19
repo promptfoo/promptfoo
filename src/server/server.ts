@@ -30,8 +30,8 @@ import promptfoo from '../index';
 import logger from '../logger';
 import Eval from '../models/eval';
 import EvalResult from '../models/evalResult';
-import type { TelemetryEventTypes } from '../telemetry';
 import telemetry from '../telemetry';
+import { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
   getPrompts,
@@ -47,7 +47,6 @@ import {
   writeResultsToDatabase,
 } from '../util';
 import { providersRouter } from './routes/providers';
-import { TelemetryEventSchema } from '../telemetry';
 
 // Running jobs
 const evalJobs = new Map<string, Job>();

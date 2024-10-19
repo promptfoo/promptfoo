@@ -1,24 +1,24 @@
 import { z } from 'zod';
-import packageJson from '../package.json';
+import { VERSION } from './constants';
 import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
 import logger from './logger';
 
 export const TelemetryEventSchema = z.object({
   event: z.enum([
-    'eval_ran',
     'assertion_used',
     'command_used',
-    'funnel',
+    'eval_ran',
     'feature_used',
+    'funnel',
     'webui_page_view',
   ]),
-  packageVersion: z.string(),
+  packageVersion: z.string().optional().default(VERSION),
   properties: z.record(z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
 });
 export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
-export type EventValue = TelemetryEvent['properties'];
+export type EventProperties = TelemetryEvent['properties'];
 
 const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
@@ -37,23 +37,23 @@ export class Telemetry {
     if (!this.telemetryDisabledRecorded) {
       this.events.push({
         event: 'feature_used',
-        packageVersion: packageJson.version,
+        packageVersion: VERSION,
         properties: { feature: 'telemetry disabled' },
       });
       this.telemetryDisabledRecorded = true;
     }
   }
 
-  record(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {
+  record(eventName: TelemetryEventTypes, properties: EventProperties): void {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
       const event: TelemetryEvent = {
         event: eventName,
-        packageVersion: packageJson.version,
+        packageVersion: VERSION,
         properties,
       };
-      
+
       const result = TelemetryEventSchema.safeParse(event);
       if (result.success) {
         this.events.push(result.data);
@@ -65,7 +65,7 @@ export class Telemetry {
 
   private recordedEvents: Set<string> = new Set();
 
-  recordOnce(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {
+  recordOnce(eventName: TelemetryEventTypes, properties: EventProperties): void {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
@@ -77,17 +77,14 @@ export class Telemetry {
     }
   }
 
-  async recordAndSend(
-    eventName: TelemetryEventTypes,
-    properties: Record<string, EventValue>,
-  ): Promise<void> {
+  async recordAndSend(eventName: TelemetryEventTypes, properties: EventProperties): Promise<void> {
     this.record(eventName, properties);
     await this.send();
   }
 
   async recordAndSendOnce(
     eventName: TelemetryEventTypes,
-    properties: Record<string, EventValue>,
+    properties: EventProperties,
   ): Promise<void> {
     if (this.disabled) {
       this.recordTelemetryDisabled();
