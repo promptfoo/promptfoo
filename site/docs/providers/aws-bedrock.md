@@ -35,9 +35,11 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
    providers:
      - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
        config:
+         accessKeyId: YOUR_ACCESS_KEY_ID
+         secretAccessKey: YOUR_SECRET_ACCESS_KEY
          region: 'us-west-2'
-         temperature: 0.7
          max_tokens: 256
+         temperature: 0.7
    ```
 
 ## Example

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import dedent from 'dedent';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
@@ -17,7 +18,9 @@ import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
+  accessKeyId?: string;
   region?: string;
+  secretAccessKey?: string;
 }
 
 interface TextGenerationOptions {
@@ -663,6 +666,16 @@ export abstract class AwsBedrockGenericProvider {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
   }
 
+  getCredentials(): AwsCredentialIdentity | undefined {
+    if (this.config.accessKeyId && this.config.secretAccessKey) {
+      return {
+        accessKeyId: this.config.accessKeyId,
+        secretAccessKey: this.config.secretAccessKey,
+      };
+    }
+    return undefined;
+  }
+
   async getBedrockInstance() {
     if (!this.bedrock) {
       let handler;
@@ -682,8 +695,10 @@ export abstract class AwsBedrockGenericProvider {
       }
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
+        const credentials = this.getCredentials();
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
+          ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
         });
         this.bedrock = bedrock;
