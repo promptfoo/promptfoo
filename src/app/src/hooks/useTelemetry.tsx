@@ -1,12 +1,8 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { callApi } from '@app/utils/api';
 import type { EventProperties, TelemetryEventTypes } from '@promptfoo/telemetry';
 
 export function useTelemetry() {
-  const isTelemetryDisabled = useMemo(() => {
-    return;
-  }, []);
-
   const recordEvent = useCallback(
     async (eventName: TelemetryEventTypes, properties: EventProperties) => {
       if (!['0', 'false'].includes(import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY)) {
@@ -28,7 +24,7 @@ export function useTelemetry() {
         console.error('Failed to record telemetry event:', error);
       }
     },
-    [isTelemetryDisabled],
+    [],
   );
 
   return { recordEvent };
