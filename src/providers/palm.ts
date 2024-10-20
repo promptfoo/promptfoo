@@ -154,21 +154,9 @@ export class PalmChatProvider extends PalmGenericProvider {
   }
 
   async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const { contents: rawContents } = maybeCoerceToGeminiFormat(
+    const { contents, system_instruction } = maybeCoerceToGeminiFormat(
       parseChatPrompt(prompt, [{ content: prompt }]),
     );
-    const systemPromptParts: { text: string }[] = [];
-    const contents = rawContents.filter((message) => {
-      if (message.role === ('system' as any) && message.parts.length > 0) {
-        systemPromptParts.push(
-          ...message.parts.filter(
-            (part): part is { text: string } => 'text' in part && typeof part.text === 'string',
-          ),
-        );
-        return false;
-      }
-      return true;
-    });
     const body: Record<string, any> = {
       contents,
       generationConfig: {
@@ -180,7 +168,7 @@ export class PalmChatProvider extends PalmGenericProvider {
         ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
-      ...(systemPromptParts.length > 0 ? { system_instruction: { parts: systemPromptParts } } : {}),
+      ...((system_instruction?.parts?.length ?? 0) > 0 ? { system_instruction } : {}),
     };
 
     if (this.config.responseSchema) {

@@ -130,9 +130,8 @@ describe('PalmChatProvider', () => {
         expect.objectContaining({
           body: expect.any(String),
         }),
-        expect.any(Number)
+        expect.any(Number),
       );
-
     });
   });
 });

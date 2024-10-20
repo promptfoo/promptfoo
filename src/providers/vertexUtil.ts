@@ -111,10 +111,12 @@ const ContentSchema = z.object({
 const GeminiFormatSchema = z.array(ContentSchema);
 
 export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
+export type GeminiPart = z.infer<typeof PartSchema>;
 
 export function maybeCoerceToGeminiFormat(contents: any): {
   contents: GeminiFormat;
   coerced: boolean;
+  system_instruction: { parts: GeminiPart[] } | undefined;
 } {
   let coerced = false;
   const parseResult = GeminiFormatSchema.safeParse(contents);
@@ -123,6 +125,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     return {
       contents: parseResult.data,
       coerced,
+      system_instruction: undefined,
     };
   }
 
@@ -151,10 +154,27 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     coerced = true;
   } else {
     logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
-    return { contents: contents as GeminiFormat, coerced: false };
+    return { contents: contents as GeminiFormat, coerced: false, system_instruction: undefined };
   }
 
-  return { contents: coercedContents, coerced };
+  const systemPromptParts: { text: string }[] = [];
+  coercedContents = coercedContents.filter((message) => {
+    if (message.role === ('system' as any) && message.parts.length > 0) {
+      systemPromptParts.push(
+        ...message.parts.filter(
+          (part): part is { text: string } => 'text' in part && typeof part.text === 'string',
+        ),
+      );
+      return false;
+    }
+    return true;
+  });
+
+  return {
+    contents: coercedContents,
+    coerced,
+    system_instruction: { parts: systemPromptParts },
+  };
 }
 
 let cachedAuth: GoogleAuth | undefined;
