@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { processFileReference } from '../src/assertions';
+import { processFileReference } from '../src/assertions/utils';
 import cliState from '../src/cliState';
 
 jest.mock('fs');

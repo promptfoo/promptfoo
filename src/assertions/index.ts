@@ -10,14 +10,12 @@ import yaml from 'js-yaml';
 import { type Option as sqlParserOption } from 'node-sql-parser';
 import util from 'node:util';
 import path from 'path';
-import Clone from 'rfdc';
 import invariant from 'tiny-invariant';
-import { AssertionsResult } from './assertions/AssertionsResult';
-import cliState from './cliState';
-import { getEnvBool, getEnvInt } from './envars';
-import { importModule } from './esm';
-import { fetchWithRetries } from './fetch';
-import logger from './logger';
+import cliState from '../cliState';
+import { getEnvBool, getEnvInt } from '../envars';
+import { importModule } from '../esm';
+import { fetchWithRetries } from '../fetch';
+import logger from '../logger';
 import {
   matchesSimilarity,
   matchesLlmRubric,
@@ -30,28 +28,29 @@ import {
   matchesContextFaithfulness,
   matchesSelectBest,
   matchesModeration,
-} from './matchers';
-import type { OpenAiChatCompletionProvider } from './providers/openai';
-import { validateFunctionCall } from './providers/openaiUtil';
-import { parseChatPrompt } from './providers/shared';
-import { runPython } from './python/pythonUtils';
-import { runPythonCode } from './python/wrapper';
-import { getGraderById } from './redteam/graders';
-import telemetry from './telemetry';
-import type { AssertionValue, ProviderResponse } from './types';
+} from '../matchers';
+import type { OpenAiChatCompletionProvider } from '../providers/openai';
+import { validateFunctionCall } from '../providers/openaiUtil';
+import { parseChatPrompt } from '../providers/shared';
+import { runPython } from '../python/pythonUtils';
+import { runPythonCode } from '../python/wrapper';
+import { getGraderById } from '../redteam/graders';
+import telemetry from '../telemetry';
+import type { AssertionValue, ProviderResponse } from '../types';
 import {
   type ApiProvider,
   type Assertion,
   type AssertionType,
   type AtomicTestCase,
   type GradingResult,
-  type TestCase,
   isGradingResult,
-} from './types';
-import { isJavascriptFile } from './util/file';
-import { extractJsonObjects } from './util/json';
-import { getNunjucksEngine } from './util/templates';
-import { transform } from './util/transform';
+} from '../types';
+import { isJavascriptFile } from '../util/file';
+import { extractJsonObjects } from '../util/json';
+import { getNunjucksEngine } from '../util/templates';
+import { transform } from '../util/transform';
+import { AssertionsResult } from './AssertionsResult';
+import { getFinalTest, processFileReference } from './utils';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -78,19 +77,6 @@ export function createAjv(): Ajv {
 const ajv = createAjv();
 
 const nunjucks = getNunjucksEngine();
-
-const clone = Clone();
-
-function getFinalTest(test: TestCase, assertion: Assertion) {
-  // Deep copy
-  const ret = clone(test);
-
-  // Assertion provider overrides test provider
-  ret.options = ret.options || {};
-  ret.options.provider = assertion.provider || ret.options.provider;
-  ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
-  return Object.freeze(ret);
-}
 
 function coerceString(value: string | object): string {
   if (typeof value === 'string') {
@@ -268,20 +254,6 @@ export async function isSql(
     reason: pass ? 'Assertion passed' : failureReasons.join(' '),
     assertion,
   };
-}
-
-export function processFileReference(fileRef: string): object | string {
-  const basePath = cliState.basePath || '';
-  const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
-  const fileContent = fs.readFileSync(filePath, 'utf8');
-  const extension = path.extname(filePath);
-  if (['.json', '.yaml', '.yml'].includes(extension)) {
-    return yaml.load(fileContent) as object;
-  } else if (extension === '.txt') {
-    return fileContent.trim();
-  } else {
-    throw new Error(`Unsupported file type: ${filePath}`);
-  }
 }
 
 export async function runAssertion({
