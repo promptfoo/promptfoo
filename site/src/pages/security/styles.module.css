@@ -174,61 +174,265 @@
 /* Add these styles to the existing styles.module.css file */
 
 .whyPromptfooSection {
-  background-color: #f8f9fa;
+  background-color: var(--primary-color);
+  color: #fff;
   padding: 4rem 0;
 }
 
-.reasonsGrid {
+.whyPromptfooSection .sectionTitle {
+  color: #fff;
+}
+
+.statsSection {
+  background-color: #f0f4f8;
+  padding: 4rem 0;
+}
+
+.statsSummary {
+  text-align: center;
+  font-size: 1.2rem;
+  max-width: 800px;
+  margin: 0 auto 3rem;
+  color: var(--text-color);
+}
+
+.statsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 2rem;
 }
 
-.reasonItem {
+.statItem {
   background-color: #fff;
   padding: 2rem;
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition:
-    transform 0.3s ease,
-    box-shadow 0.3s ease;
   text-align: center;
+  transition: transform 0.3s ease;
 }
 
-.reasonItem:hover {
+.statItem:hover {
   transform: translateY(-5px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
-.reasonIconWrapper {
-  background-color: var(--primary-color);
-  color: #fff;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 0 auto 1rem;
+.statIcon {
+  font-size: 3rem;
+  color: var(--primary-color);
+  margin-bottom: 1rem;
 }
 
-.reasonIcon {
-  font-size: 2rem;
-}
-
-.reasonTitle {
-  font-size: 1.25rem;
+.statNumber {
+  font-size: 2.5rem;
+  font-weight: bold;
   color: var(--primary-color);
   margin-bottom: 0.5rem;
 }
 
-.reasonDescription {
+.statTitle {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-color);
+}
+
+.statDescription {
   font-size: 1rem;
   color: #666;
 }
 
 @media (max-width: 768px) {
-  .reasonsGrid {
+  .statsGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Add or update these styles in your existing CSS file */
+
+.featuresSection {
+  background-color: #f8f9fa;
+  padding: 6rem 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.featuresSection::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(0, 86, 179, 0.1) 0%, rgba(23, 162, 184, 0.1) 100%);
+  z-index: 0;
+}
+
+.featuresSummary {
+  text-align: center;
+  font-size: 1.2rem;
+  max-width: 800px;
+  margin: 0 auto 4rem;
+  color: var(--text-color);
+  position: relative;
+  z-index: 1;
+}
+
+.featuresTimeline {
+  position: relative;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem 0;
+}
+
+.featuresTimeline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  background-color: var(--primary-color);
+  transform: translateX(-50%);
+}
+
+.featureItem {
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 30px;
+  position: relative;
+  margin-bottom: 4rem;
+  width: 50%;
+}
+
+.featureItem:nth-child(even) {
+  align-self: flex-end;
+  justify-content: flex-start;
+  padding-left: 30px;
+  padding-right: 0;
+}
+
+.featureIconWrapper {
+  position: absolute;
+  background-color: var(--primary-color);
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  right: -30px;
+  top: 0;
+  z-index: 2;
+}
+
+.featureItem:nth-child(even) .featureIconWrapper {
+  left: -30px;
+  right: auto;
+}
+
+.featureIcon {
+  font-size: 2rem;
+}
+
+.featureContent {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  width: calc(100% - 30px);
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.featureContent:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.15);
+}
+
+.featureItem h3 {
+  font-size: 1.5rem;
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+.featureItem p {
+  font-size: 1rem;
+  color: var(--text-color);
+}
+
+@media (max-width: 768px) {
+  .featuresTimeline::before {
+    left: 30px;
+  }
+
+  .featureItem {
+    width: 100%;
+    padding-left: 80px;
+    padding-right: 0;
+  }
+
+  .featureItem:nth-child(even) {
+    align-self: auto;
+    justify-content: flex-start;
+    padding-left: 80px;
+    padding-right: 0;
+  }
+
+  .featureIconWrapper {
+    left: 0;
+    right: auto;
+  }
+
+  .featureItem:nth-child(even) .featureIconWrapper {
+    left: 0;
+  }
+
+  .featureContent {
+    width: 100%;
+  }
+}
+
+/* Add these styles to your existing CSS file */
+
+.logoSection {
+  background-color: #f8f9fa;
+  padding: 2rem 0;
+  border-top: 1px solid #e9ecef;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.logoIntro {
+  text-align: center;
+  font-size: 1.2rem;
+  color: #6c757d;
+  margin-bottom: 2rem;
+}
+
+.logoGrid {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2rem;
+}
+
+.logoItem {
+  height: 40px;
+  width: auto;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+.logoItem:hover {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .logoGrid {
+    gap: 1rem;
+  }
+
+  .logoItem {
+    height: 30px;
   }
 }
