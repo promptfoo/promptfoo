@@ -4,6 +4,7 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../src/csv';
 import { fetchCsvFromGoogleSheet } from '../src/googleSheets';
+import logger from '../src/logger';
 import { loadApiProvider } from '../src/providers';
 import {
   generatePersonasPrompt,
@@ -454,6 +455,17 @@ describe('readTests', () => {
       vars: { var1: 'value3', var2: 'value4' },
       assert: [{ type: 'equals', value: 'expected2' }],
     });
+  });
+
+  it('should log a warning for unsupported test format', async () => {
+    const warnSpy = jest.spyOn(logger, 'warn');
+    const unsupportedTests = { invalid: 'format' };
+
+    await readTests(unsupportedTests as any);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Warning: Unsupported 'tests' format in promptfooconfig.yaml."),
+    );
+    warnSpy.mockRestore();
   });
 });
 
