@@ -33,8 +33,8 @@ export default [
   {
     languageOptions: {
       ecmaVersion: 2022,
-      sourceType: 'module',
       globals: globals.node,
+      sourceType: 'module',
     },
     plugins: {
       'react-hooks': reactHooks,
@@ -42,18 +42,18 @@ export default [
       unicorn: eslintPluginUnicorn,
     },
     rules: {
-      '@typescript-eslint/no-unsafe-function-type': 0,
       '@typescript-eslint/ban-ts-comment': 0,
       '@typescript-eslint/ban-types': 0,
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-explicit-any': 0,
+      '@typescript-eslint/no-unsafe-function-type': 0,
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
-          vars: 'all',
-          varsIgnorePattern: '^_',
           args: 'none',
           ignoreRestSiblings: false,
+          vars: 'all',
+          varsIgnorePattern: '^_',
         },
       ],
       '@typescript-eslint/no-use-before-define': 'error',
@@ -76,9 +76,9 @@ export default [
     files: ['examples/**', 'site/**'],
     rules: {
       '@typescript-eslint/no-namespace': 0,
-      '@typescript-eslint/no-var-requires': 0,
-      '@typescript-eslint/no-unused-vars': 0,
       '@typescript-eslint/no-require-imports': 0,
+      '@typescript-eslint/no-unused-vars': 0,
+      '@typescript-eslint/no-var-requires': 0,
     },
   },
 ];
