@@ -13,7 +13,8 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
 
   // Assertion provider overrides test provider
   ret.options = ret.options || {};
-  ret.options.provider = assertion.provider || ret.options.provider;
+  // NOTE: Clone does not copy functions so we set the provider again
+  ret.options.provider = assertion.provider || test?.options?.provider;
   ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
   return Object.freeze(ret);
 }

@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { processFileReference } from '../src/assertions/utils';
+import { processFileReference, getFinalTest } from '../src/assertions/utils';
 import cliState from '../src/cliState';
+import type { TestCase, Assertion, ApiProvider } from '../src/types';
 
 jest.mock('fs');
 jest.mock('path');
@@ -51,5 +52,65 @@ describe('processFileReference', () => {
     jest.mocked(path.extname).mockReturnValue('.unsupported');
 
     expect(() => processFileReference('file://test.unsupported')).toThrow('Unsupported file type');
+  });
+});
+
+describe('getFinalTest', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should correctly merge test and assertion data', () => {
+    const mockApiProvider: ApiProvider = {
+      id: () => 'mockProvider',
+      callApi: jest.fn(),
+    };
+
+    const testCase: TestCase = {
+      vars: { var1: 'value1' },
+      options: {
+        provider: {
+          id: () => 'testProvider',
+          callApi: jest.fn(),
+        },
+      },
+    };
+
+    const assertion: Assertion = {
+      type: 'equals',
+      value: 'expected value',
+      provider: mockApiProvider,
+      rubricPrompt: 'custom rubric prompt',
+    };
+
+    const result = getFinalTest(testCase, assertion);
+
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(result.options?.provider).toBe(mockApiProvider);
+    expect(result.options?.rubricPrompt).toBe('custom rubric prompt');
+    expect(result.vars).toEqual({ var1: 'value1' });
+    expect(testCase.options?.provider?.id()).toBe('testProvider');
+    expect(typeof result.options?.provider?.callApi).toBe('function');
+  });
+
+  it('should use test provider when assertion provider is not provided', () => {
+    const testCase: TestCase = {
+      options: {
+        provider: {
+          id: () => 'testProvider',
+          callApi: jest.fn(),
+        },
+      },
+    };
+
+    const assertion: Assertion = {
+      type: 'equals',
+      value: 'expected value',
+    };
+
+    const result = getFinalTest(testCase, assertion);
+
+    expect(result.options?.provider?.id()).toBe('testProvider');
+    expect(typeof result.options?.provider?.callApi).toBe('function');
   });
 });
