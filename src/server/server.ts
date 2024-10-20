@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
 import debounce from 'debounce';
+import type { Request, Response } from 'express';
 import express from 'express';
 import type { Stats } from 'fs';
 import fs from 'fs';
@@ -58,7 +59,7 @@ export function createApp() {
     res.status(200).json({ status: 'OK', version: VERSION });
   });
 
-  app.get('/api/results', async (req, res) => {
+  app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
     const datasetId = req.query.datasetId as string | undefined;
     const previousResults = await listPreviousResults(
       undefined /* limit */,
@@ -75,7 +76,7 @@ export function createApp() {
     });
   });
 
-  app.get('/api/results/:id', async (req, res) => {
+  app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
     const file = await readResult(id);
     if (!file) {
@@ -85,14 +86,14 @@ export function createApp() {
     res.json({ data: file.result });
   });
 
-  app.get('/api/prompts', async (req, res) => {
+  app.get('/api/prompts', async (req: Request, res: Response): Promise<void> => {
     if (allPrompts == null) {
       allPrompts = await getPrompts();
     }
     res.json({ data: allPrompts });
   });
 
-  app.get('/api/progress', async (req, res) => {
+  app.get('/api/progress', async (req: Request, res: Response): Promise<void> => {
     const { tagName, tagValue, description } = req.query;
     const tag =
       tagName && tagValue ? { key: tagName as string, value: tagValue as string } : undefined;
@@ -105,18 +106,18 @@ export function createApp() {
     });
   });
 
-  app.get('/api/prompts/:sha256hash', async (req, res) => {
+  app.get('/api/prompts/:sha256hash', async (req: Request, res: Response): Promise<void> => {
     const sha256hash = req.params.sha256hash;
     const prompts = await getPromptsForTestCasesHash(sha256hash);
     res.json({ data: prompts });
   });
 
-  app.get('/api/datasets', async (req, res) => {
+  app.get('/api/datasets', async (req: Request, res: Response): Promise<void> => {
     res.json({ data: await getTestCases() });
   });
 
   // This is used by ResultsView.tsx to share an eval with another promptfoo instance
-  app.post('/api/results/share', async (req, res) => {
+  app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
     const { id } = req.body;
 
     const result = await readResult(id);
@@ -130,7 +131,7 @@ export function createApp() {
     res.json({ url });
   });
 
-  app.post('/api/dataset/generate', async (req, res) => {
+  app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
     const testSuite: TestSuite = {
       prompts: req.body.prompts as Prompt[],
       tests: req.body.tests as TestCase[],
@@ -144,7 +145,7 @@ export function createApp() {
   app.use('/api/providers', providersRouter);
   app.use('/api/redteam', redteamRouter);
 
-  app.post('/api/telemetry', async (req, res) => {
+  app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
       const result = TelemetryEventSchema.safeParse(req.body);
 
@@ -168,7 +169,7 @@ export function createApp() {
   app.use(express.static(staticDir));
 
   // Handle client routing, return all requests to the app
-  app.get('*', (_req, res) => {
+  app.get('*', (req: Request, res: Response): void => {
     res.sendFile(path.join(staticDir, 'index.html'));
   });
   return app;

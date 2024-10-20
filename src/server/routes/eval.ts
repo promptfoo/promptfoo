@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Request, Response } from 'express';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import type {
@@ -19,7 +20,7 @@ export const evalRouter = Router();
 // Running jobs
 const evalJobs = new Map<string, Job>();
 
-evalRouter.post('/job', (req, res) => {
+evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
   const id = uuidv4();
   evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
@@ -52,7 +53,7 @@ evalRouter.post('/job', (req, res) => {
   res.json({ id });
 });
 
-evalRouter.get('/job/:id', (req, res) => {
+evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   const id = req.params.id;
   const job = evalJobs.get(id);
   if (!job) {
@@ -66,7 +67,7 @@ evalRouter.get('/job/:id', (req, res) => {
   }
 });
 
-evalRouter.patch('/:id', (req, res) => {
+evalRouter.patch('/:id', (req: Request, res: Response): void => {
   const id = req.params.id;
   const { table, config } = req.body;
 
@@ -83,20 +84,23 @@ evalRouter.patch('/:id', (req, res) => {
   }
 });
 
-evalRouter.post('/:evalId/results/:id/rating', async (req, res) => {
-  const { id } = req.params;
-  const gradingResult = req.body as GradingResult;
-  const result = await EvalResult.findById(id);
-  invariant(result, 'Result not found');
-  result.gradingResult = gradingResult;
-  result.success = gradingResult.pass;
-  result.score = gradingResult.score;
+evalRouter.post(
+  '/:evalId/results/:id/rating',
+  async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const gradingResult = req.body as GradingResult;
+    const result = await EvalResult.findById(id);
+    invariant(result, 'Result not found');
+    result.gradingResult = gradingResult;
+    result.success = gradingResult.pass;
+    result.score = gradingResult.score;
 
-  await result.save();
-  res.json(result);
-});
+    await result.save();
+    res.json(result);
+  },
+);
 
-evalRouter.post('/', async (req, res) => {
+evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
   try {
     if (body.data) {
@@ -124,7 +128,7 @@ evalRouter.post('/', async (req, res) => {
   }
 });
 
-evalRouter.delete('/:id', async (req, res) => {
+evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
   try {
     await deleteEval(id);

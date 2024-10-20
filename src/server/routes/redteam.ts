@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Request, Response } from 'express';
 import logger from '../../logger';
 
 export const redteamRouter = Router();
@@ -6,7 +7,7 @@ export const redteamRouter = Router();
 const CLOUD_FUNCTION_URL =
   process.env.PROMPTFOO_REMOTE_GENERATION_URL || 'https://api.promptfoo.dev/v1/generate';
 
-redteamRouter.post('/:task', async (req, res) => {
+redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> => {
   const { task } = req.params;
 
   logger.debug(`Received ${task} task request:`, {
