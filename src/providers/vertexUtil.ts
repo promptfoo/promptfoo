@@ -116,7 +116,7 @@ export type GeminiPart = z.infer<typeof PartSchema>;
 export function maybeCoerceToGeminiFormat(contents: any): {
   contents: GeminiFormat;
   coerced: boolean;
-  system_instruction: { parts: GeminiPart[] } | undefined;
+  system_instruction: { parts: [GeminiPart, ...GeminiPart[]] } | undefined;
 } {
   let coerced = false;
   const parseResult = GeminiFormatSchema.safeParse(contents);
@@ -173,7 +173,10 @@ export function maybeCoerceToGeminiFormat(contents: any): {
   return {
     contents: coercedContents,
     coerced,
-    system_instruction: { parts: systemPromptParts },
+    system_instruction:
+      systemPromptParts.length > 0
+        ? { parts: systemPromptParts as [GeminiPart, ...GeminiPart[]] }
+        : undefined,
   };
 }
 

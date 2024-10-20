@@ -42,6 +42,7 @@ describe('PalmChatProvider', () => {
       jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
+        system_instruction: undefined,
       });
 
       const response = await provider.callGemini('test prompt');
@@ -72,11 +73,12 @@ describe('PalmChatProvider', () => {
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
       jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [
-          { role: 'system', parts: [{ text: 'system instruction' }] },
+          { role: 'system' as any, parts: [{ text: 'system instruction' }] },
           { role: 'user', parts: [{ text: 'user message' }] },
         ],
         coerced: false,
-      });
+        system_instruction: undefined,
+      } as any);
 
       const response = await provider.callGemini('test prompt');
 
@@ -85,10 +87,16 @@ describe('PalmChatProvider', () => {
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
+        expect.stringContaining(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=',
+        ),
         expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+          }),
           body: expect.stringContaining(
-            '"system_instruction":{"parts":[{"text":"system instruction"}]}',
+            '"contents":[{"role":"system","parts":[{"text":"system instruction"}]},{"role":"user","parts":[{"text":"user message"}]}]',
           ),
         }),
         expect.any(Number),
@@ -122,6 +130,7 @@ describe('PalmChatProvider', () => {
       jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
+        system_instruction: undefined,
       });
 
       await provider.callGemini('test prompt');

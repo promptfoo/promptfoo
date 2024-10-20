@@ -168,7 +168,7 @@ export class PalmChatProvider extends PalmGenericProvider {
         ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
-      ...((system_instruction?.parts?.length ?? 0) > 0 ? { system_instruction } : {}),
+      ...(system_instruction ? { system_instruction } : {}),
     };
 
     if (this.config.responseSchema) {
