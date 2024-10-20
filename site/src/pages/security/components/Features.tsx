@@ -28,8 +28,8 @@ const features = [
     icon: <SecurityIcon className={styles.featureIcon} />,
     title: 'Guided Mitigation',
     description:
-      'Receive actionable recommendations to address vulnerabilities, ensuring compliance with OWASP, NIST, and EU AI standards.',
-    image: '/img/report-with-compliance.png',
+      'Manage issues and receive actionable recommendations to address vulnerabilities, ensuring compliance with OWASP, NIST, and EU AI standards.',
+    image: '/img/remediation.png',
     infoLink: '/mitigation-guide',
     infoLinkText: 'Explore our mitigation strategies',
   },
