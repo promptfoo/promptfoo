@@ -19,7 +19,9 @@ export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promi
   const { parse: parseCsv } = await import('csv-parse/sync');
   const { fetchWithProxy } = await import('./fetch');
 
-  const csvUrl = url.replace(/\/edit.*$/, '/export?format=csv');
+  const gid = new URL(url).searchParams.get('gid');
+  const csvUrl = `${url.replace(/\/edit.*$/, '/export')}?format=csv${gid ? `&gid=${gid}` : ''}`;
+
   const response = await fetchWithProxy(csvUrl);
   if (response.status !== 200) {
     throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
@@ -40,7 +42,18 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
     throw new Error(`Invalid Google Sheets URL: ${url}`);
   }
   const spreadsheetId = match[1];
-  const range = 'A1:ZZZ';
+
+  let range = 'A1:ZZZ';
+  const gid = Number(new URL(url).searchParams.get('gid'));
+  if (gid) {
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
+    const sheetName = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid)
+      ?.properties?.title;
+    if (!sheetName) {
+      throw new Error(`Sheet not found for gid: ${gid}`);
+    }
+    range = `${sheetName}!${range}`;
+  }
   const response = await sheets.spreadsheets.values.get({ spreadsheetId, range, auth });
 
   const rows = response.data.values;

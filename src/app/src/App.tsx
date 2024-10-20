@@ -1,11 +1,15 @@
+import { useEffect } from 'react';
 import {
   createBrowserRouter,
   createRoutesFromElements,
   Navigate,
   Route,
   RouterProvider,
+  useLocation,
+  Outlet,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
+import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
 import EvalPage from './pages/eval/page';
@@ -17,27 +21,39 @@ import RedteamSetupPage from './pages/redteam/setup/page';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
+function TelemetryTracker() {
+  const location = useLocation();
+  const { recordEvent } = useTelemetry();
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { path: location.pathname });
+  }, [location, recordEvent]);
+
+  return <Outlet />;
+}
+
 const router = createBrowserRouter(
-  createRoutesFromElements([
+  createRoutesFromElements(
     <Route path="/" element={<PageShell />}>
-      <Route index element={<Navigate to={'/eval'} replace />} />
-      <Route path="/datasets" element={<DatasetsPage />} />
-      <Route path="/eval" element={<EvalPage />} />
-      <Route path="/eval/:evalId" element={<EvalPage />} />
-      <Route path="/progress" element={<ProgressPage />} />
-      <Route path="/prompts" element={<PromptsPage />} />
-      <Route path="/redteam/setup" element={<RedteamSetupPage />} />
-      <Route path="/report" element={<ReportPage />} />
-      <Route path="/setup" element={<EvalCreatorPage />} />
-      {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
-        <>
+      <Route element={<TelemetryTracker />}>
+        <Route index element={<Navigate to="/eval" replace />} />
+        <Route path="/datasets" element={<DatasetsPage />} />
+        <Route path="/eval" element={<EvalPage />} />
+        <Route path="/eval/:evalId" element={<EvalPage />} />
+        <Route path="/progress" element={<ProgressPage />} />
+        <Route path="/prompts" element={<PromptsPage />} />
+        <Route path="/redteam/setup" element={<RedteamSetupPage />} />
+        <Route path="/report" element={<ReportPage />} />
+        <Route path="/setup" element={<EvalCreatorPage />} />
+        {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
           <Route path="/dashboard" element={<RedteamDashboardPage />} />
-        </>
-      )}
+        )}
+      </Route>
     </Route>,
-  ]),
+  ),
   { basename },
 );
+
 function App() {
   return <RouterProvider router={router} />;
 }
