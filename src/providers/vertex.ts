@@ -193,15 +193,22 @@ export class VertexChatProvider extends VertexGenericProvider {
         },
       },
     );
-    const { contents: updatedContents, coerced }: { contents: GeminiFormat; coerced: boolean } =
-      maybeCoerceToGeminiFormat(contents);
+    const {
+      contents: updatedContents,
+      coerced,
+      system_instruction: parsedSystemInstruction,
+    }: {
+      contents: GeminiFormat;
+      coerced: boolean;
+      system_instruction: Content | undefined;
+    } = maybeCoerceToGeminiFormat(contents);
     if (coerced) {
       logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
       contents = updatedContents;
     }
 
-    let systemInstruction: Content | undefined;
-    if (this.config.systemInstruction) {
+    let systemInstruction: Content | undefined = parsedSystemInstruction;
+    if (this.config.systemInstruction && !systemInstruction) {
       // Make a copy
       systemInstruction = clone(this.config.systemInstruction);
       if (systemInstruction && context?.vars) {
