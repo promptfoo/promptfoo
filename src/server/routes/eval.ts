@@ -96,7 +96,7 @@ evalRouter.post('/:evalId/results/:id/rating', async (req, res) => {
   res.json(result);
 });
 
-evalRouter.post('/api/eval', async (req, res) => {
+evalRouter.post('/', async (req, res) => {
   const body = req.body;
   try {
     if (body.data) {
