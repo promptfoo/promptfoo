@@ -11,6 +11,7 @@ export const TelemetryEventSchema = z.object({
     'eval_ran',
     'feature_used',
     'funnel',
+    'webui_api_event',
     'webui_page_view',
   ]),
   packageVersion: z.string().optional().default(VERSION),
