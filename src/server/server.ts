@@ -11,6 +11,7 @@ import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
+import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION } from '../constants';
 import { getDbSignalPath } from '../database';
@@ -30,6 +31,8 @@ import promptfoo from '../index';
 import logger from '../logger';
 import Eval from '../models/eval';
 import EvalResult from '../models/evalResult';
+import telemetry from '../telemetry';
+import { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
   getPrompts,
@@ -314,6 +317,25 @@ export function createApp() {
   });
 
   app.use('/api/providers', providersRouter);
+
+  app.post('/api/telemetry', async (req, res) => {
+    try {
+      const result = TelemetryEventSchema.safeParse(req.body);
+
+      if (!result.success) {
+        res
+          .status(400)
+          .json({ error: 'Invalid request body', details: fromError(result.error).toString() });
+        return;
+      }
+      const { event, properties } = result.data;
+      await telemetry.recordAndSend(event, properties);
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('Error processing telemetry request:', error);
+      res.status(500).json({ error: 'Failed to process telemetry request' });
+    }
+  });
 
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
