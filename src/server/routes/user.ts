@@ -9,11 +9,10 @@ import { ApiSchemas } from '../apiSchemas';
 
 export const userRouter = Router();
 
-userRouter.get('/email', async (req: Request, res: Response) => {
+userRouter.get('/email', async (req: Request, res: Response): Promise<void> => {
   try {
     const email = getUserEmail();
     res.json(ApiSchemas.User.Get.Response.parse({ email }));
-    await telemetry.recordAndSend('webui_api_event', { event: 'email_get' });
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.error(`Error getting email: ${fromError(error)}`);
@@ -24,7 +23,7 @@ userRouter.get('/email', async (req: Request, res: Response) => {
   }
 });
 
-userRouter.post('/email', async (req: Request, res: Response) => {
+userRouter.post('/email', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = ApiSchemas.User.Update.Request.parse(req.body);
     setUserEmail(email);
