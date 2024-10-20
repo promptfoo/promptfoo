@@ -1,19 +1,46 @@
-import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { Router } from 'express';
 import logger from '../../logger';
+import { ApiSchemas } from '../apiSchemas';
 
 export const redteamRouter = Router();
 
-const CLOUD_FUNCTION_URL =
-  process.env.PROMPTFOO_REMOTE_GENERATION_URL || 'https://api.promptfoo.dev/v1/generate';
+export const sendConfigCopy = async (req: Request, res: Response) => {
+  try {
+    const { email, config } = ApiSchemas.Redteam.Send.Request.parse(req.body);
 
-redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> => {
+    // Mock sending email
+    logger.info(`Sending config to ${email}:`, config);
+
+    // Simulate API delay
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    res.json(
+      ApiSchemas.Redteam.Send.Response.parse({
+        success: true,
+        message: `Configuration sent to ${email}`,
+      }),
+    );
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+redteamRouter.post('/send', sendConfigCopy);
+
+redteamRouter.post('/:task', async (req: Request, res: Response) => {
   const { task } = req.params;
+  const CLOUD_FUNCTION_URL =
+    process.env.PROMPTFOO_REMOTE_GENERATION_URL || 'https://api.promptfoo.dev/v1/generate';
 
   logger.debug(`Received ${task} task request:`, {
     method: req.method,
     url: req.url,
     body: req.body,
+    // headers: req.headers,
   });
 
   try {

@@ -3,7 +3,8 @@
     "outDir": "../../dist/src/app",
     "paths": {
       "@app/*": ["./src/*"],
-      "@promptfoo/*": ["../*"]
+      "@promptfoo/*": ["../*"],
+      "@server/*": ["../server/*"]
     },
     "target": "ES2020",
     "useDefineForClassFields": true,
