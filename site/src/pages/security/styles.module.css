@@ -32,11 +32,7 @@
   font-weight: bold;
   text-align: center;
   text-decoration: none;
-  color: #fff;
-  background-color: var(--primary-color);
-  border: none;
   border-radius: 4px;
-  cursor: pointer;
   transition: background-color 0.3s ease;
 }
 
@@ -53,26 +49,68 @@
 }
 
 .hero {
-  background-color: var(--primary-color);
-  color: #fff;
-  text-align: center;
   padding: 4rem 0;
+  background-color: var(--background-color);
+  color: var(--text-color);
 }
 
 .heroTitle {
-  font-size: 3rem;
+  font-size: 3.5rem;
+  font-weight: bold;
   margin-bottom: 1rem;
+  text-align: center;
 }
 
 .heroSubtitle {
   font-size: 1.5rem;
   margin-bottom: 2rem;
+  text-align: center;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .heroButtons {
   display: flex;
   justify-content: center;
   gap: 1rem;
+  margin-bottom: 3rem;
+}
+
+.buttonPrimary {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
+.buttonPrimary:hover {
+  background-color: #004494;
+  color: #fff;
+  text-decoration: none;
+}
+
+.buttonSecondary {
+  background-color: #f0f0f0;
+  color: var(--text-color);
+}
+
+.buttonSecondary:hover {
+  background-color: #e0e0e0;
+  color: var(--text-color);
+  text-decoration: none;
+}
+
+.heroVideo {
+  max-width: 800px;
+  margin: 0 auto;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.heroVideo iframe {
+  width: 100%;
+  height: 100%;
 }
 
 .featureGrid {
@@ -237,6 +275,10 @@
 .statDescription {
   font-size: 1rem;
   color: #666;
+}
+
+.statInfoIcon {
+  font-size: 0.25rem;
 }
 
 @media (max-width: 768px) {
