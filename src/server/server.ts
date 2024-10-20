@@ -140,9 +140,9 @@ export function createApp() {
     res.json({ results });
   });
 
+  app.use('/api/eval', evalRouter);
   app.use('/api/providers', providersRouter);
   app.use('/api/redteam', redteamRouter);
-  app.use('/api/eval', evalRouter);
 
   app.post('/api/telemetry', async (req, res) => {
     try {
