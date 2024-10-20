@@ -8,19 +8,19 @@ const stats = [
     icon: <AccessTimeIcon className={styles.statIcon} />,
     number: '678+',
     title: 'Hours Saved',
-    description: 'On average, compared to manual red teaming',
+    description: 'On average compared to manual red teaming',
   },
   {
     icon: <BugReportIcon className={styles.statIcon} />,
     number: '82%',
-    title: 'Undetected by Guardrails',
-    description: 'Of findings were not caught by standard protections',
+    title: 'Unique findings',
+    description: 'Not caught by guardrails',
   },
   {
     icon: <BugReportIcon className={styles.statIcon} />,
     number: '37',
     title: 'Issues Found',
-    description: 'On average per security assessment',
+    description: 'On average on the first scan',
   },
 ];
 

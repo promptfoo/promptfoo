@@ -277,7 +277,7 @@
 
 .featuresTimeline {
   position: relative;
-  max-width: 800px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 2rem 0;
 }
@@ -295,18 +295,18 @@
 
 .featureItem {
   display: flex;
-  justify-content: flex-end;
-  padding-right: 30px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6rem;
   position: relative;
-  margin-bottom: 4rem;
-  width: 50%;
 }
 
-.featureItem:nth-child(even) {
-  align-self: flex-end;
-  justify-content: flex-start;
-  padding-left: 30px;
-  padding-right: 0;
+.featureLeft {
+  flex-direction: row;
+}
+
+.featureRight {
+  flex-direction: row-reverse;
 }
 
 .featureIconWrapper {
@@ -319,14 +319,10 @@
   align-items: center;
   justify-content: center;
   color: white;
-  right: -30px;
+  left: 50%;
   top: 0;
+  transform: translateX(-50%);
   z-index: 2;
-}
-
-.featureItem:nth-child(even) .featureIconWrapper {
-  left: -30px;
-  right: auto;
 }
 
 .featureIcon {
@@ -334,11 +330,11 @@
 }
 
 .featureContent {
+  width: 45%;
   background-color: white;
   padding: 2rem;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  width: calc(100% - 30px);
   transition:
     transform 0.3s ease,
     box-shadow 0.3s ease;
@@ -347,6 +343,16 @@
 .featureContent:hover {
   transform: translateY(-5px);
   box-shadow: 0 6px 30px rgba(0, 0, 0, 0.15);
+}
+
+.featureImageWrapper {
+  width: 45%;
+}
+
+.featureImage {
+  width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
 .featureItem h3 {
@@ -362,33 +368,32 @@
 
 @media (max-width: 768px) {
   .featuresTimeline::before {
-    left: 30px;
+    left: 0;
   }
 
   .featureItem {
-    width: 100%;
-    padding-left: 80px;
-    padding-right: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    padding-left: 60px;
   }
 
-  .featureItem:nth-child(even) {
-    align-self: auto;
-    justify-content: flex-start;
-    padding-left: 80px;
-    padding-right: 0;
+  .featureLeft,
+  .featureRight {
+    flex-direction: column;
   }
 
   .featureIconWrapper {
     left: 0;
-    right: auto;
+    transform: none;
   }
 
-  .featureItem:nth-child(even) .featureIconWrapper {
-    left: 0;
-  }
-
-  .featureContent {
+  .featureContent,
+  .featureImageWrapper {
     width: 100%;
+  }
+
+  .featureImageWrapper {
+    margin-top: 2rem;
   }
 }
 
