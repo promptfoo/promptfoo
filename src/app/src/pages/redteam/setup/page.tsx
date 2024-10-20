@@ -1,6 +1,5 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import CrispChat from '@app/components/CrispChat';
-import { useTelemetry } from '@app/hooks/useTelemetry';
 import CloseIcon from '@mui/icons-material/Close';
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
@@ -121,43 +120,26 @@ export default function GeneratePage() {
   const [yamlPreviewOpen, setYamlPreviewOpen] = useState(false);
   const [setupModalOpen, setSetupModalOpen] = useState(true);
   const { config } = useRedTeamConfig();
-  const { recordEvent } = useTelemetry();
 
-  const handleNext = useCallback(() => {
+  const handleNext = () => {
     setValue((prevValue) => prevValue + 1);
-  }, []);
+  };
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     setValue((prevValue) => prevValue - 1);
-  }, []);
+  };
 
-  const handleChange = useCallback(
-    (event: React.SyntheticEvent, newValue: number) => {
-      setValue(newValue);
+  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+    setValue(newValue);
+  };
 
-      const tabNames = ['Targets', 'Application', 'Plugins', 'Strategies', 'Review'];
-      recordEvent('webui_redteam_setup_tab_click', {
-        path: '/redteam/setup',
-        tab: tabNames[newValue],
-      });
-    },
-    [recordEvent],
-  );
+  const toggleYamlPreview = () => {
+    setYamlPreviewOpen(!yamlPreviewOpen);
+  };
 
-  const toggleYamlPreview = useCallback(() => {
-    setYamlPreviewOpen((prev) => !prev);
-    recordEvent('redteam_setup_yaml_preview_toggle', {
-      path: '/redteam/setup',
-      isOpen: !yamlPreviewOpen,
-    });
-  }, [yamlPreviewOpen, recordEvent]);
-
-  const closeSetupModal = useCallback(() => {
+  const closeSetupModal = () => {
     setSetupModalOpen(false);
-    recordEvent('redteam_setup_modal_close', {
-      path: '/redteam/setup',
-    });
-  }, [recordEvent]);
+  };
 
   return (
     <Root>
