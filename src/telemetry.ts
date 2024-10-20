@@ -1,21 +1,24 @@
-import packageJson from '../package.json';
+import { z } from 'zod';
+import { VERSION } from './constants';
 import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
 import logger from './logger';
 
-export type EventValue = string | number | boolean | string[];
-type TelemetryEvent = {
-  event: string;
-  packageVersion: string;
-  properties: Record<string, EventValue>;
-};
-
-type TelemetryEventTypes =
-  | 'eval_ran'
-  | 'assertion_used'
-  | 'command_used'
-  | 'funnel'
-  | 'feature_used';
+export const TelemetryEventSchema = z.object({
+  event: z.enum([
+    'assertion_used',
+    'command_used',
+    'eval_ran',
+    'feature_used',
+    'funnel',
+    'webui_page_view',
+  ]),
+  packageVersion: z.string().optional().default(VERSION),
+  properties: z.record(z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
+});
+export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
+export type TelemetryEventTypes = TelemetryEvent['event'];
+export type EventProperties = TelemetryEvent['properties'];
 
 const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
@@ -34,54 +37,54 @@ export class Telemetry {
     if (!this.telemetryDisabledRecorded) {
       this.events.push({
         event: 'feature_used',
-        packageVersion: packageJson.version,
+        packageVersion: VERSION,
         properties: { feature: 'telemetry disabled' },
       });
       this.telemetryDisabledRecorded = true;
     }
   }
 
-  record(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {
+  record(eventName: TelemetryEventTypes, properties: EventProperties): void {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
-      this.events.push({
+      const event: TelemetryEvent = {
         event: eventName,
-        packageVersion: packageJson.version,
+        packageVersion: VERSION,
         properties,
-      });
+      };
+
+      const result = TelemetryEventSchema.safeParse(event);
+      if (result.success) {
+        this.events.push(result.data);
+      } else {
+        logger.warn(`Invalid telemetry event: ${result.error}`);
+      }
     }
   }
 
   private recordedEvents: Set<string> = new Set();
 
-  recordOnce(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {
+  recordOnce(eventName: TelemetryEventTypes, properties: EventProperties): void {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
       const eventKey = JSON.stringify({ eventName, properties });
       if (!this.recordedEvents.has(eventKey)) {
-        this.events.push({
-          event: eventName,
-          packageVersion: packageJson.version,
-          properties,
-        });
+        this.record(eventName, properties);
         this.recordedEvents.add(eventKey);
       }
     }
   }
 
-  async recordAndSend(
-    eventName: TelemetryEventTypes,
-    properties: Record<string, EventValue>,
-  ): Promise<void> {
+  async recordAndSend(eventName: TelemetryEventTypes, properties: EventProperties): Promise<void> {
     this.record(eventName, properties);
     await this.send();
   }
 
   async recordAndSendOnce(
     eventName: TelemetryEventTypes,
-    properties: Record<string, EventValue>,
+    properties: EventProperties,
   ): Promise<void> {
     if (this.disabled) {
       this.recordTelemetryDisabled();

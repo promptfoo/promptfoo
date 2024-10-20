@@ -14,7 +14,7 @@ import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
-import telemetry, { type EventValue } from '../../telemetry';
+import telemetry, { type EventProperties } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
@@ -124,7 +124,7 @@ def call_api(prompt, options, context):
     }
 `;
 
-function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+function recordOnboardingStep(step: string, properties: EventProperties = {}) {
   telemetry.recordAndSend('funnel', {
     type: 'redteam onboarding',
     step,
