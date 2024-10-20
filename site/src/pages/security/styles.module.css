@@ -21,7 +21,7 @@
 .sectionTitle {
   font-size: 2.5rem;
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 6rem;
   color: var(--primary-color);
 }
 
@@ -287,11 +287,8 @@
   }
 }
 
-/* Add or update these styles in your existing CSS file */
-
 .featuresSection {
-  background-color: #f8f9fa;
-  padding: 6rem 0;
+  padding: 4rem 0;
   position: relative;
   overflow: hidden;
 }
@@ -303,7 +300,6 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(0, 86, 179, 0.05) 0%, rgba(23, 162, 184, 0.05) 100%);
   z-index: 0;
 }
 
@@ -429,8 +425,6 @@
 .logoSection {
   background-color: #f8f9fa;
   padding: 2rem 0;
-  border-top: 1px solid #e9ecef;
-  border-bottom: 1px solid #e9ecef;
 }
 
 .logoIntro {

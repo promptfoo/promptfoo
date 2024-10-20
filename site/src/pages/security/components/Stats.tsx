@@ -33,7 +33,7 @@ export default function Stats(): JSX.Element {
     <section className={`${styles.section} ${styles.statsSection}`}>
       <div className={styles.container}>
         <h2 className={styles.sectionTitle}>
-          Detect LLM vulnerabilities <em>before</em> deployment
+          Find and fix LLM vulnerabilities <em>before</em> deployment
         </h2>
         <div className={styles.statsGrid}>
           {stats.map((stat, index) => (
