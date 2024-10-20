@@ -175,6 +175,7 @@ describe('maybeCoerceToGeminiFormat', () => {
     expect(result).toEqual({
       contents: input,
       coerced: false,
+      systemInstruction: undefined,
     });
   });
 
@@ -202,6 +203,7 @@ describe('maybeCoerceToGeminiFormat', () => {
     expect(result).toEqual({
       contents: expected,
       coerced: true,
+      systemInstruction: undefined,
     });
   });
 
@@ -216,6 +218,27 @@ describe('maybeCoerceToGeminiFormat', () => {
     expect(result).toEqual({
       contents: expected,
       coerced: true,
+      systemInstruction: undefined,
+    });
+  });
+
+  it('should handle system messages and create systemInstruction', () => {
+    const input = [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Hello!' },
+    ];
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+    expect(result).toEqual({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: 'Hello!' }],
+        },
+      ],
+      coerced: true,
+      systemInstruction: {
+        parts: [{ text: 'You are a helpful assistant.' }],
+      },
     });
   });
 
@@ -226,6 +249,7 @@ describe('maybeCoerceToGeminiFormat', () => {
     expect(result).toEqual({
       contents: input,
       coerced: false,
+      systemInstruction: undefined,
     });
     expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini: ${JSON.stringify(input)}`);
   });
