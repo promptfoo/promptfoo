@@ -104,6 +104,8 @@ export async function doEval(
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
+    logger.info(`grader2: ${testSuite?.defaultTest?.options?.provider}`);
+
     let maxConcurrency = cmdObj.maxConcurrency;
     const delay = cmdObj.delay ?? 0;
 
@@ -134,9 +136,12 @@ export async function doEval(
     };
 
     if (cmdObj.grader) {
+      logger.warn(`grader: ${cmdObj.grader}`);
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
+      logger.info(`grader: ${testSuite.defaultTest.options.provider}`);
+      delete cmdObj.grader;
     }
     if (cmdObj.var) {
       testSuite.defaultTest = testSuite.defaultTest || {};
@@ -167,6 +172,8 @@ export async function doEval(
       Please review your promptfooconfig.yaml configuration.`),
       );
     }
+
+    logger.warn(`grader3: ${testSuite?.defaultTest?.options?.provider}`);
 
     const evalRecord = cmdObj.write
       ? await Eval.create(config, testSuite.prompts)

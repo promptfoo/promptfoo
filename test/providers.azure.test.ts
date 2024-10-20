@@ -74,7 +74,9 @@ describe('maybeEmitAzureOpenAiWarning', () => {
   it('should not emit warning when Azure providers are used with a default provider set', () => {
     const testSuite: TestSuite = {
       providers: [new AzureOpenAiCompletionProvider('foo')],
-      defaultTest: { options: { provider: 'azureopenai:....' } },
+      defaultTest: {
+        options: { provider: { id: () => 'azureopenai:....', callApi: () => Promise.resolve({}) } },
+      },
       prompts: [],
     };
     const tests: TestCase[] = [

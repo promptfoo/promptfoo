@@ -3,13 +3,13 @@ import invariant from 'tiny-invariant';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import type {
-  ApiProvider,
-  Assertion,
-  AssertionValue,
-  PluginConfig,
-  ResultSuggestion,
-  TestCase,
+import {
+  type ApiProvider,
+  type Assertion,
+  type AssertionValue,
+  type PluginConfig,
+  type ResultSuggestion,
+  type TestCase,
 } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';

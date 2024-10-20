@@ -1,4 +1,5 @@
 import type winston from 'winston';
+import { z } from 'zod';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
@@ -7,9 +8,10 @@ export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
-export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
+export const ProviderTypeSchema = z.enum(['embedding', 'classification', 'text', 'moderation']);
+export type ProviderType = z.infer<typeof ProviderTypeSchema>;
 
-export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
+export type ProviderTypeMap = Partial<Record<ProviderType, ApiProvider>>;
 
 export interface ProviderModerationResponse {
   error?: string;

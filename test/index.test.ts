@@ -4,6 +4,7 @@ import * as index from '../src/index';
 import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts';
+import type { EvaluateTestSuite } from '../src/types';
 import { writeOutput, writeMultipleOutputs } from '../src/util';
 
 jest.mock('../src/cache');
@@ -160,7 +161,7 @@ describe('evaluate function', () => {
   });
 
   it('should process different types of prompts correctly', async () => {
-    const testSuite = {
+    const testSuite: EvaluateTestSuite = {
       prompts: [
         'string prompt',
         { raw: 'object prompt' },
@@ -185,10 +186,19 @@ describe('evaluate function', () => {
   });
 
   it('should resolve nested providers', async () => {
-    const testSuite = {
-      prompts: ['test prompt'],
+    const testSuite: EvaluateTestSuite = {
+      prompts: [],
       providers: [],
-      tests: [{ options: { provider: 'test-provider' } }],
+      tests: [
+        {
+          options: {
+            provider: {
+              id: () => 'test-provider',
+              callApi: async () => ({ text: 'test response', raw: 'test response' }),
+            },
+          },
+        },
+      ],
     };
     await evaluate(testSuite);
     expect(doEvaluate).toHaveBeenCalledWith(
@@ -214,7 +224,7 @@ describe('evaluate function', () => {
   it('should write results to database when writeLatestResults is true', async () => {
     const createEvalSpy = jest.spyOn(Eval, 'create');
 
-    const testSuite = {
+    const testSuite: EvaluateTestSuite = {
       prompts: ['test'],
       providers: [],
       writeLatestResults: true,
@@ -228,7 +238,7 @@ describe('evaluate function', () => {
   });
 
   it('should write output to file when outputPath is set', async () => {
-    const testSuite = {
+    const testSuite: EvaluateTestSuite = {
       prompts: ['test'],
       providers: [],
       outputPath: 'test.json',
@@ -238,7 +248,7 @@ describe('evaluate function', () => {
   });
 
   it('should write multiple outputs when outputPath is an array', async () => {
-    const testSuite = {
+    const testSuite: EvaluateTestSuite = {
       prompts: ['test'],
       providers: [],
       outputPath: ['test1.json', 'test2.json'],

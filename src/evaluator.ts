@@ -141,6 +141,8 @@ class Evaluator {
     // Use the original prompt to set the label, not renderedPrompt
     const promptLabel = prompt.label;
 
+    logger.error(`test: ${JSON.stringify(test, null, 2)}`);
+
     // Set up the special _conversation variable
     const vars = test.vars || {};
     const conversationKey = `${provider.label || provider.id()}:${prompt.id}`;

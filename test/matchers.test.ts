@@ -159,7 +159,9 @@ describe('matchesSimilarity', () => {
     const threshold = 0.5;
     const grading: GradingConfig = {
       provider: {
-        id: 'openai:embedding:text-embedding-ada-9999999',
+        id: () => 'openai:embedding:text-embedding-ada-9999999',
+        callEmbeddingApi: () => Promise.resolve({ embedding: [] }),
+        callApi: () => Promise.resolve({}),
         config: {
           apiKey: 'abc123',
           temperature: 3.1415926,
@@ -199,7 +201,9 @@ describe('matchesSimilarity', () => {
     const threshold = 0.5;
     const grading: GradingConfig = {
       provider: {
-        id: 'openai:embedding:text-embedding-ada-9999999',
+        id: () => 'openai:embedding:text-embedding-ada-9999999',
+        callEmbeddingApi: () => Promise.reject(new Error('API call failed')),
+        callApi: () => Promise.resolve({}),
         config: {
           apiKey: 'abc123',
           temperature: 3.1415926,
@@ -302,7 +306,8 @@ describe('matchesLlmRubric', () => {
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
       provider: {
-        id: 'openai:gpt-4o-mini',
+        id: () => 'openai:gpt-4o-mini',
+        callApi: () => Promise.resolve({}),
         config: {
           apiKey: 'abc123',
           temperature: 3.1415926,
@@ -715,7 +720,7 @@ describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {
     const provider = await getGradingProvider(
       'text',
-      'openai:chat:gpt-4o-mini-foobar',
+      { id: () => 'openai:chat:gpt-4o-mini-foobar', callApi: () => Promise.resolve({}) },
       DefaultGradingProvider,
     );
     // ok for this not to match exactly when the string is parsed
@@ -733,7 +738,8 @@ describe('getGradingProvider', () => {
 
   it('should return the correct provider when provider is ProviderOptions', async () => {
     const providerOptions = {
-      id: 'openai:chat:gpt-4o-mini-foobar',
+      id: () => 'openai:chat:gpt-4o-mini-foobar',
+      callApi: () => Promise.resolve({}),
       config: {
         apiKey: 'abc123',
         temperature: 3.1415926,
@@ -787,7 +793,11 @@ describe('getAndCheckProvider', () => {
   });
 
   it('should return a specific provider when a provider id is specified', async () => {
-    const provider = await getGradingProvider('text', 'openai:chat:foo', DefaultGradingProvider);
+    const provider = await getGradingProvider(
+      'text',
+      { id: () => 'openai:chat:foo', callApi: () => Promise.resolve({}) },
+      DefaultGradingProvider,
+    );
     // loadApiProvider removes `chat` from the id
     expect(provider?.id()).toBe('openai:foo');
   });
@@ -804,10 +814,13 @@ describe('getAndCheckProvider', () => {
   it('should return a provider from ProviderTypeMap when specified', async () => {
     const providerTypeMap: ProviderTypeMap = {
       text: {
-        id: 'openai:chat:foo',
+        id: () => 'openai:chat:foo',
+        callApi: () => Promise.resolve({}),
       },
       embedding: {
-        id: 'openai:embedding:bar',
+        id: () => 'openai:embedding:bar',
+        callEmbeddingApi: () => Promise.resolve({ embedding: [] }),
+        callApi: () => Promise.resolve({}),
       },
     };
     const provider = await getGradingProvider('text', providerTypeMap, DefaultGradingProvider);
@@ -816,8 +829,12 @@ describe('getAndCheckProvider', () => {
 
   it('should return a provider from ProviderTypeMap with basic strings', async () => {
     const providerTypeMap: ProviderTypeMap = {
-      text: 'openai:chat:foo',
-      embedding: 'openai:embedding:bar',
+      text: { id: () => 'openai:chat:foo', callApi: () => Promise.resolve({}) },
+      embedding: {
+        id: () => 'openai:embedding:bar',
+        callEmbeddingApi: () => Promise.resolve({ embedding: [] }),
+        callApi: () => Promise.resolve({}),
+      },
     };
     const provider = await getGradingProvider('text', providerTypeMap, DefaultGradingProvider);
     expect(provider?.id()).toBe('openai:foo');
@@ -826,7 +843,9 @@ describe('getAndCheckProvider', () => {
   it('should throw an error when the provider does not match the type', async () => {
     const providerTypeMap: ProviderTypeMap = {
       embedding: {
-        id: 'openai:embedding:foo',
+        id: () => 'openai:embedding:foo',
+        callEmbeddingApi: () => Promise.resolve({ embedding: [] }),
+        callApi: () => Promise.resolve({}),
       },
     };
     await expect(
@@ -1015,7 +1034,9 @@ describe('matchesClassification', () => {
 
     const grading: GradingConfig = {
       provider: {
-        id: 'hf:text-classification:foobar',
+        id: () => 'hf:text-classification:foobar',
+        callClassificationApi: () => Promise.resolve({}),
+        callApi: () => Promise.resolve({}),
       },
     };
 

@@ -1,5 +1,4 @@
 import cliState from '../../../src/cliState';
-import { loadApiProviders } from '../../../src/providers';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
 import {
   ATTACKER_MODEL,
@@ -53,21 +52,6 @@ describe('loadRedteamProvider', () => {
     const mockApiProvider = { id: jest.fn(), callApi: jest.fn() };
     const result = await loadRedteamProvider({ provider: mockApiProvider });
     expect(result).toBe(mockApiProvider);
-  });
-
-  it('should load provider from string', async () => {
-    jest.mocked(loadApiProviders).mockResolvedValue([mockLoadedProvider]);
-    const result = await loadRedteamProvider({ provider: 'test-provider' });
-    expect(result).toBe(mockLoadedProvider);
-    expect(loadApiProviders).toHaveBeenCalledWith(['test-provider']);
-  });
-
-  it('should load provider from ProviderOptions', async () => {
-    const providerOptions = { id: 'test-provider', apiKey: 'test-key' };
-    jest.mocked(loadApiProviders).mockResolvedValue([mockLoadedProvider]);
-    const result = await loadRedteamProvider({ provider: providerOptions });
-    expect(result).toBe(mockLoadedProvider);
-    expect(loadApiProviders).toHaveBeenCalledWith([providerOptions]);
   });
 
   it('should use default provider when no provider is specified', async () => {

@@ -1,4 +1,4 @@
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { ApiProvider } from '../types/providers';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
@@ -27,7 +27,8 @@ type CommonOptions = {
   language?: string;
   numTests?: number;
   plugins?: RedteamPluginObject[];
-  provider?: string | ProviderOptions | ApiProvider;
+  // TODO: re-add string | ProviderOptions |  if used in cli
+  provider?: ApiProvider;
   purpose?: string;
   strategies?: RedteamStrategy[];
   delay?: number;

@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import { loadApiProvider } from '../providers';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
@@ -18,6 +19,7 @@ import {
 } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
 import { ProviderSchema } from '../validators/providers';
+import { ApiProvider } from '../providers'; // Make sure to import this type
 
 /**
  * Schema for individual redteam plugins
@@ -96,7 +98,24 @@ export const RedteamGenerateOptionsSchema = z.object({
   numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
-  provider: z.string().optional().describe('Provider to use'),
+  provider: z
+    .string()
+    .optional()
+    .describe('Provider to use')
+    .transform(async (providerString, ctx) => {
+      if (!providerString) {
+        return undefined;
+      }
+      try {
+        return await loadApiProvider(providerString);
+      } catch (error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Failed to load provider: ${error instanceof Error ? error.message : error}`,
+        });
+        return z.NEVER;
+      }
+    }),
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
@@ -118,9 +137,33 @@ export const RedteamConfigSchema = z
       .optional()
       .describe('Purpose override string - describes the prompt templates'),
     provider: z
-      .lazy(() => ProviderSchema)
+      .union([
+        z.string(),
+        z.object({
+          id: z.string(),
+          config: z.record(z.unknown()).optional(),
+        }),
+      ])
       .optional()
-      .describe('Provider used for generating adversarial inputs'),
+      .describe('Provider used for generating adversarial inputs')
+      .transform(async (providerInput, ctx) => {
+        if (!providerInput) {
+          return undefined;
+        }
+        try {
+          const provider = await loadApiProvider(
+            typeof providerInput === 'string' ? providerInput : providerInput.id,
+            typeof providerInput === 'object' ? providerInput.config : undefined
+          );
+          return provider as ApiProvider;
+        } catch (error) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Failed to load provider: ${error instanceof Error ? error.message : String(error)}`,
+          });
+          return z.NEVER;
+        }
+      }),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
     language: z.string().optional().describe('Language of tests ot generate for this plugin'),
     plugins: z
@@ -151,15 +194,15 @@ export const RedteamConfigSchema = z
       .optional()
       .describe('Delay in milliseconds between plugin API calls'),
   })
-  .transform((data): RedteamFileConfig => {
+  .transform(async (data) => {
     const pluginMap = new Map<string, RedteamPluginObject>();
     const strategySet = new Set<Strategy>();
 
     const addPlugin = (id: string, config: any, numTests: number | undefined) => {
       const key = `${id}:${JSON.stringify(config)}`;
       const pluginObject: RedteamPluginObject = { id };
-      if (numTests !== undefined || data.numTests !== undefined) {
-        pluginObject.numTests = numTests ?? data.numTests;
+      if (numTests !== undefined) {
+        pluginObject.numTests = numTests;
       }
       if (config !== undefined) {
         pluginObject.config = config;
@@ -191,7 +234,7 @@ export const RedteamConfigSchema = z
       }
     };
 
-    const handlePlugin = (plugin: string | RedteamPluginObject) => {
+    const handlePlugin = (plugin: z.infer<typeof RedteamPluginSchema>) => {
       const pluginObj =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined }
@@ -259,16 +302,28 @@ export const RedteamConfigSchema = z
       .map((id) => ({ id }))
       .sort((a, b) => a.id.localeCompare(b.id));
 
+    let provider: ApiProvider | undefined;
+    if (data.provider) {
+      try {
+        provider = await loadApiProvider(
+          typeof data.provider === 'string' ? data.provider : data.provider.id,
+          typeof data.provider === 'object' ? data.provider.config : undefined
+        );
+      } catch (error) {
+        throw new Error(`Failed to load provider: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
     return {
       numTests: data.numTests,
       plugins: uniquePlugins,
       strategies,
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.language ? { language: data.language } : {}),
-      ...(data.provider ? { provider: data.provider } : {}),
+      ...(provider ? { provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
       ...(data.delay ? { delay: data.delay } : {}),
-    };
+    } as RedteamFileConfig;
   });
 
 // Ensure that schemas match their corresponding types

@@ -8,7 +8,7 @@ export async function loadRedteamProvider({
   jsonOnly = false,
   preferSmallModel = false,
 }: {
-  provider?: RedteamFileConfig['provider'];
+  provider?: RedteamFileConfig['provider'] | string | undefined;
   jsonOnly?: boolean;
   preferSmallModel?: boolean;
 } = {}) {

@@ -12,7 +12,12 @@ import {
 } from '../validators/providers';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
-import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
+import {
+  ProviderTypeSchema,
+  type ApiProvider,
+  type ProviderOptions,
+  type ProviderResponse,
+} from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
 export * from './prompts';
@@ -83,7 +88,7 @@ const GradingConfigSchema = z.object({
     ])
     .optional(),
   provider: z
-    .union([z.string(), z.any(), z.record(z.string(), z.union([z.string(), z.any()])).optional()])
+    .union([z.record(ProviderTypeSchema, ApiProviderSchema).optional(), ApiProviderSchema])
     .optional(),
   factuality: z
     .object({
@@ -407,7 +412,9 @@ export const AssertionSchema = z.object({
   weight: z.number().optional(),
 
   // Some assertions (similarity, llm-rubric) require an LLM provider
-  provider: z.custom<GradingConfig['provider']>().optional(),
+  provider: z
+    .union([z.record(ProviderTypeSchema, ApiProviderSchema).optional(), ApiProviderSchema])
+    .optional(),
 
   // Override the grading rubric
   rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),

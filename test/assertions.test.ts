@@ -443,7 +443,10 @@ describe('runAssertions', () => {
       assert: [
         {
           type: 'moderation',
-          provider: 'replicate:moderation:foo/bar',
+          provider: {
+            id: () => 'replicate:moderation:foo/bar',
+            callApi: () => Promise.resolve({}),
+          },
         },
         {
           type: 'llm-rubric',

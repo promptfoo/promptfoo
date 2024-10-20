@@ -9,6 +9,7 @@ import {
   type Prompt,
   type NunjucksFilterMap,
   type RedteamFileConfig,
+  isApiProvider,
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -178,7 +179,7 @@ async function runRedteamConversation({
 }
 
 class RedteamIterativeProvider implements ApiProvider {
-  private readonly redteamProvider: RedteamFileConfig['provider'];
+  private readonly redteamProvider: RedteamFileConfig['provider'] | string | undefined;
   private readonly injectVar: string;
 
   constructor(readonly config: Record<string, string | object>) {
@@ -193,7 +194,9 @@ class RedteamIterativeProvider implements ApiProvider {
         jsonOnly: true,
         preferSmallModel: false,
       });
-    } else {
+    } else if (typeof config.redteamProvider === 'string') {
+      this.redteamProvider = config.redteamProvider;
+    } else if (isApiProvider(config.redteamProvider)) {
       this.redteamProvider = config.redteamProvider;
     }
   }
