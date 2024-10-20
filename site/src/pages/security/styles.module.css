@@ -261,7 +261,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(0, 86, 179, 0.1) 0%, rgba(23, 162, 184, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(0, 86, 179, 0.05) 0%, rgba(23, 162, 184, 0.05) 100%);
   z-index: 0;
 }
 
@@ -288,7 +288,7 @@
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 4px;
+  width: 2px;
   background-color: var(--primary-color);
   transform: translateX(-50%);
 }
@@ -320,8 +320,8 @@
   justify-content: center;
   color: white;
   left: 50%;
-  top: 0;
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 2;
 }
 
@@ -331,18 +331,7 @@
 
 .featureContent {
   width: 45%;
-  background-color: white;
   padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  transition:
-    transform 0.3s ease,
-    box-shadow 0.3s ease;
-}
-
-.featureContent:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.15);
 }
 
 .featureImageWrapper {
@@ -353,28 +342,23 @@
   width: 100%;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
 }
 
-.featureItem h3 {
-  font-size: 1.5rem;
-  color: var(--primary-color);
-  margin-bottom: 1rem;
-}
-
-.featureItem p {
-  font-size: 1rem;
-  color: var(--text-color);
+.featureImage:hover {
+  transform: translateY(-5px);
 }
 
 @media (max-width: 768px) {
   .featuresTimeline::before {
-    left: 0;
+    left: 30px;
   }
 
   .featureItem {
     flex-direction: column;
     align-items: flex-start;
     padding-left: 60px;
+    margin-bottom: 4rem;
   }
 
   .featureLeft,
@@ -383,8 +367,9 @@
   }
 
   .featureIconWrapper {
-    left: 0;
-    transform: none;
+    left: 30px;
+    top: 0;
+    transform: translateY(-50%);
   }
 
   .featureContent,
@@ -440,4 +425,44 @@
   .logoItem {
     height: 30px;
   }
+}
+
+.faqSection {
+  background-color: #f8f9fa;
+  padding: 4rem 0;
+}
+
+.faqList {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.faqItem {
+  background-color: #fff;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.faqQuestion {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  cursor: pointer;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+.faqIcon {
+  transition: transform 0.3s ease;
+}
+
+.faqItem[open] .faqIcon {
+  transform: rotate(180deg);
+}
+
+.faqAnswer {
+  padding: 0 1rem 1rem;
+  color: var(--text-color);
 }

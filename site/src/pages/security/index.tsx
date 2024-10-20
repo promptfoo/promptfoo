@@ -1,6 +1,7 @@
 import React from 'react';
 import Layout from '@theme/Layout';
 import CallToAction from './components/CallToAction';
+import FAQ from './components/FAQ';
 import Features from './components/Features';
 import Hero from './components/Hero';
 import LogoSection from './components/LogoSection';
@@ -22,6 +23,7 @@ export default function SecurityLandingPage(): JSX.Element {
         <Features />
         <WhyPromptfoo />
         <Testimonials />
+        <FAQ />
         <CallToAction />
       </main>
     </Layout>

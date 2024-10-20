@@ -28,10 +28,14 @@ export default function Stats(): JSX.Element {
   return (
     <section className={`${styles.section} ${styles.statsSection}`}>
       <div className={styles.container}>
-        <h2 className={styles.sectionTitle}>Benefits</h2>
+        <h2 className={styles.sectionTitle}>
+          Detect LLM vulnerabilities <em>before</em> deployment
+        </h2>
+        {/*
         <p className={styles.statsSummary}>
           Uncover vulnerabilities in your LLM systems <em>before</em> deployment
         </p>
+        */}
         <div className={styles.statsGrid}>
           {stats.map((stat, index) => (
             <div key={index} className={styles.statItem}>
