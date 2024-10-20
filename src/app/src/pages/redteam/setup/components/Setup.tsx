@@ -28,8 +28,14 @@ export default function Setup({ open, onClose }: SetupProps) {
       aria-describedby="setup-dialog-description"
       maxWidth="md"
       fullWidth
+      PaperProps={{
+        sx: {
+          backgroundColor: theme.palette.background.paper,
+          color: theme.palette.text.primary,
+        },
+      }}
     >
-      <DialogTitle id="setup-dialog-title">
+      <DialogTitle id="setup-dialog-title" sx={{ color: theme.palette.text.primary }}>
         LLM Red Team Configuration Setup
         <IconButton
           onClick={onClose}
@@ -37,13 +43,14 @@ export default function Setup({ open, onClose }: SetupProps) {
             position: 'absolute',
             right: theme.spacing(1),
             top: theme.spacing(1),
+            color: theme.palette.text.secondary,
           }}
         >
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-      <DialogContent dividers>
-        <Typography variant="body1">
+      <DialogContent dividers sx={{ color: theme.palette.text.primary }}>
+        <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>
           You are about to set up several components that define how your AI system will be tested:
         </Typography>
         <ul>
@@ -77,7 +84,13 @@ export default function Setup({ open, onClose }: SetupProps) {
               href="https://www.promptfoo.dev/docs/red-team/"
               target="_blank"
               rel="noopener noreferrer"
-              sx={{ textDecoration: 'none', color: theme.palette.primary.main }}
+              sx={{ 
+                textDecoration: 'none', 
+                color: theme.palette.primary.main,
+                '&:hover': {
+                  color: theme.palette.primary.light,
+                },
+              }}
             >
               Learn more about LLM red teaming
             </Link>
@@ -87,7 +100,10 @@ export default function Setup({ open, onClose }: SetupProps) {
               onClick={onClose}
               sx={{
                 backgroundColor: theme.palette.primary.main,
-                '&:hover': { backgroundColor: theme.palette.primary.dark },
+                color: theme.palette.primary.contrastText,
+                '&:hover': { 
+                  backgroundColor: theme.palette.primary.dark,
+                },
                 px: 4,
                 py: 1,
               }}

@@ -7,7 +7,7 @@ import IconButton from '@mui/material/IconButton';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
-import { styled } from '@mui/material/styles';
+import { styled, useTheme } from '@mui/material/styles';
 import Plugins from './components/Plugins';
 import Prompts from './components/Prompts';
 import Review from './components/Review';
@@ -26,6 +26,7 @@ const StyledTabs = styled(Tabs)(({ theme }) => ({
   },
   width: '240px',
   minWidth: '240px',
+  backgroundColor: theme.palette.background.paper,
 }));
 
 const StyledTab = styled(Tab)(({ theme }) => ({
@@ -33,15 +34,19 @@ const StyledTab = styled(Tab)(({ theme }) => ({
   textAlign: 'left',
   '&.Mui-selected': {
     backgroundColor: theme.palette.action.selected,
+    color: theme.palette.text.primary,
   },
   maxWidth: 'none',
   width: '100%',
   padding: theme.spacing(2),
+  color: theme.palette.text.secondary,
 }));
 
 const TabPanel = styled(Box)(({ theme }) => ({
   flexGrow: 1,
   padding: theme.spacing(3),
+  backgroundColor: theme.palette.background.default,
+  color: theme.palette.text.primary,
 }));
 
 interface TabPanelProps {
@@ -76,6 +81,7 @@ function a11yProps(index: number) {
 const Root = styled(Box)(({ theme }) => ({
   display: 'flex',
   backgroundColor: theme.palette.background.default,
+  color: theme.palette.text.primary,
   position: 'relative',
 }));
 
@@ -86,6 +92,7 @@ const Content = styled(Box)(({ theme }) => ({
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
   }),
+  backgroundColor: theme.palette.background.default,
 }));
 
 const TabContent = styled(Box)(({ theme }) => ({
@@ -97,6 +104,7 @@ const TabContent = styled(Box)(({ theme }) => ({
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
   }),
+  backgroundColor: theme.palette.background.paper,
 }));
 
 const DrawerHeader = styled(Box)(({ theme }) => ({
@@ -105,6 +113,8 @@ const DrawerHeader = styled(Box)(({ theme }) => ({
   padding: theme.spacing(0, 1),
   ...theme.mixins.toolbar,
   justifyContent: 'flex-start',
+  backgroundColor: theme.palette.background.paper,
+  color: theme.palette.text.primary,
 }));
 
 /*
@@ -120,6 +130,7 @@ export default function GeneratePage() {
   const [yamlPreviewOpen, setYamlPreviewOpen] = useState(false);
   const [setupModalOpen, setSetupModalOpen] = useState(true);
   const { config } = useRedTeamConfig();
+  const theme = useTheme();
 
   const handleNext = () => {
     setValue((prevValue) => prevValue + 1);
@@ -150,7 +161,17 @@ export default function GeneratePage() {
           value={value}
           onChange={handleChange}
           aria-label="Red Team Config Tabs"
-          sx={{ borderRight: 1, borderColor: 'divider', width: 200 }}
+          sx={{
+            borderRight: 1,
+            borderColor: 'divider',
+            width: 200,
+            '& .MuiTab-root': {
+              color: theme.palette.text.secondary,
+            },
+            '& .Mui-selected': {
+              color: theme.palette.text.primary,
+            },
+          }}
         >
           <StyledTab label="Targets" {...a11yProps(0)} />
           <StyledTab label="Application" {...a11yProps(1)} />
@@ -180,6 +201,12 @@ export default function GeneratePage() {
           open={yamlPreviewOpen}
           onClose={toggleYamlPreview}
           variant="persistent"
+          PaperProps={{
+            sx: {
+              backgroundColor: theme.palette.background.paper,
+              color: theme.palette.text.primary,
+            },
+          }}
         >
           <DrawerHeader>
             <IconButton onClick={toggleYamlPreview}>

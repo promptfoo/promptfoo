@@ -36,6 +36,7 @@ import {
   useRedTeamConfig,
 } from '../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../types';
+import { alpha } from '@mui/material/styles';
 
 interface TargetsProps {
   onNext: () => void;
@@ -283,319 +284,452 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   };
 
   return (
-    <Stack direction="column" spacing={3}>
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-        Select Red Team Target
-      </Typography>
-
-      <Typography variant="body1">
-        A target is the specific LLM or endpoint you want to evaluate in your red teaming process.
-        In Promptfoo targets are also known as providers. You can configure additional targets
-        later.
-      </Typography>
-      <Typography variant="body1">
-        For more information on available providers and how to configure them, please visit our{' '}
-        <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
-          provider documentation
-        </Link>
-        .
-      </Typography>
-
-      <Box mb={4}>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3 }}>
-          Select a Target
-        </Typography>
-        <FormControl fullWidth>
-          <InputLabel id="predefined-target-label">Target</InputLabel>
-          <Select
-            labelId="predefined-target-label"
-            value={selectedTarget.id}
-            onChange={handleTargetChange}
-            label="Target"
-          >
-            {predefinedTargets.map((target) => (
-              <MenuItem key={target.value} value={target.value}>
-                {target.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
-          <TextField
-            fullWidth
-            label="Custom Target"
-            value={selectedTarget.id}
-            onChange={(e) => updateCustomTarget('id', e.target.value)}
-            margin="normal"
-          />
-        )}
-        {selectedTarget.id.startsWith('file://') && (
-          <>
-            {selectedTarget.id.endsWith('.js') && (
-              <Typography variant="body1" sx={{ mt: 1 }}>
-                Learn how to set up a custom JavaScript provider{' '}
-                <Link
-                  href="https://www.promptfoo.dev/docs/providers/custom-api/"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  here
-                </Link>
-                .
-              </Typography>
-            )}
-            {selectedTarget.id.endsWith('.py') && (
-              <Typography variant="body1" sx={{ mt: 1 }}>
-                Learn how to set up a custom Python provider{' '}
-                <Link
-                  href="https://www.promptfoo.dev/docs/providers/python/"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  here
-                </Link>
-                .
-              </Typography>
-            )}
-          </>
-        )}
-        {selectedTarget.id.startsWith('http') && (
-          <Box mt={2}>
-            <Typography variant="h6" gutterBottom>
-              HTTP Endpoint Configuration
-            </Typography>
-            <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-              <TextField
-                fullWidth
-                label="URL"
-                value={selectedTarget.config.url}
-                onChange={(e) => updateCustomTarget('url', e.target.value)}
-                margin="normal"
-                error={!!urlError}
-                helperText={urlError}
-                autoFocus
-                placeholder="https://example.com/api/chat"
-                required
-              />
-              <FormControl fullWidth margin="normal">
-                <InputLabel id="method-label">Method</InputLabel>
-                <Select
-                  labelId="method-label"
-                  value={selectedTarget.config.method}
-                  onChange={(e: SelectChangeEvent<string>) =>
-                    updateCustomTarget('method', e.target.value)
-                  }
-                  label="Method"
-                >
-                  {['GET', 'POST'].map((method) => (
-                    <MenuItem key={method} value={method}>
-                      {method}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              {/* New Headers Form */}
-              <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-                Headers
-              </Typography>
-              {selectedTarget.config.headers &&
-                Object.entries(selectedTarget.config.headers).map(([key, value], index) => (
-                  <Box key={index} display="flex" alignItems="center" mb={1}>
-                    <TextField
-                      label="Name"
-                      value={key}
-                      onChange={(e) => updateHeaderKey(index, e.target.value)}
-                      sx={{ mr: 1, flex: 1 }}
-                    />
-                    <TextField
-                      label="Value"
-                      value={value as string}
-                      onChange={(e) => updateHeaderValue(index, e.target.value)}
-                      sx={{ mr: 1, flex: 1 }}
-                    />
-                    <IconButton onClick={() => removeHeader(index)}>
-                      <DeleteIcon />
-                    </IconButton>
-                  </Box>
-                ))}
-              <Button startIcon={<AddIcon />} onClick={addHeader} variant="outlined" sx={{ mt: 1 }}>
-                Add Header
-              </Button>
-
-              <TextField
-                fullWidth
-                label="Request body"
-                value={requestBody}
-                error={!!bodyError}
-                helperText={bodyError}
-                onChange={(e) => {
-                  setRequestBody(e.target.value);
-                  updateCustomTarget('body', e.target.value);
-                }}
-                margin="normal"
-                multiline
-                minRows={1}
-                maxRows={10}
-                InputProps={{
-                  inputComponent: TextareaAutosize,
-                }}
-              />
-              <TextField
-                fullWidth
-                label="Response Parser"
-                value={selectedTarget.config.responseParser}
-                placeholder="Optional: A Javascript expression to parse the response. E.g. json.choices[0].message.content"
-                onChange={(e) => updateCustomTarget('responseParser', e.target.value)}
-                margin="normal"
-              />
-            </Box>
-          </Box>
-        )}
-        {selectedTarget.id.startsWith('websocket') && (
-          <Box mt={2}>
-            <Typography variant="h6" gutterBottom>
-              Custom WebSocket Endpoint Configuration
-            </Typography>
-            <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-              <TextField
-                fullWidth
-                label="WebSocket URL"
-                value={selectedTarget.config.url}
-                onChange={(e) => updateWebSocketTarget('url', e.target.value)}
-                margin="normal"
-                error={!!urlError}
-                helperText={urlError}
-              />
-              <TextField
-                fullWidth
-                label="Message Template"
-                value={selectedTarget.config.messageTemplate}
-                onChange={(e) => updateWebSocketTarget('messageTemplate', e.target.value)}
-                margin="normal"
-                multiline
-                rows={3}
-              />
-              <TextField
-                fullWidth
-                label="Response Parser"
-                value={selectedTarget.config.responseParser}
-                onChange={(e) => updateWebSocketTarget('responseParser', e.target.value)}
-                margin="normal"
-              />
-              <TextField
-                fullWidth
-                label="Timeout (ms)"
-                type="number"
-                value={selectedTarget.config.timeoutMs}
-                onChange={(e) =>
-                  updateWebSocketTarget('timeoutMs', Number.parseInt(e.target.value))
-                }
-                margin="normal"
-              />
-            </Box>
-          </Box>
-        )}
-      </Box>
-
-      {testingEnabled && (
-        <Box mt={4}>
-          <Typography variant="h6" gutterBottom>
-            Test Target Configuration
+    <Box sx={{ 
+      backgroundColor: theme.palette.background.default, // This should be the darkest background color
+      color: theme.palette.text.primary, 
+      p: 3 
+    }}>
+      <Stack direction="column" spacing={3}>
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            backgroundColor: 'transparent',
+            p: 2,
+            borderRadius: 1
+          }}
+        >
+          <Typography variant="h4" gutterBottom sx={{ 
+            fontWeight: 'bold', 
+            mb: 3, 
+            color: theme.palette.text.primary,
+          }}>
+            Select Red Team Target
           </Typography>
-          <Button
-            variant="outlined"
-            onClick={handleTestTarget}
-            disabled={testingTarget || !selectedTarget.config.url}
-            startIcon={testingTarget ? <CircularProgress size={20} /> : null}
-          >
-            {testingTarget ? 'Testing...' : 'Test Target'}
-          </Button>
-          {!selectedTarget.config.url && (
-            <Typography variant="body1" sx={{ mt: 1, color: 'red' }}>
-              Please enter a valid URL to test the target.
-            </Typography>
-          )}
 
-          {testResult && (
-            <Box mt={2}>
-              <Alert severity={testResult.success ? 'success' : 'error'}>
-                {testResult.message}
-              </Alert>
-              <Accordion sx={{ mt: 2 }}>
-                <AccordionSummary
-                  expandIcon={<ExpandMoreIcon />}
-                  aria-controls="provider-response-content"
-                  id="provider-response-header"
-                >
-                  <Typography>Provider Response Details</Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Raw Result:
-                  </Typography>
-                  <Paper
-                    elevation={0}
-                    sx={{ p: 2, bgcolor: 'grey.100', maxHeight: '200px', overflow: 'auto' }}
+          <Typography variant="body1" sx={{ color: theme.palette.text.primary }}>
+            A target is the specific LLM or endpoint you want to evaluate in your red teaming process.
+            In Promptfoo targets are also known as providers. You can configure additional targets
+            later.
+          </Typography>
+          <Typography variant="body1" sx={{ color: theme.palette.text.primary, mt: 2 }}>
+            For more information on available providers and how to configure them, please visit our{' '}
+            <Link 
+              href="https://www.promptfoo.dev/docs/providers/" 
+              target="_blank" 
+              rel="noopener"
+              sx={{ 
+                color: theme.palette.primary.main,
+                '&:hover': { color: theme.palette.primary.light },
+              }}
+            >
+              provider documentation
+            </Link>
+            .
+          </Typography>
+
+          <Box mt={4}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3, color: theme.palette.text.primary }}>
+              Select a Target
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel id="predefined-target-label" sx={{ color: theme.palette.text.secondary }}>Target</InputLabel>
+              <Select
+                labelId="predefined-target-label"
+                value={selectedTarget.id}
+                onChange={handleTargetChange}
+                label="Target"
+                sx={{ 
+                  color: theme.palette.text.primary,
+                  backgroundColor: alpha(theme.palette.background.paper, 0.1),
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.divider,
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                  '& .MuiSelect-icon': {
+                    color: theme.palette.text.secondary,
+                  },
+                }}
+              >
+                {predefinedTargets.map((target) => (
+                  <MenuItem key={target.value} value={target.value}>
+                    {target.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </Paper>
+
+        <Box mb={4} sx={{ backgroundColor: theme.palette.background.paper, p: 2, borderRadius: 1 }}>
+          <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3, color: theme.palette.text.primary }}>
+            Select a Target
+          </Typography>
+          <FormControl fullWidth>
+            <InputLabel id="predefined-target-label" sx={{ color: theme.palette.text.secondary }}>Target</InputLabel>
+            <Select
+              labelId="predefined-target-label"
+              value={selectedTarget.id}
+              onChange={handleTargetChange}
+              label="Target"
+              sx={{ 
+                color: theme.palette.text.primary,
+                backgroundColor: theme.palette.background.default,
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.divider,
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.primary.main,
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.primary.main,
+                },
+                '& .MuiSelect-icon': {
+                  color: theme.palette.text.secondary,
+                },
+              }}
+            >
+              {predefinedTargets.map((target) => (
+                <MenuItem key={target.value} value={target.value}>
+                  {target.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
+            <TextField
+              fullWidth
+              label="Custom Target"
+              value={selectedTarget.id}
+              onChange={(e) => updateCustomTarget('id', e.target.value)}
+              margin="normal"
+            />
+          )}
+          {selectedTarget.id.startsWith('file://') && (
+            <>
+              {selectedTarget.id.endsWith('.js') && (
+                <Typography variant="body1" sx={{ mt: 1 }}>
+                  Learn how to set up a custom JavaScript provider{' '}
+                  <Link
+                    href="https://www.promptfoo.dev/docs/providers/custom-api/"
+                    target="_blank"
+                    rel="noopener"
                   >
-                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      {JSON.stringify(testResult.providerResponse?.raw, null, 2)}
-                    </pre>
-                  </Paper>
-                  <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
-                    Parsed Result:
-                  </Typography>
-                  <Paper
-                    elevation={0}
-                    sx={{ p: 2, bgcolor: 'grey.100', maxHeight: '200px', overflow: 'auto' }}
-                  >
-                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      {JSON.stringify(testResult.providerResponse?.output, null, 2)}
-                    </pre>
-                  </Paper>
-                </AccordionDetails>
-              </Accordion>
-              {testResult.suggestions && (
-                <Box mt={2}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Suggestions:
-                  </Typography>
-                  <Paper elevation={1} sx={{ p: 2, bgcolor: 'grey.100' }}>
-                    <List>
-                      {testResult.suggestions.map((suggestion, index) => (
-                        <ListItem key={index}>
-                          <ListItemIcon>
-                            <InfoIcon color="primary" />
-                          </ListItemIcon>
-                          <ListItemText primary={suggestion} />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Paper>
-                </Box>
+                    here
+                  </Link>
+                  .
+                </Typography>
               )}
+              {selectedTarget.id.endsWith('.py') && (
+                <Typography variant="body1" sx={{ mt: 1 }}>
+                  Learn how to set up a custom Python provider{' '}
+                  <Link
+                    href="https://www.promptfoo.dev/docs/providers/python/"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    here
+                  </Link>
+                  .
+                </Typography>
+              )}
+            </>
+          )}
+          {selectedTarget.id.startsWith('http') && (
+            <Paper elevation={0} sx={{ backgroundColor: 'transparent', p: 2, borderRadius: 1 }}>
+              <Typography variant="h6" gutterBottom sx={{ color: theme.palette.text.primary }}>
+                HTTP Endpoint Configuration
+              </Typography>
+              <Box mt={2} p={2} border={1} borderColor={theme.palette.divider} borderRadius={1} sx={{ backgroundColor: alpha(theme.palette.background.paper, 0.8) }}>
+                <TextField
+                  fullWidth
+                  label="URL"
+                  value={selectedTarget.config.url}
+                  onChange={(e) => updateCustomTarget('url', e.target.value)}
+                  margin="normal"
+                  error={!!urlError}
+                  helperText={urlError}
+                  autoFocus
+                  placeholder="https://example.com/api/chat"
+                  required
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': {
+                        borderColor: theme.palette.divider,
+                      },
+                      '&:hover fieldset': {
+                        borderColor: theme.palette.primary.main,
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: theme.palette.primary.main,
+                      },
+                    },
+                    '& .MuiInputLabel-root': {
+                      color: theme.palette.text.secondary,
+                    },
+                    '& .MuiInputBase-input': {
+                      color: theme.palette.text.primary,
+                    },
+                  }}
+                />
+                <FormControl fullWidth margin="normal">
+                  <InputLabel id="method-label">Method</InputLabel>
+                  <Select
+                    labelId="method-label"
+                    value={selectedTarget.config.method}
+                    onChange={(e: SelectChangeEvent<string>) =>
+                      updateCustomTarget('method', e.target.value)
+                    }
+                    label="Method"
+                  >
+                    {['GET', 'POST'].map((method) => (
+                      <MenuItem key={method} value={method}>
+                        {method}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                {/* New Headers Form */}
+                <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+                  Headers
+                </Typography>
+                {selectedTarget.config.headers &&
+                  Object.entries(selectedTarget.config.headers).map(([key, value], index) => (
+                    <Box key={index} display="flex" alignItems="center" mb={1}>
+                      <TextField
+                        label="Name"
+                        value={key}
+                        onChange={(e) => updateHeaderKey(index, e.target.value)}
+                        sx={{ mr: 1, flex: 1 }}
+                      />
+                      <TextField
+                        label="Value"
+                        value={value as string}
+                        onChange={(e) => updateHeaderValue(index, e.target.value)}
+                        sx={{ mr: 1, flex: 1 }}
+                      />
+                      <IconButton onClick={() => removeHeader(index)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
+                  ))}
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={addHeader}
+                  variant="outlined"
+                  sx={{
+                    mt: 1,
+                    color: theme.palette.text.secondary,
+                    borderColor: theme.palette.divider,
+                    '&:hover': {
+                      backgroundColor: theme.palette.action.hover,
+                      borderColor: theme.palette.text.primary,
+                    },
+                  }}
+                >
+                  Add Header
+                </Button>
+
+                <TextField
+                  fullWidth
+                  label="Request body"
+                  value={requestBody}
+                  error={!!bodyError}
+                  helperText={bodyError}
+                  onChange={(e) => {
+                    setRequestBody(e.target.value);
+                    updateCustomTarget('body', e.target.value);
+                  }}
+                  margin="normal"
+                  multiline
+                  minRows={1}
+                  maxRows={10}
+                  InputProps={{
+                    inputComponent: TextareaAutosize,
+                  }}
+                />
+                <TextField
+                  fullWidth
+                  label="Response Parser"
+                  value={selectedTarget.config.responseParser}
+                  placeholder="Optional: A Javascript expression to parse the response. E.g. json.choices[0].message.content"
+                  onChange={(e) => updateCustomTarget('responseParser', e.target.value)}
+                  margin="normal"
+                />
+              </Box>
+            </Paper>
+          )}
+          {selectedTarget.id.startsWith('websocket') && (
+            <Box mt={2}>
+              <Typography variant="h6" gutterBottom>
+                Custom WebSocket Endpoint Configuration
+              </Typography>
+              <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+                <TextField
+                  fullWidth
+                  label="WebSocket URL"
+                  value={selectedTarget.config.url}
+                  onChange={(e) => updateWebSocketTarget('url', e.target.value)}
+                  margin="normal"
+                  error={!!urlError}
+                  helperText={urlError}
+                />
+                <TextField
+                  fullWidth
+                  label="Message Template"
+                  value={selectedTarget.config.messageTemplate}
+                  onChange={(e) => updateWebSocketTarget('messageTemplate', e.target.value)}
+                  margin="normal"
+                  multiline
+                  rows={3}
+                />
+                <TextField
+                  fullWidth
+                  label="Response Parser"
+                  value={selectedTarget.config.responseParser}
+                  onChange={(e) => updateWebSocketTarget('responseParser', e.target.value)}
+                  margin="normal"
+                />
+                <TextField
+                  fullWidth
+                  label="Timeout (ms)"
+                  type="number"
+                  value={selectedTarget.config.timeoutMs}
+                  onChange={(e) =>
+                    updateWebSocketTarget('timeoutMs', Number.parseInt(e.target.value))
+                  }
+                  margin="normal"
+                />
+              </Box>
             </Box>
           )}
         </Box>
-      )}
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4 }}>
-        <Button
-          variant="contained"
-          onClick={onNext}
-          endIcon={<KeyboardArrowRightIcon />}
-          disabled={!selectedTarget}
-          sx={{
-            backgroundColor: theme.palette.primary.main,
-            '&:hover': { backgroundColor: theme.palette.primary.dark },
-            '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
-            px: 4,
-            py: 1,
-          }}
-        >
-          Next
-        </Button>
-      </Box>
-    </Stack>
+        {testingEnabled && (
+          <Box mt={4}>
+            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.text.primary }}>
+              Test Target Configuration
+            </Typography>
+            <Button
+              variant="outlined"
+              onClick={handleTestTarget}
+              disabled={testingTarget || !selectedTarget.config.url}
+              startIcon={testingTarget ? <CircularProgress size={20} /> : null}
+              sx={{
+                color: theme.palette.primary.main,
+                borderColor: theme.palette.primary.main,
+                '&:hover': {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                },
+              }}
+            >
+              {testingTarget ? 'Testing...' : 'Test Target'}
+            </Button>
+            {!selectedTarget.config.url && (
+              <Typography variant="body1" sx={{ mt: 1, color: theme.palette.error.main }}>
+                Please enter a valid URL to test the target.
+              </Typography>
+            )}
+
+            {testResult && (
+              <Box mt={2}>
+                <Alert 
+                  severity={testResult.success ? 'success' : 'error'}
+                  sx={{
+                    backgroundColor: testResult.success 
+                      ? theme.palette.success.light 
+                      : theme.palette.error.light,
+                    color: testResult.success 
+                      ? theme.palette.success.contrastText 
+                      : theme.palette.error.contrastText,
+                  }}
+                >
+                  {testResult.message}
+                </Alert>
+                <Accordion sx={{ mt: 2, backgroundColor: theme.palette.background.paper }}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    aria-controls="provider-response-content"
+                    id="provider-response-header"
+                  >
+                    <Typography sx={{ color: theme.palette.text.primary }}>Provider Response Details</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Typography variant="subtitle2" gutterBottom sx={{ color: theme.palette.text.primary }}>
+                      Raw Result:
+                    </Typography>
+                    <Paper
+                      elevation={0}
+                      sx={{ p: 2, bgcolor: theme.palette.action.hover, maxHeight: '200px', overflow: 'auto' }}
+                    >
+                      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: theme.palette.text.primary }}>
+                        {JSON.stringify(testResult.providerResponse?.raw, null, 2)}
+                      </pre>
+                    </Paper>
+                    <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, color: theme.palette.text.primary }}>
+                      Parsed Result:
+                    </Typography>
+                    <Paper
+                      elevation={0}
+                      sx={{ p: 2, bgcolor: theme.palette.action.hover, maxHeight: '200px', overflow: 'auto' }}
+                    >
+                      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: theme.palette.text.primary }}>
+                        {JSON.stringify(testResult.providerResponse?.output, null, 2)}
+                      </pre>
+                    </Paper>
+                  </AccordionDetails>
+                </Accordion>
+                {testResult.suggestions && (
+                  <Box mt={2}>
+                    <Typography variant="subtitle1" gutterBottom sx={{ color: theme.palette.text.primary }}>
+                      Suggestions:
+                    </Typography>
+                    <Paper elevation={1} sx={{ p: 2, bgcolor: theme.palette.action.hover }}>
+                      <List>
+                        {testResult.suggestions.map((suggestion, index) => (
+                          <ListItem key={index}>
+                            <ListItemIcon>
+                              <InfoIcon color="primary" />
+                            </ListItemIcon>
+                            <ListItemText primary={suggestion} sx={{ color: theme.palette.text.primary }} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Paper>
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Box>
+        )}
+
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4 }}>
+          <Button
+            variant="contained"
+            onClick={onNext}
+            endIcon={<KeyboardArrowRightIcon />}
+            disabled={!selectedTarget}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.primary.contrastText,
+              '&:hover': { backgroundColor: theme.palette.primary.dark },
+              '&:disabled': { 
+                backgroundColor: theme.palette.action.disabledBackground,
+                color: theme.palette.action.disabled,
+              },
+              px: 4,
+              py: 1,
+            }}
+          >
+            Next
+          </Button>
+        </Box>
+      </Stack>
+    </Box>
   );
 }
