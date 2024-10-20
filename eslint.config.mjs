@@ -39,9 +39,9 @@ export default [
     },
     plugins: {
       'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
       'unused-imports': unusedImports,
       unicorn: eslintPluginUnicorn,
-      'react-refresh': reactRefresh,
     },
     rules: {
       '@typescript-eslint/ban-ts-comment': 0,
@@ -68,11 +68,11 @@ export default [
       'no-useless-escape': 0,
       'object-shorthand': 'error',
       'prefer-const': 'error',
+      'react-refresh/only-export-components': 'warn',
       'unicorn/no-lonely-if': 'error',
       'unicorn/no-negated-condition': 'error',
       'unicorn/prefer-number-properties': 'error',
       'unused-imports/no-unused-imports': 'error',
-      'react-refresh/only-export-components': 'warn',
     },
   },
   {
