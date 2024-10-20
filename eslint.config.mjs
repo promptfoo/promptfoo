@@ -1,5 +1,6 @@
 // @ts-check
 import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
 import eslint from '@eslint/js';
 import jest from 'eslint-plugin-jest';
 import eslintPluginUnicorn from 'eslint-plugin-unicorn';
@@ -38,6 +39,7 @@ export default [
     },
     plugins: {
       'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
       'unused-imports': unusedImports,
       unicorn: eslintPluginUnicorn,
     },
@@ -66,6 +68,7 @@ export default [
       'no-useless-escape': 0,
       'object-shorthand': 'error',
       'prefer-const': 'error',
+      'react-refresh/only-export-components': 'warn',
       'unicorn/no-lonely-if': 'error',
       'unicorn/no-negated-condition': 'error',
       'unicorn/prefer-number-properties': 'error',
