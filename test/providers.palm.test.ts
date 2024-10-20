@@ -42,7 +42,7 @@ describe('PalmChatProvider', () => {
       jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
-        system_instruction: undefined,
+        systemInstruction: undefined,
       });
 
       const response = await provider.callGemini('test prompt');
@@ -77,7 +77,7 @@ describe('PalmChatProvider', () => {
           { role: 'user', parts: [{ text: 'user message' }] },
         ],
         coerced: false,
-        system_instruction: undefined,
+        systemInstruction: undefined,
       } as any);
 
       const response = await provider.callGemini('test prompt');
@@ -130,7 +130,7 @@ describe('PalmChatProvider', () => {
       jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
-        system_instruction: undefined,
+        systemInstruction: undefined,
       });
 
       await provider.callGemini('test prompt');

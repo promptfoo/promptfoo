@@ -116,7 +116,7 @@ export type GeminiPart = z.infer<typeof PartSchema>;
 export function maybeCoerceToGeminiFormat(contents: any): {
   contents: GeminiFormat;
   coerced: boolean;
-  system_instruction: { parts: [GeminiPart, ...GeminiPart[]] } | undefined;
+  systemInstruction: { parts: [GeminiPart, ...GeminiPart[]] } | undefined;
 } {
   let coerced = false;
   const parseResult = GeminiFormatSchema.safeParse(contents);
@@ -125,7 +125,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     return {
       contents: parseResult.data,
       coerced,
-      system_instruction: undefined,
+      systemInstruction: undefined,
     };
   }
 
@@ -154,7 +154,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     coerced = true;
   } else {
     logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
-    return { contents: contents as GeminiFormat, coerced: false, system_instruction: undefined };
+    return { contents: contents as GeminiFormat, coerced: false, systemInstruction: undefined };
   }
 
   const systemPromptParts: { text: string }[] = [];
@@ -173,7 +173,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
   return {
     contents: coercedContents,
     coerced,
-    system_instruction:
+    systemInstruction:
       systemPromptParts.length > 0
         ? { parts: systemPromptParts as [GeminiPart, ...GeminiPart[]] }
         : undefined,

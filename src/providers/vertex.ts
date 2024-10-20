@@ -196,11 +196,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     const {
       contents: updatedContents,
       coerced,
-      system_instruction: parsedSystemInstruction,
-    }: {
-      contents: GeminiFormat;
-      coerced: boolean;
-      system_instruction: Content | undefined;
+      systemInstruction: parsedSystemInstruction,
     } = maybeCoerceToGeminiFormat(contents);
     if (coerced) {
       logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);

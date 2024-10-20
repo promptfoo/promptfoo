@@ -154,7 +154,7 @@ export class PalmChatProvider extends PalmGenericProvider {
   }
 
   async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const { contents, system_instruction } = maybeCoerceToGeminiFormat(
+    const { contents, systemInstruction } = maybeCoerceToGeminiFormat(
       parseChatPrompt(prompt, [{ content: prompt }]),
     );
     const body: Record<string, any> = {
@@ -168,7 +168,7 @@ export class PalmChatProvider extends PalmGenericProvider {
         ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
-      ...(system_instruction ? { system_instruction } : {}),
+      ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
     if (this.config.responseSchema) {
