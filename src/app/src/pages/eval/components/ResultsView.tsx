@@ -4,9 +4,11 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import EmailIcon from '@mui/icons-material/Email';
+import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
@@ -83,7 +85,13 @@ async function updateEvalAuthor(evalId: string, author: string) {
   return response.json();
 }
 
-const AuthorChip = ({ author, onEditAuthor }) => {
+const AuthorChip = ({
+  author,
+  onEditAuthor,
+}: {
+  author: string | null;
+  onEditAuthor: () => void;
+}) => {
   return (
     <Tooltip title={author ? 'Click to edit author' : 'Click to set author'}>
       <Box
@@ -109,6 +117,50 @@ const AuthorChip = ({ author, onEditAuthor }) => {
         </IconButton>
       </Box>
     </Tooltip>
+  );
+};
+
+const EvalIdChip = ({ evalId, onCopy }: { evalId: string; onCopy: () => void }) => {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = () => {
+    onCopy();
+    setCopied(true);
+  };
+
+  return (
+    <>
+      <Box
+        display="flex"
+        alignItems="center"
+        sx={{
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+          px: 1,
+          py: 0.5,
+          '&:hover': {
+            bgcolor: 'action.hover',
+          },
+        }}
+      >
+        <FingerprintIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
+        <Typography variant="body2" sx={{ mr: 1 }}>
+          <strong>ID:</strong> {evalId}
+        </Typography>
+        <Tooltip title="Copy ID">
+          <IconButton size="small" onClick={handleCopy} sx={{ ml: 'auto' }}>
+            <ContentCopyIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Snackbar
+        open={copied}
+        autoHideDuration={2000}
+        onClose={() => setCopied(false)}
+        message="Eval ID copied to clipboard"
+      />
+    </>
   );
 };
 
@@ -381,18 +433,20 @@ export default function ResultsView({
     }
   };
 
-  const [evalIdCopied, setEvalIdCopied] = React.useState(false);
   const [evalSelectorDialogOpen, setEvalSelectorDialogOpen] = React.useState(false);
 
-  const handleEvalIdCopyClick = async () => {
-    if (!evalId) {
-      return;
+  const handleEvalIdCopyClick = () => {
+    if (evalId) {
+      navigator.clipboard.writeText(evalId).then(
+        () => {
+          // Clipboard successfully set
+        },
+        () => {
+          // Clipboard write failed, you might want to handle this error
+          console.error('Failed to copy to clipboard');
+        },
+      );
     }
-    await navigator.clipboard.writeText(evalId);
-    setEvalIdCopied(true);
-    setTimeout(() => {
-      setEvalIdCopied(false);
-    }, 1000);
   };
 
   const handleEditAuthor = async () => {
@@ -449,31 +503,7 @@ export default function ResultsView({
             title="Select an Eval"
           />
         </Box>
-        {config?.description && evalId && (
-          <>
-            <Tooltip title="Click to copy">
-              <Chip
-                size="small"
-                label={
-                  <>
-                    <strong>ID:</strong> {evalId}
-                  </>
-                }
-                sx={{
-                  opacity: 0.7,
-                  cursor: 'pointer',
-                }}
-                onClick={handleEvalIdCopyClick}
-              />
-            </Tooltip>
-            <Snackbar
-              open={evalIdCopied}
-              autoHideDuration={1000}
-              onClose={() => setEvalIdCopied(false)}
-              message="Eval id copied to clipboard"
-            />
-          </>
-        )}
+        {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
         <AuthorChip author={author} onEditAuthor={handleEditAuthor} />
         {Object.keys(config?.tags || {}).map((tag) => (
           <Chip
