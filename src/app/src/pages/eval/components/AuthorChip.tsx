@@ -50,7 +50,7 @@ export const AuthorChip: React.FC<AuthorChipProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      await onEditAuthor(email || ''); // Use empty string if email is falsy
+      await onEditAuthor(email || '');
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
