@@ -4,6 +4,7 @@ import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
+import { getUserEmail } from '../../globalConfig/accounts';
 import type {
   EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
@@ -90,7 +91,7 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
 evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = ApiSchemas.Eval.UpdateAuthor.Params.parse(req.params);
-    const { author } = ApiSchemas.Eval.UpdateAuthor.Request.parse(req.body);
+    let { author } = ApiSchemas.Eval.UpdateAuthor.Request.parse(req.body);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -98,13 +99,23 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    eval_.author = author;
-    await eval_.save();
+    // If the author is empty, try to use the current user's email
+    if (!author) {
+      author = getUserEmail() || '';
+    }
 
-    const response = ApiSchemas.Eval.UpdateAuthor.Response.parse({
-      message: 'Author updated successfully',
-    });
-    res.json(response);
+    // Only update if the author is not empty
+    if (author) {
+      eval_.author = author;
+      await eval_.save();
+
+      const response = ApiSchemas.Eval.UpdateAuthor.Response.parse({
+        message: 'Author updated successfully',
+      });
+      res.json(response);
+    } else {
+      res.status(400).json({ error: 'No author provided and no user email set' });
+    }
   } catch (error) {
     if (error instanceof z.ZodError) {
       const validationError = fromZodError(error);

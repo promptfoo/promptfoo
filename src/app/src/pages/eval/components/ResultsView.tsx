@@ -2,16 +2,18 @@ import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { callApi, fetchUserEmail } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import EmailIcon from '@mui/icons-material/Email';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import SearchIcon from '@mui/icons-material/Source';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import { Typography } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -80,6 +82,35 @@ async function updateEvalAuthor(evalId: string, author: string) {
 
   return response.json();
 }
+
+const AuthorChip = ({ author, onEditAuthor }) => {
+  return (
+    <Tooltip title={author ? 'Click to edit author' : 'Click to set author'}>
+      <Box
+        display="flex"
+        alignItems="center"
+        sx={{
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+          px: 1,
+          py: 0.5,
+          '&:hover': {
+            bgcolor: 'action.hover',
+          },
+        }}
+      >
+        <EmailIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
+        <Typography variant="body2" sx={{ mr: 1 }}>
+          <strong>Author:</strong> {author || 'Unknown'}
+        </Typography>
+        <IconButton size="small" onClick={onEditAuthor} sx={{ ml: 'auto' }}>
+          <EditIcon fontSize="small" />
+        </IconButton>
+      </Box>
+    </Tooltip>
+  );
+};
 
 export default function ResultsView({
   recentEvals,
@@ -365,7 +396,8 @@ export default function ResultsView({
   };
 
   const handleEditAuthor = async () => {
-    const newAuthor = prompt('Enter the author name:');
+    const currentUserEmail = await fetchUserEmail();
+    const newAuthor = prompt('Enter the author name:', currentUserEmail || '');
     if (newAuthor && evalId) {
       try {
         await updateEvalAuthor(evalId, newAuthor);
@@ -442,24 +474,7 @@ export default function ResultsView({
             />
           </>
         )}
-        <Tooltip title={author ? '' : 'Click to edit author'}>
-          <Box display="flex" alignItems="center">
-            <Chip
-              size="small"
-              label={
-                <>
-                  <strong>Author:</strong> {author || 'Unknown'}
-                </>
-              }
-              sx={{ opacity: 0.7 }}
-            />
-            {!author && (
-              <IconButton size="small" onClick={handleEditAuthor}>
-                <EditIcon fontSize="small" />
-              </IconButton>
-            )}
-          </Box>
-        </Tooltip>
+        <AuthorChip author={author} onEditAuthor={handleEditAuthor} />
         {Object.keys(config?.tags || {}).map((tag) => (
           <Chip
             key={tag}
