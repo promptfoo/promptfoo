@@ -92,10 +92,14 @@ export async function loadApiProvider(
     forRedteam?: boolean;
   } = {},
 ): Promise<ApiProvider> {
-  console.log(`loadApiProvider(${providerPath}, ${JSON.stringify(context)})`);
   const { options = {}, basePath, env, forRedteam } = context;
-  console.log('options', options);
-  invariant(!forRedteam || options.targetId, 'targetId is required for redteam evaluations');
+
+  if (forRedteam && !options.targetId) {
+    logger.warn(
+      'targetId is required for redteam providers. Please specify a targetId in the provider config.',
+    );
+    throw new Error('targetId is required for redteam providers');
+  }
   const providerOptions: ProviderOptions = {
     id: options.id,
     targetId: options.targetId,
