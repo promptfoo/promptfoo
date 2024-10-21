@@ -1,9 +1,5 @@
 import type { StandaloneEval } from '@/../../../util';
-import {
-  riskCategories,
-  riskCategorySeverityMap,
-  Severity,
-} from '@app/pages/redteam/report/components/constants';
+import { riskCategories, riskCategorySeverityMap, Severity } from '@promptfoo/redteam/constants';
 
 export function calculateTrend(current: number, previous: number, increaseIsBad: boolean) {
   const difference = current - previous;

@@ -1,14 +1,14 @@
 import React from 'react';
-import {
-  categoryAliases,
-  displayNameOverrides,
-  subCategoryDescriptions,
-} from '@app/pages/redteam/report/components/constants';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  subCategoryDescriptions,
+} from '@promptfoo/redteam/constants';
 import type { StandaloneEval } from '@promptfoo/util';
 import { processCategoryData, calculateTrend } from './utils';
 
