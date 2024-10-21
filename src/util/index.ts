@@ -18,7 +18,6 @@ import {
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
-  evalsToProvidersTable,
   evalsToTagsTable,
   promptsTable,
   tagsTable,
@@ -760,7 +759,7 @@ export async function deleteEval(evalId: string) {
     await db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
     await db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
     await db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
-    await db.delete(evalsToProvidersTable).where(eq(evalsToProvidersTable.evalId, evalId)).run();
+
     // Finally, delete the eval record
     const deletedIds = await db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
     if (deletedIds.changes === 0) {
@@ -778,7 +777,6 @@ export async function deleteAllEvals(): Promise<void> {
   const db = getDb();
   await db.transaction(async (tx) => {
     await tx.delete(evalResultsTable).run();
-    await tx.delete(evalsToProvidersTable).run();
     await tx.delete(evalsToPromptsTable).run();
     await tx.delete(evalsToDatasetsTable).run();
     await tx.delete(evalsToTagsTable).run();
