@@ -19,14 +19,6 @@ import type {
   EvaluateSummaryV2,
 } from '../types';
 
-// ------------ Providers ------------
-
-export const providers = sqliteTable('providers', {
-  id: text('id').primaryKey(),
-  providerId: text('provider_id').notNull(),
-  label: text('label'),
-});
-
 // ------------ Prompts ------------
 
 export const promptsTable = sqliteTable(
@@ -101,7 +93,6 @@ export const evalResultsTable = sqliteTable(
 
     // Provider-related fields
     provider: text('provider', { mode: 'json' }).$type<ProviderOptions>().notNull(),
-    providerId: text('provider_id').references(() => providers.id),
 
     latencyMs: integer('latency_ms'),
     cost: real('cost'),
@@ -174,32 +165,6 @@ export const evalsToTagsRelations = relations(evalsToTagsTable, ({ one }) => ({
   tag: one(tagsTable, {
     fields: [evalsToTagsTable.tagId],
     references: [tagsTable.id],
-  }),
-}));
-
-export const evalsToProvidersTable = sqliteTable(
-  'evals_to_providers',
-  {
-    providerId: text('provider_id')
-      .notNull()
-      .references(() => providers.id),
-    evalId: text('eval_id')
-      .notNull()
-      .references(() => evalsTable.id),
-  },
-  (t) => ({
-    pk: primaryKey({ columns: [t.providerId, t.evalId] }),
-  }),
-);
-
-export const evalsToProvidersRelations = relations(evalsToProvidersTable, ({ one }) => ({
-  provider: one(providers, {
-    fields: [evalsToProvidersTable.providerId],
-    references: [providers.id],
-  }),
-  eval: one(evalsTable, {
-    fields: [evalsToProvidersTable.evalId],
-    references: [evalsTable.id],
   }),
 }));
 

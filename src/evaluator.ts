@@ -13,7 +13,6 @@ import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
-import Provider from './models/provider';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -840,10 +839,6 @@ class Evaluator {
     }
 
     await this.evalRecord.addPrompts(prompts);
-    const providers = await Provider.createMultiple(testSuite.providers, {
-      persist: this.evalRecord.persisted,
-    });
-    await this.evalRecord.addProviders(providers);
 
     // Finish up
     if (multibar) {
