@@ -14,6 +14,7 @@ import {
   evalResultsTable,
   evalsToProvidersTable,
 } from '../database/tables';
+import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import type {
@@ -159,6 +160,7 @@ export default class Eval {
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
     const evalId = opts?.id || createEvalId(createdAt);
+    const author = opts?.author || getUserEmail();
     const db = getDb();
     await db.transaction(async (tx) => {
       await tx
@@ -166,7 +168,7 @@ export default class Eval {
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
-          author: opts?.author,
+          author,
           description: config.description,
           config,
           results: {},
@@ -461,7 +463,7 @@ export default class Eval {
   }
 }
 
-export async function getSummaryofLatestEvals(
+export async function getSummaryOfLatestEvals(
   limit: number = DEFAULT_QUERY_LIMIT,
   filterDescription?: string,
   datasetId?: string,
