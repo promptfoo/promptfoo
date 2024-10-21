@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { categoryLabels } from '@app/pages/redteam/report/components/constants';
+import { categoryLabels } from '@promptfoo/redteam/constants';
 
 export function usePlugins() {
   const [loading, setLoading] = useState(true);

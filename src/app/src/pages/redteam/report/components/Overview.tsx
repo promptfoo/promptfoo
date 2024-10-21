@@ -4,7 +4,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { Severity, riskCategorySeverityMap } from './constants';
+import { Severity, riskCategorySeverityMap } from '@promptfoo/redteam/constants';
 import './Overview.css';
 
 interface OverviewProps {

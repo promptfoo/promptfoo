@@ -5,7 +5,7 @@ import CardContent from '@mui/material/CardContent';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/system';
-import { displayNameOverrides, subCategoryDescriptions } from './constants';
+import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import './StrategyStats.css';
 
 interface StrategyStatsProps {

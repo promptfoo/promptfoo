@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Severity } from '@app/pages/redteam/report/components/constants';
+import { Severity } from '@promptfoo/redteam/constants';
 import {
   AreaChart,
   Area,

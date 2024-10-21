@@ -131,6 +131,13 @@ export const ALL_PLUGINS: readonly Plugin[] = [
   ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS]),
 ].sort() as Plugin[];
 
+export const FRAMEWORK_NAMES: Record<string, string> = {
+  'nist:ai:measure': 'NIST AI RMF',
+  'owasp:llm': 'OWASP LLM Top 10',
+  'owasp:api': 'OWASP API Top 10',
+  'mitre:atlas': 'MITRE ATLAS',
+};
+
 export const OWASP_LLM_TOP_10_MAPPING: Record<
   string,
   { plugins: Plugin[]; strategies: Strategy[] }
@@ -448,3 +455,225 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries',
   ssrf: 'Server-Side Request Forgery (SSRF) tests',
 };
+
+// These names are displayed in risk cards and in the table
+export const displayNameOverrides = {
+  'ascii-smuggling': 'ASCII smuggling',
+  basic: 'Basic',
+  bfla: 'Privilege Escalation',
+  bola: 'Unauthorized Data Access',
+  competitors: 'Competitor Endorsements',
+  contracts: 'Unsupervised Contracts',
+  crescendo: 'Multi-turn',
+  'cross-session-leak': 'Cross-Session Leak',
+  'debug-access': 'Debug Access',
+  'excessive-agency': 'Excessive Agency',
+  'harmful:copyright-violations': 'Copyright Violations',
+  'harmful:cybercrime': 'Cybercrime',
+  'harmful:illegal-activities': 'Illegal Activities',
+  'harmful:misinformation-disinformation': 'Misinformation & disinformation',
+  'harmful:specialized-advice': 'Specialized Advice',
+  'indirect-prompt-injection': 'Indirect Prompt Injection',
+  jailbreak: 'Single-shot optimization',
+  'jailbreak:tree': 'Tree-based optimization',
+  'math-prompt': 'Math Prompt',
+  multilingual: 'Multilingual',
+  pii: 'PII Leaks',
+  policy: 'Custom Policy',
+  politics: 'Political Opinions',
+  'prompt-extraction': 'Prompt Extraction',
+  'prompt-injection': 'Prompt Injection',
+  rbac: 'RBAC Enforcement',
+  religion: 'Religious Sensitivity',
+  'shell-injection': 'Shell Injection',
+  'sql-injection': 'SQL Injection',
+  ssrf: 'Malicious Resource Fetching',
+};
+
+export enum Severity {
+  Critical = 'Critical',
+  High = 'High',
+  Medium = 'Medium',
+  Low = 'Low',
+}
+
+export const riskCategorySeverityMap: Record<string, Severity> = {
+  'ascii-smuggling': Severity.Low,
+  'cross-session-leak': Severity.Medium,
+  'debug-access': Severity.High,
+  'excessive-agency': Severity.Medium,
+  'harmful:child-exploitation': Severity.Critical,
+  'harmful:copyright-violations': Severity.Low,
+  'harmful:cybercrime': Severity.Low,
+  'harmful:graphic-content': Severity.Medium,
+  'harmful:harassment-bullying': Severity.Low,
+  'harmful:hate': Severity.Critical,
+  'harmful:illegal-activities': Severity.Medium,
+  'harmful:illegal-drugs': Severity.Medium,
+  'harmful:indiscriminate-weapons': Severity.Medium,
+  'harmful:insults': Severity.Low,
+  'harmful:intellectual-property': Severity.Medium,
+  'harmful:misinformation-disinformation': Severity.Medium,
+  'harmful:non-violent-crime': Severity.Medium,
+  'harmful:privacy': Severity.High,
+  'harmful:profanity': Severity.Low,
+  'harmful:radicalization': Severity.Low,
+  'harmful:self-harm': Severity.Critical,
+  'harmful:sex-crime': Severity.High,
+  'harmful:sexual-content': Severity.Medium,
+  'harmful:specialized-advice': Severity.Medium,
+  'harmful:unsafe-practices': Severity.Low,
+  'harmful:violent-crime': Severity.High,
+  'prompt-injection': Severity.Medium,
+  'shell-injection': Severity.High,
+  'sql-injection': Severity.High,
+  competitors: Severity.Low,
+  contracts: Severity.Medium,
+  hallucination: Severity.Medium,
+  hijacking: Severity.High,
+  imitation: Severity.Low,
+  jailbreak: Severity.Medium,
+  overreliance: Severity.Low,
+  pii: Severity.High,
+  politics: Severity.Low,
+  rbac: Severity.High,
+  policy: Severity.High,
+  bola: Severity.High,
+  bfla: Severity.High,
+  religion: Severity.Low,
+  ssrf: Severity.High,
+  'indirect-prompt-injection': Severity.High,
+  'prompt-extraction': Severity.Medium,
+};
+
+export const riskCategories = {
+  'Security Risk': [
+    'bola',
+    'bfla',
+    'debug-access',
+    'hijacking',
+    'pii',
+    'prompt-extraction',
+    'rbac',
+    'shell-injection',
+    'sql-injection',
+    'ssrf',
+    'indirect-prompt-injection',
+    'cross-session-leak',
+  ],
+  'Legal Risk': [
+    'contracts',
+    'harmful:child-exploitation',
+    'harmful:copyright-violations',
+    'harmful:cybercrime',
+    'harmful:hate',
+    'harmful:illegal-activities',
+    'harmful:illegal-drugs',
+    'harmful:intellectual-property',
+    'harmful:privacy',
+    'harmful:self-harm',
+    'harmful:sex-crime',
+    'harmful:sexual-content',
+    'harmful:specialized-advice',
+    'harmful:violent-crime',
+  ],
+  'Brand Risk': [
+    'policy',
+    'competitors',
+    'excessive-agency',
+    'hallucination',
+    'harmful:graphic-content',
+    'harmful:harassment-bullying',
+    'harmful:indiscriminate-weapons',
+    'harmful:insults',
+    'harmful:misinformation-disinformation',
+    'harmful:non-violent-crime',
+    'harmful:profanity',
+    'harmful:radicalization',
+    'harmful:unsafe-practices',
+    'imitation',
+    'overreliance',
+    'politics',
+    'religion',
+  ],
+};
+
+export const categoryDescriptions = {
+  'Brand Risk': 'Risks that can affect the brand reputation and trustworthiness.',
+  'Legal Risk': 'Risks that can lead to legal consequences or violations.',
+  'Technical Risk': 'Risks involving malicious activities targeting the system or users.',
+};
+
+export type TopLevelCategory = keyof typeof riskCategories;
+
+export const categoryMapReverse = Object.entries(riskCategories).reduce(
+  (acc, [category, harms]) => {
+    harms.forEach((harm) => {
+      acc[harm] = category;
+    });
+    return acc;
+  },
+  {} as Record<string, string>,
+);
+
+export const categoryLabels = Object.keys(categoryMapReverse);
+
+// Map from plugin name to metric name or harm category
+export const categoryAliases = {
+  'cross-session-leak': 'CrossSessionLeak',
+  'ascii-smuggling': 'AsciiSmuggling',
+  bola: 'BOLAEnforcement',
+  bfla: 'BFLAEnforcement',
+  ssrf: 'SSRFEnforcement',
+  'debug-access': 'DebugAccess',
+  'excessive-agency': 'ExcessiveAgency',
+  'harmful:child-exploitation': 'Child Exploitation',
+  'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
+  'harmful:graphic-content': 'Graphic & age-restricted content',
+  'harmful:harassment-bullying': 'Harassment & Bullying',
+  'harmful:hate': 'Hate',
+  'harmful:illegal-activities': 'Illegal Activities - Fraud & scams',
+  'harmful:illegal-drugs': 'Illegal Drugs',
+  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
+  'harmful:insults': 'Insults and personal attacks',
+  'harmful:intellectual-property': 'Intellectual Property violation',
+  'harmful:misinformation-disinformation':
+    'Misinformation & Disinformation - Harmful lies and propaganda',
+  'harmful:non-violent-crime': 'Non-Violent Crimes',
+  'harmful:privacy': 'Privacy violations',
+  'harmful:profanity': 'Requests containing profanity',
+  'harmful:radicalization': 'Radicalization',
+  'harmful:self-harm': 'Self-Harm',
+  'harmful:sex-crime': 'Sex Crimes',
+  'harmful:sexual-content': 'Sexual Content',
+  'harmful:specialized-advice': 'Specialized Advice - Financial',
+  'harmful:unsafe-practices': 'Promotion of unsafe practices',
+  'harmful:violent-crime': 'Violent Crimes',
+  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
+  'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
+  'prompt-injection': 'Harmful/Injection',
+  'shell-injection': 'ShellInjection',
+  'sql-injection': 'SqlInjection',
+  competitors: 'CompetitorEndorsement',
+  contracts: 'ContractualCommitment',
+  hallucination: 'Hallucination',
+  hijacking: 'Hijacking',
+  imitation: 'Imitation',
+  jailbreak: 'Harmful/Iterative',
+  overreliance: 'Overreliance',
+  pii: 'PIILeak',
+  politics: 'PoliticalStatement',
+  religion: 'Religion',
+  rbac: 'RbacEnforcement',
+  policy: 'PolicyViolation',
+  'indirect-prompt-injection': 'IndirectPromptInjection',
+  'prompt-extraction': 'PromptExtraction',
+};
+
+export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
+  (acc, [key, value]) => {
+    acc[value] = key;
+    return acc;
+  },
+  {} as Record<string, string>,
+);
