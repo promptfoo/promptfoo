@@ -25,7 +25,7 @@ export const ApiSchemas = {
         id: z.string(),
       }),
       Request: z.object({
-        author: z.string().email().nullable().or(z.literal('')),
+        author: z.string().email(),
       }),
       Response: z.object({
         message: z.string(),

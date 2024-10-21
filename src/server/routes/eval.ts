@@ -4,6 +4,7 @@ import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
+import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import type {
   EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
@@ -104,6 +105,12 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
 
     eval_.author = author;
     await eval_.save();
+
+    // NOTE: Side effect. If user email is not set, set it to the author's email
+    if (!getUserEmail()) {
+      setUserEmail(author);
+    }
+
     res.json(
       ApiSchemas.Eval.UpdateAuthor.Response.parse({
         message: 'Author updated successfully',
