@@ -97,7 +97,7 @@ Remember that promptfoo runs your Python script in a separate process, so some s
 1. Set environment variables:
 
    ```sh
-   export PROMPTFOO_ENABLE_DRIZZLE_LOGS=true
+   export PROMPTFOO_ENABLE_DATABASE_LOGS=true
    export LOG_LEVEL=debug
    ```
 
@@ -110,5 +110,5 @@ Remember that promptfoo runs your Python script in a separate process, so some s
 3. Disable logging when done:
 
    ```sh
-   unset PROMPTFOO_ENABLE_DRIZZLE_LOGS
+   unset PROMPTFOO_ENABLE_DATABASE_LOGS
    ```

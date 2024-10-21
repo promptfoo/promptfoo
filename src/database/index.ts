@@ -8,7 +8,7 @@ import { getConfigDirectoryPath } from '../util/config/manage';
 
 class DrizzleLogWriter implements LogWriter {
   write(message: string) {
-    if (getEnvBool('PROMPTFOO_ENABLE_DRIZZLE_LOGS', false)) {
+    if (getEnvBool('PROMPTFOO_ENABLE_DATABASE_LOGS', false)) {
       logger.debug(`Drizzle: ${message}`);
     }
   }
