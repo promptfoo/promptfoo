@@ -144,13 +144,12 @@ export default function Prompts({ onNext, onBack }: PromptsProps) {
             <Box key={index} display="flex" alignItems="center" mb={2}>
               <TextField
                 fullWidth
-                label={`Prompt ${index + 1}`}
+                label={config.prompts.length === 1 ? 'Prompt' : `Prompt ${index + 1}`}
                 value={prompt}
                 onChange={(e) => updatePrompt(index, e.target.value)}
                 margin="normal"
                 multiline
                 rows={3}
-                sx={{ backgroundColor: '#ffffff' }}
               />
               <Tooltip title="Remove prompt">
                 <IconButton onClick={() => removePrompt(index)}>
