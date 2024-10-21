@@ -95,8 +95,25 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     isJsonContentType ? JSON.stringify(selectedTarget.config.body) : selectedTarget.config.body,
   );
 
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+
   useEffect(() => {
     updateConfig('target', selectedTarget);
+    const missingFields: string[] = [];
+
+    if (!selectedTarget.targetId) {
+      missingFields.push('Target Name');
+    }
+
+    // Make sure we have a url target is a valid HTTP or WebSocket endpoint
+    if (
+      (selectedTarget.id.startsWith('http') || selectedTarget.id.startsWith('websocket')) &&
+      !selectedTarget.config.url
+    ) {
+      missingFields.push('URL');
+    }
+
+    setMissingFields(missingFields);
   }, [selectedTarget, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
@@ -107,7 +124,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         value === 'javascript'
           ? 'file://path/to/custom_provider.js'
           : 'file://path/to/custom_provider.py';
-      setSelectedTarget({ id: filePath, config: {} });
+      setSelectedTarget({ id: filePath, config: {}, targetId: filePath });
       updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'http') {
@@ -117,6 +134,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     } else if (value === 'websocket') {
       setSelectedTarget({
         id: 'websocket',
+        targetId: 'websocket',
         config: {
           type: 'websocket',
           url: 'wss://example.com/ws',
@@ -128,7 +146,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
       updateConfig('prompts', ['{{prompt}}']);
       updateConfig('purpose', '');
     } else {
-      setSelectedTarget({ id: value, config: {} });
+      setSelectedTarget({ id: value, targetId: value, config: {} });
       updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     }
@@ -171,6 +189,8 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         if (!value.includes('{{prompt}}')) {
           setBodyError('Request body must contain {{prompt}}');
         }
+      } else if (field === 'targetId') {
+        updatedTarget.targetId = value;
       } else {
         (updatedTarget.config as any)[field] = value;
       }
@@ -305,8 +325,26 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3 }}>
           Select a Target
         </Typography>
+        <TextField
+          fullWidth
+          sx={{ mb: 2 }}
+          label="Target Name"
+          value={selectedTarget.targetId}
+          placeholder="e.g. 'customer-service-agent'"
+          onChange={(e) => updateCustomTarget('targetId', e.target.value)}
+          margin="normal"
+          required
+          autoFocus
+        />
+
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
+          The target name will be used to report vulnerabilities. Make sure it's meaningful and
+          re-use it when generating new redteam configs for the same target. Eg:
+          'customer-service-agent', 'compliance-bot'
+        </Typography>
+
         <FormControl fullWidth>
-          <InputLabel id="predefined-target-label">Target</InputLabel>
+          <InputLabel id="predefined-target-label">Target Type</InputLabel>
           <Select
             labelId="predefined-target-label"
             value={selectedTarget.id}
@@ -373,7 +411,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                 margin="normal"
                 error={!!urlError}
                 helperText={urlError}
-                autoFocus
                 placeholder="https://example.com/api/chat"
                 required
               />
@@ -503,6 +540,11 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           <Typography variant="h6" gutterBottom>
             Test Target Configuration
           </Typography>
+          {!selectedTarget.config.url && (
+            <Typography variant="body1" sx={{ mb: 1, color: 'gray' }}>
+              Please enter a valid URL to test the target.
+            </Typography>
+          )}
           <Button
             variant="outlined"
             onClick={handleTestTarget}
@@ -511,11 +553,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           >
             {testingTarget ? 'Testing...' : 'Test Target'}
           </Button>
-          {!selectedTarget.config.url && (
-            <Typography variant="body1" sx={{ mt: 1, color: 'red' }}>
-              Please enter a valid URL to test the target.
-            </Typography>
-          )}
 
           {testResult && (
             <Box mt={2}>
@@ -579,22 +616,37 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         </Box>
       )}
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          mt: 4,
+          flexDirection: 'column',
+          alignSelf: 'flex-end',
+          alignItems: 'flex-end',
+        }}
+      >
         <Button
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          disabled={!selectedTarget}
+          disabled={missingFields.length > 0}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },
             '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
             px: 4,
             py: 1,
+            maxWidth: '150px',
           }}
         >
           Next
         </Button>
+        {missingFields.length > 0 && (
+          <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+            Missing required fields: {missingFields.join(', ')}.
+          </Typography>
+        )}
       </Box>
     </Stack>
   );

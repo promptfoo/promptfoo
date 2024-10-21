@@ -33,7 +33,6 @@ import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
-import type Provider from './provider';
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
@@ -360,24 +359,6 @@ export default class Eval {
     if (this.persisted) {
       const db = getDb();
       await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
-    }
-  }
-
-  async addProviders(providers: Provider[]) {
-    if (this.persisted) {
-      const db = getDb();
-      await db.transaction(async (tx) => {
-        for (const provider of providers) {
-          const id = provider.id;
-          tx.insert(evalsToProvidersTable)
-            .values({
-              evalId: this.id,
-              providerId: id,
-            })
-            .onConflictDoNothing()
-            .run();
-        }
-      });
     }
   }
 
