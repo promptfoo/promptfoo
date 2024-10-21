@@ -1,6 +1,13 @@
+import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, { getSummaryOfLatestEvals } from '../../src/models/eval';
+import type { Prompt } from '../../src/types';
 import EvalFactory from '../factories/evalFactory';
+
+jest.mock('../../src/globalConfig/accounts', () => ({
+  ...jest.requireActual('../../src/globalConfig/accounts'),
+  getUserEmail: jest.fn(),
+}));
 
 describe('evaluator', () => {
   beforeAll(async () => {
@@ -43,6 +50,32 @@ describe('evaluator', () => {
 
       const eval_2 = await Eval.findById(eval1.id);
       expect(eval_2).toBeUndefined();
+    });
+  });
+
+  describe('create', () => {
+    it('should use provided author when available', async () => {
+      const providedAuthor = 'provided@example.com';
+      const config = { description: 'Test eval' };
+      const renderedPrompts: Prompt[] = [
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' },
+      ];
+      const evaluation = await Eval.create(config, renderedPrompts, { author: providedAuthor });
+      expect(evaluation.author).toBe(providedAuthor);
+      const persistedEval = await Eval.findById(evaluation.id);
+      expect(persistedEval?.author).toBe(providedAuthor);
+    });
+
+    it('should use default author from getUserEmail when not provided', async () => {
+      jest.mocked(getUserEmail).mockReturnValue('default@example.com');
+      const mockEmail = 'default@example.com';
+      const config = { description: 'Test eval' };
+      const renderedPrompts: Prompt[] = [
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' },
+      ];
+      const evaluation = await Eval.create(config, renderedPrompts);
+      const persistedEval = await Eval.findById(evaluation.id);
+      expect(persistedEval?.author).toBe(mockEmail);
     });
   });
 });

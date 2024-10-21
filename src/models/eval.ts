@@ -158,9 +158,11 @@ export default class Eval {
       results?: EvalResult[];
     },
   ): Promise<Eval> {
+    logger.warn(`opts: ${JSON.stringify(opts)}`);
     const createdAt = opts?.createdAt || new Date();
     const evalId = opts?.id || createEvalId(createdAt);
     const author = opts?.author || getUserEmail();
+    logger.info(`author: ${author}`);
     const db = getDb();
     await db.transaction(async (tx) => {
       await tx
