@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApi, fetchUserEmail } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -362,16 +362,14 @@ export default function ResultsView({
     }
   };
 
-  const handleEditAuthor = async () => {
-    const currentUserEmail = await fetchUserEmail();
-    const newAuthor = prompt('Enter the author name:', currentUserEmail || '');
-    if (newAuthor && evalId) {
+  const handleEditAuthor = async (newAuthor: string) => {
+    if (evalId) {
       try {
         await updateEvalAuthor(evalId, newAuthor);
         setAuthor(newAuthor);
       } catch (error) {
         console.error('Failed to update author:', error);
-        // You might want to show an error message to the user here
+        throw error; // This will be caught by the AuthorChip component
       }
     }
   };
