@@ -203,7 +203,6 @@ export default function Prompts({ onNext, onBack }: PromptsProps) {
               margin="normal"
               multiline
               rows={4}
-              sx={{ backgroundColor: '#ffffff' }}
             />
             {needsCustomPrompt && (
               <Typography variant="body1" color="text.secondary" mt={1}>
