@@ -67,8 +67,8 @@ describe('evaluator', () => {
     });
 
     it('should use default author from getUserEmail when not provided', async () => {
-      jest.mocked(getUserEmail).mockReturnValue('default@example.com');
       const mockEmail = 'default@example.com';
+      jest.mocked(getUserEmail).mockReturnValue(mockEmail);
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
         { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' },
