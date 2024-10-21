@@ -18,6 +18,7 @@ import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
+import IconButton from '@mui/material/IconButton/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -64,6 +65,22 @@ interface ResultsViewProps {
   defaultEvalId?: string;
 }
 
+async function updateEvalAuthor(evalId: string, author: string) {
+  const response = await callApi(`/eval/${evalId}/author`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ author }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to update eval author');
+  }
+
+  return response.json();
+}
+
 export default function ResultsView({
   recentEvals,
   onRecentEvalSelected,
@@ -84,6 +101,7 @@ export default function ResultsView({
     setInComparisonMode,
     columnStates,
     setColumnState,
+    setAuthor,
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
@@ -346,6 +364,19 @@ export default function ResultsView({
     }, 1000);
   };
 
+  const handleEditAuthor = async () => {
+    const newAuthor = prompt('Enter the author name:');
+    if (newAuthor && evalId) {
+      try {
+        await updateEvalAuthor(evalId, newAuthor);
+        setAuthor(newAuthor);
+      } catch (error) {
+        console.error('Failed to update author:', error);
+        // You might want to show an error message to the user here
+      }
+    }
+  };
+
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -411,16 +442,23 @@ export default function ResultsView({
             />
           </>
         )}
-        <Tooltip title={author ? '' : 'Set eval author with `promptfoo config set email`'}>
-          <Chip
-            size="small"
-            label={
-              <>
-                <strong>Author:</strong> {author || 'Unknown'}
-              </>
-            }
-            sx={{ opacity: 0.7 }}
-          />
+        <Tooltip title={author ? '' : 'Click to edit author'}>
+          <Box display="flex" alignItems="center">
+            <Chip
+              size="small"
+              label={
+                <>
+                  <strong>Author:</strong> {author || 'Unknown'}
+                </>
+              }
+              sx={{ opacity: 0.7 }}
+            />
+            {!author && (
+              <IconButton size="small" onClick={handleEditAuthor}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            )}
+          </Box>
         </Tooltip>
         {Object.keys(config?.tags || {}).map((tag) => (
           <Chip

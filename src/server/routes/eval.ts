@@ -137,3 +137,29 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
     res.status(500).json({ error: 'Failed to delete eval' });
   }
 });
+
+evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { author } = req.body;
+
+  if (!id || !author) {
+    res.status(400).json({ error: 'Missing id or author' });
+    return;
+  }
+
+  try {
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    eval_.author = author;
+    await eval_.save();
+
+    res.json({ message: 'Author updated successfully' });
+  } catch (error) {
+    console.error('Failed to update eval author:', error);
+    res.status(500).json({ error: 'Failed to update eval author' });
+  }
+});
