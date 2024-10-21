@@ -2,6 +2,7 @@ import type { KeyboardEvent } from 'react';
 import React, { useState, useEffect } from 'react';
 import EditIcon from '@mui/icons-material/Edit';
 import EmailIcon from '@mui/icons-material/Email';
+import InfoIcon from '@mui/icons-material/Info';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -110,21 +111,32 @@ export const AuthorChip: React.FC<AuthorChipProps> = ({
           horizontal: 'left',
         }}
       >
-        <Box sx={{ p: 2, display: 'flex', alignItems: 'flex-end', width: '400px' }}>
-          <TextField
-            label="Author Email"
-            variant="standard"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyPress={handleKeyPress}
-            error={!!error}
-            helperText={error}
-            disabled={isLoading}
-            sx={{ flexGrow: 1, mr: 2 }}
-          />
-          <Button onClick={handleSave} disabled={isLoading || !email}>
-            {isLoading ? <CircularProgress size={24} /> : 'Save'}
-          </Button>
+        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', width: '400px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-end', mb: 2 }}>
+            <TextField
+              label="Author Email"
+              variant="standard"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyPress={handleKeyPress}
+              error={!!error}
+              helperText={error}
+              disabled={isLoading}
+              sx={{ flexGrow: 1, mr: 2 }}
+            />
+            <Button onClick={handleSave} disabled={isLoading || !email}>
+              {isLoading ? <CircularProgress size={24} /> : 'Save'}
+            </Button>
+          </Box>
+          {!currentUserEmail && (
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <InfoIcon color="info" fontSize="small" sx={{ mr: 1 }} />
+              <Typography variant="caption">
+                {`Setting an email address will also set the default author for future evals.
+                It is changeable with \`promptfoo config set email <your-email@example.com>\``}
+              </Typography>
+            </Box>
+          )}
         </Box>
       </Popover>
     </>
