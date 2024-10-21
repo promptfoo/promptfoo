@@ -44,13 +44,13 @@ export const AuthorChip: React.FC<AuthorChipProps> = ({
   };
 
   const handleSave = async () => {
-    if (isLoading || !email) {
+    if (isLoading) {
       return;
     }
     setIsLoading(true);
     setError(null);
     try {
-      await onEditAuthor(email);
+      await onEditAuthor(email || ''); // Use empty string if email is falsy
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
