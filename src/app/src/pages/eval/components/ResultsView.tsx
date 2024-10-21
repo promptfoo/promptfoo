@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { callApi, fetchUserEmail } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -362,6 +362,14 @@ export default function ResultsView({
     }
   };
 
+  const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    fetchUserEmail().then((email) => {
+      setCurrentUserEmail(email);
+    });
+  }, []);
+
   const handleEditAuthor = async (newAuthor: string) => {
     if (evalId) {
       try {
@@ -369,7 +377,7 @@ export default function ResultsView({
         setAuthor(newAuthor);
       } catch (error) {
         console.error('Failed to update author:', error);
-        throw error; // This will be caught by the AuthorChip component
+        throw error;
       }
     }
   };
@@ -415,7 +423,11 @@ export default function ResultsView({
           />
         </Box>
         {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
-        <AuthorChip author={author} onEditAuthor={handleEditAuthor} />
+        <AuthorChip
+          author={author}
+          onEditAuthor={handleEditAuthor}
+          currentUserEmail={currentUserEmail}
+        />
         {Object.keys(config?.tags || {}).map((tag) => (
           <Chip
             key={tag}

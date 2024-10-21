@@ -1,4 +1,5 @@
-import React, { useState, KeyboardEvent } from 'react';
+import type { KeyboardEvent } from 'react';
+import React, { useState, useEffect } from 'react';
 import EditIcon from '@mui/icons-material/Edit';
 import EmailIcon from '@mui/icons-material/Email';
 import {
@@ -15,17 +16,28 @@ import {
 interface AuthorChipProps {
   author: string | null;
   onEditAuthor: (newAuthor: string) => Promise<void>;
+  currentUserEmail: string | null;
 }
 
-export const AuthorChip: React.FC<AuthorChipProps> = ({ author, onEditAuthor }) => {
+export const AuthorChip: React.FC<AuthorChipProps> = ({
+  author,
+  onEditAuthor,
+  currentUserEmail,
+}) => {
   const [isLoading, setIsLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [email, setEmail] = useState(author || '');
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!author && currentUserEmail) {
+      setEmail(currentUserEmail);
+    }
+  }, [author, currentUserEmail]);
+
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
-    setEmail(author || '');
+    setEmail(author || currentUserEmail || '');
     setError(null);
   };
 
@@ -34,7 +46,9 @@ export const AuthorChip: React.FC<AuthorChipProps> = ({ author, onEditAuthor }) 
   };
 
   const handleSave = async () => {
-    if (isLoading || !email) return;
+    if (isLoading || !email) {
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
