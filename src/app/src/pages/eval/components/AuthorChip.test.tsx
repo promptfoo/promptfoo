@@ -97,4 +97,41 @@ describe('AuthorChip', () => {
       expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     });
   });
+
+  it('shows warning message when currentUserEmail is not set', async () => {
+    render(<AuthorChip {...defaultProps} currentUserEmail={null} />);
+    await userEvent.click(screen.getByText('test@example.com'));
+    expect(
+      screen.getByText(
+        /Setting an email address will also set the default author for future evals./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /It is changeable with `promptfoo config set email <your-email@example.com>`/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('does not show warning message when currentUserEmail is set', async () => {
+    render(<AuthorChip {...defaultProps} />);
+    await userEvent.click(screen.getByText('test@example.com'));
+    expect(
+      screen.queryByText(
+        /Setting an email address will also set the default author for future evals./,
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it('displays info icon when warning message is shown', async () => {
+    render(<AuthorChip {...defaultProps} currentUserEmail={null} />);
+    await userEvent.click(screen.getByText('test@example.com'));
+    expect(screen.getByTestId('InfoIcon')).toBeInTheDocument();
+  });
+
+  it('does not display info icon when warning message is not shown', async () => {
+    render(<AuthorChip {...defaultProps} />);
+    await userEvent.click(screen.getByText('test@example.com'));
+    expect(screen.queryByTestId('InfoIcon')).not.toBeInTheDocument();
+  });
 });
