@@ -1,10 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Severity,
-  categoryAliases,
-  riskCategories,
-  riskCategorySeverityMap,
-} from '@app/pages/redteam/report/components/constants';
 import { callApi } from '@app/utils/api';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -18,6 +12,12 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import {
+  Severity,
+  categoryAliases,
+  riskCategories,
+  riskCategorySeverityMap,
+} from '@promptfoo/redteam/constants';
 import type { StandaloneEval } from '@promptfoo/util';
 import type { ApplicationAttackSuccessDataPoint } from './ApplicationAttackSuccessChart';
 import CategoryBreakdown from './CategoryBreakdown';

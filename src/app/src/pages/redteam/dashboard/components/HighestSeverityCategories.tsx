@@ -1,9 +1,4 @@
 import React from 'react';
-import {
-  categoryAliases,
-  displayNameOverrides,
-  Severity,
-} from '@app/pages/redteam/report/components/constants';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
@@ -12,6 +7,7 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
+import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
 import type { StandaloneEval } from '@promptfoo/util';
 import { processCategoryData } from './utils';
 
