@@ -33,7 +33,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({ strategyStats }) => {
     <Card className="strategy-stats-card">
       <CardContent className="strategy-stats-content">
         <Typography variant="h5" mb={2}>
-          Attack success rates
+          Attack Methods
         </Typography>
         <Box className="strategy-grid">
           {strategies.map(([strategy, { pass, total }]) => {
