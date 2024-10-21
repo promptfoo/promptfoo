@@ -1,0 +1,58 @@
+import React from 'react';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FingerprintIcon from '@mui/icons-material/Fingerprint';
+import { Box, Typography, IconButton, Tooltip, Snackbar } from '@mui/material';
+
+interface EvalIdChipProps {
+  evalId: string;
+  onCopy: () => void;
+}
+
+export const EvalIdChip: React.FC<EvalIdChipProps> = ({ evalId, onCopy }) => {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = () => {
+    onCopy();
+    setCopied(true);
+  };
+
+  return (
+    <>
+      <Box
+        display="flex"
+        alignItems="center"
+        sx={{
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+          px: 1,
+          py: 0.5,
+          '&:hover': {
+            bgcolor: 'action.hover',
+          },
+        }}
+      >
+        <FingerprintIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
+        <Typography variant="body2" sx={{ mr: 1 }}>
+          <strong>ID:</strong> {evalId}
+        </Typography>
+        <Tooltip title="Copy ID">
+          <IconButton
+            size="small"
+            onClick={handleCopy}
+            sx={{ ml: 'auto' }}
+            aria-label="Copy Eval ID"
+          >
+            <ContentCopyIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Snackbar
+        open={copied}
+        autoHideDuration={2000}
+        onClose={() => setCopied(false)}
+        message="Eval ID copied to clipboard"
+      />
+    </>
+  );
+};

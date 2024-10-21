@@ -4,35 +4,23 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import EmailIcon from '@mui/icons-material/Email';
-import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import SearchIcon from '@mui/icons-material/Source';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import { Typography } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import FormControl from '@mui/material/FormControl';
-import IconButton from '@mui/material/IconButton/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
-import InputLabel from '@mui/material/InputLabel';
 import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import OutlinedInput from '@mui/material/OutlinedInput';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import Select from '@mui/material/Select';
-import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import type { StackProps } from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -42,11 +30,15 @@ import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable
 import type { VisibilityState } from '@tanstack/table-core';
 import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
+import { AuthorChip } from './AuthorChip';
+import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
+import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
+import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import SettingsModal from './ResultsViewSettingsModal';
@@ -84,85 +76,6 @@ async function updateEvalAuthor(evalId: string, author: string) {
 
   return response.json();
 }
-
-const AuthorChip = ({
-  author,
-  onEditAuthor,
-}: {
-  author: string | null;
-  onEditAuthor: () => void;
-}) => {
-  return (
-    <Tooltip title={author ? 'Click to edit author' : 'Click to set author'}>
-      <Box
-        display="flex"
-        alignItems="center"
-        sx={{
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 1,
-          px: 1,
-          py: 0.5,
-          '&:hover': {
-            bgcolor: 'action.hover',
-          },
-        }}
-      >
-        <EmailIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
-        <Typography variant="body2" sx={{ mr: 1 }}>
-          <strong>Author:</strong> {author || 'Unknown'}
-        </Typography>
-        <IconButton size="small" onClick={onEditAuthor} sx={{ ml: 'auto' }}>
-          <EditIcon fontSize="small" />
-        </IconButton>
-      </Box>
-    </Tooltip>
-  );
-};
-
-const EvalIdChip = ({ evalId, onCopy }: { evalId: string; onCopy: () => void }) => {
-  const [copied, setCopied] = React.useState(false);
-
-  const handleCopy = () => {
-    onCopy();
-    setCopied(true);
-  };
-
-  return (
-    <>
-      <Box
-        display="flex"
-        alignItems="center"
-        sx={{
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 1,
-          px: 1,
-          py: 0.5,
-          '&:hover': {
-            bgcolor: 'action.hover',
-          },
-        }}
-      >
-        <FingerprintIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
-        <Typography variant="body2" sx={{ mr: 1 }}>
-          <strong>ID:</strong> {evalId}
-        </Typography>
-        <Tooltip title="Copy ID">
-          <IconButton size="small" onClick={handleCopy} sx={{ ml: 'auto' }}>
-            <ContentCopyIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Box>
-      <Snackbar
-        open={copied}
-        autoHideDuration={2000}
-        onClose={() => setCopied(false)}
-        message="Eval ID copied to clipboard"
-      />
-    </>
-  );
-};
 
 export default function ResultsView({
   recentEvals,
@@ -516,42 +429,14 @@ export default function ResultsView({
       </ResponsiveStack>
       <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
         <Box>
-          <FormControl sx={{ minWidth: 200, maxWidth: 350 }} size="small">
-            <InputLabel id="visible-columns-label">Columns</InputLabel>
-            <Select
-              labelId="visible-columns-label"
-              id="visible-columns"
-              multiple
-              value={currentColumnState.selectedColumns}
-              onChange={handleChange}
-              input={<OutlinedInput label="Visible columns" />}
-              renderValue={(selected: string[]) => selected.join(', ')}
-            >
-              {columnData.map((column) => (
-                <MenuItem dense key={column.value} value={column.value}>
-                  <Checkbox checked={currentColumnState.selectedColumns.includes(column.value)} />
-                  <ListItemText primary={column.label} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <ColumnSelector
+            columnData={columnData}
+            selectedColumns={currentColumnState.selectedColumns}
+            onChange={handleChange}
+          />
         </Box>
         <Box>
-          <FormControl sx={{ minWidth: 180 }} size="small">
-            <InputLabel id="failure-filter-mode-label">Display</InputLabel>
-            <Select
-              labelId="filter-mode-label"
-              id="filter-mode"
-              value={filterMode}
-              onChange={handleFilterModeChange}
-              label="Filter"
-            >
-              <MenuItem value="all">Show all results</MenuItem>
-              <MenuItem value="failures">Show failures only</MenuItem>
-              <MenuItem value="different">Show different only</MenuItem>
-              <MenuItem value="highlights">Show highlights only</MenuItem>
-            </Select>
-          </FormControl>
+          <FilterModeSelector filterMode={filterMode} onChange={handleFilterModeChange} />
         </Box>
         <Box>
           <TextField
