@@ -70,8 +70,6 @@ See also: [ProviderResponse](/docs/configuration/reference/#providerresponse)
 Here's an example of a custom API provider that returns a predefined output along with token usage:
 
 ```javascript
-import fetch from 'node-fetch';
-
 class CustomApiProvider {
   constructor(options) {
     // Provider ID can be overridden by the config file (e.g. when using multiple of the same provider)
