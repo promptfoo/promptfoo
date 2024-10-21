@@ -2,6 +2,9 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
+import { fromZodError } from 'zod-validation-error';
+import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import type {
   EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
@@ -14,6 +17,7 @@ import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { updateResult, deleteEval, writeResultsToDatabase } from '../../util';
+import { ApiSchemas } from '../apiSchemas';
 
 export const evalRouter = Router();
 
@@ -81,6 +85,45 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
     res.json({ message: 'Eval updated successfully' });
   } catch {
     res.status(500).json({ error: 'Failed to update eval table' });
+  }
+});
+
+evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = ApiSchemas.Eval.UpdateAuthor.Params.parse(req.params);
+    const { author } = ApiSchemas.Eval.UpdateAuthor.Request.parse(req.body);
+
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+    if (!author) {
+      res.status(400).json({ error: 'No author provided' });
+      return;
+    }
+
+    eval_.author = author;
+    await eval_.save();
+
+    // NOTE: Side effect. If user email is not set, set it to the author's email
+    if (!getUserEmail()) {
+      setUserEmail(author);
+    }
+
+    res.json(
+      ApiSchemas.Eval.UpdateAuthor.Response.parse({
+        message: 'Author updated successfully',
+      }),
+    );
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const validationError = fromZodError(error);
+      res.status(400).json({ error: validationError.message });
+    } else {
+      console.error('Failed to update eval author:', error);
+      res.status(500).json({ error: 'Failed to update eval author' });
+    }
   }
 });
 

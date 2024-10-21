@@ -19,4 +19,17 @@ export const ApiSchemas = {
       }),
     },
   },
+  Eval: {
+    UpdateAuthor: {
+      Params: z.object({
+        id: z.string(),
+      }),
+      Request: z.object({
+        author: z.string().email(),
+      }),
+      Response: z.object({
+        message: z.string(),
+      }),
+    },
+  },
 };
