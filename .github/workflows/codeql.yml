@@ -17,7 +17,7 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
       security-events: write
       packages: read
@@ -39,19 +39,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create CodeQL config file
-        run: |
-          mkdir -p .github/codeql
-          echo "disable-default-queries: true" > .github/codeql/codeql-config.yml
-          echo "queries:" >> .github/codeql/codeql-config.yml
-          echo "  - uses: security-extended" >> .github/codeql/codeql-config.yml
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
-          config-file: .github/codeql/codeql-config.yml
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
