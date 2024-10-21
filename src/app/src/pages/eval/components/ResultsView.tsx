@@ -351,11 +351,8 @@ export default function ResultsView({
   const handleEvalIdCopyClick = () => {
     if (evalId) {
       navigator.clipboard.writeText(evalId).then(
+        () => {},
         () => {
-          // Clipboard successfully set
-        },
-        () => {
-          // Clipboard write failed, you might want to handle this error
           console.error('Failed to copy to clipboard');
         },
       );

@@ -1,6 +1,9 @@
 import React from 'react';
-import type { SelectChangeEvent } from '@mui/material';
-import { FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import MenuItem from '@mui/material/MenuItem';
+import type { SelectChangeEvent } from '@mui/material/Select';
+import Select from '@mui/material/Select';
 
 interface FilterModeSelectorProps {
   filterMode: string;
@@ -10,7 +13,7 @@ interface FilterModeSelectorProps {
 export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({ filterMode, onChange }) => {
   return (
     <FormControl sx={{ minWidth: 180 }} size="small">
-      <InputLabel id="failure-filter-mode-label">Display</InputLabel>
+      <InputLabel id="filter-mode-label">Display</InputLabel>
       <Select
         labelId="filter-mode-label"
         id="filter-mode"
