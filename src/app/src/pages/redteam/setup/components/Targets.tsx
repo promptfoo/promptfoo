@@ -95,24 +95,25 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     isJsonContentType ? JSON.stringify(selectedTarget.config.body) : selectedTarget.config.body,
   );
 
-  const [canContinue, setCanContinue] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
 
   useEffect(() => {
     updateConfig('target', selectedTarget);
+    const missingFields: string[] = [];
 
-    if (selectedTarget && selectedTarget.targetId) {
-      // Make sure we have a url target is a valid HTTP or WebSocket endpoint
-      if (
-        (selectedTarget.id.startsWith('http') || selectedTarget.id.startsWith('websocket')) &&
-        selectedTarget.config.url
-      ) {
-        setCanContinue(true);
-      } else {
-        setCanContinue(false);
-      }
-    } else {
-      setCanContinue(false);
+    if (!selectedTarget.targetId) {
+      missingFields.push('Target Name');
     }
+
+    // Make sure we have a url target is a valid HTTP or WebSocket endpoint
+    if (
+      (selectedTarget.id.startsWith('http') || selectedTarget.id.startsWith('websocket')) &&
+      !selectedTarget.config.url
+    ) {
+      missingFields.push('URL');
+    }
+
+    setMissingFields(missingFields);
   }, [selectedTarget, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
@@ -539,6 +540,11 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           <Typography variant="h6" gutterBottom>
             Test Target Configuration
           </Typography>
+          {!selectedTarget.config.url && (
+            <Typography variant="body1" sx={{ mb: 1, color: 'gray' }}>
+              Please enter a valid URL to test the target.
+            </Typography>
+          )}
           <Button
             variant="outlined"
             onClick={handleTestTarget}
@@ -547,11 +553,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           >
             {testingTarget ? 'Testing...' : 'Test Target'}
           </Button>
-          {!selectedTarget.config.url && (
-            <Typography variant="body1" sx={{ mt: 1, color: 'red' }}>
-              Please enter a valid URL to test the target.
-            </Typography>
-          )}
 
           {testResult && (
             <Box mt={2}>
@@ -615,22 +616,37 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         </Box>
       )}
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          mt: 4,
+          flexDirection: 'column',
+          alignSelf: 'flex-end',
+          alignItems: 'flex-end',
+        }}
+      >
         <Button
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          disabled={!canContinue}
+          disabled={missingFields.length > 0}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },
             '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
             px: 4,
             py: 1,
+            maxWidth: '150px',
           }}
         >
           Next
         </Button>
+        {missingFields.length > 0 && (
+          <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+            Missing required fields: {missingFields.join(', ')}.
+          </Typography>
+        )}
       </Box>
     </Stack>
   );
