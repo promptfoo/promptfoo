@@ -1,5 +1,5 @@
 import { runDbMigrations } from '../../src/migrate';
-import Eval, { getSummaryofLatestEvals } from '../../src/models/eval';
+import Eval, { getSummaryOfLatestEvals } from '../../src/models/eval';
 import EvalFactory from '../factories/evalFactory';
 
 describe('evaluator', () => {
@@ -11,7 +11,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();
       await EvalFactory.createOldResult();
-      const evaluations = await getSummaryofLatestEvals();
+      const evaluations = await getSummaryOfLatestEvals();
 
       expect(evaluations).toHaveLength(2);
       expect(evaluations).toContainEqual(

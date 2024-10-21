@@ -463,7 +463,7 @@ export default class Eval {
   }
 }
 
-export async function getSummaryofLatestEvals(
+export async function getSummaryOfLatestEvals(
   limit: number = DEFAULT_QUERY_LIMIT,
   filterDescription?: string,
   datasetId?: string,

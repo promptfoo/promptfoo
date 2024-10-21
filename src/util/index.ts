@@ -30,7 +30,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { createEvalId, getSummaryofLatestEvals } from '../models/eval';
+import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -375,7 +375,7 @@ export async function listPreviousResults(
 
   const endTime = performance.now();
   const executionTime = endTime - startTime;
-  const evalResults = await getSummaryofLatestEvals(undefined, filterDescription, datasetId);
+  const evalResults = await getSummaryOfLatestEvals(undefined, filterDescription, datasetId);
   logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
   const combinedResults = [...evalResults, ...mappedResults];
   return combinedResults;
