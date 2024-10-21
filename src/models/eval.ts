@@ -461,11 +461,6 @@ export default class Eval {
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
-
-  async updateAuthor(author: string) {
-    this.author = author;
-    await this.save();
-  }
 }
 
 export async function getSummaryOfLatestEvals(
