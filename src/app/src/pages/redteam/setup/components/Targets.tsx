@@ -74,7 +74,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   const setSelectedTarget = (value: ProviderOptions) => {
     updateConfig('target', value);
   };
-  console.log(config);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [bodyError, setBodyError] = useState<string | null>(null);
   const [testingTarget, setTestingTarget] = useState(false);
@@ -96,8 +95,24 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     isJsonContentType ? JSON.stringify(selectedTarget.config.body) : selectedTarget.config.body,
   );
 
+  const [canContinue, setCanContinue] = useState(false);
+
   useEffect(() => {
     updateConfig('target', selectedTarget);
+
+    if (selectedTarget && selectedTarget.targetId) {
+      // Make sure we have a url target is a valid HTTP or WebSocket endpoint
+      if (
+        (selectedTarget.id.startsWith('http') || selectedTarget.id.startsWith('websocket')) &&
+        selectedTarget.config.url
+      ) {
+        setCanContinue(true);
+      } else {
+        setCanContinue(false);
+      }
+    } else {
+      setCanContinue(false);
+    }
   }, [selectedTarget, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
@@ -605,7 +620,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          disabled={!selectedTarget}
+          disabled={!canContinue}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },
