@@ -17,7 +17,7 @@ import {
   riskCategories,
   riskCategorySeverityMap,
   subCategoryDescriptions,
-} from './constants';
+} from '@promptfoo/redteam/constants';
 import './TestSuites.css';
 
 const getSubCategoryStats = (

@@ -1,23 +1,5 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import type { Plugin } from '@app/pages/redteam/report/components/constants';
-import {
-  COLLECTIONS,
-  HARM_PLUGINS,
-  PII_PLUGINS,
-  BASE_PLUGINS,
-  ADDITIONAL_PLUGINS,
-  CONFIG_REQUIRED_PLUGINS,
-  DEFAULT_PLUGINS,
-  ALL_PLUGINS,
-  NIST_AI_RMF_MAPPING,
-  OWASP_LLM_TOP_10_MAPPING,
-  OWASP_API_TOP_10_MAPPING,
-  MITRE_ATLAS_MAPPING,
-  displayNameOverrides,
-  categoryAliases,
-  subCategoryDescriptions,
-} from '@app/pages/redteam/report/components/constants';
 import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -39,6 +21,24 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import {
+  COLLECTIONS,
+  HARM_PLUGINS,
+  PII_PLUGINS,
+  BASE_PLUGINS,
+  ADDITIONAL_PLUGINS,
+  CONFIG_REQUIRED_PLUGINS,
+  DEFAULT_PLUGINS,
+  ALL_PLUGINS,
+  NIST_AI_RMF_MAPPING,
+  OWASP_LLM_TOP_10_MAPPING,
+  OWASP_API_TOP_10_MAPPING,
+  MITRE_ATLAS_MAPPING,
+  displayNameOverrides,
+  subCategoryDescriptions,
+  categoryAliases,
+  type Plugin,
+} from '@promptfoo/redteam/constants';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 import PresetCard from './PresetCard';
