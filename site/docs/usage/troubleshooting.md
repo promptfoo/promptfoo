@@ -91,3 +91,24 @@ telnet 127.0.0.1 4444
 If you encounter errors in your Python script, the error message and stack trace will be displayed in the promptfoo output. Make sure to check this information for clues about what might be going wrong in your code.
 
 Remember that promptfoo runs your Python script in a separate process, so some standard debugging techniques may not work as expected. Using logging and remote debugging as described above are the most reliable ways to troubleshoot issues in your Python providers.
+
+## Debugging the Database
+
+1. Set environment variables:
+
+   ```sh
+   export PROMPTFOO_ENABLE_DATABASE_LOGS=true
+   export LOG_LEVEL=debug
+   ```
+
+2. Run your command:
+
+   ```sh
+   promptfoo eval
+   ```
+
+3. Disable logging when done:
+
+   ```sh
+   unset PROMPTFOO_ENABLE_DATABASE_LOGS
+   ```
