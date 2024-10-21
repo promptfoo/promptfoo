@@ -468,17 +468,44 @@ export const displayNameOverrides = {
   'cross-session-leak': 'Cross-Session Leak',
   'debug-access': 'Debug Access',
   'excessive-agency': 'Excessive Agency',
+  hallucination: 'Hallucination',
+  harmful: 'Harmful Content',
+  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
+  'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations',
   'harmful:cybercrime': 'Cybercrime',
+  'harmful:graphic-content': 'Graphic Content',
+  'harmful:harassment-bullying': 'Harassment & Bullying',
+  'harmful:hate': 'Hate Speech',
   'harmful:illegal-activities': 'Illegal Activities',
-  'harmful:misinformation-disinformation': 'Misinformation & disinformation',
+  'harmful:illegal-drugs': 'Illegal Drugs',
+  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
+  'harmful:insults': 'Insults',
+  'harmful:intellectual-property': 'Intellectual Property Violation',
+  'harmful:misinformation-disinformation': 'Misinformation & Disinformation',
+  'harmful:non-violent-crime': 'Non-Violent Crime',
+  'harmful:privacy': 'Privacy Violation',
+  'harmful:profanity': 'Profanity',
+  'harmful:radicalization': 'Radicalization',
+  'harmful:self-harm': 'Self-Harm',
+  'harmful:sex-crime': 'Sex Crime',
+  'harmful:sexual-content': 'Sexual Content',
   'harmful:specialized-advice': 'Specialized Advice',
+  'harmful:unsafe-practices': 'Unsafe Practices',
+  'harmful:violent-crime': 'Violent Crime',
+  hijacking: 'Hijacking',
+  imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   jailbreak: 'Single-shot optimization',
   'jailbreak:tree': 'Tree-based optimization',
   'math-prompt': 'Math Prompt',
   multilingual: 'Multilingual',
+  overreliance: 'Overreliance',
   pii: 'PII Leaks',
+  'pii:api-db': 'PII in API/Database',
+  'pii:direct': 'Direct PII Exposure',
+  'pii:session': 'PII in Session Data',
+  'pii:social': 'PII via Social Engineering',
   policy: 'Custom Policy',
   politics: 'Political Opinions',
   'prompt-extraction': 'Prompt Extraction',
@@ -677,3 +704,96 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
   },
   {} as Record<string, string>,
 );
+
+export const pluginDescriptions: Record<string, string> = {
+  'sql-injection':
+    'SQL injection is a vulnerability that allows attackers to execute unauthorized database queries, potentially leading to data theft or manipulation.',
+  'cross-session-leak':
+    'Cross-session leak occurs when sensitive information from one user session is inadvertently exposed to another session, compromising data privacy.',
+  'ascii-smuggling':
+    'ASCII smuggling is a technique used to obfuscate malicious content using ASCII characters, potentially bypassing security filters.',
+  bfla: 'Broken Function Level Authorization (BFLA) is a vulnerability where an application fails to properly restrict access to sensitive functions based on user roles.',
+  bola: 'Broken Object Level Authorization (BOLA) is a vulnerability where an application fails to properly restrict access to sensitive data objects based on user permissions.',
+  competitors:
+    'Competitor mentions and endorsements can lead to unintended promotion of rival products or services.',
+  contracts:
+    'Unauthorized contract creation or modification can lead to legal and financial risks for the organization.',
+  'debug-access':
+    'Debug access vulnerabilities can expose sensitive system information or provide unauthorized control over the application.',
+  'excessive-agency':
+    'Excessive agency occurs when the AI model takes actions or makes decisions beyond its intended scope, potentially leading to unintended consequences.',
+  hallucination:
+    'AI hallucination refers to the generation of false or misleading information, which can lead to misinformation or incorrect decision-making.',
+  hijacking:
+    'Hijacking vulnerabilities allow attackers to take control of user sessions or system resources, compromising security and privacy.',
+  imitation:
+    'Imitation vulnerabilities occur when the AI impersonates individuals, brands, or organizations without authorization, potentially leading to fraud or reputational damage.',
+  'indirect-prompt-injection':
+    "Indirect prompt injection allows attackers to manipulate the AI's behavior by injecting malicious content into variables used in prompts.",
+  overreliance:
+    'Overreliance on AI systems without proper validation can lead to errors in decision-making or actions based on incorrect assumptions.',
+  pii: 'Personal Identifiable Information (PII) leaks can compromise user privacy and lead to legal and reputational consequences.',
+  policy:
+    'Policy violations occur when the AI system acts in ways that contradict established organizational policies or guidelines.',
+  politics:
+    'Political statements or biases in AI responses can lead to controversy or alienation of users with different political views.',
+  'prompt-extraction':
+    'Prompt extraction vulnerabilities allow attackers to reveal the system prompts used to guide the AI, potentially exposing sensitive information or enabling further attacks.',
+  rbac: 'Role-Based Access Control (RBAC) vulnerabilities occur when the system fails to properly enforce access restrictions based on user roles.',
+  religion:
+    'Religious statements or biases in AI responses can lead to controversy or alienation of users with different religious beliefs.',
+  'shell-injection':
+    'Shell injection vulnerabilities allow attackers to execute unauthorized system commands, potentially leading to system compromise.',
+  ssrf: 'Server-Side Request Forgery (SSRF) vulnerabilities allow attackers to make unauthorized requests from the server, potentially accessing internal resources or services.',
+  'harmful:child-exploitation': 'Content exploiting or harming children',
+  'harmful:cybercrime': 'Content related to cybercriminal activities',
+  'harmful:graphic-content': 'Displaying graphic or violent content',
+  'harmful:harassment-bullying': 'Content that harasses or bullies individuals',
+  'harmful:hate': 'Content that promotes hate or discrimination',
+  'harmful:illegal-activities': 'Content promoting illegal activities',
+  'harmful:illegal-drugs': 'Content related to illegal drug use or trade',
+  'harmful:indiscriminate-weapons': 'Content related to weapons without context',
+  'harmful:insults': 'Content that insults or demeans individuals',
+  'harmful:intellectual-property': 'Content violating intellectual property rights',
+  'harmful:misinformation-disinformation': 'Spreading false or misleading information',
+  'harmful:non-violent-crime': 'Content related to non-violent criminal activities',
+  'harmful:privacy': 'Content violating privacy rights',
+  'harmful:profanity': 'Content containing profane or inappropriate language',
+  'harmful:radicalization': 'Content that promotes radical or extremist views',
+  'harmful:self-harm': 'Content that encourages self-harm or suicide',
+  'harmful:sex-crime': 'Content related to sexual crimes',
+  'harmful:sexual-content': 'Explicit or inappropriate sexual content',
+  'harmful:specialized-advice': 'Providing advice in specialized fields without expertise',
+  'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices',
+  'harmful:violent-crime': 'Content related to violent criminal activities',
+  'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
+  'harmful:copyright-violations': 'Content violating copyright laws',
+};
+
+export const strategyDescriptions: Record<string, string> = {
+  'ascii-smuggling': 'Obfuscates malicious content using ASCII characters to bypass filters',
+  base64: 'Encodes malicious content in Base64 to evade detection',
+  crescendo: 'Gradually escalates the conversation to probe for vulnerabilities',
+  'indirect-prompt-injection': 'Injects malicious instructions into variables used in prompts',
+  'jailbreak:tree': 'Uses a tree-based search approach for more sophisticated jailbreaking',
+  jailbreak: 'Attempts to bypass security measures through iterative prompt refinement',
+  leetspeak: 'Replaces characters with similar-looking numbers or symbols to obfuscate content',
+  'math-prompt': 'Encodes harmful content using mathematical concepts and notation',
+  multilingual: 'Translates malicious content into low-resource languages to evade detection',
+  'prompt-injection': 'Injects malicious instructions into prompts via user input',
+  rot13: 'Applies a simple letter substitution cipher to obfuscate malicious content',
+};
+
+export const strategyDisplayNames: Record<Strategy, string> = {
+  'jailbreak:tree': 'Tree-based Optimization',
+  'math-prompt': 'Mathematical Encoding',
+  'prompt-injection': 'Prompt Injection',
+  base64: 'Base64 Encoding',
+  basic: 'Basic',
+  crescendo: 'Crescendo',
+  default: 'Default',
+  jailbreak: 'Single-shot Optimization',
+  leetspeak: 'Leetspeak',
+  multilingual: 'Multilingual',
+  rot13: 'ROT13 Encoding',
+};
