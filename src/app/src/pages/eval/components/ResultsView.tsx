@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApi, fetchUserEmail } from '@app/utils/api';
+import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -59,22 +59,6 @@ interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (file: string) => void;
   defaultEvalId?: string;
-}
-
-async function updateEvalAuthor(evalId: string, author: string) {
-  const response = await callApi(`/eval/${evalId}/author`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ author }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to update eval author');
-  }
-
-  return response.json();
 }
 
 export default function ResultsView({

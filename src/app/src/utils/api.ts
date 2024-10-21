@@ -22,3 +22,19 @@ export async function fetchUserEmail(): Promise<string | null> {
     return null;
   }
 }
+
+export async function updateEvalAuthor(evalId: string, author: string) {
+  const response = await callApi(`/eval/${evalId}/author`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ author }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to update eval author');
+  }
+
+  return response.json();
+}
