@@ -42,6 +42,17 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
+function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
+  const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);
+  if (hasProviderWithoutLabel) {
+    console.log(
+      chalk.yellow(
+        'Warning: Your target (provider) does not have a label specified. Labels are used to uniquely identify redteam targets. Make it meaningful and unique eg: helpdesk-search-agent. \n We highly reccomend setting a label on your targets/providers in your redteam config. the provider Id will be used instead. ',
+      ),
+    );
+  }
+}
+
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
@@ -339,6 +350,9 @@ export async function doEval(
       } else {
         logger.info('Done.');
       }
+    }
+    if (defaultConfig.redteam) {
+      showRedteamProviderLabelMissingWarning(testSuite);
     }
   };
 

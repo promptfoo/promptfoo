@@ -95,8 +95,25 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     isJsonContentType ? JSON.stringify(selectedTarget.config.body) : selectedTarget.config.body,
   );
 
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+
   useEffect(() => {
     updateConfig('target', selectedTarget);
+    const missingFields: string[] = [];
+
+    if (!selectedTarget.label) {
+      missingFields.push('Target Name');
+    }
+
+    // Make sure we have a url target is a valid HTTP or WebSocket endpoint
+    if (
+      (selectedTarget.id.startsWith('http') || selectedTarget.id.startsWith('websocket')) &&
+      (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url))
+    ) {
+      missingFields.push('URL');
+    }
+
+    setMissingFields(missingFields);
   }, [selectedTarget, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
@@ -171,6 +188,8 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         if (!value.includes('{{prompt}}')) {
           setBodyError('Request body must contain {{prompt}}');
         }
+      } else if (field === 'label') {
+        updatedTarget.label = value;
       } else {
         (updatedTarget.config as any)[field] = value;
       }
@@ -305,13 +324,31 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3 }}>
           Select a Target
         </Typography>
+        <TextField
+          fullWidth
+          sx={{ mb: 2 }}
+          label="Target Name"
+          value={selectedTarget.label}
+          placeholder="e.g. 'customer-service-agent'"
+          onChange={(e) => updateCustomTarget('label', e.target.value)}
+          margin="normal"
+          required
+          autoFocus
+        />
+
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
+          The target name will be used to report vulnerabilities. Make sure it's meaningful and
+          re-use it when generating new redteam configs for the same target. Eg:
+          'customer-service-agent', 'compliance-bot'
+        </Typography>
+
         <FormControl fullWidth>
-          <InputLabel id="predefined-target-label">Target</InputLabel>
+          <InputLabel id="predefined-target-label">Target Type</InputLabel>
           <Select
             labelId="predefined-target-label"
             value={selectedTarget.id}
             onChange={handleTargetChange}
-            label="Target"
+            label="Target Type"
           >
             {predefinedTargets.map((target) => (
               <MenuItem key={target.value} value={target.value}>
@@ -373,7 +410,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                 margin="normal"
                 error={!!urlError}
                 helperText={urlError}
-                autoFocus
                 placeholder="https://example.com/api/chat"
                 required
               />
@@ -500,19 +536,22 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
 
       {testingEnabled && (
         <Box mt={4}>
-          <Typography variant="h6" gutterBottom>
-            Test Target Configuration
-          </Typography>
-          <Button
-            variant="outlined"
-            onClick={handleTestTarget}
-            disabled={testingTarget || !selectedTarget.config.url}
-            startIcon={testingTarget ? <CircularProgress size={20} /> : null}
-          >
-            {testingTarget ? 'Testing...' : 'Test Target'}
-          </Button>
+          <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>
+              Test Target Configuration
+            </Typography>
+            <Button
+              variant="outlined"
+              onClick={handleTestTarget}
+              disabled={testingTarget || !selectedTarget.config.url}
+              startIcon={testingTarget ? <CircularProgress size={20} /> : null}
+            >
+              {testingTarget ? 'Testing...' : 'Test Target'}
+            </Button>
+          </Stack>
+
           {!selectedTarget.config.url && (
-            <Typography variant="body1" sx={{ mt: 1, color: 'red' }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Please enter a valid URL to test the target.
             </Typography>
           )}
@@ -536,7 +575,12 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                   </Typography>
                   <Paper
                     elevation={0}
-                    sx={{ p: 2, bgcolor: 'grey.100', maxHeight: '200px', overflow: 'auto' }}
+                    sx={{
+                      p: 2,
+                      bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                      maxHeight: '200px',
+                      overflow: 'auto',
+                    }}
                   >
                     <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {JSON.stringify(testResult.providerResponse?.raw, null, 2)}
@@ -560,7 +604,13 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                   <Typography variant="subtitle1" gutterBottom>
                     Suggestions:
                   </Typography>
-                  <Paper elevation={1} sx={{ p: 2, bgcolor: 'grey.100' }}>
+                  <Paper
+                    elevation={1}
+                    sx={{
+                      p: 2,
+                      bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                    }}
+                  >
                     <List>
                       {testResult.suggestions.map((suggestion, index) => (
                         <ListItem key={index}>
@@ -579,18 +629,46 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         </Box>
       )}
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mt: 4,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {missingFields.length > 0 && (
+          <Alert
+            severity="error"
+            sx={{
+              flexGrow: 1,
+              mr: 2,
+              '& .MuiAlert-message': {
+                display: 'flex',
+                alignItems: 'center',
+              },
+            }}
+          >
+            <Typography variant="body2">
+              Missing required fields: {missingFields.join(', ')}
+            </Typography>
+          </Alert>
+        )}
+
         <Button
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          disabled={!selectedTarget}
+          disabled={missingFields.length > 0}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },
             '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
             px: 4,
             py: 1,
+            minWidth: '150px',
           }}
         >
           Next

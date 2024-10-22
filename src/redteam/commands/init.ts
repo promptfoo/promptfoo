@@ -53,6 +53,7 @@ targets:
   - {{ provider }}
   {% else -%}
   - id: {{ provider.id }}
+    label: {{ provider.label }}
     config:
       {% for k, v in provider.config -%}
       {{ k }}: {{ v | dump }}
@@ -179,6 +180,11 @@ export async function redteamInit(directory: string | undefined) {
   console.clear();
   logger.info(chalk.bold('Red Team Configuration\n'));
 
+  const label = await input({
+    message:
+      "What's the name of the target you want to red team? (e.g. 'helpdesk-agent', 'customer-service-chatbot')\n",
+  });
+
   const redTeamChoice = await select({
     message: 'What would you like to do?',
     choices: [
@@ -245,6 +251,7 @@ export async function redteamInit(directory: string | undefined) {
       providers = [
         {
           id: 'https://example.com/generate',
+          label,
           config: {
             method: 'POST',
             headers: {
@@ -286,9 +293,9 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = ['openai:gpt-4o-mini'];
+      providers = [{ id: 'openai:gpt-4o-mini', label }];
     } else {
-      providers = [selectedProvider];
+      providers = [{ id: selectedProvider, label }];
     }
   }
 

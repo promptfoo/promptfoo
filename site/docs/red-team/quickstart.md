@@ -62,6 +62,7 @@ Edit the config to set up the target endpoint. For example:
 ```yaml
 targets:
   - id: 'https://example.com/generate'
+    label: 'travel-agent-agent'
     config:
       method: 'POST'
       headers:
@@ -71,6 +72,10 @@ targets:
 
 purpose: 'Budget travel agent'
 ```
+
+:::important
+The `label` is used to create issues and report the results of the red teaming. Make sure to re-use the same `label` when generating new redteam configs for the same target.
+:::
 
 Setting the `purpose` is optional, but it will significantly improve the quality of the generated test cases (try to be specific).
 
@@ -87,8 +92,8 @@ prompts:
   # - file://path/to/prompt.txt
 
 targets:
-  - openai:gpt-4o-mini
-  - anthropic:messages:claude-3.5-sonnet-20240620
+  - id: openai:gpt-4o-mini
+    label: 'travel-agent-mini'
 ```
 
 For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/parameters/#prompts).
