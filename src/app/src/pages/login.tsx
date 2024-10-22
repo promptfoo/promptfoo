@@ -81,7 +81,7 @@ export default function LoginPage() {
             {params.get('type') === 'report' ? 'View Report' : 'Authentication required'}
           </Typography>
           <Typography variant="body1" align="center" sx={{ mb: 3 }}>
-            Please enter your email to continue
+            Please verify your email to continue
           </Typography>
           <Box component="form" onSubmit={handleSubmit}>
             <TextField
