@@ -1,7 +1,6 @@
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
-import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import crypto from 'crypto';
-import { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
+import type { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
 import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { getCache, isCacheEnabled } from '../cache';
@@ -332,7 +331,8 @@ export class WatsonXProvider implements ApiProvider {
   modelName: string;
   options: ProviderOptions;
   env?: EnvOverrides;
-  client: WatsonXAIClient;
+  client?: WatsonXAIClient;
+  config: z.infer<typeof ConfigSchema>;
 
   constructor(modelName: string, options: ProviderOptions) {
     const validationResult = ConfigSchema.safeParse(options.config);
@@ -347,14 +347,7 @@ export class WatsonXProvider implements ApiProvider {
     this.modelName = modelName;
     this.options = options;
     this.env = env;
-
-    const authenticator = this.getAuth(validatedConfig);
-
-    this.client = WatsonXAI.newInstance({
-      version: this.options.config.version || '2023-05-29',
-      serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
-      authenticator,
-    });
+    this.config = validatedConfig;
   }
 
   id(): string {
@@ -365,23 +358,23 @@ export class WatsonXProvider implements ApiProvider {
     return `[Watsonx Provider ${this.modelName}]`;
   }
 
-  getAuth(
-    validatedConfig: z.infer<typeof ConfigSchema>,
-  ): IamAuthenticator | BearerTokenAuthenticator {
+  async getAuth(): Promise<IamAuthenticator | BearerTokenAuthenticator> {
+    const { IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core');
+
     const apiKey =
-      validatedConfig.apiKey ||
-      (validatedConfig.apiKeyEnvar
-        ? process.env[validatedConfig.apiKeyEnvar] ||
-          this.env?.[validatedConfig.apiKeyEnvar as keyof EnvOverrides]
+      this.config.apiKey ||
+      (this.config.apiKeyEnvar
+        ? process.env[this.config.apiKeyEnvar] ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.WATSONX_AI_APIKEY ||
       getEnvString('WATSONX_AI_APIKEY');
 
     const bearerToken =
-      validatedConfig.apiBearerToken ||
-      (validatedConfig.apiBearerTokenEnvar
-        ? process.env[validatedConfig.apiBearerTokenEnvar] ||
-          this.env?.[validatedConfig.apiBearerTokenEnvar as keyof EnvOverrides]
+      this.config.apiBearerToken ||
+      (this.config.apiBearerTokenEnvar
+        ? process.env[this.config.apiBearerTokenEnvar] ||
+          this.env?.[this.config.apiBearerTokenEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.WATSONX_AI_BEARER_TOKEN ||
       getEnvString('WATSONX_AI_BEARER_TOKEN');
@@ -431,14 +424,26 @@ export class WatsonXProvider implements ApiProvider {
     return modelId;
   }
 
-  getClient(): WatsonXAIClient {
+  async getClient(): Promise<WatsonXAIClient> {
+    if (this.client) {
+      return this.client;
+    }
+
+    const authenticator = await this.getAuth();
+    const { WatsonXAI } = await import('@ibm-cloud/watsonx-ai');
+    this.client = WatsonXAI.newInstance({
+      version: this.options.config.version || '2023-05-29',
+      serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
+      authenticator,
+    });
     return this.client;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
+    const client = await this.getClient();
+
     const modelId = this.getModelId();
     const projectId = this.getProjectId();
-    const client = this.getClient();
 
     const cache = getCache();
     const configHash = generateConfigHash(this.options.config);
