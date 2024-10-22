@@ -378,6 +378,7 @@ export const ADDITIONAL_STRATEGIES = [
   'jailbreak:tree',
   'leetspeak',
   'math-prompt',
+  'goat',
   'multilingual',
   'rot13',
 ] as const;
@@ -454,6 +455,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Attempts to execute shell commands through the model',
   'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries',
   ssrf: 'Server-Side Request Forgery (SSRF) tests',
+  goat: 'GOAT (Goal-oriented Adversarial Testing) strategy',
 };
 
 // These names are displayed in risk cards and in the table
@@ -492,6 +494,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'harmful:unsafe-practices': 'Unsafe Practices',
   'harmful:violent-crime': 'Violent Crime',
   hijacking: 'Hijacking',
+  goat: 'GOAT',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   jailbreak: 'Single-shot optimization',
@@ -804,6 +807,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   rot13: 'Applies a simple letter substitution cipher to obfuscate malicious content',
   default: 'Single-shot',
   basic: 'Single-shot',
+  goat: 'GOAT (Goal-oriented Adversarial Testing) strategy',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
@@ -819,4 +823,5 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   leetspeak: 'Leetspeak',
   multilingual: 'Multilingual',
   rot13: 'ROT13 Encoding',
+  goat: 'GOAT',
 };

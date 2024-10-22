@@ -88,7 +88,7 @@ interface PromptfooChatCompletionOptions {
   id?: string;
   jsonOnly: boolean;
   preferSmallModel: boolean;
-  task: 'crescendo' | 'iterative' | 'iterative:image' | 'iterative:tree';
+  task: 'crescendo' | 'iterative' | 'iterative:image' | 'iterative:tree' | 'goat';
 }
 
 export class PromptfooChatCompletionProvider implements ApiProvider {

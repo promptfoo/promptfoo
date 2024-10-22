@@ -70,6 +70,7 @@ import { WebhookProvider } from './providers/webhook';
 import { WebSocketProvider } from './providers/websocket';
 import { createXAIProvider } from './providers/xai';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
+import RedteamGoatProvider from './redteam/providers/goat';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
@@ -451,6 +452,8 @@ export async function loadApiProvider(
     ret = new RedteamImageIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:crescendo') {
     ret = new RedteamCrescendoProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:goat') {
+    ret = new RedteamGoatProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
   } else if (providerPath.startsWith('groq:')) {
