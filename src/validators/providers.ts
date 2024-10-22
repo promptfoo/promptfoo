@@ -54,7 +54,6 @@ export const ProviderOptionsSchema = z
   .object({
     id: z.custom<ProviderId>().optional(),
     label: z.custom<ProviderLabel>().optional(),
-    targetId: z.string().optional(),
     config: z.any().optional(),
     prompts: z.array(z.string()).optional(),
     transform: z.string().optional(),

@@ -101,7 +101,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     updateConfig('target', selectedTarget);
     const missingFields: string[] = [];
 
-    if (!selectedTarget.targetId) {
+    if (!selectedTarget.label) {
       missingFields.push('Target Name');
     }
 
@@ -124,7 +124,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         value === 'javascript'
           ? 'file://path/to/custom_provider.js'
           : 'file://path/to/custom_provider.py';
-      setSelectedTarget({ id: filePath, config: {}, targetId: filePath });
+      setSelectedTarget({ id: filePath, config: {} });
       updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'http') {
@@ -134,7 +134,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     } else if (value === 'websocket') {
       setSelectedTarget({
         id: 'websocket',
-        targetId: 'websocket',
         config: {
           type: 'websocket',
           url: 'wss://example.com/ws',
@@ -146,7 +145,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
       updateConfig('prompts', ['{{prompt}}']);
       updateConfig('purpose', '');
     } else {
-      setSelectedTarget({ id: value, targetId: value, config: {} });
+      setSelectedTarget({ id: value, config: {} });
       updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     }
@@ -189,8 +188,8 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         if (!value.includes('{{prompt}}')) {
           setBodyError('Request body must contain {{prompt}}');
         }
-      } else if (field === 'targetId') {
-        updatedTarget.targetId = value;
+      } else if (field === 'label') {
+        updatedTarget.label = value;
       } else {
         (updatedTarget.config as any)[field] = value;
       }
@@ -329,9 +328,9 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           fullWidth
           sx={{ mb: 2 }}
           label="Target Name"
-          value={selectedTarget.targetId}
+          value={selectedTarget.label}
           placeholder="e.g. 'customer-service-agent'"
-          onChange={(e) => updateCustomTarget('targetId', e.target.value)}
+          onChange={(e) => updateCustomTarget('label', e.target.value)}
           margin="normal"
           required
           autoFocus

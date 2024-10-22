@@ -31,7 +31,7 @@ The redteam configuration uses the following YAML structure:
 ```yaml
 targets:
   - id: openai:gpt-4o
-    targetId: customer-service-agent
+    label: customer-service-agent
 
 redteam:
   plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>

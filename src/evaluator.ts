@@ -168,7 +168,6 @@ class Evaluator {
         id: provider.id(),
         label: provider.label,
         config: provider.config,
-        targetId: provider.targetId,
       },
       prompt: {
         raw: renderedPrompt,

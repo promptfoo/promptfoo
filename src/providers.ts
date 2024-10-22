@@ -94,15 +94,14 @@ export async function loadApiProvider(
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env, forRedteam } = context;
 
-  if (forRedteam && !options.targetId) {
+  if (forRedteam && !options.label) {
     logger.warn(
-      'targetId is required for redteam providers. Please specify a targetId in the provider config.',
+      'label is required for redteam providers. Please specify a label in the provider config.',
     );
-    throw new Error('targetId is required for redteam providers');
+    throw new Error('label is required for redteam providers');
   }
   const providerOptions: ProviderOptions = {
     id: options.id,
-    targetId: options.targetId,
     config: {
       ...options.config,
       basePath,
@@ -498,7 +497,6 @@ export async function loadApiProvider(
   ret.transform = options.transform;
   ret.delay = options.delay;
   ret.label ||= getNunjucksEngine().renderString(options.label || '', {});
-  ret.targetId = options.targetId;
   return ret;
 }
 
