@@ -12,6 +12,7 @@ import cliState from '../cliState';
 import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
+import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
@@ -27,12 +28,7 @@ import type {
 import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
-import {
-  migrateResultsFromFileSystemToDatabase,
-  printBorder,
-  setupEnv,
-  writeMultipleOutputs,
-} from '../util';
+import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { filterProviders } from './eval/filterProviders';
@@ -64,6 +60,10 @@ export async function doEval(
       watch: Boolean(cmdObj.watch),
     });
     await telemetry.send();
+
+    if (cmdObj.write) {
+      await runDbMigrations();
+    }
 
     // Reload default config - because it may have changed.
     if (defaultConfigPath) {
@@ -197,8 +197,6 @@ export async function doEval(
         )}`,
       );
     }
-
-    await migrateResultsFromFileSystemToDatabase();
 
     if (getEnvBool('PROMPTFOO_LIGHTWEIGHT_RESULTS')) {
       const outputPath = config.outputPath;

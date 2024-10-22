@@ -28,7 +28,6 @@ import { getDirectory, importModule } from '../esm';
 import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import { runDbMigrations } from '../migrate';
 import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
@@ -473,12 +472,6 @@ export function readResult_fileSystem(
   } catch (err) {
     logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
   }
-}
-
-export async function migrateResultsFromFileSystemToDatabase() {
-  // First run db migrations
-  logger.debug('Running db migrations...');
-  await runDbMigrations();
 }
 
 export async function readResult(
