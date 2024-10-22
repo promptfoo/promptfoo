@@ -143,7 +143,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
   };
-  console.log('config.provider', config.provider);
+
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
     logger.error('Invalid redteam configuration:');
