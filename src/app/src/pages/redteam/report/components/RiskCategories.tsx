@@ -2,13 +2,21 @@ import React from 'react';
 import Stack from '@mui/material/Stack';
 import type { TopLevelCategory } from '@promptfoo/redteam/constants';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
+import type { GradingResult } from '@promptfoo/types';
 import RiskCard from './RiskCard';
 
 const RiskCategories: React.FC<{
   categoryStats: Record<string, { pass: number; total: number }>;
   evalId: string;
-  failuresByPlugin: Record<string, { prompt: string; output: string }[]>;
-}> = ({ categoryStats, evalId, failuresByPlugin }) => {
+  failuresByPlugin: Record<
+    string,
+    { prompt: string; output: string; gradingResult?: GradingResult }[]
+  >;
+  passesByPlugin: Record<
+    string,
+    { prompt: string; output: string; gradingResult?: GradingResult }[]
+  >;
+}> = ({ categoryStats, evalId, failuresByPlugin, passesByPlugin }) => {
   const categories = Object.keys(riskCategories).map((category) => ({
     name: category,
     passed: riskCategories[category as TopLevelCategory].every(
@@ -49,6 +57,7 @@ const RiskCategories: React.FC<{
             }))}
             evalId={evalId}
             failuresByPlugin={failuresByPlugin}
+            passesByPlugin={passesByPlugin}
           />
         );
       })}

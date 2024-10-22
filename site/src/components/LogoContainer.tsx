@@ -18,7 +18,7 @@ export default function LogoContainer() {
         alt="Anthropic"
       />
       <img style={{ maxWidth: '100px' }} src="/img/brands/microsoft-logo.svg" alt="Microsoft" />
-      <img style={{ maxHeight: '50px' }} src="/img/brands/salesforce-logo.svg" alt="Salesforce" />
+      <img style={{ maxHeight: '50px' }} src="/img/brands/doordash-logo.svg" alt="Doordash" />
       <img style={{ maxHeight: '120px' }} src="/img/brands/carvana-logo.svg" alt="Carvana" />
     </div>
   );

@@ -75,7 +75,7 @@ function a11yProps(index: number) {
 
 const Root = styled(Box)(({ theme }) => ({
   display: 'flex',
-  backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+  backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
   minHeight: '100vh',
   position: 'relative',
 }));
