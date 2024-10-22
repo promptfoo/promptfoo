@@ -372,6 +372,7 @@ export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'ascii-smuggling',
   'base64',
   'crescendo',
   'jailbreak:tree',
@@ -390,7 +391,6 @@ export const ALL_STRATEGIES = [
 ] as const;
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
-// Duplicated in src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
   basic: 'Raw attacks without any special attack strategies',
@@ -457,14 +457,12 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 };
 
 // These names are displayed in risk cards and in the table
-export const displayNameOverrides = {
+export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'ASCII smuggling',
-  basic: 'Basic',
   bfla: 'Privilege Escalation',
   bola: 'Unauthorized Data Access',
   competitors: 'Competitor Endorsements',
   contracts: 'Unsupervised Contracts',
-  crescendo: 'Multi-turn',
   'cross-session-leak': 'Cross-Session Leak',
   'debug-access': 'Debug Access',
   'excessive-agency': 'Excessive Agency',
@@ -515,6 +513,12 @@ export const displayNameOverrides = {
   'shell-injection': 'Shell Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'Malicious Resource Fetching',
+  default: 'Default',
+  basic: 'Basic',
+  base64: 'Base64 Encoding',
+  crescendo: 'Crescendo',
+  leetspeak: 'Leetspeak Encoding',
+  rot13: 'ROT13 Encoding',
 };
 
 export enum Severity {
@@ -524,7 +528,7 @@ export enum Severity {
   Low = 'Low',
 }
 
-export const riskCategorySeverityMap: Record<string, Severity> = {
+export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
   'cross-session-leak': Severity.Medium,
   'debug-access': Severity.High,
@@ -551,7 +555,6 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   'harmful:specialized-advice': Severity.Medium,
   'harmful:unsafe-practices': Severity.Low,
   'harmful:violent-crime': Severity.High,
-  'prompt-injection': Severity.Medium,
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
   competitors: Severity.Low,
@@ -559,7 +562,6 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   hallucination: Severity.Medium,
   hijacking: Severity.High,
   imitation: Severity.Low,
-  jailbreak: Severity.Medium,
   overreliance: Severity.Low,
   pii: Severity.High,
   politics: Severity.Low,
@@ -571,9 +573,16 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   ssrf: Severity.High,
   'indirect-prompt-injection': Severity.High,
   'prompt-extraction': Severity.Medium,
+  harmful: Severity.Medium,
+  default: Severity.Low,
+  'harmful:chemical-biological-weapons': Severity.High,
+  'pii:api-db': Severity.High,
+  'pii:direct': Severity.High,
+  'pii:session': Severity.High,
+  'pii:social': Severity.High,
 };
 
-export const riskCategories = {
+export const riskCategories: Record<string, Plugin[]> = {
   'Security Risk': [
     'bola',
     'bfla',
@@ -646,7 +655,7 @@ export const categoryMapReverse = Object.entries(riskCategories).reduce(
 export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
-export const categoryAliases = {
+export const categoryAliases: Record<Plugin, string> = {
   'cross-session-leak': 'CrossSessionLeak',
   'ascii-smuggling': 'AsciiSmuggling',
   bola: 'BOLAEnforcement',
@@ -678,7 +687,6 @@ export const categoryAliases = {
   'harmful:violent-crime': 'Violent Crimes',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
-  'prompt-injection': 'Harmful/Injection',
   'shell-injection': 'ShellInjection',
   'sql-injection': 'SqlInjection',
   competitors: 'CompetitorEndorsement',
@@ -686,7 +694,6 @@ export const categoryAliases = {
   hallucination: 'Hallucination',
   hijacking: 'Hijacking',
   imitation: 'Imitation',
-  jailbreak: 'Harmful/Iterative',
   overreliance: 'Overreliance',
   pii: 'PIILeak',
   politics: 'PoliticalStatement',
@@ -695,6 +702,12 @@ export const categoryAliases = {
   policy: 'PolicyViolation',
   'indirect-prompt-injection': 'IndirectPromptInjection',
   'prompt-extraction': 'PromptExtraction',
+  harmful: 'Harmful',
+  default: 'Default',
+  'pii:api-db': 'PIILeak',
+  'pii:direct': 'PIILeak',
+  'pii:session': 'PIILeak',
+  'pii:social': 'PIILeak',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -705,7 +718,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
   {} as Record<string, string>,
 );
 
-export const pluginDescriptions: Record<string, string> = {
+export const pluginDescriptions: Record<Plugin, string> = {
   'sql-injection':
     'SQL injection is a vulnerability that allows attackers to execute unauthorized database queries, potentially leading to data theft or manipulation.',
   'cross-session-leak':
@@ -768,13 +781,18 @@ export const pluginDescriptions: Record<string, string> = {
   'harmful:violent-crime': 'Content related to violent criminal activities',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
   'harmful:copyright-violations': 'Content violating copyright laws',
+  harmful: 'Content that may be harmful or dangerous in various ways',
+  default: 'Default plugin behavior',
+  'pii:api-db': 'PII exposed through API or database',
+  'pii:direct': 'Direct exposure of PII',
+  'pii:session': 'PII exposed in session data',
+  'pii:social': 'PII exposed through social engineering',
 };
 
-export const strategyDescriptions: Record<string, string> = {
+export const strategyDescriptions: Record<Strategy, string> = {
   'ascii-smuggling': 'Obfuscates malicious content using ASCII characters to bypass filters',
   base64: 'Encodes malicious content in Base64 to evade detection',
   crescendo: 'Gradually escalates the conversation to probe for vulnerabilities',
-  'indirect-prompt-injection': 'Injects malicious instructions into variables used in prompts',
   'jailbreak:tree': 'Uses a tree-based search approach for more sophisticated jailbreaking',
   jailbreak: 'Attempts to bypass security measures through iterative prompt refinement',
   leetspeak: 'Replaces characters with similar-looking numbers or symbols to obfuscate content',
@@ -782,16 +800,19 @@ export const strategyDescriptions: Record<string, string> = {
   multilingual: 'Translates malicious content into low-resource languages to evade detection',
   'prompt-injection': 'Injects malicious instructions into prompts via user input',
   rot13: 'Applies a simple letter substitution cipher to obfuscate malicious content',
+  default: 'Dynamically probes and refines prompts to bypass security measures',
+  basic: 'Single shot common prompt injection vulnerabilities',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
+  'ascii-smuggling': 'ASCII Smuggling',
   'jailbreak:tree': 'Tree-based Optimization',
   'math-prompt': 'Mathematical Encoding',
   'prompt-injection': 'Prompt Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   crescendo: 'Crescendo',
-  default: 'Default',
+  default: 'Basic and Iterative Jailbreak',
   jailbreak: 'Single-shot Optimization',
   leetspeak: 'Leetspeak',
   multilingual: 'Multilingual',
