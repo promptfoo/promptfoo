@@ -108,7 +108,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     // Make sure we have a url target is a valid HTTP or WebSocket endpoint
     if (
       (selectedTarget.id.startsWith('http') || selectedTarget.id.startsWith('websocket')) &&
-      !selectedTarget.config.url
+      (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url))
     ) {
       missingFields.push('URL');
     }
@@ -536,22 +536,25 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
 
       {testingEnabled && (
         <Box mt={4}>
-          <Typography variant="h6" gutterBottom>
-            Test Target Configuration
-          </Typography>
+          <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>
+              Test Target Configuration
+            </Typography>
+            <Button
+              variant="outlined"
+              onClick={handleTestTarget}
+              disabled={testingTarget || !selectedTarget.config.url}
+              startIcon={testingTarget ? <CircularProgress size={20} /> : null}
+            >
+              {testingTarget ? 'Testing...' : 'Test Target'}
+            </Button>
+          </Stack>
+
           {!selectedTarget.config.url && (
-            <Typography variant="body1" sx={{ mb: 1, color: 'gray' }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Please enter a valid URL to test the target.
             </Typography>
           )}
-          <Button
-            variant="outlined"
-            onClick={handleTestTarget}
-            disabled={testingTarget || !selectedTarget.config.url}
-            startIcon={testingTarget ? <CircularProgress size={20} /> : null}
-          >
-            {testingTarget ? 'Testing...' : 'Test Target'}
-          </Button>
 
           {testResult && (
             <Box mt={2}>
@@ -572,7 +575,12 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                   </Typography>
                   <Paper
                     elevation={0}
-                    sx={{ p: 2, bgcolor: 'grey.100', maxHeight: '200px', overflow: 'auto' }}
+                    sx={{
+                      p: 2,
+                      bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                      maxHeight: '200px',
+                      overflow: 'auto',
+                    }}
                   >
                     <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {JSON.stringify(testResult.providerResponse?.raw, null, 2)}
@@ -596,7 +604,13 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                   <Typography variant="subtitle1" gutterBottom>
                     Suggestions:
                   </Typography>
-                  <Paper elevation={1} sx={{ p: 2, bgcolor: 'grey.100' }}>
+                  <Paper
+                    elevation={1}
+                    sx={{
+                      p: 2,
+                      bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                    }}
+                  >
                     <List>
                       {testResult.suggestions.map((suggestion, index) => (
                         <ListItem key={index}>
@@ -618,13 +632,31 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
       <Box
         sx={{
           display: 'flex',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           mt: 4,
-          flexDirection: 'column',
-          alignSelf: 'flex-end',
-          alignItems: 'flex-end',
+          width: '100%',
+          position: 'relative',
         }}
       >
+        {missingFields.length > 0 && (
+          <Alert
+            severity="error"
+            sx={{
+              flexGrow: 1,
+              mr: 2,
+              '& .MuiAlert-message': {
+                display: 'flex',
+                alignItems: 'center',
+              },
+            }}
+          >
+            <Typography variant="body2">
+              Missing required fields: {missingFields.join(', ')}
+            </Typography>
+          </Alert>
+        )}
+
         <Button
           variant="contained"
           onClick={onNext}
@@ -636,16 +668,11 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
             '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
             px: 4,
             py: 1,
-            maxWidth: '150px',
+            minWidth: '150px',
           }}
         >
           Next
         </Button>
-        {missingFields.length > 0 && (
-          <Typography variant="body2" color="error" sx={{ mt: 1 }}>
-            Missing required fields: {missingFields.join(', ')}.
-          </Typography>
-        )}
       </Box>
     </Stack>
   );
