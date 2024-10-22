@@ -597,7 +597,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
 
       // Handle structured output
-      if (this.config.response_format?.type === 'json_schema' && typeof output === 'string') {
+      if (responseFormat?.type === 'json_schema' && typeof output === 'string') {
         try {
           output = JSON.parse(output);
         } catch (error) {

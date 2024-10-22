@@ -1182,7 +1182,7 @@ describe('call provider apis', () => {
       const requestBody = JSON.parse(fetchArgs[1]?.body as string);
       expect(requestBody.response_format).toEqual(promptResponseFormat);
 
-      expect(result.output).toBe('{"key2": "value2"}');
+      expect(result.output).toEqual({ key2: 'value2' });
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
 
