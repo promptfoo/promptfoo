@@ -14,8 +14,7 @@ const mockedFetchResponse = (ok: boolean, response: object, headers: object = {}
       'content-type': 'application/json',
       ...headers,
     }),
-    // Add other methods and properties as needed
-  } as unknown as Response;
+  } as Response;
 };
 
 const mockedSetTimeout = (reqTimeout: number) =>

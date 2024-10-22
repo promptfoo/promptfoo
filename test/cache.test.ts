@@ -1,7 +1,5 @@
 import { fetchWithCache, disableCache, enableCache, clearCache } from '../src/cache';
 
-jest.mock('node:fetch');
-
 const mockedFetch = jest.mocked(jest.fn());
 global.fetch = mockedFetch;
 
@@ -16,7 +14,6 @@ const mockedFetchResponse = (ok: boolean, response: object): Response => {
     headers: new Headers({
       'content-type': 'application/json',
     }),
-    // Add other methods and properties as needed
   } as Response;
 };
 

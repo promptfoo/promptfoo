@@ -7,10 +7,10 @@ export async function fetchWithProxy(
   url: RequestInfo,
   options: RequestInit = {},
 ): Promise<Response> {
-  (options as any).agent = new ProxyAgent({
+  const agent = new ProxyAgent({
     rejectUnauthorized: false, // Don't check SSL cert
   });
-  return fetch(url, options);
+  return fetch(url, { ...options, agent } as RequestInit);
 }
 
 export function fetchWithTimeout(
@@ -68,9 +68,9 @@ async function handleRateLimit(response: Response): Promise<void> {
 
 export async function fetchWithRetries(
   url: RequestInfo,
-  options: RequestInit,
+  options: RequestInit = {},
   timeout: number,
-  retries: number = 3,
+  retries: number = 4,
 ): Promise<Response> {
   let lastError;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
