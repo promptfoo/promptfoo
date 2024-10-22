@@ -2,11 +2,10 @@ import React from 'react';
 import styles from '../styles.module.css';
 
 const logos = [
-  { src: '/img/logos/openai.svg', alt: 'OpenAI' },
-  { src: '/img/logos/anthropic.svg', alt: 'Anthropic' },
-  { src: '/img/logos/shopify.svg', alt: 'Shopify' },
-  { src: '/img/logos/doordash.svg', alt: 'DoorDash' },
-  // Add more logos as needed
+  { src: '/img/brands/shopify-logo.svg', alt: 'Shopify' },
+  { src: '/img/brands/doordash-logo.svg', alt: 'Doordash' },
+  { src: '/img/brands/anthropic-logo.svg', alt: 'Anthropic' },
+  { src: '/img/brands/microsoft-logo.svg', alt: 'Microsoft' },
 ];
 
 export default function LogoSection(): JSX.Element {
@@ -18,7 +17,7 @@ export default function LogoSection(): JSX.Element {
           <strong>
             <u>16 million</u>
           </strong>{' '}
-          adversarial probes this year at companies like
+          probes this year at companies like
         </p>
         <div className={styles.logoGrid}>
           {logos.map((logo, index) => (

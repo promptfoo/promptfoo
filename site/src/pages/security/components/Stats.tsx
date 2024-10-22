@@ -1,6 +1,7 @@
 import React from 'react';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import BugReportIcon from '@mui/icons-material/BugReport';
+import SearchIcon from '@mui/icons-material/Search';
 import Tooltip from '@mui/material/Tooltip';
 import styles from '../styles.module.css';
 
@@ -8,12 +9,12 @@ const stats = [
   {
     icon: <AccessTimeIcon className={styles.statIcon} />,
     number: '678+',
-    title: 'Hours Saved',
+    title: 'Hours saved',
     description: 'On average compared to manual red teaming',
     tooltip: 'Using multiturn and iterative testing methods, 1 minute per attempt',
   },
   {
-    icon: <BugReportIcon className={styles.statIcon} />,
+    icon: <SearchIcon className={styles.statIcon} />,
     number: '82%',
     title: 'Unique findings',
     description: 'Not caught by guardrails',
@@ -22,7 +23,7 @@ const stats = [
   {
     icon: <BugReportIcon className={styles.statIcon} />,
     number: '37',
-    title: 'Issues Found',
+    title: 'Issues found & remediated',
     description: 'On average on the first scan',
     tooltip: 'Based on red teams performed on diverse industry use cases',
   },

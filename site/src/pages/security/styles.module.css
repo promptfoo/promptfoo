@@ -49,7 +49,7 @@
 }
 
 .hero {
-  padding: 4rem 0;
+  padding-top: 4rem;
   background-color: var(--background-color);
   color: var(--text-color);
 }
@@ -223,7 +223,7 @@
 
 .statsSection {
   background-color: #f0f4f8;
-  padding: 4rem 0;
+  padding: 6rem 0;
 }
 
 .statsSummary {
@@ -420,11 +420,10 @@
   }
 }
 
-/* Add these styles to your existing CSS file */
-
 .logoSection {
   background-color: #f8f9fa;
-  padding: 2rem 0;
+  padding-top: 2rem;
+  padding-bottom: 4rem;
 }
 
 .logoIntro {
@@ -439,11 +438,12 @@
   justify-content: center;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2rem;
+  gap: 4rem;
 }
 
 .logoItem {
-  height: 40px;
+  height: auto;
+  max-width: 125px;
   width: auto;
   opacity: 0.7;
   transition: opacity 0.3s ease;

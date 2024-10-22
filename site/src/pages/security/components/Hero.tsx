@@ -11,13 +11,17 @@ export default function Hero(): JSX.Element {
           Detect, mitigate, and monitor vulnerabilities in AI systems before deployment
         </p>
         <div className={styles.heroButtons}>
-          <Link to="/contact" className={`${styles.button} ${styles.buttonPrimary}`}>
-            Get Started
+          <Link to="/docs/red-team/" className={`${styles.button} ${styles.buttonPrimary}`}>
+            Get started
           </Link>
-          <Link to="/docs/security" className={`${styles.button} ${styles.buttonSecondary}`}>
-            Learn More
+          <Link to="/contact/" className={`${styles.button} ${styles.buttonSecondary}`}>
+            Get a demo
           </Link>
         </div>
+        <div className={styles.heroVideo}>
+          <img src="/img/continuous-monitoring.png" alt="Promptfoo LLM Security Overview" />
+        </div>
+        {/*
         <div className={styles.heroVideo}>
           <iframe
             width="560"
@@ -29,6 +33,7 @@ export default function Hero(): JSX.Element {
             allowFullScreen
           ></iframe>
         </div>
+        */}
       </div>
     </section>
   );
