@@ -393,7 +393,7 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
-  basic: 'Raw attacks without any special attack strategies',
+  basic: 'Single-shot, unoptimized attacks using raw prompts based on plugin description',
   'ascii-smuggling': 'Attempts to obfuscate malicious content using ASCII smuggling',
   base64: 'Attempts to obfuscate malicious content using Base64 encoding',
   bfla: 'Broken Function Level Authorization (BFLA) tests',
@@ -792,16 +792,18 @@ export const pluginDescriptions: Record<Plugin, string> = {
 export const strategyDescriptions: Record<Strategy, string> = {
   'ascii-smuggling': 'Obfuscates malicious content using ASCII characters to bypass filters',
   base64: 'Encodes malicious content in Base64 to evade detection',
-  crescendo: 'Gradually escalates the conversation to probe for vulnerabilities',
+  crescendo:
+    'A multi-turn attack that gradually escalates the conversation to probe for vulnerabilities',
   'jailbreak:tree': 'Uses a tree-based search approach for more sophisticated jailbreaking',
-  jailbreak: 'Attempts to bypass security measures through iterative prompt refinement',
+  jailbreak:
+    'An optimized single shot attack generatedby iteratively refining the prompt to bypass security measures',
   leetspeak: 'Replaces characters with similar-looking numbers or symbols to obfuscate content',
   'math-prompt': 'Encodes harmful content using mathematical concepts and notation',
   multilingual: 'Translates malicious content into low-resource languages to evade detection',
   'prompt-injection': 'Injects malicious instructions into prompts via user input',
   rot13: 'Applies a simple letter substitution cipher to obfuscate malicious content',
-  default: 'Dynamically probes and refines prompts to bypass security measures',
-  basic: 'Single shot common prompt injection vulnerabilities',
+  default: 'Single-shot',
+  basic: 'Single-shot',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
@@ -811,8 +813,8 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',
-  crescendo: 'Crescendo',
-  default: 'Basic and Iterative Jailbreak',
+  crescendo: 'Multi-turn Crescendo',
+  default: 'Basic',
   jailbreak: 'Single-shot Optimization',
   leetspeak: 'Leetspeak',
   multilingual: 'Multilingual',
