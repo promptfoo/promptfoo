@@ -521,7 +521,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       presence_penalty:
         config.presence_penalty ?? Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        confg.frequency_penalty ?? Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+        config.frequency_penalty ?? Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       ...(config.functions
         ? {
             functions: maybeLoadFromExternalFile(
