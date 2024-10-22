@@ -1,3 +1,4 @@
+import invariant from 'tiny-invariant';
 import { importModule } from '../src/esm';
 import { processJsFile, transformContext } from '../src/prompts/processors/javascript';
 
@@ -141,7 +142,11 @@ describe('processJsFile', () => {
     const config = { key: 'value' };
     const result = await processJsFile(filePath, { config }, undefined);
     const promptFunction = result[0].function;
-    await promptFunction({ vars: {}, provider: { id: () => 'test', label: 'Test' } });
+    invariant(promptFunction, 'Prompt function is required');
+    await promptFunction({
+      vars: {},
+      provider: { id: () => 'test', label: 'Test', callApi: jest.fn() },
+    });
     expect(mockFunction).toHaveBeenCalledWith(
       expect.objectContaining({
         config: { key: 'value' },
