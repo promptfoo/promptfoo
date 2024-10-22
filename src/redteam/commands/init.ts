@@ -182,7 +182,7 @@ export async function redteamInit(directory: string | undefined) {
 
   const label = await input({
     message:
-      "What's the name of the target you want to red team? (e.g. 'support-bot' or 'helpdesk-agent')\n",
+      "What's the name of the target you want to red team? (e.g. 'helpdesk-agent', 'customer-service-chatbot')\n",
   });
 
   const redTeamChoice = await select({

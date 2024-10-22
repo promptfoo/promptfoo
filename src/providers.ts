@@ -89,17 +89,9 @@ export async function loadApiProvider(
     options?: ProviderOptions;
     basePath?: string;
     env?: EnvOverrides;
-    forRedteam?: boolean;
   } = {},
 ): Promise<ApiProvider> {
-  const { options = {}, basePath, env, forRedteam } = context;
-
-  if (forRedteam && !options.label) {
-    logger.warn(
-      'label is required for redteam providers. Please specify a label in the provider config.',
-    );
-    throw new Error('label is required for redteam providers');
-  }
+  const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
     id: options.id,
     config: {
@@ -506,12 +498,11 @@ export async function loadApiProviders(
     basePath?: string;
     env?: EnvOverrides;
   } = {},
-  forRedteam?: boolean,
 ): Promise<ApiProvider[]> {
   const { basePath } = options;
   const env = options.env || cliState.config?.env;
   if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths, { basePath, env, forRedteam })];
+    return [await loadApiProvider(providerPaths, { basePath, env })];
   } else if (typeof providerPaths === 'function') {
     return [
       {
@@ -523,7 +514,7 @@ export async function loadApiProviders(
     return Promise.all(
       providerPaths.map((provider, idx) => {
         if (typeof provider === 'string') {
-          return loadApiProvider(provider, { basePath, env, forRedteam });
+          return loadApiProvider(provider, { basePath, env });
         } else if (typeof provider === 'function') {
           return {
             id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
@@ -535,14 +526,13 @@ export async function loadApiProviders(
             options: provider,
             basePath,
             env,
-            forRedteam,
           });
         } else {
           // List of { id: string, config: ProviderConfig } objects
           const id = Object.keys(provider)[0];
           const providerObject = (provider as ProviderOptionsMap)[id];
           const context = { ...providerObject, id: providerObject.id || id };
-          return loadApiProvider(id, { options: context, basePath, env, forRedteam });
+          return loadApiProvider(id, { options: context, basePath, env });
         }
       }),
     );
