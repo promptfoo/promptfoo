@@ -11,9 +11,13 @@ import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { Gauge } from '@mui/x-charts/Gauge';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  subCategoryDescriptions,
+} from '@promptfoo/redteam/constants';
 import { type GradingResult } from '@promptfoo/types';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
-import { categoryAliases, displayNameOverrides, subCategoryDescriptions } from './constants';
 import { useReportStore } from './store';
 import './RiskCard.css';
 

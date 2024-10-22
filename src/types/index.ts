@@ -467,6 +467,7 @@ export const VarsSchema = z.record(
 export type Vars = z.infer<typeof VarsSchema>;
 
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
+// HEADS UP: When you add a property here, you probably need to load it from `defaultTest` in evaluator.ts.
 export const TestCaseSchema = z.object({
   // Optional description of what you're testing
   description: z.string().optional(),

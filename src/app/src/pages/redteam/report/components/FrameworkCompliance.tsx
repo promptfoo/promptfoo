@@ -18,7 +18,7 @@ import {
   categoryAliases,
   displayNameOverrides,
   FRAMEWORK_NAMES,
-} from './constants';
+} from '@promptfoo/redteam/constants';
 import { useReportStore } from './store';
 import './FrameworkCompliance.css';
 

@@ -9,7 +9,7 @@ import path from 'path';
 import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
-import telemetry, { type EventValue } from './telemetry';
+import telemetry, { type EventProperties } from './telemetry';
 import type { EnvOverrides } from './types';
 import { getNunjucksEngine } from './util/templates';
 
@@ -234,7 +234,7 @@ promptfoo eval
 Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
-function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+function recordOnboardingStep(step: string, properties: EventProperties = {}) {
   telemetry.recordAndSend('funnel', {
     type: 'eval onboarding',
     step,

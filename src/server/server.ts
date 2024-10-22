@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
 import debounce from 'debounce';
+import type { Request, Response } from 'express';
 import express from 'express';
 import type { Stats } from 'fs';
 import fs from 'fs';
@@ -10,26 +11,16 @@ import readline from 'node:readline';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
-import { v4 as uuidv4 } from 'uuid';
+import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION } from '../constants';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
-import type {
-  EvaluateSummaryV2,
-  EvaluateTestSuiteWithEvaluateOptions,
-  GradingResult,
-  Job,
-  Prompt,
-  PromptWithMetadata,
-  ResultsFile,
-  TestCase,
-  TestSuite,
-} from '../index';
-import promptfoo from '../index';
+import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import Eval from '../models/eval';
-import EvalResult from '../models/evalResult';
+import telemetry from '../telemetry';
+import { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
   getPrompts,
@@ -37,17 +28,14 @@ import {
   listPreviousResults,
   readResult,
   getTestCases,
-  updateResult,
   getLatestEval,
   migrateResultsFromFileSystemToDatabase,
   getStandaloneEvals,
-  deleteEval,
-  writeResultsToDatabase,
 } from '../util';
+import { evalRouter } from './routes/eval';
 import { providersRouter } from './routes/providers';
-
-// Running jobs
-const evalJobs = new Map<string, Job>();
+import { redteamRouter } from './routes/redteam';
+import { userRouter } from './routes/user';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -72,7 +60,7 @@ export function createApp() {
     res.status(200).json({ status: 'OK', version: VERSION });
   });
 
-  app.get('/api/results', async (req, res) => {
+  app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
     const datasetId = req.query.datasetId as string | undefined;
     const previousResults = await listPreviousResults(
       undefined /* limit */,
@@ -89,128 +77,7 @@ export function createApp() {
     });
   });
 
-  app.post('/api/eval/job', (req, res) => {
-    const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
-    const id = uuidv4();
-    evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
-
-    promptfoo
-      .evaluate(
-        Object.assign({}, testSuite, {
-          writeLatestResults: true,
-          sharing: testSuite.sharing ?? true,
-        }),
-        Object.assign({}, evaluateOptions, {
-          eventSource: 'web',
-          progressCallback: (progress: number, total: number) => {
-            const job = evalJobs.get(id);
-            invariant(job, 'Job not found');
-            job.progress = progress;
-            job.total = total;
-            console.log(`[${id}] ${progress}/${total}`);
-          },
-        }),
-      )
-      .then(async (result) => {
-        const job = evalJobs.get(id);
-        invariant(job, 'Job not found');
-        job.status = 'complete';
-        job.result = await result.toEvaluateSummary();
-        console.log(`[${id}] Complete`);
-      });
-
-    res.json({ id });
-  });
-
-  app.get('/api/eval/job/:id', (req, res) => {
-    const id = req.params.id;
-    const job = evalJobs.get(id);
-    if (!job) {
-      res.status(404).json({ error: 'Job not found' });
-      return;
-    }
-    if (job.status === 'complete') {
-      res.json({ status: 'complete', result: job.result });
-    } else {
-      res.json({ status: 'in-progress', progress: job.progress, total: job.total });
-    }
-  });
-
-  app.patch('/api/eval/:id', (req, res) => {
-    const id = req.params.id;
-    const { table, config } = req.body;
-
-    if (!id) {
-      res.status(400).json({ error: 'Missing id' });
-      return;
-    }
-
-    try {
-      updateResult(id, config, table);
-      res.json({ message: 'Eval updated successfully' });
-    } catch {
-      res.status(500).json({ error: 'Failed to update eval table' });
-    }
-  });
-
-  // @ts-ignore
-  app.post('/api/eval/:evalId/results/:id/rating', async (req, res) => {
-    const { id } = req.params;
-    const gradingResult = req.body as GradingResult;
-    const result = await EvalResult.findById(id);
-    invariant(result, 'Result not found');
-    result.gradingResult = gradingResult;
-    result.success = gradingResult.pass;
-    result.score = gradingResult.score;
-
-    await result.save();
-    return res.json(result);
-  });
-
-  app.post('/api/eval', async (req, res) => {
-    const body = req.body;
-    try {
-      if (body.data) {
-        logger.debug('[POST /api/eval] Saving eval results (v3) to database');
-        const { data: payload } = req.body as { data: ResultsFile };
-        const id = await writeResultsToDatabase(
-          payload.results as EvaluateSummaryV2,
-          payload.config,
-        );
-        res.json({ id });
-      } else {
-        const incEval = body as unknown as Eval;
-        logger.debug('[POST /api/eval] Saving eval results (v4) to database');
-        const eval_ = await Eval.create(incEval.config, incEval.prompts || [], {
-          author: incEval.author,
-          createdAt: new Date(incEval.createdAt),
-          results: incEval.results,
-        });
-        logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
-
-        logger.debug(
-          `[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`,
-        );
-
-        res.json({ id: eval_.id });
-      }
-    } catch (error) {
-      console.error('Failed to write eval to database', error, body);
-      res.status(500).json({ error: 'Failed to write eval to database' });
-    }
-  });
-
-  app.delete('/api/eval/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-      await deleteEval(id);
-      res.json({ message: 'Eval deleted successfully' });
-    } catch {
-      res.status(500).json({ error: 'Failed to delete eval' });
-    }
-  });
-
-  app.get('/api/results/:id', async (req, res) => {
+  app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
     const file = await readResult(id);
     if (!file) {
@@ -220,14 +87,14 @@ export function createApp() {
     res.json({ data: file.result });
   });
 
-  app.get('/api/prompts', async (req, res) => {
+  app.get('/api/prompts', async (req: Request, res: Response): Promise<void> => {
     if (allPrompts == null) {
       allPrompts = await getPrompts();
     }
     res.json({ data: allPrompts });
   });
 
-  app.get('/api/progress', async (req, res) => {
+  app.get('/api/progress', async (req: Request, res: Response): Promise<void> => {
     const { tagName, tagValue, description } = req.query;
     const tag =
       tagName && tagValue ? { key: tagName as string, value: tagValue as string } : undefined;
@@ -240,18 +107,18 @@ export function createApp() {
     });
   });
 
-  app.get('/api/prompts/:sha256hash', async (req, res) => {
+  app.get('/api/prompts/:sha256hash', async (req: Request, res: Response): Promise<void> => {
     const sha256hash = req.params.sha256hash;
     const prompts = await getPromptsForTestCasesHash(sha256hash);
     res.json({ data: prompts });
   });
 
-  app.get('/api/datasets', async (req, res) => {
+  app.get('/api/datasets', async (req: Request, res: Response): Promise<void> => {
     res.json({ data: await getTestCases() });
   });
 
   // This is used by ResultsView.tsx to share an eval with another promptfoo instance
-  app.post('/api/results/share', async (req, res) => {
+  app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
     const { id } = req.body;
 
     const result = await readResult(id);
@@ -265,7 +132,7 @@ export function createApp() {
     res.json({ url });
   });
 
-  app.post('/api/dataset/generate', async (req, res) => {
+  app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
     const testSuite: TestSuite = {
       prompts: req.body.prompts as Prompt[],
       tests: req.body.tests as TestCase[],
@@ -275,53 +142,36 @@ export function createApp() {
     res.json({ results });
   });
 
-  app.post('/api/redteam/:task', async (req, res) => {
-    const { task } = req.params;
-    const CLOUD_FUNCTION_URL =
-      process.env.PROMPTFOO_REMOTE_GENERATION_URL || 'https://api.promptfoo.dev/v1/generate';
+  app.use('/api/eval', evalRouter);
+  app.use('/api/providers', providersRouter);
+  app.use('/api/redteam', redteamRouter);
+  app.use('/api/user', userRouter);
 
-    logger.debug(`Received ${task} task request:`, {
-      method: req.method,
-      url: req.url,
-      body: req.body,
-      // headers: req.headers,
-    });
-
+  app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
-      logger.debug(`Sending request to cloud function: ${CLOUD_FUNCTION_URL}`);
-      const response = await fetch(CLOUD_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          task,
-          ...req.body,
-        }),
-      });
+      const result = TelemetryEventSchema.safeParse(req.body);
 
-      if (!response.ok) {
-        logger.error(`Cloud function responded with status ${response.status}`);
-        throw new Error(`Cloud function responded with status ${response.status}`);
+      if (!result.success) {
+        res
+          .status(400)
+          .json({ error: 'Invalid request body', details: fromError(result.error).toString() });
+        return;
       }
-
-      const data = await response.json();
-      logger.debug(`Received response from cloud function:`, data);
-      res.json(data);
+      const { event, properties } = result.data;
+      await telemetry.recordAndSend(event, properties);
+      res.status(200).json({ success: true });
     } catch (error) {
-      logger.error(`Error in ${task} task:`, error);
-      res.status(500).json({ error: `Failed to process ${task} task` });
+      console.error('Error processing telemetry request:', error);
+      res.status(500).json({ error: 'Failed to process telemetry request' });
     }
   });
-
-  app.use('/api/providers', providersRouter);
 
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
   app.use(express.static(staticDir));
 
   // Handle client routing, return all requests to the app
-  app.get('*', (_req, res) => {
+  app.get('*', (req: Request, res: Response): void => {
     res.sendFile(path.join(staticDir, 'index.html'));
   });
   return app;

@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import CrispChat from '@app/components/CrispChat';
 import CloseIcon from '@mui/icons-material/Close';
-import { Box, Tabs, Tab, IconButton, Drawer, Typography } from '@mui/material';
+import Box from '@mui/material/Box';
+import Drawer from '@mui/material/Drawer';
+import IconButton from '@mui/material/IconButton';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import Plugins from './components/Plugins';
 import Prompts from './components/Prompts';
@@ -70,7 +75,8 @@ function a11yProps(index: number) {
 
 const Root = styled(Box)(({ theme }) => ({
   display: 'flex',
-  backgroundColor: theme.palette.background.default,
+  backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+  minHeight: '100vh',
   position: 'relative',
 }));
 

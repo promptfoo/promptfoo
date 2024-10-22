@@ -12,6 +12,7 @@ import Modal from '@mui/material/Modal';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { categoryAliasesReverse, type categoryAliases } from '@promptfoo/redteam/constants';
 import {
   type EvaluateResult,
   type ResultsFile,
@@ -30,7 +31,6 @@ import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { categoryAliasesReverse, type categoryAliases } from './constants';
 import './Report.css';
 
 function getStrategyIdFromMetric(metric: string): string | null {
@@ -198,7 +198,7 @@ const App: React.FC = () => {
 
   let tools = [];
   if (Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])) {
-    const providerTools = evalData.config.providers[0].config.tools;
+    const providerTools = evalData.config.providers[0].config?.tools;
     tools = Array.isArray(providerTools) ? providerTools : [providerTools];
   }
 

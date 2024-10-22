@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Request, Response } from 'express';
 import logger from '../../logger';
 import { loadApiProviders } from '../../providers';
 import { HttpProvider } from '../../providers/http';
@@ -6,7 +7,7 @@ import { ProviderSchema } from '../../validators/providers';
 
 export const providersRouter = Router();
 
-providersRouter.post('/test', async (req, res) => {
+providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
 
   let provider;

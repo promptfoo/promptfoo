@@ -1,11 +1,20 @@
 import React from 'react';
-import { Chip, Typography, TextField, Box, Button, Grid, Paper, Divider } from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 
 export default function Review() {
   const { config, updateConfig } = useRedTeamConfig();
+  const theme = useTheme();
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -121,7 +130,7 @@ export default function Review() {
               component="pre"
               sx={{
                 p: 2,
-                backgroundColor: 'grey.100',
+                backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
                 borderRadius: 1,
                 fontFamily: 'monospace',
                 fontSize: '0.875rem',

@@ -5,6 +5,7 @@ import type { ApiProvider, EnvOverrides, ProviderResponse, CallApiContextParams 
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { CHAT_MODELS } from './googleShared';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { maybeCoerceToGeminiFormat } from './vertexUtil';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
@@ -153,7 +154,9 @@ export class PalmChatProvider extends PalmGenericProvider {
   }
 
   async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const contents = parseChatPrompt(prompt, [{ parts: [{ text: prompt }] }]);
+    const { contents, systemInstruction } = maybeCoerceToGeminiFormat(
+      parseChatPrompt(prompt, [{ content: prompt }]),
+    );
     const body: Record<string, any> = {
       contents,
       generationConfig: {
@@ -165,6 +168,7 @@ export class PalmChatProvider extends PalmGenericProvider {
         ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
+      ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
     if (this.config.responseSchema) {

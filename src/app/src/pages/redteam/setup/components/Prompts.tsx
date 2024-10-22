@@ -4,22 +4,20 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import {
-  Typography,
-  TextField,
-  Button,
-  Box,
-  IconButton,
-  Stack,
-  Grid,
-  Tooltip,
-  Switch,
-  FormControlLabel,
-} from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
+import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import { useDebouncedCallback } from 'use-debounce';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig.ts';
-import Entities from './EntitiesPicker.tsx';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import Entities from './EntitiesPicker';
 
 interface PromptsProps {
   onNext: () => void;
@@ -146,13 +144,12 @@ export default function Prompts({ onNext, onBack }: PromptsProps) {
             <Box key={index} display="flex" alignItems="center" mb={2}>
               <TextField
                 fullWidth
-                label={`Prompt ${index + 1}`}
+                label={config.prompts.length === 1 ? 'Prompt' : `Prompt ${index + 1}`}
                 value={prompt}
                 onChange={(e) => updatePrompt(index, e.target.value)}
                 margin="normal"
                 multiline
                 rows={3}
-                sx={{ backgroundColor: '#ffffff' }}
               />
               <Tooltip title="Remove prompt">
                 <IconButton onClick={() => removePrompt(index)}>
@@ -205,7 +202,6 @@ export default function Prompts({ onNext, onBack }: PromptsProps) {
               margin="normal"
               multiline
               rows={4}
-              sx={{ backgroundColor: '#ffffff' }}
             />
             {needsCustomPrompt && (
               <Typography variant="body1" color="text.secondary" mt={1}>

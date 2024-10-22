@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
 import type { StandaloneEval } from '@/../../../util';
-import {
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Link,
-  TablePagination,
-} from '@mui/material';
+import Link from '@mui/material/Link';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 
 const RecentEvals: React.FC<{ evals: StandaloneEval[] }> = ({ evals }) => {
   const [page, setPage] = useState(0);

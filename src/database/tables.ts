@@ -19,14 +19,6 @@ import type {
   EvaluateSummaryV2,
 } from '../types';
 
-// ------------ Providers ------------
-
-export const providers = sqliteTable('providers', {
-  id: text('id').primaryKey(),
-  providerId: text('provider_id').notNull(),
-  config: text('options', { mode: 'json' }).$type<Record<string, any>>().notNull(),
-});
-
 // ------------ Prompts ------------
 
 export const promptsTable = sqliteTable(
@@ -35,7 +27,7 @@ export const promptsTable = sqliteTable(
     id: text('id').primaryKey(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`cast(unixepoch() as int)`),
+      .default(sql`CURRENT_TIMESTAMP`),
     prompt: text('prompt').notNull(),
   },
   (table) => ({
@@ -66,7 +58,7 @@ export const evalsTable = sqliteTable(
     id: text('id').primaryKey(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`cast(unixepoch() as int)`),
+      .default(sql`CURRENT_TIMESTAMP`),
     author: text('author'),
     description: text('description'),
     results: text('results', { mode: 'json' }).$type<EvaluateSummaryV2 | object>().notNull(),
@@ -85,10 +77,10 @@ export const evalResultsTable = sqliteTable(
     id: text('id').primaryKey(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`cast(unixepoch() as int)`),
+      .default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at')
       .notNull()
-      .default(sql`cast(unixepoch() as int)`),
+      .default(sql`CURRENT_TIMESTAMP`),
     evalId: text('eval_id')
       .notNull()
       .references(() => evalsTable.id),
@@ -101,7 +93,6 @@ export const evalResultsTable = sqliteTable(
 
     // Provider-related fields
     provider: text('provider', { mode: 'json' }).$type<ProviderOptions>().notNull(),
-    providerId: text('provider_id').references(() => providers.id),
 
     latencyMs: integer('latency_ms'),
     cost: real('cost'),
@@ -177,32 +168,6 @@ export const evalsToTagsRelations = relations(evalsToTagsTable, ({ one }) => ({
   }),
 }));
 
-export const evalsToProvidersTable = sqliteTable(
-  'evals_to_providers',
-  {
-    providerId: text('provider_id')
-      .notNull()
-      .references(() => providers.id),
-    evalId: text('eval_id')
-      .notNull()
-      .references(() => evalsTable.id),
-  },
-  (t) => ({
-    pk: primaryKey({ columns: [t.providerId, t.evalId] }),
-  }),
-);
-
-export const evalsToProvidersRelations = relations(evalsToProvidersTable, ({ one }) => ({
-  provider: one(providers, {
-    fields: [evalsToProvidersTable.providerId],
-    references: [providers.id],
-  }),
-  eval: one(evalsTable, {
-    fields: [evalsToProvidersTable.evalId],
-    references: [evalsTable.id],
-  }),
-}));
-
 // ------------ Datasets ------------
 
 export const datasetsTable = sqliteTable(
@@ -212,7 +177,7 @@ export const datasetsTable = sqliteTable(
     tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
     createdAt: integer('created_at')
       .notNull()
-      .default(sql`cast(unixepoch() as int)`),
+      .default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({
     createdAtIdx: index('datasets_created_at_idx').on(table.createdAt),
@@ -282,7 +247,7 @@ export const llmOutputs = sqliteTable(
     id: text('id')
       .notNull()
       .unique(),
-    createdAt: integer('created_at').notNull().default(sql`cast(unixepoch() as int)`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     evalId: text('eval_id')
       .notNull()
       .references(() => evals.id),

@@ -60,7 +60,7 @@ describe('HttpProvider', () => {
       mockUrl,
       expect.objectContaining({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'test prompt' }),
       }),
       expect.any(Number),
@@ -105,7 +105,7 @@ describe('HttpProvider', () => {
       `${mockUrl}?foo=bar`,
       expect.objectContaining({
         method: 'PATCH',
-        headers: { Authorization: 'Bearer token' },
+        headers: { 'content-type': 'application/json', authorization: 'Bearer token' },
         body: JSON.stringify({ key: 'test prompt' }),
       }),
       expect.any(Number),
@@ -156,34 +156,9 @@ describe('HttpProvider', () => {
       mockUrl,
       {
         method: 'POST',
-        headers: { 'X-Custom-Header': 'TEST PROMPT' },
+        headers: { 'content-type': 'application/json', 'x-custom-header': 'TEST PROMPT' },
         body: JSON.stringify({ key: 'test prompt' }),
       },
-      expect.any(Number),
-      'text',
-      undefined,
-    );
-  });
-
-  it('should escape JSON prompts in Nunjucks rendering', async () => {
-    provider = new HttpProvider(mockUrl, {
-      config: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { key: '{{ prompt }}' },
-        responseParser: (data: any) => data,
-      },
-    });
-    const jsonPrompt = '{"key": "value"}';
-    const mockResponse = { data: 'response', cached: false };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-    await provider.callApi(jsonPrompt);
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      mockUrl,
-      expect.objectContaining({
-        body: JSON.stringify({ key: { key: 'value' } }),
-      }),
       expect.any(Number),
       'text',
       undefined,
@@ -399,17 +374,6 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should handle JSON strings', () => {
-      const body = {
-        jsonString: '{"key": "{{ prompt }}"}',
-      };
-      const vars = { prompt: 'test prompt' };
-      const result = processBody(body, vars);
-      expect(result).toEqual({
-        jsonString: { key: 'test prompt' },
-      });
-    });
-
     it('should handle empty vars', () => {
       const body = { key: '{{ prompt }}' };
       const result = processBody(body, {});
@@ -426,12 +390,13 @@ describe('HttpProvider', () => {
       };
       const vars = { prompt: 'test prompt' };
       const result = processBody(body, vars);
+
       expect(result).toEqual({
         outer: {
           inner: ['test prompt', { nestedKey: 'test prompt' }],
           static: 'value',
         },
-        jsonArray: [1, 2, 'test prompt'],
+        jsonArray: `[1, 2, \"test prompt\"]`,
       });
     });
   });
@@ -558,5 +523,166 @@ describe('HttpProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toEqual({ custom: 'success' });
+  });
+
+  describe('getDefaultHeaders', () => {
+    it('should return empty object for GET requests', () => {
+      const provider = new HttpProvider(mockUrl, { config: { method: 'GET' } });
+      const result = provider['getDefaultHeaders'](null);
+      expect(result).toEqual({});
+    });
+
+    it('should return application/json for object body', () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: { method: 'POST', body: { key: 'value' } },
+      });
+      const result = provider['getDefaultHeaders']({ key: 'value' });
+      expect(result).toEqual({ 'content-type': 'application/json' });
+    });
+
+    it('should return empty object for string body', () => {
+      const provider = new HttpProvider(mockUrl, { config: { method: 'POST', body: 'test' } });
+      const result = provider['getDefaultHeaders']('string body');
+      expect(result).toEqual({});
+    });
+  });
+
+  describe('validateContentTypeAndBody', () => {
+    it('should not throw for valid content-type and body', () => {
+      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
+      expect(() => {
+        provider['validateContentTypeAndBody'](
+          { 'content-type': 'application/json' },
+          { key: 'value' },
+        );
+      }).not.toThrow();
+    });
+
+    it('should throw for non-json content-type with object body', () => {
+      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
+      expect(() => {
+        provider['validateContentTypeAndBody']({ 'content-type': 'text/plain' }, { key: 'value' });
+      }).toThrow('Content-Type is not application/json, but body is an object or array');
+    });
+  });
+
+  describe('getContentType', () => {
+    it('should return content-type if present', () => {
+      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
+      const result = provider['getContentType']({ 'content-type': 'application/json' });
+      expect(result).toBe('application/json');
+    });
+
+    it('should return undefined if content-type is not present', () => {
+      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
+      const result = provider['getContentType']({});
+      expect(result).toBeUndefined();
+    });
+
+    it('should be case-insensitive', () => {
+      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
+      const result = provider['getContentType']({ 'Content-Type': 'application/json' });
+      expect(result).toBe('application/json');
+    });
+  });
+
+  describe('getHeaders', () => {
+    it('should combine default headers with config headers', () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          headers: { 'X-Custom': '{{ prompt }}' },
+          body: 'test',
+        },
+      });
+      const result = provider['getHeaders'](
+        { 'content-type': 'application/json' },
+        { prompt: 'test' },
+      );
+      expect(result).toEqual({
+        'content-type': 'application/json',
+        'x-custom': 'test',
+      });
+    });
+
+    it('should render template strings in headers', () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          headers: { 'X-Custom': '{{ prompt | upper }}' },
+          body: 'test',
+        },
+      });
+      const result = provider['getHeaders']({}, { prompt: 'test' });
+      expect(result).toEqual({
+        'x-custom': 'TEST',
+      });
+    });
+  });
+
+  it('should default to application/json for content-type if body is an object', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'X-Custom': '{{ prompt }}' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+    const mockResponse = { data: JSON.stringify({ result: 'success' }), cached: false };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-custom': 'test prompt',
+        },
+        body: JSON.stringify({ key: 'test prompt' }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+    );
+  });
+
+  it('should not default to application/json for content-type if body is not an object', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        body: 'test',
+      },
+    });
+    const mockResponse = { data: JSON.stringify({ result: 'success' }), cached: false };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        headers: {},
+        body: 'test',
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+    );
+  });
+
+  it('should throw an error if the body is an object and the content-type is not application/json', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain' },
+        body: { key: 'value' },
+      },
+    });
+
+    await expect(provider.callApi('test prompt')).rejects.toThrow(
+      'Content-Type is not application/json, but body is an object or array',
+    );
   });
 });

@@ -5,7 +5,7 @@ import CardContent from '@mui/material/CardContent';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/system';
-import { displayNameOverrides, subCategoryDescriptions } from './constants';
+import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import './StrategyStats.css';
 
 interface StrategyStatsProps {
@@ -33,7 +33,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({ strategyStats }) => {
     <Card className="strategy-stats-card">
       <CardContent className="strategy-stats-content">
         <Typography variant="h5" mb={2}>
-          Attack success rates
+          Attack Methods
         </Typography>
         <Box className="strategy-grid">
           {strategies.map(([strategy, { pass, total }]) => {

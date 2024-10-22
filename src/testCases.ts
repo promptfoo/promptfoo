@@ -222,6 +222,14 @@ export async function readTests(
         ret.push(await readTest(globOrTest, basePath));
       }
     }
+  } else {
+    logger.warn(dedent`
+      Warning: Unsupported 'tests' format in promptfooconfig.yaml.
+      Expected: string, string[], or TestCase[], but received: ${typeof tests}
+
+      Please check your configuration file and ensure the 'tests' field is correctly formatted.
+      For more information, visit: https://promptfoo.dev/docs/configuration/reference/#test-case
+    `);
   }
 
   if (

@@ -62,6 +62,7 @@ import {
   ReplicateProvider,
 } from './providers/replicate';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
+import { createTogetherAiProvider } from './providers/togetherai';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WatsonXProvider } from './providers/watsonx';
@@ -200,6 +201,22 @@ export async function loadApiProvider(
         apiBaseUrl: 'https://openrouter.ai/api/v1',
         apiKeyEnvar: 'OPENROUTER_API_KEY',
       },
+    });
+  } else if (providerPath.startsWith('github:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://models.inference.ai.azure.com',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      },
+    });
+  } else if (providerPath.startsWith('togetherai:')) {
+    ret = createTogetherAiProvider(providerPath, {
+      config: providerOptions,
+      env: context.env,
     });
   } else if (providerPath.startsWith('portkey:')) {
     const splits = providerPath.split(':');
