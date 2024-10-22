@@ -2,7 +2,7 @@ import { reportProviderAPIKeyWarnings } from '../src/onboarding';
 
 describe('reportProviderAPIKeyWarnings', () => {
   const openaiID = 'openai:gpt-4o';
-  const anthropicID = 'anthropic:messages:claude-3-5-sonnet-20240620';
+  const anthropicID = 'anthropic:messages:claude-3-5-sonnet-20241022';
   let oldEnv: any = {};
   beforeAll(() => {
     oldEnv = { ...process.env };
