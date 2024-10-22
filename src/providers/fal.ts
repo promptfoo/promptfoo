@@ -1,5 +1,4 @@
 import type { Cache } from 'cache-manager';
-import fetch from 'node-fetch';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';

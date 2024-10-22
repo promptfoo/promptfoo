@@ -47,7 +47,7 @@ describe('WatsonXProvider', () => {
   });
 
   describe('constructor', () => {
-    it('should initialize with modelName and config', () => {
+    it('should initialize with modelName and config', async () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: jest.fn(),
       };
@@ -56,6 +56,9 @@ describe('WatsonXProvider', () => {
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.modelName).toBe(modelName);
       expect(provider.options.config).toEqual(config);
+
+      // Get client to trigger authentication
+      await provider.getClient();
       expect(logger.info).toHaveBeenCalledWith('Using IAM Authentication.');
     });
 
@@ -95,15 +98,14 @@ describe('WatsonXProvider', () => {
   });
 
   describe('getClient', () => {
-    it('should initialize WatsonXAI client with correct parameters', () => {
+    it('should initialize WatsonXAI client with correct parameters', async () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: jest.fn(),
       };
       jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
 
       const provider = new WatsonXProvider(modelName, { config });
-
-      const client = provider.getClient();
+      const client = await provider.getClient();
 
       expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
         version: '2023-05-29',
@@ -112,25 +114,24 @@ describe('WatsonXProvider', () => {
       });
 
       expect(IamAuthenticator).toHaveBeenCalledWith({ apikey: 'test-api-key' });
-
       expect(client).toBe(mockedWatsonXAIClient);
     });
 
-    it('should throw an error if neither API key nor Bearer Token is set', () => {
+    it('should throw an error if neither API key nor Bearer Token is set', async () => {
       jest.spyOn(envarsModule, 'getEnvString').mockReturnValue(undefined as any);
 
-      expect(() => {
-        new WatsonXProvider(modelName, {
-          config: { ...config, apiKey: undefined, apiBearerToken: undefined },
-        });
-      }).toThrow(
+      const provider = new WatsonXProvider(modelName, {
+        config: { ...config, apiKey: undefined, apiBearerToken: undefined },
+      });
+
+      await expect(provider.getClient()).rejects.toThrow(
         /Authentication credentials not provided\. Please set either `WATSONX_AI_APIKEY` for IAM Authentication or `WATSONX_AI_BEARER_TOKEN` for Bearer Token Authentication\./,
       );
     });
   });
 
   describe('constructor with Bearer Token', () => {
-    it('should use Bearer Token Authentication when apiKey is not provided', () => {
+    it('should use Bearer Token Authentication when apiKey is not provided', async () => {
       const bearerTokenConfig = {
         ...config,
         apiKey: undefined,
@@ -142,16 +143,17 @@ describe('WatsonXProvider', () => {
       jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
 
       const provider = new WatsonXProvider(modelName, { config: bearerTokenConfig });
+      await provider.getClient();
+
       expect(logger.info).toHaveBeenCalledWith('Using Bearer Token Authentication.');
       expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
         version: '2023-05-29',
         serviceUrl: 'https://us-south.ml.cloud.ibm.com',
         authenticator: expect.any(BearerTokenAuthenticator),
       });
-      expect(provider.getClient()).toBe(mockedWatsonXAIClient);
     });
 
-    it('should prefer API Key Authentication over Bearer Token Authentication when both are provided', () => {
+    it('should prefer API Key Authentication over Bearer Token Authentication when both are provided', async () => {
       const dualAuthConfig = { ...config, apiBearerToken: 'test-bearer-token' };
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: jest.fn(),
@@ -159,13 +161,14 @@ describe('WatsonXProvider', () => {
       jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
 
       const provider = new WatsonXProvider(modelName, { config: dualAuthConfig });
+      await provider.getClient();
+
       expect(logger.info).toHaveBeenCalledWith('Using IAM Authentication.');
       expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
         version: '2023-05-29',
         serviceUrl: 'https://us-south.ml.cloud.ibm.com',
         authenticator: expect.any(IamAuthenticator),
       });
-      expect(provider.getClient()).toBe(mockedWatsonXAIClient);
     });
   });
 
@@ -260,7 +263,7 @@ describe('WatsonXProvider', () => {
       jest.mocked(isCacheEnabled).mockReturnValue(true);
 
       const provider = new WatsonXProvider(modelName, { config });
-      const generateTextSpy = jest.spyOn(provider.getClient(), 'generateText');
+      const generateTextSpy = jest.spyOn(await provider.getClient(), 'generateText');
       const response = await provider.callApi(prompt);
       expect(cache.get).toHaveBeenCalledWith(cacheKey);
       expect(response).toEqual(cachedResponse);

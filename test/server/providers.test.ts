@@ -13,8 +13,6 @@ describe('providersRouter', () => {
   it('should parse and load the provider, then call callApi', async () => {
     const mockCallApi = jest.fn().mockResolvedValue({ output: 'Mocked response' });
     jest.spyOn(httpProvider.HttpProvider.prototype, 'callApi').mockImplementation(mockCallApi);
-
-    // Add this mock for the fetch call
     jest.mocked(fetch).mockResolvedValue({
       json: jest.fn().mockResolvedValue({
         changes_needed: true,
@@ -22,7 +20,20 @@ describe('providersRouter', () => {
         changes_needed_suggestions: ['Test suggestion 1', 'Test suggestion 2'],
       }),
       ok: true,
-    } as unknown as Response);
+      headers: new Headers(),
+      redirected: false,
+      status: 200,
+      statusText: 'OK',
+      type: 'basic',
+      url: 'http://example.com',
+      clone: jest.fn(),
+      body: null,
+      bodyUsed: false,
+      arrayBuffer: jest.fn(),
+      blob: jest.fn(),
+      formData: jest.fn(),
+      text: jest.fn(),
+    } as Response);
     const testProvider = {
       id: 'http://example.com/api',
       config: {

@@ -45,6 +45,7 @@ RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl &&
 
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
+ENV PROMPTFOO_SELF_HOSTED=1
 
 EXPOSE 3000
 

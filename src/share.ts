@@ -1,6 +1,5 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
-import type { Response } from 'node-fetch';
 import { URL } from 'url';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { getEnvBool, isCI } from './envars';

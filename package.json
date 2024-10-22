@@ -61,10 +61,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\""
   },
   "overrides": {
-    "uri-js": "npm:uri-js-replace",
-    "node-fetch": {
-      "whatwg-url": "14.x"
-    }
+    "uri-js": "npm:uri-js-replace"
   },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
@@ -84,12 +81,12 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.675.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.677.0",
     "@azure/identity": "^4.5.0",
     "@eslint/js": "^9.13.0",
     "@libsql/client": "^0.14.0",
     "@swc/cli": "^0.4.0",
-    "@swc/core": "^1.7.36",
+    "@swc/core": "^1.7.39",
     "@swc/jest": "^0.2.36",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/async": "^3.2.24",
@@ -106,7 +103,6 @@
     "@types/inquirer": "^9.0.7",
     "@types/jest": "^29.5.13",
     "@types/js-yaml": "^4.0.9",
-    "@types/node-fetch": "^2.6.11",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/semver": "^7.5.8",
@@ -134,11 +130,11 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.6.3",
-    "typescript-eslint": "^8.10.0",
+    "typescript-eslint": "^8.11.0",
     "zod-to-json-schema": "^3.23.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.29.2",
+    "@anthropic-ai/sdk": "^0.30.0",
     "@apidevtools/json-schema-ref-parser": "^11.7.2",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
@@ -175,9 +171,8 @@
     "js-yaml": "^4.1.0",
     "mathjs": "^13.2.0",
     "node-cache": "^5.1.2",
-    "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
-    "openai": "^4.68.1",
+    "openai": "^4.68.2",
     "opener": "^1.5.2",
     "proxy-agent": "^6.4.0",
     "python-shell": "^5.0.0",

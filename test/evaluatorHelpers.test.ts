@@ -4,7 +4,6 @@ import { renderPrompt, resolveVariables, runExtensionHook } from '../src/evaluat
 import type { Prompt } from '../src/types';
 import { transform } from '../src/util/transform';
 
-jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));

@@ -24,7 +24,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -33,7 +33,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
        config:
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
@@ -61,7 +61,7 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -95,7 +95,7 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-3-5-sonnet-20240620-v1:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
 ```yaml
 config:

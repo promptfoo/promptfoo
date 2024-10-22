@@ -12,7 +12,7 @@ interface MetricCardProps {
   trend?: 'up' | 'down' | 'flat';
   trendValue?: string;
   sentiment?: 'good' | 'bad' | 'flat';
-  subtitle?: string; // Add this line
+  subtitle?: string;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({

@@ -1,33 +1,20 @@
-import type { Response } from 'node-fetch';
-import fetch from 'node-fetch';
 import { fetchWithRetries } from '../src/fetch';
 
-jest.mock('node-fetch');
+const mockedFetch = jest.spyOn(global, 'fetch');
 
-const mockedFetch = jest.mocked(fetch);
-
-const mockedFetchResponse = (
-  ok: boolean,
-  response: object,
-  headers: Record<string, string> = {},
-) => {
+const mockedFetchResponse = (ok: boolean, response: object, headers: object = {}) => {
+  const responseText = JSON.stringify(response);
   return {
     ok,
     status: ok ? 200 : 429,
     statusText: ok ? 'OK' : 'Too Many Requests',
-    data: response,
-    headers: {
-      get: (name: string) => {
-        if (name === 'content-type') {
-          return 'application/json';
-        }
-        if (headers[name] !== undefined) {
-          return headers[name];
-        }
-        return null;
-      },
-    },
-  } as unknown as Response;
+    text: () => Promise.resolve(responseText),
+    json: () => Promise.resolve(response),
+    headers: new Headers({
+      'content-type': 'application/json',
+      ...headers,
+    }),
+  } as Response;
 };
 
 const mockedSetTimeout = (reqTimeout: number) =>
@@ -61,7 +48,7 @@ describe('fetchWithRetries', () => {
     const result = await fetchWithRetries(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(result).toMatchObject({ data: response });
+    await expect(result.json()).resolves.toEqual(response);
   });
 
   it('should retry after given time if rate limited, using X-Limit headers', async () => {
@@ -71,7 +58,7 @@ describe('fetchWithRetries', () => {
     const timeout = 1234;
     const now = Date.now();
 
-    const setTimoutMock = mockedSetTimeout(timeout);
+    const setTimeoutMock = mockedSetTimeout(timeout);
 
     mockedFetch
       .mockResolvedValueOnce(
@@ -83,12 +70,12 @@ describe('fetchWithRetries', () => {
       .mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithRetries(url, {}, timeout);
-    const waitTime = setTimoutMock.mock.calls[1][1];
+    const waitTime = setTimeoutMock.mock.calls[1][1];
 
     expect(mockedFetch).toHaveBeenCalledTimes(2);
     expect(waitTime).toBeGreaterThan(rateLimitReset);
     expect(waitTime).toBeLessThanOrEqual(rateLimitReset + 1000);
-    expect(result).toMatchObject({ data: response });
+    await expect(result.json()).resolves.toEqual(response);
   });
 
   it('should retry after given time if rate limited, using status and Retry-After', async () => {
@@ -97,7 +84,7 @@ describe('fetchWithRetries', () => {
     const retryAfter = 15;
     const timeout = 1234;
 
-    const setTimoutMock = mockedSetTimeout(timeout);
+    const setTimeoutMock = mockedSetTimeout(timeout);
 
     mockedFetch
       .mockResolvedValueOnce(
@@ -106,11 +93,11 @@ describe('fetchWithRetries', () => {
       .mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithRetries(url, {}, timeout);
-    const waitTime = setTimoutMock.mock.calls[1][1];
+    const waitTime = setTimeoutMock.mock.calls[1][1];
 
     expect(mockedFetch).toHaveBeenCalledTimes(2);
     expect(waitTime).toBe(retryAfter * 1000);
-    expect(result).toMatchObject({ data: response });
+    await expect(result.json()).resolves.toEqual(response);
   });
 
   it('should retry after default wait time if rate limited and wait time not found', async () => {
@@ -118,17 +105,17 @@ describe('fetchWithRetries', () => {
     const response = { data: 'test data' };
     const timeout = 1234;
 
-    const setTimoutMock = mockedSetTimeout(timeout);
+    const setTimeoutMock = mockedSetTimeout(timeout);
 
     mockedFetch
       .mockResolvedValueOnce(mockedFetchResponse(false, response))
       .mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithRetries(url, {}, timeout);
-    const waitTime = setTimoutMock.mock.calls[1][1];
+    const waitTime = setTimeoutMock.mock.calls[1][1];
 
     expect(mockedFetch).toHaveBeenCalledTimes(2);
     expect(waitTime).toBe(60_000);
-    expect(result).toMatchObject({ data: response });
+    await expect(result.json()).resolves.toEqual(response);
   });
 });

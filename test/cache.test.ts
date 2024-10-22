@@ -1,24 +1,20 @@
-import type { Response } from 'node-fetch';
-import fetch from 'node-fetch';
 import { fetchWithCache, disableCache, enableCache, clearCache } from '../src/cache';
 
-jest.mock('node-fetch');
-const mockedFetch = jest.mocked(fetch);
+const mockedFetch = jest.mocked(jest.fn());
+global.fetch = mockedFetch;
 
-const mockedFetchResponse = (ok: boolean, response: object) => {
+const mockedFetchResponse = (ok: boolean, response: object): Response => {
+  const responseText = JSON.stringify(response);
   return {
     ok,
-    status: 200,
-    text: () => Promise.resolve(JSON.stringify(response)),
-    headers: {
-      get: (name: string) => {
-        if (name === 'content-type') {
-          return 'application/json';
-        }
-        return null;
-      },
-    },
-  } as unknown as Response;
+    status: ok ? 200 : 400,
+    statusText: ok ? 'OK' : 'Bad Request',
+    text: () => Promise.resolve(responseText),
+    json: () => Promise.resolve(response),
+    headers: new Headers({
+      'content-type': 'application/json',
+    }),
+  } as Response;
 };
 
 describe('fetchWithCache', () => {
