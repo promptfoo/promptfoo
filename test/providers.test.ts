@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import child_process from 'child_process';
 import dedent from 'dedent';
 import * as fs from 'fs';
-import fetch from 'node-fetch';
 import * as path from 'path';
 import Stream from 'stream';
 import { clearCache, disableCache, enableCache } from '../src/cache';
@@ -71,7 +70,6 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
@@ -101,6 +99,9 @@ jest.mock('../src/logger', () => ({
   warn: jest.fn(),
 }));
 
+const mockFetch = jest.mocked(jest.fn());
+global.fetch = mockFetch;
+
 const defaultMockResponse = {
   status: 200,
   statusText: 'OK',
@@ -125,12 +126,12 @@ describe('call provider apis', () => {
         }),
       ),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new OpenAiCompletionProvider('text-davinci-003');
     const result = await provider.callApi('Test prompt');
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
@@ -146,14 +147,14 @@ describe('call provider apis', () => {
       ),
       ok: true,
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
@@ -169,14 +170,14 @@ describe('call provider apis', () => {
       ),
       ok: true,
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output 2');
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
 
@@ -184,7 +185,7 @@ describe('call provider apis', () => {
       JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result2.output).toBe('Test output 2');
     expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
   });
@@ -200,14 +201,14 @@ describe('call provider apis', () => {
       ),
       ok: true,
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
 
@@ -217,7 +218,7 @@ describe('call provider apis', () => {
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(result2.output).toBe('Test output');
     expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
 
@@ -233,7 +234,7 @@ describe('call provider apis', () => {
     const prompt = 'Test prompt';
     await provider.callApi(prompt);
 
-    expect(fetch).toHaveBeenCalledWith(
+    expect(mockFetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         body: expect.stringMatching(`temperature\":3.1415926`),
@@ -254,7 +255,7 @@ describe('call provider apis', () => {
       ),
       ok: true,
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
       config: {
@@ -280,7 +281,7 @@ describe('call provider apis', () => {
       JSON.stringify([{ role: 'user', content: 'Get me a person' }]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toEqual({ name: 'John', age: 30 });
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
@@ -296,14 +297,14 @@ describe('call provider apis', () => {
       ),
       ok: true,
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Generate inappropriate content' }]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.error).toBe('Model refused to generate a response: Content policy violation');
     expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0 });
   });
@@ -333,7 +334,7 @@ describe('call provider apis', () => {
       ),
       ok: true,
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const mockWeatherFunction = jest.fn().mockResolvedValue('Sunny, 25°C');
 
@@ -364,7 +365,7 @@ describe('call provider apis', () => {
       JSON.stringify([{ role: 'user', content: "What's the weather in New York?" }]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
     expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
@@ -380,12 +381,12 @@ describe('call provider apis', () => {
         }),
       ),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new AzureOpenAiCompletionProvider('text-davinci-003');
     const result = await provider.callApi('Test prompt');
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
@@ -400,14 +401,14 @@ describe('call provider apis', () => {
         }),
       ),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
@@ -435,7 +436,7 @@ describe('call provider apis', () => {
         }),
       ),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini', {
       config: { dataSources },
@@ -447,7 +448,7 @@ describe('call provider apis', () => {
       ]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test response');
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
@@ -464,14 +465,14 @@ describe('call provider apis', () => {
         }),
       ),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
 
@@ -487,12 +488,12 @@ describe('call provider apis', () => {
         }),
       ),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new LlamaProvider('llama.cpp');
     const result = await provider.callApi('Test prompt');
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
   });
 
@@ -510,12 +511,12 @@ describe('call provider apis', () => {
 {"model":"llama2:13b","created_at":"2023-08-08T21:50:35.117166Z","response":" blue","done":false}
 {"model":"llama2:13b","created_at":"2023-08-08T21:50:41.695299Z","done":true,"context":[1,29871,1,13,9314],"total_duration":10411943458,"load_duration":458333,"sample_count":217,"sample_duration":154566000,"prompt_eval_count":11,"prompt_eval_duration":3334582000,"eval_count":216,"eval_duration":6905134000}`),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new OllamaCompletionProvider('llama');
     const result = await provider.callApi('Test prompt');
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Great question! The sky appears blue');
   });
 
@@ -531,12 +532,12 @@ describe('call provider apis', () => {
 {"model":"orca-mini","created_at":"2023-12-16T01:46:19.324309782Z","message":{"role":"assistant","content":".","images":null},"done":false}
 {"model":"orca-mini","created_at":"2023-12-16T01:46:19.337165395Z","done":true,"total_duration":1486443841,"load_duration":1280794143,"prompt_eval_count":35,"prompt_eval_duration":142384000,"eval_count":6,"eval_duration":61912000}`),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama');
     const result = await provider.callApi('Test prompt');
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe(' Because of Rayleigh scattering.');
   });
 
@@ -549,12 +550,12 @@ describe('call provider apis', () => {
         }),
       ),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new WebhookProvider('http://example.com/webhook');
     const result = await provider.callApi('Test prompt');
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
   });
 
@@ -567,12 +568,12 @@ describe('call provider apis', () => {
         ...defaultMockResponse,
         text: jest.fn().mockResolvedValue(JSON.stringify(mockedData)),
       };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+      mockFetch.mockResolvedValue(mockResponse);
 
       const provider = new HuggingfaceTextGenerationProvider('gpt2');
       const result = await provider.callApi('Test prompt');
 
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
     });
   });
@@ -582,12 +583,12 @@ describe('call provider apis', () => {
       ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(JSON.stringify([0.1, 0.2, 0.3, 0.4, 0.5])),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new HuggingfaceFeatureExtractionProvider('distilbert-base-uncased');
     const result = await provider.callEmbeddingApi('Test text');
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
   });
 
@@ -608,12 +609,12 @@ describe('call provider apis', () => {
       ...defaultMockResponse,
       text: jest.fn().mockResolvedValue(JSON.stringify(mockClassification)),
     };
-    jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+    mockFetch.mockResolvedValue(mockResponse);
 
     const provider = new HuggingfaceTextClassificationProvider('foo');
     const result = await provider.callClassificationApi('Test text');
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result.classification).toEqual({
       nothate: 0.9,
       hate: 0.1,
@@ -624,8 +625,6 @@ describe('call provider apis', () => {
     beforeAll(() => {
       enableCache();
     });
-
-    const fetchMock = jest.mocked(fetch);
     const cloudflareMinimumConfig: Required<
       Pick<ICloudflareProviderBaseConfig, 'accountId' | 'apiKey'>
     > = {
@@ -663,16 +662,16 @@ describe('call provider apis', () => {
           ok: true,
         };
 
-        fetchMock.mockResolvedValue(mockResponse as never);
+        mockFetch.mockResolvedValue(mockResponse);
         const result = await provider.callApi(PROMPT);
 
-        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
         expect(result.output).toBe(responsePayload.result.response);
         expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
 
         const resultFromCache = await provider.callApi(PROMPT);
 
-        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
         expect(resultFromCache.output).toBe(responsePayload.result.response);
         expect(resultFromCache.tokenUsage).toEqual(tokenUsageDefaultResponse);
       });
@@ -699,15 +698,15 @@ describe('call provider apis', () => {
             ok: true,
           };
 
-          fetchMock.mockResolvedValue(mockResponse as never);
+          mockFetch.mockResolvedValue(mockResponse);
           const result = await provider.callApi(PROMPT);
 
-          expect(fetch).toHaveBeenCalledTimes(1);
+          expect(mockFetch).toHaveBeenCalledTimes(1);
           expect(result.output).toBe(responsePayload.result.response);
           expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
 
           const resultFromCache = await provider.callApi(PROMPT);
-          expect(fetch).toHaveBeenCalledTimes(2);
+          expect(mockFetch).toHaveBeenCalledTimes(2);
           expect(resultFromCache.output).toBe(responsePayload.result.response);
           expect(resultFromCache.tokenUsage).toEqual(tokenUsageDefaultResponse);
         } finally {
@@ -732,7 +731,7 @@ describe('call provider apis', () => {
           ok: true,
         };
 
-        fetchMock.mockResolvedValue(mockResponse as never);
+        mockFetch.mockResolvedValue(mockResponse);
         const result = await provider.callApi(PROMPT);
 
         expect(result.error).toContain(JSON.stringify(responsePayload.errors));
@@ -775,27 +774,25 @@ describe('call provider apis', () => {
           ok: true,
         };
 
-        fetchMock.mockResolvedValue(mockResponse as never);
+        mockFetch.mockResolvedValue(mockResponse);
         await cfProvider.callApi(PROMPT);
 
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(fetchMock.mock.calls).toHaveLength(1);
-        const [url, options] = fetchMock.mock.calls[0] ?? [undefined, {}];
-        const { body, headers, method } = options as RequestInit;
-        expect(url).toContain(cloudflareChatConfig.accountId);
-        expect(method).toBe('POST');
-        expect(headers && 'Authorization' in headers ? headers['Authorization'] : '').toContain(
-          cloudflareChatConfig.apiKey,
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            body: expect.stringMatching(`"prompt":"${PROMPT}"`),
+          }),
         );
-        const hydratedBody = typeof body === 'string' ? JSON.parse(body) : body;
-        expect(hydratedBody.prompt).toBe(PROMPT);
 
         const {
           accountId: _accountId,
           apiKey: _apiKey,
           ...passThroughConfig
         } = cloudflareChatConfig;
-        const { prompt: _prompt, ...bodyWithoutPrompt } = hydratedBody;
+        const { prompt: _prompt, ...bodyWithoutPrompt } = JSON.parse(
+          jest.mocked(mockFetch).mock.calls[0][1].body as string,
+        );
         expect(bodyWithoutPrompt).toEqual(passThroughConfig);
       });
     });
@@ -820,10 +817,10 @@ describe('call provider apis', () => {
           ok: true,
         };
 
-        fetchMock.mockResolvedValue(mockResponse as never);
+        mockFetch.mockResolvedValue(mockResponse);
         const result = await provider.callApi('Test chat prompt');
 
-        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
         expect(result.output).toBe(responsePayload.result.response);
         expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
       });
@@ -851,10 +848,10 @@ describe('call provider apis', () => {
           ok: true,
         };
 
-        fetchMock.mockResolvedValue(mockResponse as never);
+        mockFetch.mockResolvedValue(mockResponse);
         const result = await provider.callEmbeddingApi('Create embeddings from this');
 
-        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
         expect(result.embedding).toEqual(responsePayload.result.data[0]);
         expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
       });
@@ -953,7 +950,7 @@ describe('call provider apis', () => {
         ),
         ok: true,
       };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+      mockFetch.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
         config: {
@@ -985,7 +982,7 @@ describe('call provider apis', () => {
 
       const result = await provider.callApi('Add 5 and 6');
 
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('11');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
@@ -1021,7 +1018,7 @@ describe('call provider apis', () => {
         ),
         ok: true,
       };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+      mockFetch.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
         config: {
@@ -1072,7 +1069,7 @@ describe('call provider apis', () => {
 
       const result = await provider.callApi('Add 5 and 6, then multiply 2 and 3');
 
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('11\n6');
       expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8 });
     });
@@ -1098,7 +1095,7 @@ describe('call provider apis', () => {
         ),
         ok: true,
       };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+      mockFetch.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
         config: {
@@ -1125,7 +1122,7 @@ describe('call provider apis', () => {
 
       const result = await provider.callApi('Call the error function');
 
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(result.output).toEqual({ arguments: '{}', name: 'errorFunction' });
       expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
     });

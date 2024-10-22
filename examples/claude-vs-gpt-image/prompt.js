@@ -6,7 +6,7 @@
  *
  * Note: For simplicity and to avoid dependencies, this example uses the built-in
  * 'https' module. In a production environment, use more robust libraries like
- * node-fetch or axios for better error handling and features.
+ * axios for better error handling and features.
  */
 
 const https = require('https');

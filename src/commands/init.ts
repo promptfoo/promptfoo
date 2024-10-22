@@ -4,7 +4,6 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs/promises';
-import fetch from 'node-fetch';
 import path from 'path';
 import { VERSION } from '../constants';
 import { getEnvString } from '../envars';

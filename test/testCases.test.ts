@@ -17,7 +17,6 @@ import {
 } from '../src/testCases';
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../src/types';
 
-jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));

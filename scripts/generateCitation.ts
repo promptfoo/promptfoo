@@ -1,6 +1,5 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
-import fetch from 'node-fetch';
 import path from 'path';
 
 /**
