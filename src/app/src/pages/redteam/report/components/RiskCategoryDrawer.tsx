@@ -6,6 +6,8 @@ import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';
@@ -17,6 +19,7 @@ interface RiskCategoryDrawerProps {
   onClose: () => void;
   category: string;
   failures: { prompt: string; output: string; gradingResult?: GradingResult }[];
+  passes: { prompt: string; output: string; gradingResult?: GradingResult }[];
   numPassed: number;
   numFailed: number;
   evalId: string;
@@ -63,6 +66,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   onClose,
   category,
   failures,
+  passes,
   evalId,
   numPassed,
   numFailed,
@@ -98,6 +102,8 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
     undefined,
   );
+
+  const [activeTab, setActiveTab] = React.useState(0);
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
@@ -138,11 +144,18 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
         >
           View All Logs
         </Button>
-        {failures.length > 0 ? (
-          <>
-            <Typography variant="h6" className="failed-tests-header">
-              Flagged Tests
-            </Typography>
+
+        <Tabs
+          value={activeTab}
+          onChange={(_, newValue) => setActiveTab(newValue)}
+          sx={{ borderBottom: 1, borderColor: 'divider', mt: 2 }}
+        >
+          <Tab label={`Flagged Tests (${failures.length})`} />
+          <Tab label={`Passed Tests (${passes.length})`} />
+        </Tabs>
+
+        {activeTab === 0 ? (
+          failures.length > 0 ? (
             <List>
               {failures.slice(0, 5).map((failure, index) => (
                 <ListItem key={index} className="failure-item">
@@ -172,10 +185,31 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
                 </ListItem>
               ))}
             </List>
-          </>
+          ) : (
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
+              <Typography variant="body1">No failed tests</Typography>
+            </Box>
+          )
+        ) : passes.length > 0 ? (
+          <List>
+            {passes.slice(0, 5).map((pass, index) => (
+              <ListItem key={index} className="failure-item">
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
+                  <Box sx={{ flexGrow: 1 }}>
+                    <Typography variant="subtitle1" className="prompt">
+                      {getPromptDisplayString(pass.prompt)}
+                    </Typography>
+                    <Typography variant="body2" className="output">
+                      {getOutputDisplay(pass.output)}
+                    </Typography>
+                  </Box>
+                </Box>
+              </ListItem>
+            ))}
+          </List>
         ) : (
           <Box sx={{ mt: 2, textAlign: 'center' }}>
-            <Typography variant="body1">All tests passed successfully</Typography>
+            <Typography variant="body1">No passed tests</Typography>
           </Box>
         )}
       </Box>
