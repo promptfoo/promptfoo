@@ -18,6 +18,7 @@ import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
+import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { TelemetryEventSchema } from '../telemetry';
@@ -29,7 +30,6 @@ import {
   readResult,
   getTestCases,
   getLatestEval,
-  migrateResultsFromFileSystemToDatabase,
   getStandaloneEvals,
 } from '../util';
 import { evalRouter } from './routes/eval';
@@ -191,7 +191,7 @@ export function startServer(
     },
   });
 
-  migrateResultsFromFileSystemToDatabase().then(() => {
+  runDbMigrations().then(() => {
     logger.info('Migrated results from file system to database');
   });
 

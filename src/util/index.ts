@@ -475,12 +475,6 @@ export function readResult_fileSystem(
   }
 }
 
-export async function migrateResultsFromFileSystemToDatabase() {
-  // First run db migrations
-  logger.debug('Running db migrations...');
-  await runDbMigrations();
-}
-
 export async function readResult(
   id: string,
 ): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {
