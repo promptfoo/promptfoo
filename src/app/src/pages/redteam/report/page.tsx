@@ -15,7 +15,7 @@ export default function ReportPage() {
 
   useEffect(() => {
     if (!isLoading && !email) {
-      navigate(`/login?redirect=${window.location.pathname}`);
+      navigate(`/login?type=report&redirect=${window.location.pathname}${window.location.search}`);
     }
   }, [isLoading, email, navigate]);
 

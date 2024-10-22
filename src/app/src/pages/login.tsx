@@ -20,8 +20,8 @@ export default function LoginPage() {
     fetchEmail();
   }, [fetchEmail]);
 
+  const params = new URLSearchParams(location.search);
   const handleRedirect = () => {
-    const params = new URLSearchParams(location.search);
     const redirect = params.get('redirect');
     if (redirect) {
       navigate(redirect);
@@ -78,7 +78,7 @@ export default function LoginPage() {
       >
         <Paper elevation={3} sx={{ padding: 4, width: '100%' }}>
           <Typography component="h1" variant="h4" align="center" gutterBottom>
-            Authentication required
+            {params.get('type') === 'report' ? 'View Report' : 'Authentication required'}
           </Typography>
           <Typography variant="body1" align="center" sx={{ mb: 3 }}>
             Please enter your email to continue
