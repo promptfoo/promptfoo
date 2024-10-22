@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
+import { getEnvBool } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
@@ -12,7 +13,11 @@ export const userRouter = Router();
 userRouter.get('/email', async (req: Request, res: Response): Promise<void> => {
   try {
     const email = getUserEmail();
-    res.json(ApiSchemas.User.Get.Response.parse({ email }));
+    if (email) {
+      res.json(ApiSchemas.User.Get.Response.parse({ email }));
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.error(`Error getting email: ${fromError(error)}`);
@@ -33,7 +38,11 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
         message: `Email updated`,
       }),
     );
-    await telemetry.recordAndSend('webui_api_event', { event: 'email_set' });
+    await telemetry.recordAndSend('webui_api', {
+      event: 'email_set',
+      email,
+      selfHosted: getEnvBool('PROMPTFOO_SELF_HOSTED'),
+    });
   } catch (error) {
     logger.error(`Error setting email: ${error}`);
     if (error instanceof z.ZodError) {
