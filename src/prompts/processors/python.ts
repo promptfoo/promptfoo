@@ -24,7 +24,6 @@ export const pythonPromptFunction = async (
   },
 ) => {
   invariant(context.provider?.id, 'provider.id is required');
-  logger.warn(`context: ${JSON.stringify(context, null, 2)}`);
   const transformedContext: PromptFunctionContext = {
     vars: context.vars,
     provider: {
@@ -60,7 +59,7 @@ export const pythonPromptFunctionLegacy = async (
         typeof context.provider?.id === 'function' ? context.provider?.id() : context.provider?.id,
       label: context.provider?.label,
     },
-    config: context.config ?? {}, 
+    config: context.config ?? {},
   };
   const options: PythonShellOptions = {
     mode: 'text',
@@ -88,14 +87,13 @@ export function processPythonFile(
   const fileContent = fs.readFileSync(filePath, 'utf-8');
   const label =
     prompt.label ?? (functionName ? `${filePath}:${functionName}` : `${filePath}: ${fileContent}`);
-  logger.warn(`Processing Python file ${filePath} with function ${functionName}`);
-  logger.warn(`config: ${JSON.stringify(prompt.config, null, 2)}`);
   return [
     {
       raw: fileContent,
       label,
       function: functionName
-        ? (context) => pythonPromptFunction(filePath, functionName, { ...context, config: prompt.config })
+        ? (context) =>
+            pythonPromptFunction(filePath, functionName, { ...context, config: prompt.config })
         : (context) => pythonPromptFunctionLegacy(filePath, { ...context, config: prompt.config }),
       config: prompt.config,
     },

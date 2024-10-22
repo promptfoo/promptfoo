@@ -3,9 +3,8 @@ import sys
 
 
 def prompt1(context):
-    print(f'------------------ context: {context}')
     return (
-        f'Write a one-sentence insult for anyone who likes {context["config"]["templateMultiFilter"]}.'
+        f'Write a one-sentence insult for anyone who likes {context["vars"]["topic"]}.'
     )
 
 
