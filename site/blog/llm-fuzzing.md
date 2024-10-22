@@ -2,7 +2,7 @@
 sidebar_label: Does Fuzzing LLMs Actually Work?
 title: Does Fuzzing LLMs Actually Work?
 image: /img/blog/fuzzing/red_panda_firewood.png
-date: 2024-10-017
+date: 2024-10-17
 ---
 
 # Does Fuzzing LLMs Actually Work?
