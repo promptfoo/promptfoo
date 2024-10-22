@@ -40,6 +40,7 @@ describe('pythonPromptFunction', () => {
           id: 'providerId',
           label: 'providerLabel',
         },
+        config: {},
       },
     ]);
   });
@@ -66,6 +67,7 @@ describe('pythonPromptFunction', () => {
             id: context.provider.id(),
             label: context.provider.label,
           },
+          config: {},
         }),
       ],
     });

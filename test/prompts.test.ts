@@ -359,6 +359,7 @@ describe('readPrompts', () => {
         raw: "()=>console.log('dummy prompt')",
         label: 'prompt.js',
         function: expect.any(Function),
+        config: {},
       },
     ]);
     expect(importModule).toHaveBeenCalledWith(promptPath, undefined);
@@ -381,6 +382,7 @@ describe('readPrompts', () => {
         raw: String(mockFunction),
         label: 'prompt.js:functionName',
         function: expect.any(Function),
+        config: {}, // Add this line
       },
     ]);
 
