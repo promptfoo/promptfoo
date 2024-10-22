@@ -1589,4 +1589,12 @@ config:
     const provider = await loadApiProvider('openai:chat:gpt-4o', { options: providerOptions });
     expect(provider.label).toBe('foo');
   });
+
+  it('loadApiProvider with xai', async () => {
+    const provider = await loadApiProvider('xai:grok-2');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('grok-2');
+    expect(provider.config.apiBaseUrl).toBe('https://api.x.ai/v1');
+    expect(provider.config.apiKeyEnvar).toBe('XAI_API_KEY');
+  });
 });
