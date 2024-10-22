@@ -504,6 +504,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ? undefined
       : (this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
 
+    const responseFormat = context?.prompt.config?.response_format || this.config.response_format;
+
     const body = {
       model: this.modelName,
       messages,
@@ -530,10 +532,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
         : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
-      ...(this.config.response_format
+      ...(responseFormat
         ? {
             response_format: maybeLoadFromExternalFile(
-              renderVarsInObject(this.config.response_format, context?.vars),
+              renderVarsInObject(responseFormat, context?.vars),
             ),
           }
         : {}),
