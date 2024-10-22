@@ -490,56 +490,60 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     // NOTE: Special handling for o1 models which do not support max_tokens and temperature
     const isO1Model = this.modelName.startsWith('o1-');
     const maxCompletionTokens = isO1Model
-      ? (this.config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
+      ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
     const maxTokens = isO1Model
       ? undefined
-      : (this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+      : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
     const temperature = isO1Model
       ? undefined
-      : (this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
+      : (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
 
     const body = {
       model: this.modelName,
       messages,
-      seed: this.config.seed,
+      seed: config.seed,
       ...(maxTokens ? { max_tokens: maxTokens } : {}),
       ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
       ...(temperature ? { temperature } : {}),
-      top_p: this.config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
+      top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        this.config.presence_penalty ??
-        Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+        config.presence_penalty ?? Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        this.config.frequency_penalty ??
-        Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      ...(this.config.functions
+        config.frequency_penalty ?? Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+      ...(config.functions
         ? {
             functions: maybeLoadFromExternalFile(
-              renderVarsInObject(this.config.functions, context?.vars),
+              renderVarsInObject(config.functions, context?.vars),
             ),
           }
         : {}),
-      ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
-      ...(this.config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+      ...(config.function_call ? { function_call: config.function_call } : {}),
+      ...(config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
         : {}),
-      ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
-      ...(this.config.response_format
+      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.response_format
         ? {
             response_format: maybeLoadFromExternalFile(
-              renderVarsInObject(this.config.response_format, context?.vars),
+              renderVarsInObject(config.response_format, context?.vars),
             ),
           }
         : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(this.config.stop ? { stop: this.config.stop } : {}),
-      ...(this.config.passthrough || {}),
+      ...(config.stop ? { stop: config.stop } : {}),
+      ...(config.passthrough || {}),
     };
     let data;
     let cached = false;
@@ -552,7 +556,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...this.config.headers,
+            ...config.headers,
           },
           body: JSON.stringify(body),
         },
@@ -595,7 +599,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
 
       // Handle structured output
-      if (this.config.response_format?.type === 'json_schema' && typeof output === 'string') {
+      if (config.response_format?.type === 'json_schema' && typeof output === 'string') {
         try {
           output = JSON.parse(output);
         } catch (error) {
@@ -605,13 +609,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
-      if (functionCalls && this.config.functionToolCallbacks) {
+      if (functionCalls && config.functionToolCallbacks) {
         const results = [];
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
-          if (this.config.functionToolCallbacks[functionName]) {
+          if (config.functionToolCallbacks[functionName]) {
             try {
-              const functionResult = await this.config.functionToolCallbacks[functionName](
+              const functionResult = await config.functionToolCallbacks[functionName](
                 functionCall.arguments || functionCall.function?.arguments,
               );
               results.push(functionResult);
@@ -628,7 +632,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             logProbs,
             cost: calculateOpenAICost(
               this.modelName,
-              this.config,
+              config,
               data.usage?.prompt_tokens,
               data.usage?.completion_tokens,
             ),
@@ -643,7 +647,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         logProbs,
         cost: calculateOpenAICost(
           this.modelName,
-          this.config,
+          config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
