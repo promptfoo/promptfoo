@@ -2,7 +2,6 @@ import cacheManager from 'cache-manager';
 import type { Cache } from 'cache-manager';
 import fsStore from 'cache-manager-fs-hash';
 import fs from 'fs';
-import type { RequestInfo, RequestInit } from 'node-fetch';
 import path from 'path';
 import { getEnvBool, getEnvString, getEnvInt } from './envars';
 import { fetchWithRetries } from './fetch';

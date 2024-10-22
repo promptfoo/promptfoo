@@ -61,10 +61,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\""
   },
   "overrides": {
-    "uri-js": "npm:uri-js-replace",
-    "node-fetch": {
-      "whatwg-url": "14.x"
-    }
+    "uri-js": "npm:uri-js-replace"
   },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
@@ -106,7 +103,6 @@
     "@types/inquirer": "^9.0.7",
     "@types/jest": "^29.5.13",
     "@types/js-yaml": "^4.0.9",
-    "@types/node-fetch": "^2.6.11",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/semver": "^7.5.8",
@@ -175,7 +171,6 @@
     "js-yaml": "^4.1.0",
     "mathjs": "^13.2.0",
     "node-cache": "^5.1.2",
-    "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
     "openai": "^4.68.1",
     "opener": "^1.5.2",

@@ -151,6 +151,32 @@ const App: React.FC = () => {
     return failures;
   }, [evalData]);
 
+  const passesByPlugin = React.useMemo(() => {
+    const passes: Record<
+      string,
+      { prompt: string; output: string; gradingResult?: GradingResult }[]
+    > = {};
+    evalData?.results.results.forEach((result) => {
+      const pluginId = getPluginIdFromResult(result);
+      if (!pluginId) {
+        console.warn(`Could not get passes for plugin ${pluginId}`);
+        return;
+      }
+      if (pluginId && result.gradingResult?.pass) {
+        if (!passes[pluginId]) {
+          passes[pluginId] = [];
+        }
+        passes[pluginId].push({
+          prompt:
+            result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
+          output: result.response?.output,
+          gradingResult: result.gradingResult || undefined,
+        });
+      }
+    });
+    return passes;
+  }, [evalData]);
+
   React.useEffect(() => {
     document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
   }, [evalData, evalId]);
@@ -374,6 +400,7 @@ const App: React.FC = () => {
           categoryStats={categoryStats}
           evalId={evalId}
           failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
         />
         <TestSuites evalId={evalId} categoryStats={categoryStats} />
       </Stack>

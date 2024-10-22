@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import * as fs from 'fs';
-import { Response } from 'node-fetch';
 import * as path from 'path';
 import {
   containsXml,

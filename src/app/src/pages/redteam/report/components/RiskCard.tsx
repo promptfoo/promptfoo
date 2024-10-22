@@ -33,6 +33,10 @@ const RiskCard: React.FC<{
     string,
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
+  passesByPlugin: Record<
+    string,
+    { prompt: string; output: string; gradingResult?: GradingResult }[]
+  >;
 }> = ({
   title,
   subtitle,
@@ -42,6 +46,7 @@ const RiskCard: React.FC<{
   testTypes,
   evalId,
   failuresByPlugin,
+  passesByPlugin,
 }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -171,6 +176,7 @@ const RiskCard: React.FC<{
             onClose={() => setDrawerOpen(false)}
             category={selectedCategory}
             failures={failuresByPlugin[selectedCategory] || []}
+            passes={passesByPlugin[selectedCategory] || []}
             evalId={evalId}
             numPassed={testTypes.find((t) => t.name === selectedCategory)?.numPassed || 0}
             numFailed={testTypes.find((t) => t.name === selectedCategory)?.numFailed || 0}

@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import fs from 'fs/promises';
-import fetch from 'node-fetch';
 import * as init from '../../src/commands/init';
 import logger from '../../src/logger';
 
@@ -16,7 +15,6 @@ jest.mock('../../src/commands/init', () => {
 
 jest.mock('fs/promises');
 jest.mock('path');
-jest.mock('node-fetch');
 jest.mock('../../src/constants');
 jest.mock('../../src/logger');
 jest.mock('../../src/onboarding');
@@ -24,6 +22,9 @@ jest.mock('../../src/telemetry');
 jest.mock('@inquirer/confirm');
 jest.mock('@inquirer/input');
 jest.mock('@inquirer/select');
+
+const mockFetch = jest.mocked(jest.fn());
+global.fetch = mockFetch;
 
 describe('init command', () => {
   beforeEach(() => {
@@ -38,22 +39,24 @@ describe('init command', () => {
     it('should download a file successfully', async () => {
       const mockResponse = {
         ok: true,
+        status: 200,
         text: jest.fn().mockResolvedValue('file content'),
       };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as any);
+      mockFetch.mockResolvedValue(mockResponse);
 
       await init.downloadFile('https://example.com/file.txt', '/path/to/file.txt');
 
-      expect(fetch).toHaveBeenCalledWith('https://example.com/file.txt');
+      expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.txt');
       expect(fs.writeFile).toHaveBeenCalledWith('/path/to/file.txt', 'file content');
     });
 
     it('should throw an error if download fails', async () => {
       const mockResponse = {
         ok: false,
+        status: 404,
         statusText: 'Not Found',
       };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as any);
+      mockFetch.mockResolvedValue(mockResponse);
 
       await expect(
         init.downloadFile('https://example.com/file.txt', '/path/to/file.txt'),
@@ -61,7 +64,7 @@ describe('init command', () => {
     });
 
     it('should handle network errors', async () => {
-      jest.mocked(fetch).mockRejectedValue(new Error('Network error'));
+      mockFetch.mockRejectedValue(new Error('Network error'));
 
       await expect(
         init.downloadFile('https://example.com/file.txt', '/path/to/file.txt'),
@@ -75,7 +78,7 @@ describe('init command', () => {
         ok: false,
         statusText: 'Not Found',
       };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as any);
+      mockFetch.mockResolvedValue(mockResponse);
 
       await expect(init.downloadDirectory('example', '/path/to/target')).rejects.toThrow(
         'Failed to fetch directory contents: Not Found',
@@ -83,7 +86,7 @@ describe('init command', () => {
     });
 
     it('should handle network errors', async () => {
-      jest.mocked(fetch).mockRejectedValue(new Error('Network error'));
+      mockFetch.mockRejectedValue(new Error('Network error'));
 
       await expect(init.downloadDirectory('example', '/path/to/target')).rejects.toThrow(
         'Network error',
@@ -114,13 +117,14 @@ describe('init command', () => {
     it('should return a list of examples', async () => {
       const mockResponse = {
         ok: true,
+        status: 200,
         json: jest.fn().mockResolvedValue([
           { name: 'example1', type: 'dir' },
           { name: 'example2', type: 'dir' },
           { name: 'not-an-example', type: 'file' },
         ]),
       };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as any);
+      mockFetch.mockResolvedValue(mockResponse);
 
       const examples = await init.getExamplesList();
 
@@ -133,7 +137,7 @@ describe('init command', () => {
         status: 404,
         statusText: 'Not Found',
       };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as any);
+      mockFetch.mockResolvedValue(mockResponse);
 
       const examples = await init.getExamplesList();
 
@@ -142,7 +146,7 @@ describe('init command', () => {
     });
 
     it('should handle network errors', async () => {
-      jest.mocked(fetch).mockRejectedValue(new Error('Network error'));
+      mockFetch.mockRejectedValue(new Error('Network error'));
 
       const examples = await init.getExamplesList();
 
