@@ -348,7 +348,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
             labelId="predefined-target-label"
             value={selectedTarget.id}
             onChange={handleTargetChange}
-            label="Target"
+            label="Target Type"
           >
             {predefinedTargets.map((target) => (
               <MenuItem key={target.value} value={target.value}>
