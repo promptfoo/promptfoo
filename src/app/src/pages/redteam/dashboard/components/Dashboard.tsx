@@ -17,6 +17,7 @@ import {
   categoryAliases,
   riskCategories,
   riskCategorySeverityMap,
+  type Plugin as PluginType,
 } from '@promptfoo/redteam/constants';
 import type { StandaloneEval } from '@promptfoo/util';
 import type { ApplicationAttackSuccessDataPoint } from './ApplicationAttackSuccessChart';
@@ -113,7 +114,7 @@ export default function Dashboard() {
         };
 
         Object.entries(eval_.pluginFailCount || {}).forEach(([pluginId, count]) => {
-          const severity = riskCategorySeverityMap[pluginId] || Severity.Low;
+          const severity = riskCategorySeverityMap[pluginId as PluginType] || Severity.Low;
           dataPoint[severity] += count;
           dataPoint.total += count;
         });
