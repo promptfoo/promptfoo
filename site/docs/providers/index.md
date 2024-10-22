@@ -9,7 +9,7 @@ Here's a basic example of configuring providers in your promptfoo YAML config:
 ```yaml
 providers:
   - openai:gpt-4o-mini
-  - anthropic:messages:claude-3-5-sonnet-20240620
+  - anthropic:messages:claude-3-5-sonnet-20241022
   - vertex:gemini-pro
 ```
 
@@ -18,7 +18,7 @@ providers:
 | Api Providers                                       | Description                                | Syntax & Example                                |
 | --------------------------------------------------- | ------------------------------------------ | ----------------------------------------------- |
 | [OpenAI](./openai.md)                               | GPT models including GPT-4 and GPT-3.5     | `openai:o1-preview`                             |
-| [Anthropic](./anthropic.md)                         | Claude models                              | `anthropic:messages:claude-3-5-sonnet-20240620` |
+| [Anthropic](./anthropic.md)                         | Claude models                              | `anthropic:messages:claude-3-5-sonnet-20241022` |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers               | `https://api.example.com/v1/chat/completions`   |
 | [Javascript](./custom-api.md)                       | Custom - JavaScript file                   | `file://path/to/custom_provider.js`             |
 | [Python](./python.md)                               | Custom - Python file                       | `file://path/to/custom_provider.py`             |
@@ -53,6 +53,7 @@ providers:
 | [Web Browser](./browser.md)                         | Custom - Automate web browser interactions | `browser`                                       |
 | [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                               | Compatible with OpenAI syntax                   |
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                              | `watsonx:ibm/granite-13b-chat-v2`               |
+| [X.AI](./xai.md)                                    | X.AI's models                              | `xai:grok-2`                                    |
 
 ## Provider Syntax
 

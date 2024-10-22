@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 import { ProxyAgent } from 'proxy-agent';
 import invariant from 'tiny-invariant';
 import { getEnvInt, getEnvBool } from './envars';
@@ -9,10 +7,10 @@ export async function fetchWithProxy(
   url: RequestInfo,
   options: RequestInit = {},
 ): Promise<Response> {
-  options.agent = new ProxyAgent({
+  const agent = new ProxyAgent({
     rejectUnauthorized: false, // Don't check SSL cert
-  }) as unknown as RequestInit['agent'];
-  return fetch(url, options);
+  });
+  return fetch(url, { ...options, agent } as RequestInit);
 }
 
 export function fetchWithTimeout(
@@ -30,7 +28,7 @@ export function fetchWithTimeout(
 
     fetchWithProxy(url, {
       ...options,
-      signal: signal as never, // AbortSignal type is not exported by node-fetch 2.x
+      signal,
     })
       .then((response) => {
         clearTimeout(timeoutId);

@@ -100,9 +100,9 @@ export async function runPython(
     `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
   const customPath = options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON');
-  const pythonPath = customPath || 'python';
+  let pythonPath = customPath || 'python';
 
-  await validatePythonPath(pythonPath, typeof customPath === 'string');
+  pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
 
   const pythonOptions: PythonShellOptions = {
     args: [absPath, method, tempJsonPath, outputPath],

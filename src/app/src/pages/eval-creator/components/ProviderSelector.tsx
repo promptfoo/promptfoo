@@ -34,7 +34,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
   )
   .concat(
     [
-      'anthropic:messages:claude-3-5-sonnet-20240620',
+      'anthropic:messages:claude-3-5-sonnet-20241022',
       'anthropic:messages:claude-3-haiku-20240307',
       'anthropic:messages:claude-3-sonnet-20240229',
       'anthropic:messages:claude-3-opus-20240229',
