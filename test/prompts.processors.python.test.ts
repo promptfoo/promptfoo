@@ -78,4 +78,20 @@ describe('processPythonFile', () => {
       },
     ]);
   });
+
+  it('should process a valid Python file with config', () => {
+    const filePath = 'file.py';
+    const fileContent = 'print("Hello, world!")';
+    mockReadFileSync.mockReturnValue(fileContent);
+    jest.mocked(pythonPromptFunctionLegacy).mockResolvedValueOnce('mocked result');
+    const config = { key: 'value' };
+    expect(processPythonFile(filePath, { config }, undefined)).toEqual([
+      {
+        function: expect.any(Function),
+        label: `${filePath}: ${fileContent}`,
+        raw: fileContent,
+        config: { key: 'value' },
+      },
+    ]);
+  });
 });

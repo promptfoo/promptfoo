@@ -1127,13 +1127,108 @@ describe('call provider apis', () => {
       expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
     });
   });
+
+  describe('OpenAiChatCompletionProvider response_format', () => {
+    it('should prioritize response_format from prompt config over provider config', async () => {
+      const providerResponseFormat = {
+        type: 'json_object' as const,
+      };
+      const promptResponseFormat = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'test_schema',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: { key2: { type: 'string' } },
+            additionalProperties: false,
+          },
+        },
+      };
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          response_format: providerResponseFormat,
+        },
+      });
+
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [{ message: { content: '{"key2": "value2"}' } }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+        ),
+      };
+      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+      const result = await provider.callApi('Test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            response_format: promptResponseFormat,
+          },
+        },
+      });
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const fetchArgs = jest.mocked(fetch).mock.calls[0];
+      const requestBody = JSON.parse(fetchArgs[1]?.body as string);
+      expect(requestBody.response_format).toEqual(promptResponseFormat);
+
+      expect(result.output).toEqual({ key2: 'value2' });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
+    it('should use provider config response_format when prompt config is not provided', async () => {
+      const providerResponseFormat = {
+        type: 'json_object' as const,
+      };
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          response_format: providerResponseFormat,
+        },
+      });
+
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [{ message: { content: '{"key1": "value1"}' } }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+        ),
+      };
+      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
+
+      const result = await provider.callApi('Test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+        },
+      });
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const fetchArgs = jest.mocked(fetch).mock.calls[0];
+      const requestBody = JSON.parse(fetchArgs[1]?.body as string);
+      expect(requestBody.response_format).toEqual(providerResponseFormat);
+      expect(result.output).toBe('{"key1": "value1"}');
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+  });
 });
 
 describe('loadApiProvider', () => {
   it('loadApiProvider with yaml filepath', async () => {
-    const mockYamlContent = `id: 'openai:gpt-4'
-config:
-  key: 'value'`;
+    const mockYamlContent = dedent`
+    id: 'openai:gpt-4'
+    config:
+      key: 'value'`;
     jest.mocked(fs.readFileSync).mockReturnValueOnce(mockYamlContent);
 
     const provider = await loadApiProvider('file://path/to/mock-provider-file.yaml');

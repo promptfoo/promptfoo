@@ -303,6 +303,7 @@ interface Prompt {
   // A function to generate a prompt on a per-input basis. Overrides the raw prompt.
   function?: (context: {
     vars: Record<string, string | object>;
+    config?: Record<string, any>;
     provider?: ApiProvider;
   }) => Promise<string | object>;
 }

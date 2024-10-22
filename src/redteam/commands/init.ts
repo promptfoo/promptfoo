@@ -268,7 +268,7 @@ export async function redteamInit(directory: string | undefined) {
       { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
       {
         name: 'anthropic:claude-3-5-sonnet-20240620',
-        value: 'anthropic:messages:claude-3-5-sonnet-20240620',
+        value: 'anthropic:messages:claude-3-5-sonnet-20241022',
       },
       {
         name: 'anthropic:claude-3-opus-20240307',

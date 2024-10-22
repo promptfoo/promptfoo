@@ -13,6 +13,7 @@ import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
 import EvalPage from './pages/eval/page';
+import LoginPage from './pages/login';
 import ProgressPage from './pages/progress/page';
 import PromptsPage from './pages/prompts/page';
 import RedteamDashboardPage from './pages/redteam/dashboard/page';
@@ -48,6 +49,7 @@ const router = createBrowserRouter(
         {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
           <Route path="/dashboard" element={<RedteamDashboardPage />} />
         )}
+        <Route path="/login" element={<LoginPage />} />
       </Route>
     </Route>,
   ),
