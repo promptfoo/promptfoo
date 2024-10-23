@@ -1,5 +1,6 @@
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
+import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
@@ -61,6 +62,7 @@ async function fetchRemoteTestCases(
     injectVar,
     n,
     config,
+    version: VERSION,
   });
   logger.debug(`Using remote redteam generation for ${key}:\n${body}`);
   try {
