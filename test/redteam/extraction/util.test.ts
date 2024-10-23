@@ -34,6 +34,8 @@ describe('fetchRemoteGeneration', () => {
         task: 'purpose',
         result: 'This is a purpose',
       },
+      status: 200,
+      statusText: 'OK',
       cached: false,
     };
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
@@ -59,6 +61,8 @@ describe('fetchRemoteGeneration', () => {
         task: 'entities',
         result: ['Entity1', 'Entity2'],
       },
+      status: 200,
+      statusText: 'OK',
       cached: false,
     };
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
@@ -94,6 +98,8 @@ describe('fetchRemoteGeneration', () => {
         task: 'purpose',
         // Missing 'result' field
       },
+      status: 200,
+      statusText: 'OK',
       cached: false,
     };
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);

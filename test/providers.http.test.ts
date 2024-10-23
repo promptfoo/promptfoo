@@ -50,6 +50,8 @@ describe('HttpProvider', () => {
     });
     const mockResponse = {
       data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
       cached: false,
     };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
@@ -97,7 +99,12 @@ describe('HttpProvider', () => {
         responseParser: (data: any) => data,
       },
     });
-    const mockResponse = { data: 'custom response', cached: false };
+    const mockResponse = {
+      data: 'custom response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -130,6 +137,8 @@ describe('HttpProvider', () => {
       });
       const mockResponse = {
         data: JSON.stringify({ result: 'parsed', custom: 'parsed' }),
+        status: 200,
+        statusText: 'OK',
         cached: false,
       };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
@@ -148,7 +157,12 @@ describe('HttpProvider', () => {
         responseParser: (data: any) => data,
       },
     });
-    const mockResponse = { data: 'custom response', cached: false };
+    const mockResponse = {
+      data: 'custom response',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -197,7 +211,12 @@ describe('HttpProvider', () => {
         responseParser: (data: any) => data,
       },
     });
-    const mockResponse = { data: 'response data', cached: false };
+    const mockResponse = {
+      data: 'response data',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -229,6 +248,8 @@ describe('HttpProvider', () => {
       const mockResponse = {
         data: JSON.stringify({ result: 'success' }),
         cached: false,
+        status: 200,
+        statusText: 'OK',
       };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
@@ -267,6 +288,8 @@ describe('HttpProvider', () => {
       const mockResponse = {
         data: JSON.stringify({ result: 'received' }),
         cached: false,
+        status: 200,
+        statusText: 'OK',
       };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
@@ -305,6 +328,8 @@ describe('HttpProvider', () => {
 
       const mockResponse = {
         data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
         cached: false,
       };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
@@ -411,7 +436,12 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = { data: JSON.stringify({ result: 'success' }), cached: false };
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -445,7 +475,12 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = { data: JSON.stringify({ result: 'parsed' }), cached: false };
+      const mockResponse = {
+        data: JSON.stringify({ result: 'parsed' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -502,6 +537,8 @@ describe('HttpProvider', () => {
     });
     const mockResponse = {
       data: JSON.stringify({ key: 'value' }),
+      status: 200,
+      statusText: 'OK',
       cached: false,
     };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
@@ -518,7 +555,12 @@ describe('HttpProvider', () => {
       },
     });
 
-    const mockResponse = { data: JSON.stringify({ result: 'success' }), cached: false };
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test prompt');
@@ -626,7 +668,12 @@ describe('HttpProvider', () => {
         body: { key: '{{ prompt }}' },
       },
     });
-    const mockResponse = { data: JSON.stringify({ result: 'success' }), cached: false };
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -654,7 +701,12 @@ describe('HttpProvider', () => {
         body: 'test',
       },
     });
-    const mockResponse = { data: JSON.stringify({ result: 'success' }), cached: false };
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
