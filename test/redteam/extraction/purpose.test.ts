@@ -1,5 +1,5 @@
-import { version } from '../../../package.json';
 import { fetchWithCache } from '../../../src/cache';
+import { VERSION } from '../../../src/constants';
 import { extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
 import type { ApiProvider } from '../../../src/types';
 
@@ -55,7 +55,7 @@ describe('System Purpose Extractor', () => {
         body: JSON.stringify({
           task: 'purpose',
           prompts: ['prompt1', 'prompt2'],
-          version,
+          version: VERSION,
         }),
       }),
       expect.any(Number),

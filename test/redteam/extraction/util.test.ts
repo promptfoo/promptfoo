@@ -1,5 +1,5 @@
-import { version } from '../../../package.json';
 import { fetchWithCache } from '../../../src/cache';
+import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
 import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
 import {
@@ -50,7 +50,7 @@ describe('fetchRemoteGeneration', () => {
         body: JSON.stringify({
           task: 'purpose',
           prompts: ['prompt1', 'prompt2'],
-          version,
+          version: VERSION,
         }),
       },
       REQUEST_TIMEOUT_MS,
@@ -79,7 +79,7 @@ describe('fetchRemoteGeneration', () => {
         body: JSON.stringify({
           task: 'entities',
           prompts: ['prompt1', 'prompt2'],
-          version,
+          version: VERSION,
         }),
       },
       REQUEST_TIMEOUT_MS,

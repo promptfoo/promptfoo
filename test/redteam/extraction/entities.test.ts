@@ -1,5 +1,5 @@
-import { version } from '../../../package.json';
 import { fetchWithCache } from '../../../src/cache';
+import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
 import { extractEntities } from '../../../src/redteam/extraction/entities';
 import type { ApiProvider } from '../../../src/types';
@@ -62,7 +62,7 @@ describe('Entities Extractor', () => {
         body: JSON.stringify({
           task: 'entities',
           prompts: ['prompt1', 'prompt2'],
-          version,
+          version: VERSION,
         }),
       }),
       expect.any(Number),
