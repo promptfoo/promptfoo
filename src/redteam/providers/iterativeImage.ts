@@ -119,6 +119,9 @@ async function runRedteamConversation({
 
     // Get new prompt
     const redteamResp = await redteamProvider.callApi(redteamBody);
+    if (redteamResp.error) {
+      throw new Error(`Error from redteam provider: ${redteamResp.error}`);
+    }
     invariant(
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
@@ -154,6 +157,9 @@ async function runRedteamConversation({
       },
     ]);
     const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
+    if (isOnTopicResp.error) {
+      throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
+    }
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
     const { isOnTopic } = extractFirstJsonObject<{ isOnTopic: boolean }>(isOnTopicResp.output);
     logger.debug(`Iteration ${i + 1}: On-topic response: ${isOnTopicResp.output}`);

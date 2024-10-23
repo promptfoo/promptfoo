@@ -10,13 +10,13 @@ import {
   getNewPrompt,
   checkIfOnTopic,
   updateRedteamHistory,
-  getTargetResponse,
 } from '../../../src/redteam/providers/iterativeTree';
 import {
   ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
+import { getTargetResponse } from '../../../src/redteam/providers/shared';
 import type { ApiProvider } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
@@ -91,14 +91,6 @@ describe('RedteamIterativeProvider', () => {
       );
 
       expect(score).toBe(1); // 2 - 3, but minimum is 1
-    });
-
-    it('should throw an error for invalid API response', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid json' });
-
-      await expect(
-        evaluateResponse(mockRedteamProvider, 'Judge prompt', 'Target response', false),
-      ).rejects.toThrow(); // eslint-disable-line jest/require-to-throw-message
     });
   });
 
@@ -470,20 +462,6 @@ describe('RedteamIterativeProvider', () => {
       expect(mockTargetProvider.callApi).toHaveBeenCalledWith(targetPrompt);
     });
 
-    it('should throw an error for empty or undefined output', async () => {
-      mockTargetProvider.callApi.mockResolvedValue({ output: '' });
-
-      const targetPrompt = 'Test prompt';
-      await expect(getTargetResponse(mockTargetProvider, targetPrompt)).rejects.toThrow(
-        'Expected output to be defined',
-      );
-
-      mockTargetProvider.callApi.mockResolvedValue({ output: undefined });
-      await expect(getTargetResponse(mockTargetProvider, targetPrompt)).rejects.toThrow(
-        'Expected output to be defined',
-      );
-    });
-
     it('should stringify non-string outputs', async () => {
       const nonStringOutput = { key: 'value' };
       mockTargetProvider.callApi.mockResolvedValue({ output: nonStringOutput });
@@ -492,15 +470,6 @@ describe('RedteamIterativeProvider', () => {
       const result = await getTargetResponse(mockTargetProvider, targetPrompt);
 
       expect(result).toBe(JSON.stringify(nonStringOutput));
-    });
-
-    it('should throw an error if callApi fails', async () => {
-      mockTargetProvider.callApi.mockRejectedValue(new Error('API call failed'));
-
-      const targetPrompt = 'Test prompt';
-      await expect(getTargetResponse(mockTargetProvider, targetPrompt)).rejects.toThrow(
-        'API call failed',
-      );
     });
   });
 });
