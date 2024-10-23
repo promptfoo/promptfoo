@@ -2,6 +2,8 @@ FROM --platform=${BUILDPLATFORM} node:20-alpine
 
 FROM node:20-alpine AS base
 
+RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
+
 # Install dependencies only when needed
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
@@ -46,6 +48,9 @@ RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl &&
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
 ENV PROMPTFOO_SELF_HOSTED=1
+
+RUN chown -R promptfoo:promptfoo /app
+USER promptfoo
 
 EXPOSE 3000
 
