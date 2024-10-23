@@ -21,8 +21,18 @@ export default class EvalResult {
     opts?: { persist: boolean },
   ) {
     const persist = opts?.persist == null ? true : opts.persist;
-    const { prompt, error, score, latencyMs, success, provider, gradingResult, namedScores, cost } =
-      result;
+    const {
+      prompt,
+      error,
+      score,
+      latencyMs,
+      success,
+      provider,
+      gradingResult,
+      namedScores,
+      cost,
+      metadata,
+    } = result;
     const args = {
       id: randomUUID(),
       evalId,
@@ -40,6 +50,7 @@ export default class EvalResult {
       provider,
       latencyMs,
       cost,
+      metadata,
     };
     if (persist) {
       const db = getDb();
@@ -97,6 +108,7 @@ export default class EvalResult {
   provider: ProviderOptions;
   latencyMs: number;
   cost: number;
+  metadata: Record<string, any>;
   persisted: boolean;
 
   constructor(opts: {
@@ -116,6 +128,7 @@ export default class EvalResult {
     provider: ProviderOptions;
     latencyMs?: number | null;
     cost?: number | null;
+    metadata?: Record<string, any> | null;
     persisted?: boolean;
   }) {
     this.id = opts.id;
@@ -135,6 +148,7 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
+    this.metadata = opts.metadata || {};
     this.persisted = opts.persisted || false;
   }
 
@@ -172,6 +186,7 @@ export default class EvalResult {
       testCase: this.testCase,
       testIdx: this.testIdx,
       vars: this.testCase.vars || {},
+      metadata: this.metadata,
     };
   }
 }
