@@ -1,4 +1,7 @@
+import cliState from '../../src/cliState';
+import { getEnvBool, getEnvString } from '../../src/envars';
 import { removePrefix } from '../../src/redteam/util';
+import { shouldGenerateRemote } from '../../src/redteam/util';
 
 describe('removePrefix', () => {
   it('should remove a simple prefix', () => {
@@ -27,5 +30,48 @@ describe('removePrefix', () => {
 
   it('should handle prefix that is the entire string', () => {
     expect(removePrefix('Prompt:', 'Prompt')).toBe('');
+  });
+});
+
+jest.mock('../../src/envars');
+jest.mock('../../src/cliState', () => ({
+  remote: undefined,
+}));
+
+describe('shouldGenerateRemote', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    cliState.remote = undefined;
+  });
+
+  it('should return true when remote generation is not disabled and no OpenAI key exists', () => {
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    jest.mocked(getEnvString).mockReturnValue('');
+    expect(shouldGenerateRemote()).toBe(true);
+  });
+
+  it('should return false when remote generation is disabled via env var', () => {
+    jest.mocked(getEnvBool).mockReturnValue(true);
+    jest.mocked(getEnvString).mockReturnValue('');
+    expect(shouldGenerateRemote()).toBe(false);
+  });
+
+  it('should return false when OpenAI key exists', () => {
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    jest.mocked(getEnvString).mockReturnValue('sk-123');
+    expect(shouldGenerateRemote()).toBe(false);
+  });
+
+  it('should return false when remote generation is disabled via env var and OpenAI key exists', () => {
+    jest.mocked(getEnvBool).mockReturnValue(true);
+    jest.mocked(getEnvString).mockReturnValue('sk-123');
+    expect(shouldGenerateRemote()).toBe(false);
+  });
+
+  it('should return true when cliState.remote is true regardless of other conditions', () => {
+    jest.mocked(getEnvBool).mockReturnValue(true);
+    jest.mocked(getEnvString).mockReturnValue('sk-123');
+    cliState.remote = true;
+    expect(shouldGenerateRemote()).toBe(true);
   });
 });

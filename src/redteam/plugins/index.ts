@@ -160,6 +160,9 @@ function createRemotePlugin<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async (provider, purpose, injectVar, n, delayMs, config) => {
+      if (!shouldGenerateRemote()) {
+        throw new Error(`${key} plugin requires remote generation to be enabled`);
+      }
       return fetchRemoteTestCases(key, purpose, injectVar, n, config);
     },
   };
