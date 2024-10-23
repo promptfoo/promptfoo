@@ -33,7 +33,12 @@ describe('fetchWithCache', () => {
     const result = await fetchWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ cached: false, data: response });
+    expect(result).toEqual({
+      cached: false,
+      data: response,
+      status: 400,
+      statusText: 'Bad Request',
+    });
   });
 
   it('should fetch data with cache enabled', async () => {
@@ -47,7 +52,7 @@ describe('fetchWithCache', () => {
     const result = await fetchWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ cached: false, data: response });
+    expect(result).toEqual({ cached: false, data: response, status: 200, statusText: 'OK' });
   });
 
   it('should fetch data with cache enabled after previous test', async () => {
@@ -59,7 +64,7 @@ describe('fetchWithCache', () => {
     const result = await fetchWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(0);
-    expect(result).toEqual({ cached: true, data: response });
+    expect(result).toEqual({ cached: true, data: response, status: 200, statusText: 'OK' });
   });
 
   it('should only fetch data once with cache enabled', async () => {
@@ -78,8 +83,8 @@ describe('fetchWithCache', () => {
     ]);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(a).toEqual({ cached: false, data: response });
-    expect(b).toEqual({ cached: true, data: response });
+    expect(a).toEqual({ cached: false, data: response, status: 200, statusText: 'OK' });
+    expect(b).toEqual({ cached: true, data: response, status: 200, statusText: 'OK' });
   });
 
   it('should fetch data without cache for a single test', async () => {
@@ -93,7 +98,7 @@ describe('fetchWithCache', () => {
     const result = await fetchWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ cached: false, data: response });
+    expect(result).toEqual({ cached: false, data: response, status: 200, statusText: 'OK' });
 
     enableCache();
   });
@@ -109,7 +114,7 @@ describe('fetchWithCache', () => {
     const result = await fetchWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ cached: false, data: response });
+    expect(result).toEqual({ cached: false, data: response, status: 200, statusText: 'OK' });
 
     enableCache();
   });

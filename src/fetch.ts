@@ -46,16 +46,29 @@ function isRateLimited(response: Response): boolean {
   invariant(response.headers, 'Response headers are missing');
   invariant(response.status, 'Response status is missing');
 
-  return response.headers.get('X-RateLimit-Remaining') === '0' || response.status === 429;
+  // Check for OpenAI specific rate limit headers and status codes
+  return (
+    response.headers.get('X-RateLimit-Remaining') === '0' ||
+    response.status === 429 ||
+    // OpenAI specific error codes
+    response.headers.get('x-ratelimit-remaining-requests') === '0' ||
+    response.headers.get('x-ratelimit-remaining-tokens') === '0'
+  );
 }
 
 async function handleRateLimit(response: Response): Promise<void> {
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
   const retryAfter = response.headers.get('Retry-After');
+  // OpenAI specific headers
+  const openaiReset =
+    response.headers.get('x-ratelimit-reset-requests') ||
+    response.headers.get('x-ratelimit-reset-tokens');
 
   let waitTime = 60_000; // Default wait time of 60 seconds
 
-  if (rateLimitReset) {
+  if (openaiReset) {
+    waitTime = Math.max(Number.parseInt(openaiReset) * 1000, 0);
+  } else if (rateLimitReset) {
     const resetTime = new Date(Number.parseInt(rateLimitReset) * 1000);
     const now = new Date();
     waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
@@ -63,6 +76,7 @@ async function handleRateLimit(response: Response): Promise<void> {
     waitTime = Number.parseInt(retryAfter) * 1000;
   }
 
+  logger.debug(`Rate limited, waiting ${waitTime}ms before retry`);
   await new Promise((resolve) => setTimeout(resolve, waitTime));
 }
 

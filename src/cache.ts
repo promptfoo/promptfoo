@@ -43,6 +43,8 @@ export function getCache() {
 export type FetchWithCacheResult<T> = {
   data: T;
   cached: boolean;
+  status: number;
+  statusText: string;
 };
 
 export async function fetchWithCache<T = any>(
@@ -59,6 +61,8 @@ export async function fetchWithCache<T = any>(
       return {
         cached: false,
         data: format === 'json' ? JSON.parse(respText) : respText,
+        status: resp.status,
+        statusText: resp.statusText,
       };
     } catch {
       throw new Error(`Error parsing response as JSON: ${respText}`);
@@ -81,12 +85,18 @@ export async function fetchWithCache<T = any>(
     const response = await fetchWithRetries(url, options, timeout);
     const responseText = await response.text();
     try {
-      const data = JSON.stringify(format === 'json' ? JSON.parse(responseText) : responseText);
+      const data = JSON.stringify({
+        data: format === 'json' ? JSON.parse(responseText) : responseText,
+        status: response.status,
+        statusText: response.statusText,
+      });
       if (!response.ok) {
         if (responseText == '') {
-          errorResponse = JSON.stringify(
-            `Empty Response: ${response.status}: ${response.statusText}`,
-          );
+          errorResponse = JSON.stringify({
+            data: `Empty Response: ${response.status}: ${response.statusText}`,
+            status: response.status,
+            statusText: response.statusText,
+          });
         } else {
           errorResponse = data;
         }
@@ -112,9 +122,12 @@ export async function fetchWithCache<T = any>(
     logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
   }
 
+  const parsedResponse = JSON.parse((cachedResponse ?? errorResponse) as string);
   return {
     cached,
-    data: JSON.parse((cachedResponse ?? errorResponse) as string) as T,
+    data: parsedResponse.data as T,
+    status: parsedResponse.status,
+    statusText: parsedResponse.statusText,
   };
 }
 
