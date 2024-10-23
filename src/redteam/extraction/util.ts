@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import { z } from 'zod';
+import { version } from '../../../package.json';
 import { fetchWithCache } from '../../cache';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
@@ -41,6 +42,7 @@ export async function fetchRemoteGeneration(
     const body = {
       task,
       prompts,
+      version,
     };
 
     const response = await fetchWithCache(

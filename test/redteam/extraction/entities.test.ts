@@ -1,3 +1,4 @@
+import { version } from '../../../package.json';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { extractEntities } from '../../../src/redteam/extraction/entities';
@@ -58,7 +59,11 @@ describe('Entities Extractor', () => {
       'https://api.promptfoo.dev/v1/generate',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ task: 'entities', prompts: ['prompt1', 'prompt2'] }),
+        body: JSON.stringify({
+          task: 'entities',
+          prompts: ['prompt1', 'prompt2'],
+          version,
+        }),
       }),
       expect.any(Number),
       'json',

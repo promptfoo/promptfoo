@@ -1,3 +1,4 @@
+import { version } from '../../../package.json';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
@@ -46,7 +47,11 @@ describe('fetchRemoteGeneration', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task: 'purpose', prompts: ['prompt1', 'prompt2'] }),
+        body: JSON.stringify({
+          task: 'purpose',
+          prompts: ['prompt1', 'prompt2'],
+          version,
+        }),
       },
       REQUEST_TIMEOUT_MS,
       'json',
@@ -71,7 +76,11 @@ describe('fetchRemoteGeneration', () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task: 'entities', prompts: ['prompt1', 'prompt2'] }),
+        body: JSON.stringify({
+          task: 'entities',
+          prompts: ['prompt1', 'prompt2'],
+          version,
+        }),
       },
       REQUEST_TIMEOUT_MS,
       'json',

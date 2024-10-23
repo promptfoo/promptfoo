@@ -1,4 +1,5 @@
 import invariant from 'tiny-invariant';
+import { version } from '../../../package.json';
 import { fetchWithCache } from '../../cache';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
@@ -61,6 +62,7 @@ async function fetchRemoteTestCases(
     injectVar,
     n,
     config,
+    version,
   });
   logger.debug(`Using remote redteam generation for ${key}:\n${body}`);
   try {
