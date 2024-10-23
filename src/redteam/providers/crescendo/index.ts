@@ -15,7 +15,7 @@ import type {
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { isBasicRefusal, shouldGenerateRemote } from '../../util';
-import { loadRedteamProvider } from '../shared';
+import { getTargetResponse, loadRedteamProvider } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_ROUNDS = 10;
@@ -292,6 +292,9 @@ class CrescendoProvider implements ApiProvider {
       },
       vars: {},
     });
+    if (response.error) {
+      throw new Error(`Error from redteam provider: ${response.error}`);
+    }
     invariant(typeof response.output === 'string', 'Expected output to be a string');
 
     const parsedOutput = extractFirstJsonObject<{
@@ -367,22 +370,16 @@ class CrescendoProvider implements ApiProvider {
       });
     }
 
-    const response = await provider.callApi(renderedPrompt);
-    if (response.error) {
-      logger.error(`Error received from target: ${response.error}`);
-      throw new Error(`Error received from target: ${response.error}`);
-    }
-    invariant(response.output, 'Expected output to be defined');
-    logger.debug(`Received response from target: ${response.output}`);
+    const targetResponse = await getTargetResponse(provider, renderedPrompt);
+    invariant(targetResponse, 'Expected output to be defined');
+    logger.debug(`Received response from target: ${targetResponse}`);
 
-    const outputString =
-      typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
     this.memory.addMessage(this.targetConversationId, {
       role: 'assistant',
-      content: outputString,
+      content: targetResponse,
     });
 
-    return outputString;
+    return targetResponse;
   }
 
   private async getRefusalScore(
@@ -421,6 +418,9 @@ class CrescendoProvider implements ApiProvider {
       },
       vars: {},
     });
+    if (refusalResponse.error) {
+      throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
+    }
     invariant(typeof refusalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Refusal score response: ${refusalResponse.output}`);
 
@@ -463,6 +463,9 @@ class CrescendoProvider implements ApiProvider {
       },
       vars: {},
     });
+    if (evalResponse.error) {
+      throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
+    }
     invariant(typeof evalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Eval score response: ${evalResponse.output}`);
 

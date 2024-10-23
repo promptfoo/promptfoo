@@ -1,6 +1,11 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { isProviderOptions, isApiProvider, type RedteamFileConfig } from '../../types';
+import {
+  isProviderOptions,
+  isApiProvider,
+  type RedteamFileConfig,
+  type ApiProvider,
+} from '../../types';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 export async function loadRedteamProvider({
@@ -37,4 +42,34 @@ export async function loadRedteamProvider({
     });
   }
   return ret;
+}
+
+/**
+ * Gets the response from the target provider for a given prompt.
+ * @param targetProvider - The API provider to get the response from.
+ * @param targetPrompt - The prompt to send to the target provider.
+ * @returns A promise that resolves to the target provider's response as a string.
+ */
+export async function getTargetResponse(
+  targetProvider: ApiProvider,
+  targetPrompt: string,
+): Promise<string> {
+  let targetRespRaw;
+  try {
+    targetRespRaw = await targetProvider.callApi(targetPrompt);
+  } catch (error) {
+    return (error as Error).message;
+  }
+
+  if (targetRespRaw?.output) {
+    return typeof targetRespRaw.output === 'string'
+      ? targetRespRaw.output
+      : JSON.stringify(targetRespRaw.output);
+  }
+
+  if (targetRespRaw?.error) {
+    return targetRespRaw.error;
+  }
+
+  throw new Error('Expected target output or error to be set');
 }
