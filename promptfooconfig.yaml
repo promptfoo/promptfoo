@@ -14,7 +14,7 @@ providers:
 #    config:
 #      temperature: 0.1
 #      max_tokens: 2000
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-1.5-flash
     config:
       temperature: 1.0
 defaultTest:

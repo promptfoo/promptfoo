@@ -83,6 +83,8 @@ export class PalmChatProvider extends PalmGenericProvider {
     'gemini-pro',
     'gemini-pro-vision',
     'gemini-1.5-pro',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-8b',
   ];
 
   constructor(
