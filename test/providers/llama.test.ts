@@ -48,7 +48,9 @@ describe('LlamaProvider', () => {
       jest.clearAllMocks();
     });
     it('should call fetchWithCache with correct parameters', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValue({ ...response, cached: false });
+      jest
+        .mocked(fetchWithCache)
+        .mockResolvedValue({ ...response, cached: false, status: 200, statusText: 'OK' });
 
       const provider = new LlamaProvider(modelName, { config });
       await provider.callApi(prompt);
@@ -84,9 +86,12 @@ describe('LlamaProvider', () => {
       );
     });
     it('should return the correct response on success', async () => {
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: { content: 'test response' }, cached: false });
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: { content: 'test response' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new LlamaProvider(modelName, { config });
       const result = await provider.callApi(prompt);
@@ -104,7 +109,7 @@ describe('LlamaProvider', () => {
     });
 
     it('should return an error if response data is malformed', async () => {
-      const malformedResponse = { data: null, cached: false };
+      const malformedResponse = { data: null, cached: false, status: 200, statusText: 'OK' };
       jest.mocked(fetchWithCache).mockResolvedValue(malformedResponse);
 
       const provider = new LlamaProvider(modelName, { config });

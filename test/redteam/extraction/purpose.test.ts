@@ -42,6 +42,8 @@ describe('System Purpose Extractor', () => {
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
     jest.mocked(fetchWithCache).mockResolvedValue({
       data: { task: 'purpose', result: 'Remote extracted purpose' },
+      status: 200,
+      statusText: 'OK',
       cached: false,
     });
 

@@ -545,10 +545,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
-    let data;
+    let data, status, statusText;
     let cached = false;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data, cached, status, statusText } = await fetchWithCache(
         `${this.getApiUrl()}/chat/completions`,
         {
           method: 'POST',
@@ -561,7 +561,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      )) as unknown as { data: any; cached: boolean });
+      ));
+
+      if (status < 200 || status >= 300) {
+        return {
+          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+        };
+      }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
       return {
