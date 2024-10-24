@@ -172,7 +172,7 @@ export async function renderPrompt(
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
-    // return nunjucks.renderString(basePrompt, vars);
+    // return nunjucks.renderString(basePrompt, vars); // TODO Itay: figure out how to do this better
     return basePrompt;
   }
 }
