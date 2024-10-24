@@ -24,7 +24,7 @@ import type {
   ApiProvider,
   ProviderTypeMap,
 } from '../src/types';
-import { TestGrader } from './utils';
+import { TestGrader } from './util/utils';
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn().mockImplementation(() => {
