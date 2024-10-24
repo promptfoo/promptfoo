@@ -1,10 +1,11 @@
 extensions:
-  - file:///app/geminiFileUploadInJs.mjs:geminiUploadExtension
+  - file://BASE_PATH/geminiFileUploadInJs.mjs:geminiUploadExtension
+  - file://BASE_PATH/geminiFileUploadInJs.mjs:replaceCurlyBrackets
+  - file://BASE_PATH/geminiFileUploadInJs.mjs:returnCurlyBrackets
 
 prompts:
-  - /app/motion/prompts/prompt_one.txt
-  - /app/motion/prompts/prompt_two.txt
-#  - /Users/itaylevy/IdeaProjects/promptfoo/prompt_three.txt
+  - BASE_PATH/motion/prompts/prompt_one.txt
+  - BASE_PATH/motion/prompts/prompt_two.txt
 providers:
   #  - id: openai:chat:gpt-4o
   #    config:
@@ -25,6 +26,7 @@ defaultTest:
     - type: llm-rubric
       value: The suggestions are prioritized in a way that gives more weighting to the impact of the suggestion.
       metric: Ordering
+
 #defaultTest:
 #  assert:
 #    - type: select-best

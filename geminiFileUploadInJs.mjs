@@ -11,6 +11,16 @@ const safetyMargin = 2 * 60 * 60; // 2 hours
 const fileTtl = geminiFileExpiration - safetyMargin;
 const writeFile = promisify(fs.writeFile);
 const fileDbLocalPath = path.join(process.cwd(), 'fileDb.json');
+const nunjucksSnR = {
+  notVars: {
+    START: '%%-START-%%',
+    END: '%%-END-%%',
+  },
+  yesVars: {
+    START: /\[\[/g,
+    END: /\]\]/g,
+  }
+}
 
 export class FileDb {
   constructor() {
@@ -236,6 +246,33 @@ class GeminiApiService {
       )
     );
   }
+}
+
+export const replaceCurlyBrackets = async (hookName, context) => {
+  if (hookName !== 'beforeAll') {
+    return;
+  }
+
+  context.suite.prompts = context.suite.prompts.map((prompt) => ({
+    ...prompt,
+    raw: prompt.raw
+      .replace(/{{/g, nunjucksSnR.notVars.START)
+      .replace(/}}/g, nunjucksSnR.notVars.END)
+      .replace(nunjucksSnR.yesVars.START, '{{')
+      .replace(nunjucksSnR.yesVars.END, '}}'),
+  }));
+};
+
+export const returnCurlyBrackets = async (hookName, context) => {
+  if (hookName !== 'afterPromptRender') {
+    return;
+  }
+
+  const notVarsStart = new RegExp(nunjucksSnR.notVars.START, 'g');
+  const notVarsEnd = new RegExp(nunjucksSnR.notVars.END, 'g');
+  context.renderedPromptObj.value = context.renderedPromptObj.value
+    .replace(notVarsStart, '{{')
+    .replace(notVarsEnd, '}}');
 }
 
 export const geminiUploadExtension = async (hookName, context) => {

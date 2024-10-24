@@ -26,7 +26,7 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from '../../types';
-import { maybeLoadFromExternalFile, readFilters } from '../../util';
+import { maybeLoadFromExternalFile, readFilters, setupEnv } from '../../util';
 import { isJavascriptFile } from '../../util/file';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
@@ -141,6 +141,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 }
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
+  setupEnv(undefined);
   let ret: UnifiedConfig & {
     targets?: UnifiedConfig['providers'];
     plugins?: RedteamPluginObject[];
@@ -148,7 +149,12 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
+    let contents = fs.readFileSync(configPath, 'utf-8');
+    const basePath = process.env.BASE_PATH;
+    if (basePath) {
+      contents = contents.replace(/BASE_PATH/g, basePath);
+    }
+    const rawConfig = yaml.load(contents) as UnifiedConfig;
     ret = await dereferenceConfig(rawConfig || {});
   } else if (isJavascriptFile(configPath)) {
     ret = (await importModule(configPath)) as UnifiedConfig;
