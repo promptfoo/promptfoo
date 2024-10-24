@@ -2,19 +2,19 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import cliState from '../src/cliState';
-import { importModule } from '../src/esm';
-import { readTests } from '../src/testCases';
-import type { UnifiedConfig } from '../src/types';
-import { maybeLoadFromExternalFile } from '../src/util';
+import cliState from '../../src/cliState';
+import { importModule } from '../../src/esm';
+import { readTests } from '../../src/testCases';
+import type { UnifiedConfig } from '../../src/types';
+import { maybeLoadFromExternalFile } from '../../src/util';
 import {
   dereferenceConfig,
   readConfig,
   resolveConfigs,
   combineConfigs,
-} from '../src/util/config/load';
+} from '../../src/util/config/load';
 
-jest.mock('../src/database', () => ({
+jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
 }));
 
@@ -35,27 +35,27 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../src/util', () => {
-  const originalModule = jest.requireActual('../src/util');
+jest.mock('../../src/util', () => {
+  const originalModule = jest.requireActual('../../src/util');
   return {
     ...originalModule,
     maybeLoadFromExternalFile: jest.fn(originalModule.maybeLoadFromExternalFile),
   };
 });
 
-jest.mock('../src/esm', () => ({
+jest.mock('../../src/esm', () => ({
   importModule: jest.fn(),
 }));
 
-jest.mock('../src/testCases', () => {
-  const originalModule = jest.requireActual('../src/testCases');
+jest.mock('../../src/testCases', () => {
+  const originalModule = jest.requireActual('../../src/testCases');
   return {
     ...originalModule,
     readTests: jest.fn(originalModule.readTests),
   };
 });
 
-jest.mock('../src/logger');
+jest.mock('../../src/logger');
 
 describe('combineConfigs', () => {
   beforeEach(() => {

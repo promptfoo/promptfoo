@@ -1,4 +1,4 @@
-import { isJavascriptFile } from '../src/util/file';
+import { isJavascriptFile } from '../../src/util/file';
 
 describe('util', () => {
   beforeEach(() => {

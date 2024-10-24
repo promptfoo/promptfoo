@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { extractJsonObjects, isValidJson, safeJsonStringify, orderKeys } from '../src/util/json';
+import { extractJsonObjects, isValidJson, safeJsonStringify, orderKeys } from '../../src/util/json';
 
 describe('json utilities', () => {
   describe('isValidJson', () => {

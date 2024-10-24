@@ -1,5 +1,5 @@
-import { runDbMigrations } from '../src/migrate';
-import { listPreviousResults } from '../src/util';
+import { runDbMigrations } from '../../src/migrate';
+import { listPreviousResults } from '../../src/util';
 import EvalFactory from './factories/evalFactory';
 
 describe('listPreviousResults', () => {

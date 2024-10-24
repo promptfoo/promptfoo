@@ -1,6 +1,6 @@
-import { runDbMigrations } from '../src/migrate';
-import Eval from '../src/models/eval';
-import { deleteAllEvals } from '../src/util';
+import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
+import { deleteAllEvals } from '../../src/util';
 import EvalFactory from './factories/evalFactory';
 
 describe('delete all evals', () => {

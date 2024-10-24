@@ -1,10 +1,10 @@
 import * as path from 'path';
-import { runPython } from '../src/python/pythonUtils';
-import { transform, TransformInputType } from '../src/util/transform';
+import { runPython } from '../../src/python/pythonUtils';
+import { transform, TransformInputType } from '../../src/util/transform';
 
-jest.mock('../src/esm');
+jest.mock('../../src/esm');
 
-jest.mock('../src/python/pythonUtils', () => ({
+jest.mock('../../src/python/pythonUtils', () => ({
   runPython: jest.fn().mockImplementation(async (filePath, functionName, args) => {
     const [output] = args;
     return output.toUpperCase() + ' FROM PYTHON';
@@ -19,7 +19,7 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('../src/database', () => ({
+jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
 }));
 

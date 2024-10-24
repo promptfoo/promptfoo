@@ -3,7 +3,7 @@ import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
-} from '../src/util/templates';
+} from '../../src/util/templates';
 
 describe('extractVariablesFromTemplate', () => {
   it('should extract simple variables', () => {
