@@ -68,6 +68,7 @@ async function doRedteamRun(options: RedteamRunOptions) {
     {
       showProgressBar: true,
     },
+    true /* isRedteam */,
   );
 
   logger.info(chalk.green('\nRed team evaluation complete!'));

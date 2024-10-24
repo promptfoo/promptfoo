@@ -58,6 +58,7 @@ export async function doEval(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
+  isRedteam: boolean,
 ) {
   setupEnv(cmdObj.envPath);
   let config: Partial<UnifiedConfig> | undefined = undefined;
@@ -113,7 +114,11 @@ export async function doEval(
       disableCache();
     }
 
-    ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
+    ({
+      config,
+      testSuite,
+      basePath: _basePath,
+    } = await resolveConfigs(cmdObj, defaultConfig, isRedteam));
 
     let maxConcurrency = cmdObj.maxConcurrency;
     const delay = cmdObj.delay ?? 0;
@@ -363,6 +368,7 @@ export function evalCommand(
   program: Command,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
+  isRedteam?: boolean,
 ) {
   const evaluateOptions: EvaluateOptions = {};
   if (defaultConfig.evaluateOptions) {
@@ -546,6 +552,7 @@ export function evalCommand(
         defaultConfig,
         defaultConfigPath,
         evaluateOptions,
+        isRedteam ?? false,
       );
     });
 

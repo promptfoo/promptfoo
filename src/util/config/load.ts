@@ -2,6 +2,7 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { re } from 'mathjs';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { readAssertions } from '../../assertions';
@@ -407,14 +408,25 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
+  isRedteam?: boolean,
 ): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   if (configPaths) {
-    fileConfig = await combineConfigs(configPaths);
-    // The user has provided a config file, so we do not want to use the default config.
-    defaultConfig = {};
+    if (isRedteam) {
+      const configDirectory = path.dirname(configPaths[0]);
+      const maybeConfig = await maybeReadConfig(path.join(configDirectory, 'redteam.yaml'));
+      if (maybeConfig) {
+        fileConfig = maybeConfig;
+      } else {
+        logger.warn(`No redteam.yaml configuration file found in directory: ${configDirectory}`);
+      }
+    } else {
+      fileConfig = await combineConfigs(configPaths);
+      // The user has provided a config file, so we do not want to use the default config.
+      defaultConfig = {};
+    }
   }
 
   // Standalone assertion mode
