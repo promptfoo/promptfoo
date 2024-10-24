@@ -34,6 +34,7 @@ export class GroqProvider implements ApiProvider {
   private groq: Groq;
   private modelName: string;
   public config: GroqCompletionOptions;
+  apiKey?: string;
 
   constructor(
     modelName: string,
@@ -42,9 +43,9 @@ export class GroqProvider implements ApiProvider {
     const { config, env } = options;
     this.modelName = modelName;
     this.config = config || {};
-    const apiKey = this.config.apiKey || env?.GROQ_API_KEY || process.env.GROQ_API_KEY;
+    this.apiKey = this.config.apiKey || env?.GROQ_API_KEY || process.env.GROQ_API_KEY;
     this.groq = new Groq({
-      apiKey,
+      apiKey: this.apiKey,
       maxRetries: 2,
       timeout: REQUEST_TIMEOUT_MS,
     });
@@ -54,6 +55,10 @@ export class GroqProvider implements ApiProvider {
 
   public getModelName(): string {
     return this.modelName;
+  }
+
+  getApiKey(): string | undefined {
+    return this.apiKey;
   }
 
   toString(): string {

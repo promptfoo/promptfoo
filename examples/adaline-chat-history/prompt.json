@@ -1,0 +1,33 @@
+[
+  {
+    "role": "system",
+    "content": [
+      {
+        "modality": "text",
+        "value": {{ system_message | dump }}
+      }
+    ]
+  },
+  {% for message in previous_messages %}
+    {% for role, content in message %}
+      {
+        "role": "{{ role }}",
+        "content": [
+          {
+            "modality": "text",
+            "value": {{ content | dump }}
+          }
+        ]
+      },
+    {% endfor %}
+  {% endfor %}
+  {
+    "role": "user",
+    "content": [
+      {
+        "modality": "text",
+        "value": {{ question | dump }}
+      }
+    ]
+  }
+]

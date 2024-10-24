@@ -1,0 +1,20 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "modality": "text",
+        "value": "{{question}}"
+      },
+      {
+        "modality": "image",
+        "detail": "auto",
+        "value": {
+          "type": "base64",
+          "media_type": "jpeg",
+          "base64": "{{base64_image}}"
+        }
+      }
+    ]
+  }
+]
