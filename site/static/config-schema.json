@@ -861,10 +861,12 @@
             }
           },
           "additionalProperties": false
+        },
+        "targets": {
+          "$ref": "#/definitions/PromptfooConfigSchema/properties/providers"
         }
       },
       "required": [
-        "providers",
         "prompts"
       ],
       "additionalProperties": false
