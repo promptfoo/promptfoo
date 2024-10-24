@@ -11,7 +11,10 @@ export default function Hero(): JSX.Element {
           Detect, mitigate, and monitor vulnerabilities in AI systems before deployment
         </p>
         <div className={styles.heroButtons}>
-          <Link to="/docs/red-team/" className={`${styles.button} ${styles.buttonPrimary}`}>
+          <Link
+            to="/docs/red-team/quickstart/"
+            className={`${styles.button} ${styles.buttonPrimary}`}
+          >
             Get started
           </Link>
           <Link to="/contact/" className={`${styles.button} ${styles.buttonSecondary}`}>

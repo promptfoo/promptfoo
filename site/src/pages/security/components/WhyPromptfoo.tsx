@@ -19,9 +19,9 @@ const reasons = [
   },
   {
     icon: <GroupIcon className={styles.statIcon} />,
-    stat: '30k+',
-    title: 'Developers',
-    description: 'Trust Promptfoo for their LLM security needs',
+    stat: '200+',
+    title: 'Companies',
+    description: 'Trust Promptfoo for LLM security & testing',
   },
 ];
 

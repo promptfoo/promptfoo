@@ -6,7 +6,6 @@ import Features from './components/Features';
 import Hero from './components/Hero';
 import LogoSection from './components/LogoSection';
 import Stats from './components/Stats';
-import Testimonials from './components/Testimonials';
 import WhyPromptfoo from './components/WhyPromptfoo';
 import styles from './styles.module.css';
 
@@ -22,7 +21,7 @@ export default function SecurityLandingPage(): JSX.Element {
         <Stats />
         <Features />
         <WhyPromptfoo />
-        <Testimonials />
+        {/* <Testimonials /> */}
         <FAQ />
         <CallToAction />
       </main>

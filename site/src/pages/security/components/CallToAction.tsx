@@ -8,19 +8,19 @@ export default function CallToAction(): JSX.Element {
       <div className={styles.container}>
         <h2 className={styles.ctaTitle}>Ready to Secure Your LLM Applications?</h2>
         <p className={styles.ctaDescription}>
-          Contact our sales team today for a personalized demo and to discuss how Promptfoo can
-          improve your LLM security posture.
+          Try Promptfoo today and contact us to discuss how Promptfoo can improve your LLM security
+          posture.
         </p>
         <div className={styles.ctaButtons}>
-          <Link to="/contact" className={styles.button}>
+          <Link
+            to="/docs/red-team/quickstart/"
+            className={`${styles.button} ${styles.buttonPrimary}`}
+          >
             Get Started
           </Link>
-          <a
-            href="mailto:sales@promptfoo.dev"
-            className={`${styles.button} ${styles.buttonSecondary}`}
-          >
-            Email Us
-          </a>
+          <Link to="/contact/" className={`${styles.button} ${styles.buttonSecondary}`}>
+            Contact Us
+          </Link>
         </div>
       </div>
     </section>

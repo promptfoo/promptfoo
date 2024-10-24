@@ -3,44 +3,51 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import SearchIcon from '@mui/icons-material/Search';
 import SecurityIcon from '@mui/icons-material/Security';
 import TimelineIcon from '@mui/icons-material/Timeline';
+import dedent from 'dedent';
 import styles from '../styles.module.css';
 
 const features = [
   {
     icon: <AssessmentIcon className={styles.featureIcon} />,
-    title: 'Comprehensive Assessment',
-    description:
-      'Analyze your LLM application with dynamic adversarial tests tailored to your specific use case and architecture.',
+    title: 'Adaptive Scans',
+    description: dedent`
+      Our LLM models generate thousands of dynamic probes tailored to your specific use case and architecture, outperforming generic fuzzing and guardrails.
+    `,
     image: '/img/riskreport-1.png',
-    infoLink: '/assessment-details',
-    infoLinkText: 'Learn what sets our scans apart',
-  },
-  {
-    icon: <SearchIcon className={styles.featureIcon} />,
-    title: 'Advanced Vulnerability Detection',
-    description:
-      'Uncover hidden risks with our 30+ configurable plugins, identifying issues that standard guardrails miss.',
-    image: '/img/riskreport-2.png',
-    infoLink: '/vulnerability-detection',
-    infoLinkText: 'See why we are the most comprehensive',
-  },
-  {
-    icon: <SecurityIcon className={styles.featureIcon} />,
-    title: 'Guided Mitigation',
-    description:
-      'Manage issues and receive actionable recommendations to address vulnerabilities, ensuring compliance with OWASP, NIST, and EU AI standards.',
-    image: '/img/remediation.png',
-    infoLink: '/mitigation-guide',
-    infoLinkText: 'Explore our mitigation strategies',
+    infoLink: '/docs/red-team/quickstart/',
+    infoLinkText: 'See how scans work',
   },
   {
     icon: <TimelineIcon className={styles.featureIcon} />,
     title: 'Continuous Monitoring',
-    description:
-      'Integrate with your CI/CD pipeline for ongoing risk assessment, catching new vulnerabilities before they reach production.',
+    description: dedent`
+      Integrate with your CI/CD pipeline for ongoing risk assessment, catching new vulnerabilities before they reach production.
+    `,
     image: '/img/continuous-monitoring.png',
-    infoLink: '/continuous-monitoring',
-    infoLinkText: 'Discover the benefits of ongoing assessment',
+    //infoLink: '/continuous-monitoring',
+    //infoLinkText: 'Discover the benefits of ongoing assessment',
+  },
+  {
+    icon: <SecurityIcon className={styles.featureIcon} />,
+    title: 'Guided Mitigation',
+    description: dedent`
+      Manage issues, track progress, and receive actionable recommendations to address vulnerabilities.
+    `,
+    image: '/img/issues.png',
+    //infoLink: '/docs/red-team/',
+    //infoLinkText: 'Learn about red teaming',
+  },
+  {
+    icon: <SearchIcon className={styles.featureIcon} />,
+    title: 'Comprehensive Coverage',
+    description: dedent`
+      Cover 30+ areas of harm including prompt injections, jailbreaks, data/PII leaks, and bias/toxicity. 
+      
+      Adhere to OWASP, NIST, and EU AI frameworks, or create custom policies to enforce your own organizational standards.
+    `,
+    image: '/img/riskreport-2.png',
+    infoLink: '/docs/red-team/llm-vulnerability-types/',
+    infoLinkText: 'View supported vulnerability and harm types',
   },
 ];
 
@@ -62,7 +69,14 @@ export default function Features(): JSX.Element {
               <div className={styles.featureIconWrapper}>{feature.icon}</div>
               <div className={styles.featureContent}>
                 <h3>{feature.title}</h3>
-                <p>{feature.description}</p>
+                <p>
+                  {feature.description.split('\n').map((line, index) => (
+                    <React.Fragment key={index}>
+                      {line}
+                      <br />
+                    </React.Fragment>
+                  ))}
+                </p>
                 <a href={feature.infoLink} className={styles.featureInfoLink}>
                   {feature.infoLinkText}
                 </a>
