@@ -86,14 +86,12 @@ describe('LlamaProvider', () => {
       );
     });
     it('should return the correct response on success', async () => {
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({
-          data: { content: 'test response' },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: { content: 'test response' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new LlamaProvider(modelName, { config });
       const result = await provider.callApi(prompt);
