@@ -47,8 +47,11 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   if (hasProviderWithoutLabel) {
     logger.warn(
       dedent`
-      Warning: Your target (provider) does not have a label specified. Labels are used to uniquely identify redteam targets. Make it meaningful and unique eg: helpdesk-search-agent. 
-      We highly recommend setting a label on your targets/providers in your redteam config. the provider id will be used instead. 
+      ${chalk.bold.yellow('Warning')}: Your target (provider) does not have a label specified.
+
+      Labels are used to uniquely identify redteam targets. Please set a meaningful and unique label (e.g., 'helpdesk-search-agent') for your targets/providers in your redteam config.
+
+      Provider ID will be used as a fallback if no label is specified.
       `,
     );
   }
@@ -352,7 +355,7 @@ export async function doEval(
         logger.info('Done.');
       }
     }
-    if (defaultConfig.redteam) {
+    if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
   };

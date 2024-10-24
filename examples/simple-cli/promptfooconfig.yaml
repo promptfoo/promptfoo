@@ -1,4 +1,5 @@
-description: 'Bug test'
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Simple test'
 
 prompts:
   - raw: foo

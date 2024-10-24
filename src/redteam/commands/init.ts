@@ -29,8 +29,9 @@ import {
 import { doGenerateRedteam } from './generate';
 
 const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
-# Docs: https://promptfoo.dev/docs/red-team/configuration
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
+# Docs: https://promptfoo.dev/docs/red-team/configuration
 description: "My first red team"
 
 {% if prompts.length > 0 -%}

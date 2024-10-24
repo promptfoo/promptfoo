@@ -1,7 +1,9 @@
+import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as os from 'os';
 import * as path from 'path';
+import logger from '../../../src/logger';
 import type { UnifiedConfig } from '../../../src/types';
 import {
   getConfigDirectoryPath,
@@ -12,6 +14,9 @@ import {
 jest.mock('os');
 jest.mock('fs');
 jest.mock('js-yaml');
+jest.mock('../../../src/logger', () => ({
+  warn: jest.fn(),
+}));
 
 describe('config', () => {
   const mockHomedir = '/mock/home';
@@ -77,7 +82,13 @@ describe('writePromptfooConfig', () => {
 
     writePromptfooConfig(mockConfig, mockOutputPath);
 
-    expect(fs.writeFileSync).toHaveBeenCalledWith(mockOutputPath, mockYaml);
+    expect(fs.writeFileSync).toHaveBeenCalledWith(
+      mockOutputPath,
+      dedent`
+      # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+      ${mockYaml}
+    `,
+    );
   });
 
   it('orders the keys of the config correctly', () => {
@@ -108,9 +119,8 @@ describe('writePromptfooConfig', () => {
     const mockConfig: Partial<UnifiedConfig> = {};
 
     writePromptfooConfig(mockConfig, mockOutputPath);
-
-    expect(fs.writeFileSync).toHaveBeenCalledWith(mockOutputPath, undefined);
-    expect(yaml.dump).toHaveBeenCalledWith({}, { skipInvalid: true });
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('Warning: config is empty, skipping write');
   });
 
   it('preserves all fields of the UnifiedConfig', () => {

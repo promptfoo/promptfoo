@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: llama
     label: llama3-8b

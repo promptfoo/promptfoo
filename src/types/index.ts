@@ -721,7 +721,26 @@ export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
-});
+  providers: ProvidersSchema.optional(),
+  targets: ProvidersSchema.optional(),
+})
+  .refine(
+    (data) => {
+      const hasTargets = Boolean(data.targets);
+      const hasProviders = Boolean(data.providers);
+      return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+    },
+    {
+      message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+    },
+  )
+  .transform((data) => {
+    if (data.targets && !data.providers) {
+      data.providers = data.targets;
+      delete data.targets;
+    }
+    return data;
+  });
 
 export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
 
