@@ -1,11 +1,11 @@
-description: 'Simple test'
+description: 'Bug test'
 
 prompts:
-  - 'Rephrase this in {{language}}: {{body}}'
-  - 'Translate this to conversational {{language}}: {{body}}'
+  - raw: foo
+    label: my_id
 
 providers:
-  - openai:gpt-4o-mini
+  - echo
 
 tests:
   - vars:
