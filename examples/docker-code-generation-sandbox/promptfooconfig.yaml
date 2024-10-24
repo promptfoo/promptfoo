@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Code generation with sandboxed verification
 
 prompts: code_generation_prompt.txt

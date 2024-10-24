@@ -53,7 +53,7 @@
     "db:migrate": "npx tsx src/migrate.ts",
     "citation:generate": "ts-node scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
-    "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json",
+    "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json | npx prettier --write site/static/config-schema.json",
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
     "prepublishOnly": "npm run build:clean && npm run build",
     "dev:server": "nodemon src/server/index.ts",
