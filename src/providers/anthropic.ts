@@ -205,6 +205,14 @@ export class AnthropicMessagesProvider implements ApiProvider {
     return `[Anthropic Messages Provider ${this.modelName || 'claude-2.1'}]`;
   }
 
+  getApiKey(): string | undefined {
+    return this.apiKey;
+  }
+
+  getApiBaseUrl(): string | undefined {
+    return this.config.apiBaseUrl;
+  }
+
   async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
