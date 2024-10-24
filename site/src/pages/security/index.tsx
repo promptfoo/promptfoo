@@ -12,7 +12,7 @@ import styles from './styles.module.css';
 export default function SecurityLandingPage(): JSX.Element {
   return (
     <Layout
-      title="LLM Vulnerability Management"
+      title="Generative AI Security"
       description="Detect, mitigate, and monitor risks for LLM-based systems before deployment with Promptfoo's comprehensive security solution."
     >
       <main className={styles.securityLandingPage}>
