@@ -1,6 +1,9 @@
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { fetchWithCache } from '../../src/cache';
-import { MistralChatCompletionProvider, MistralEmbeddingProvider } from '../../src/providers/mistral';
+import {
+  MistralChatCompletionProvider,
+  MistralEmbeddingProvider,
+} from '../../src/providers/mistral';
 
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),

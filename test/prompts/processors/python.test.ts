@@ -4,11 +4,11 @@ import {
   processPythonFile,
   pythonPromptFunction,
   pythonPromptFunctionLegacy,
-} from '../src/prompts/processors/python';
+} from '../../../src/prompts/processors/python';
 
 jest.mock('fs');
-jest.mock('../src/prompts/processors/python', () => {
-  const actual = jest.requireActual('../src/prompts/processors/python');
+jest.mock('../../../src/prompts/processors/python', () => {
+  const actual = jest.requireActual('../../../src/prompts/processors/python');
   return {
     ...actual,
     pythonPromptFunction: jest.fn(),

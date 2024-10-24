@@ -1,10 +1,10 @@
 import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
-import { importModule } from '../src/esm';
-import { readPrompts, readProviderPromptMap } from '../src/prompts';
-import { maybeFilePath } from '../src/prompts/utils';
-import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
+import { importModule } from '../../src/esm';
+import { readPrompts, readProviderPromptMap } from '../../src/prompts';
+import { maybeFilePath } from '../../src/prompts/utils';
+import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -31,17 +31,17 @@ jest.mock('fs', () => {
 });
 
 jest.mock('python-shell');
-jest.mock('../src/esm', () => {
-  const actual = jest.requireActual('../src/esm');
+jest.mock('../../src/esm', () => {
+  const actual = jest.requireActual('../../src/esm');
   return {
     ...actual,
     importModule: jest.fn(actual.importModule),
   };
 });
-jest.mock('../src/logger');
-jest.mock('../src/python/wrapper');
-jest.mock('../src/prompts/utils', () => {
-  const actual = jest.requireActual('../src/prompts/utils');
+jest.mock('../../src/logger');
+jest.mock('../../src/python/wrapper');
+jest.mock('../../src/prompts/utils', () => {
+  const actual = jest.requireActual('../../src/prompts/utils');
   return {
     ...actual,
     maybeFilePath: jest.fn(actual.maybeFilePath),

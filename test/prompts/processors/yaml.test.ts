@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { processYamlFile } from '../src/prompts/processors/yaml';
+import { processYamlFile } from '../../../src/prompts/processors/yaml';
 
 jest.mock('fs');
 

@@ -1,8 +1,8 @@
 import invariant from 'tiny-invariant';
-import { importModule } from '../src/esm';
-import { processJsFile, transformContext } from '../src/prompts/processors/javascript';
+import { importModule } from '../../../src/esm';
+import { processJsFile, transformContext } from '../../../src/prompts/processors/javascript';
 
-jest.mock('../src/esm', () => ({
+jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),
 }));
 
