@@ -30,7 +30,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { shouldGenerateRemote } from '../util';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
-import { loadRedteamProvider } from './shared';
+import { getTargetResponse, loadRedteamProvider } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -107,6 +107,9 @@ export async function evaluateResponse(
     },
     vars: {},
   });
+  if (judgeResp.error) {
+    throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
+  }
   invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
   let { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
 
@@ -136,6 +139,9 @@ export async function getNewPrompt(
     },
     vars: {},
   });
+  if (redteamResp.error) {
+    throw new Error(`Error from redteam provider: ${redteamResp.error}`);
+  }
   invariant(
     typeof redteamResp.output === 'string',
     `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
@@ -172,27 +178,13 @@ export async function checkIfOnTopic(
     },
     vars: {},
   });
+  if (isOnTopicResp.error) {
+    throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
+  }
   invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
   const { onTopic } = extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output);
   invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
   return onTopic;
-}
-
-/**
- * Gets the response from the target provider for a given prompt.
- * @param targetProvider - The API provider to get the response from.
- * @param targetPrompt - The prompt to send to the target provider.
- * @returns A promise that resolves to the target provider's response as a string.
- */
-export async function getTargetResponse(
-  targetProvider: ApiProvider,
-  targetPrompt: string,
-): Promise<string> {
-  const targetResp = await targetProvider.callApi(targetPrompt);
-  invariant(targetResp.output, 'Expected output to be defined');
-  return typeof targetResp.output === 'string'
-    ? targetResp.output
-    : JSON.stringify(targetResp.output);
 }
 
 /**

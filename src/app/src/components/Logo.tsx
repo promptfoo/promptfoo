@@ -31,7 +31,7 @@ const LogoIcon = styled('img')({
 
 export default function Logo() {
   return (
-    <Link to="https://promptfoo.dev" style={{ textDecoration: 'none' }}>
+    <Link to="/" style={{ textDecoration: 'none' }}>
       <LogoWrapper>
         <LogoIcon src={logoPanda} alt="Promptfoo Logo" />
         <LogoText variant="h1">promptfoo</LogoText>

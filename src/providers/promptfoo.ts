@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../cache';
+import { VERSION } from '../constants';
 import { getEnvString } from '../envars';
 import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
@@ -44,6 +45,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       purpose: this.purpose,
       harmCategory: this.harmCategory,
       email: getUserEmail(),
+      version: VERSION,
     };
 
     try {
