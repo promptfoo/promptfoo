@@ -7,47 +7,47 @@ import {
   runAssertion,
   runAssertions,
   validateXml,
-} from '../src/assertions';
-import { fetchWithRetries } from '../src/fetch';
+} from '../../src/assertions';
+import { fetchWithRetries } from '../../src/fetch';
 import {
   DefaultGradingJsonProvider,
   DefaultEmbeddingProvider,
   OpenAiChatCompletionProvider,
-} from '../src/providers/openai';
-import { ReplicateModerationProvider } from '../src/providers/replicate';
-import { runPython } from '../src/python/pythonUtils';
-import { runPythonCode } from '../src/python/wrapper';
+} from '../../src/providers/openai';
+import { ReplicateModerationProvider } from '../../src/providers/replicate';
+import { runPython } from '../../src/python/pythonUtils';
+import { runPythonCode } from '../../src/python/wrapper';
 import type {
   Assertion,
   ApiProvider,
   AtomicTestCase,
   ProviderResponse,
   GradingResult,
-} from '../src/types';
-import { TestGrader } from './utils';
+} from '../../src/types';
+import { TestGrader } from '../util/utils';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('../src/fetch', () => {
-  const actual = jest.requireActual('../src/fetch');
+jest.mock('../../src/fetch', () => {
+  const actual = jest.requireActual('../../src/fetch');
   return {
     ...actual,
     fetchWithRetries: jest.fn(actual.fetchWithRetries),
   };
 });
 
-jest.mock('../src/python/wrapper', () => {
-  const actual = jest.requireActual('../src/python/wrapper');
+jest.mock('../../src/python/wrapper', () => {
+  const actual = jest.requireActual('../../src/python/wrapper');
   return {
     ...actual,
     runPythonCode: jest.fn(actual.runPythonCode),
   };
 });
 
-jest.mock('../src/python/pythonUtils', () => {
-  const actual = jest.requireActual('../src/python/pythonUtils');
+jest.mock('../../src/python/pythonUtils', () => {
+  const actual = jest.requireActual('../../src/python/pythonUtils');
   return {
     ...actual,
     runPython: jest.fn(actual.runPython),
@@ -65,8 +65,8 @@ jest.mock('fs', () => ({
   },
 }));
 
-jest.mock('../src/esm');
-jest.mock('../src/database', () => ({
+jest.mock('../../src/esm');
+jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
 }));
 jest.mock('path', () => ({
@@ -75,11 +75,11 @@ jest.mock('path', () => ({
   extname: jest.fn(jest.requireActual('path').extname),
 }));
 
-jest.mock('../src/cliState', () => ({
+jest.mock('../../src/cliState', () => ({
   basePath: '/base/path',
 }));
-jest.mock('../src/matchers', () => {
-  const actual = jest.requireActual('../src/matchers');
+jest.mock('../../src/matchers', () => {
+  const actual = jest.requireActual('../../src/matchers');
   return {
     ...actual,
     matchesContextRelevance: jest

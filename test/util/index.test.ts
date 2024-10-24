@@ -1,11 +1,11 @@
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
-import cliState from '../src/cliState';
-import { getDb } from '../src/database';
-import * as googleSheets from '../src/googleSheets';
-import Eval from '../src/models/eval';
-import type { ApiProvider, EvaluateResult, TestCase } from '../src/types';
+import cliState from '../../src/cliState';
+import { getDb } from '../../src/database';
+import * as googleSheets from '../../src/googleSheets';
+import Eval from '../../src/models/eval';
+import type { ApiProvider, EvaluateResult, TestCase } from '../../src/types';
 import {
   maybeLoadFromExternalFile,
   parsePathOrGlob,
@@ -16,10 +16,10 @@ import {
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
-} from '../src/util';
+} from '../../src/util';
 import { TestGrader } from './utils';
 
-jest.mock('../src/database', () => ({
+jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
 }));
 
@@ -41,10 +41,10 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../src/logger');
-jest.mock('../src/esm');
+jest.mock('../../src/logger');
+jest.mock('../../src/esm');
 
-jest.mock('../src/googleSheets', () => ({
+jest.mock('../../src/googleSheets', () => ({
   writeCsvToGoogleSheet: jest.fn(),
 }));
 

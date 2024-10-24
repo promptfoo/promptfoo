@@ -1,6 +1,6 @@
 import { runDbMigrations } from '../../src/migrate';
 import { listPreviousResults } from '../../src/util';
-import EvalFactory from './factories/evalFactory';
+import EvalFactory from '../factories/evalFactory';
 
 describe('listPreviousResults', () => {
   beforeAll(async () => {

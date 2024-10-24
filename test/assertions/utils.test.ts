@@ -1,12 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { processFileReference, getFinalTest } from '../src/assertions/utils';
-import cliState from '../src/cliState';
-import type { TestCase, Assertion, ApiProvider } from '../src/types';
+import { processFileReference, getFinalTest } from '../../src/assertions/utils';
+import cliState from '../../src/cliState';
+import type { TestCase, Assertion, ApiProvider } from '../../src/types';
 
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../src/cliState');
+jest.mock('../../src/cliState');
 
 describe('processFileReference', () => {
   beforeEach(() => {
