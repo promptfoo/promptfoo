@@ -64,6 +64,7 @@ async function main() {
     redteamBaseCommand,
     redteamConfig ?? defaultConfig,
     redteamConfigPath ?? defaultConfigPath,
+    true /* isRedteam */,
   );
   redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamRunCommand(redteamBaseCommand);
