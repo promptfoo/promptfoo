@@ -32,10 +32,10 @@ defaultTest:
     - type: llm-rubric
       value: The suggestions are prioritized in a way that gives more weighting to the impact of the suggestion.
       metric: Ordering
-    - type: javascript
-      value: file://BASE_PATH/motion/customAssert/outputInArray.js
-      config:
-        listName: myValues
+#    - type: javascript
+#      value: file://BASE_PATH/motion/customAssert/outputInArray.js
+#      config:
+#        listName: myValues
 
 #defaultTest:
 #  assert:

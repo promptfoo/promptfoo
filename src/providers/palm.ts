@@ -190,7 +190,7 @@ export class PalmChatProvider extends PalmGenericProvider {
       {
         parts: [
           ...geminiFiles,
-          { text: prompt }
+          // { text: prompt }
         ]
       },
     ];
@@ -198,6 +198,9 @@ export class PalmChatProvider extends PalmGenericProvider {
     const contents = parseChatPrompt(prompt, whatWeNeed);
     const body = {
       contents,
+      systemInstruction: {
+        parts:  { text: prompt }
+      },
       generationConfig: {
         temperature: this.config.temperature,
         topP: this.config.topP,
