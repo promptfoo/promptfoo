@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # This config is used for testing markdown rendering in development.
 description: 'Markdown test'
 
