@@ -198,6 +198,7 @@ interface ProviderResponse {
   cached?: boolean;
   cost?: number; // required for cost assertion
   logProbs?: number[]; // required for perplexity assertion
+  isRefusal?: boolean; // the provider has explicitly refused to generate a response
 }
 ```
 

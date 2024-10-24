@@ -305,8 +305,9 @@ describe('call provider apis', () => {
     );
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(result.error).toBe('Model refused to generate a response: Content policy violation');
+    expect(result.output).toBe('Content policy violation');
     expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0 });
+    expect(result.isRefusal).toBe(true);
   });
 
   it('OpenAiChatCompletionProvider callApi with function tool callbacks', async () => {

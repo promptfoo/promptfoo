@@ -585,8 +585,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const message = data.choices[0].message;
       if (message.refusal) {
         return {
-          error: `Model refused to generate a response: ${message.refusal}`,
+          output: message.refusal,
           tokenUsage: getTokenUsage(data, cached),
+          isRefusal: true,
         };
       }
       let output = '';
