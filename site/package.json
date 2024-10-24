@@ -27,6 +27,7 @@
     "@mui/icons-material": "^6.1.5",
     "@segment/ajv-human-errors": "^2.14.0",
     "clsx": "^2.1.1",
+    "dedent": "^1.5.3",
     "docusaurus-plugin-image-zoom": "^2.0.0",
     "prism-react-renderer": "^2.4.0",
     "react": "^18.3.1",
