@@ -582,10 +582,10 @@ describe('HttpProvider', () => {
       expect(result).toEqual({ 'content-type': 'application/json' });
     });
 
-    it('should return empty object for string body', () => {
+    it('should return text/plain for string body', () => {
       const provider = new HttpProvider(mockUrl, { config: { method: 'POST', body: 'test' } });
       const result = provider['getDefaultHeaders']('string body');
-      expect(result).toEqual({});
+      expect(result).toEqual({ 'content-type': 'text/plain' });
     });
   });
 
@@ -694,7 +694,7 @@ describe('HttpProvider', () => {
     );
   });
 
-  it('should not default to application/json for content-type if body is not an object', async () => {
+  it('should default to text/plain for content-type if body is not an object', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         method: 'POST',
@@ -715,7 +715,7 @@ describe('HttpProvider', () => {
       mockUrl,
       expect.objectContaining({
         method: 'POST',
-        headers: {},
+        headers: { 'content-type': 'text/plain' },
         body: 'test',
       }),
       expect.any(Number),
@@ -760,7 +760,7 @@ describe('HttpProvider', () => {
         mockUrl,
         expect.objectContaining({
           method: 'POST',
-          headers: {},
+          headers: { 'content-type': 'text/plain' },
           body: 'Hello world',
         }),
         expect.any(Number),

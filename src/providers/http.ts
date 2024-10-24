@@ -184,6 +184,8 @@ export class HttpProvider implements ApiProvider {
     }
     if (typeof body === 'object' && body !== null) {
       return { 'content-type': 'application/json' };
+    } else if (typeof body === 'string') {
+      return { 'content-type': 'text/plain' };
     }
     return {};
   }
