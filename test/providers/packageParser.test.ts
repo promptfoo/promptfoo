@@ -1,7 +1,11 @@
 import { createRequire } from 'node:module';
 import path from 'path';
 import { importModule } from '../../src/esm';
-import { parsePackageProvider, loadFromPackage } from '../../src/providers/packageParser';
+import {
+  parsePackageProvider,
+  loadFromPackage,
+  isPackagePath,
+} from '../../src/providers/packageParser';
 import type { ProviderOptions } from '../../src/types/providers';
 
 jest.mock('node:module', () => {
@@ -25,13 +29,11 @@ jest.mock('../../src/logger');
 
 describe('isPackagePath', () => {
   it('should return true for package paths', () => {
-    expect(loadFromPackage('package:packageName:exportedClassOrFunction', '/mock/base/path')).toBe(
-      true,
-    );
+    expect(isPackagePath('package:packageName:exportedClassOrFunction')).toBe(true);
   });
 
   it('should return false for non-package paths', () => {
-    expect(loadFromPackage('notAPackagePath', '/mock/base/path')).toBe(false);
+    expect(isPackagePath('notAPackagePath')).toBe(false);
   });
 });
 
