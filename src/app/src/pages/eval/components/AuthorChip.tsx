@@ -16,12 +16,14 @@ interface AuthorChipProps {
   author: string | null;
   onEditAuthor: (newAuthor: string) => Promise<void>;
   currentUserEmail: string | null;
+  editable: boolean;
 }
 
 export const AuthorChip: React.FC<AuthorChipProps> = ({
   author,
   onEditAuthor,
   currentUserEmail,
+  editable,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -71,11 +73,13 @@ export const AuthorChip: React.FC<AuthorChipProps> = ({
 
   return (
     <>
-      <Tooltip title={author ? 'Click to edit author' : 'Click to set author'}>
+      <Tooltip
+        title={editable ? (author ? 'Click to edit author' : 'Click to set author') : 'Author'}
+      >
         <Box
           display="flex"
           alignItems="center"
-          onClick={handleClick}
+          onClick={editable ? handleClick : undefined}
           sx={{
             border: '1px solid',
             borderColor: 'divider',
@@ -85,16 +89,19 @@ export const AuthorChip: React.FC<AuthorChipProps> = ({
             '&:hover': {
               bgcolor: 'action.hover',
             },
-            cursor: 'pointer',
+            minHeight: 40,
+            cursor: editable ? 'pointer' : 'default',
           }}
         >
           <EmailIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
           <Typography variant="body2" sx={{ mr: 1 }}>
             <strong>Author:</strong> {author || 'Unknown'}
           </Typography>
-          <IconButton size="small" sx={{ ml: 'auto' }} disabled={isLoading}>
-            <EditIcon fontSize="small" />
-          </IconButton>
+          {editable && (
+            <IconButton size="small" sx={{ ml: 'auto' }} disabled={isLoading}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          )}
         </Box>
       </Tooltip>
       <Popover

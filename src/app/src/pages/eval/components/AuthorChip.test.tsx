@@ -10,6 +10,7 @@ describe('AuthorChip', () => {
     author: 'test@example.com',
     onEditAuthor: mockOnEditAuthor,
     currentUserEmail: 'user@example.com',
+    editable: true,
   };
 
   beforeEach(() => {
@@ -133,5 +134,16 @@ describe('AuthorChip', () => {
     render(<AuthorChip {...defaultProps} />);
     await userEvent.click(screen.getByText('test@example.com'));
     expect(screen.queryByTestId('InfoIcon')).not.toBeInTheDocument();
+  });
+
+  it('does not show edit icon when not editable', () => {
+    render(<AuthorChip {...defaultProps} editable={false} />);
+    expect(screen.queryByTestId('EditIcon')).not.toBeInTheDocument();
+  });
+
+  it('does not show popover when not editable', async () => {
+    render(<AuthorChip {...defaultProps} editable={false} />);
+    await userEvent.click(screen.getByText('test@example.com'));
+    expect(screen.queryByLabelText('Author Email')).not.toBeInTheDocument();
   });
 });

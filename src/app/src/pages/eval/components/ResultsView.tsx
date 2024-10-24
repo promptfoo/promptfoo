@@ -412,6 +412,7 @@ export default function ResultsView({
           author={author}
           onEditAuthor={handleEditAuthor}
           currentUserEmail={currentUserEmail}
+          editable
         />
         {Object.keys(config?.tags || {}).map((tag) => (
           <Chip
