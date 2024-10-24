@@ -86,6 +86,7 @@ export interface ProviderResponse {
   raw?: string | any;
   output?: string | any;
   tokenUsage?: TokenUsage;
+  isRefusal?: boolean;
 }
 
 export interface ProviderEmbeddingResponse {

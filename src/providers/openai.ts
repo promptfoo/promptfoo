@@ -587,6 +587,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         return {
           output: message.refusal,
           tokenUsage: getTokenUsage(data, cached),
+          isRefusal: true,
         };
       }
       let output = '';
