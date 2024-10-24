@@ -45,10 +45,14 @@ type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);
   if (hasProviderWithoutLabel) {
-    console.log(
-      chalk.yellow(
-        'Warning: Your target (provider) does not have a label specified. Labels are used to uniquely identify redteam targets. Make it meaningful and unique eg: helpdesk-search-agent. \n We highly reccomend setting a label on your targets/providers in your redteam config. the provider Id will be used instead. ',
-      ),
+    logger.warn(
+      dedent`
+      ${chalk.bold.yellow('Warning')}: Your target (provider) does not have a label specified.
+
+      Labels are used to uniquely identify redteam targets. Please set a meaningful and unique label (e.g., 'helpdesk-search-agent') for your targets/providers in your redteam config.
+
+      Provider ID will be used as a fallback if no label is specified.
+      `,
     );
   }
 }
@@ -351,7 +355,7 @@ export async function doEval(
         logger.info('Done.');
       }
     }
-    if (defaultConfig.redteam) {
+    if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
   };
