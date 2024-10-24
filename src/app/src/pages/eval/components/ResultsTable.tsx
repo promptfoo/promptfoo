@@ -8,7 +8,7 @@ import {
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
-import { useToast } from '@app/hooks/useToast';
+import { useToast } from '@app/contexts/ToastContext';
 import type {
   EvaluateTableRow,
   EvaluateTableOutput,
