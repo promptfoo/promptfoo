@@ -1,6 +1,6 @@
 import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
-import { removePrefix } from '../../src/redteam/util';
+import { neverGenerateRemote, removePrefix } from '../../src/redteam/util';
 import { shouldGenerateRemote } from '../../src/redteam/util';
 
 describe('removePrefix', () => {
@@ -73,5 +73,21 @@ describe('shouldGenerateRemote', () => {
     jest.mocked(getEnvString).mockReturnValue('sk-123');
     cliState.remote = true;
     expect(shouldGenerateRemote()).toBe(true);
+  });
+});
+
+describe('neverGenerateRemote', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should return true when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set to true', () => {
+    jest.mocked(getEnvBool).mockReturnValue(true);
+    expect(neverGenerateRemote()).toBe(true);
+  });
+
+  it('should return false when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set to false', () => {
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    expect(neverGenerateRemote()).toBe(false);
   });
 });

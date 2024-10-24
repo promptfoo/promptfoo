@@ -22,13 +22,13 @@ const REFUSAL_SUBSTRINGS = [
   "I'm not able to provide",
 ];
 
+export function neverGenerateRemote(): boolean {
+  return getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+}
+
 export function shouldGenerateRemote(): boolean {
   // Generate remotely when the user has not disabled it and does not have an OpenAI key.
-  return (
-    (!getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION') &&
-      !getEnvString('OPENAI_API_KEY')) ||
-    (cliState.remote ?? false)
-  );
+  return (!neverGenerateRemote() && !getEnvString('OPENAI_API_KEY')) || (cliState.remote ?? false);
 }
 
 export function isBasicRefusal(response: string): boolean {

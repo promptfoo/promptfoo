@@ -6,7 +6,7 @@ import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginConfig, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS, REMOTE_GENERATION_URL } from '../constants';
-import { shouldGenerateRemote } from '../util';
+import { neverGenerateRemote, shouldGenerateRemote } from '../util';
 import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
@@ -160,7 +160,7 @@ function createRemotePlugin<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async (provider, purpose, injectVar, n, delayMs, config) => {
-      if (!shouldGenerateRemote()) {
+      if (neverGenerateRemote()) {
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }
       return fetchRemoteTestCases(key, purpose, injectVar, n, config);
