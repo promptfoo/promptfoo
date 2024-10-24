@@ -1,10 +1,10 @@
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
-import { getCache, isCacheEnabled } from '../src/cache';
-import logger from '../src/logger';
-import { VertexChatProvider } from '../src/providers/vertex';
-import * as vertexUtil from '../src/providers/vertexUtil';
+import { getCache, isCacheEnabled } from '../../src/cache';
+import logger from '../../src/logger';
+import { VertexChatProvider } from '../../src/providers/vertex';
+import * as vertexUtil from '../../src/providers/vertexUtil';
 
-jest.mock('../src/cache', () => ({
+jest.mock('../../src/cache', () => ({
   getCache: jest.fn().mockReturnValue({
     get: jest.fn(),
     set: jest.fn(),
@@ -12,12 +12,12 @@ jest.mock('../src/cache', () => ({
   isCacheEnabled: jest.fn(),
 }));
 
-jest.mock('../src/providers/vertexUtil', () => ({
-  ...jest.requireActual('../src/providers/vertexUtil'),
+jest.mock('../../src/providers/vertexUtil', () => ({
+  ...jest.requireActual('../../src/providers/vertexUtil'),
   getGoogleClient: jest.fn(),
 }));
 
-jest.mock('../src/logger');
+jest.mock('../../src/logger');
 
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;

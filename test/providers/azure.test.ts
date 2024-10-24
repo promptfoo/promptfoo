@@ -1,11 +1,11 @@
-import { AzureOpenAiCompletionProvider } from '../src/providers/azureopenai';
-import { AzureOpenAiGenericProvider } from '../src/providers/azureopenai';
-import { maybeEmitAzureOpenAiWarning } from '../src/providers/azureopenaiUtil';
-import { HuggingfaceTextGenerationProvider } from '../src/providers/huggingface';
-import { OpenAiCompletionProvider } from '../src/providers/openai';
-import type { TestSuite, TestCase } from '../src/types';
+import { AzureOpenAiCompletionProvider } from '../../src/providers/azureopenai';
+import { AzureOpenAiGenericProvider } from '../../src/providers/azureopenai';
+import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azureopenaiUtil';
+import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
+import { OpenAiCompletionProvider } from '../../src/providers/openai';
+import type { TestSuite, TestCase } from '../../src/types';
 
-jest.mock('../src/logger');
+jest.mock('../../src/logger');
 
 describe('maybeEmitAzureOpenAiWarning', () => {
   it('should not emit warning when no Azure providers are used', () => {

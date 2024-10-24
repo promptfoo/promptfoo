@@ -1,16 +1,16 @@
-import { getCache, isCacheEnabled } from '../src/cache';
-import { fetchWithCache } from '../src/cache';
-import { MistralChatCompletionProvider, MistralEmbeddingProvider } from '../src/providers/mistral';
+import { getCache, isCacheEnabled } from '../../src/cache';
+import { fetchWithCache } from '../../src/cache';
+import { MistralChatCompletionProvider, MistralEmbeddingProvider } from '../../src/providers/mistral';
 
-jest.mock('../src/cache', () => ({
-  ...jest.requireActual('../src/cache'),
+jest.mock('../../src/cache', () => ({
+  ...jest.requireActual('../../src/cache'),
   fetchWithCache: jest.fn(),
   getCache: jest.fn(),
   isCacheEnabled: jest.fn(),
 }));
 
-jest.mock('../src/util');
-jest.mock('../src/logger');
+jest.mock('../../src/util');
+jest.mock('../../src/logger');
 
 describe('Mistral', () => {
   beforeEach(() => {

@@ -1,14 +1,14 @@
-import * as cache from '../src/cache';
-import { PalmChatProvider } from '../src/providers/palm';
-import * as vertexUtil from '../src/providers/vertexUtil';
+import * as cache from '../../src/cache';
+import { PalmChatProvider } from '../../src/providers/palm';
+import * as vertexUtil from '../../src/providers/vertexUtil';
 
-jest.mock('../src/cache', () => ({
+jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-jest.mock('../src/logger');
+jest.mock('../../src/logger');
 
-jest.mock('../src/providers/vertexUtil', () => ({
+jest.mock('../../src/providers/vertexUtil', () => ({
   maybeCoerceToGeminiFormat: jest.fn(),
 }));
 

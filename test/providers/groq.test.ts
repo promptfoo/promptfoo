@@ -1,6 +1,6 @@
-import { clearCache, disableCache, enableCache } from '../src/cache';
-import { GroqProvider } from '../src/providers/groq';
-import { maybeLoadFromExternalFile } from '../src/util';
+import { clearCache, disableCache, enableCache } from '../../src/cache';
+import { GroqProvider } from '../../src/providers/groq';
+import { maybeLoadFromExternalFile } from '../../src/util';
 
 jest.mock('groq-sdk', () => {
   return {
@@ -14,8 +14,8 @@ jest.mock('groq-sdk', () => {
     })),
   };
 });
-jest.mock('../src/logger');
-jest.mock('../src/util', () => ({
+jest.mock('../../src/logger');
+jest.mock('../../src/util', () => ({
   maybeLoadFromExternalFile: jest.fn(),
   renderVarsInObject: jest.fn(),
 }));

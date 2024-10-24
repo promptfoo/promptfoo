@@ -1,9 +1,9 @@
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
-import { getCache, isCacheEnabled } from '../src/cache';
-import * as envarsModule from '../src/envars';
-import logger from '../src/logger';
-import { WatsonXProvider, generateConfigHash } from '../src/providers/watsonx';
+import { getCache, isCacheEnabled } from '../../src/cache';
+import * as envarsModule from '../../src/envars';
+import logger from '../../src/logger';
+import { WatsonXProvider, generateConfigHash } from '../../src/providers/watsonx';
 
 jest.mock('@ibm-cloud/watsonx-ai', () => ({
   WatsonXAI: {
@@ -16,18 +16,18 @@ jest.mock('ibm-cloud-sdk-core', () => ({
   BearerTokenAuthenticator: jest.fn(),
 }));
 
-jest.mock('../src/cache', () => ({
+jest.mock('../../src/cache', () => ({
   getCache: jest.fn(),
   isCacheEnabled: jest.fn(),
 }));
 
-jest.mock('../src/logger', () => ({
+jest.mock('../../src/logger', () => ({
   debug: jest.fn(),
   error: jest.fn(),
   info: jest.fn(),
 }));
 
-jest.mock('../src/envars', () => ({
+jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn(),
   getEnvInt: jest.fn(),
 }));

@@ -1,15 +1,15 @@
 import fs from 'fs';
 import path from 'path';
-import { getCache, isCacheEnabled } from '../src/cache';
-import { PythonProvider } from '../src/providers/pythonCompletion';
-import { runPython } from '../src/python/pythonUtils';
+import { getCache, isCacheEnabled } from '../../src/cache';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
+import { runPython } from '../../src/python/pythonUtils';
 
-jest.mock('../src/python/pythonUtils');
-jest.mock('../src/cache');
+jest.mock('../../src/python/pythonUtils');
+jest.mock('../../src/cache');
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../src/util', () => {
-  const actual = jest.requireActual('../src/util');
+jest.mock('../../src/util', () => {
+  const actual = jest.requireActual('../../src/util');
   return {
     ...actual,
     parsePathOrGlob: jest.fn(() => ({

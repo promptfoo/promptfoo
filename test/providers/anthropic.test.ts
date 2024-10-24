@@ -1,6 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
-import { clearCache, disableCache, enableCache, getCache } from '../src/cache';
+import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
 import {
   AnthropicCompletionProvider,
   AnthropicLlmRubricProvider,
@@ -8,12 +8,12 @@ import {
   calculateAnthropicCost,
   outputFromMessage,
   parseMessages,
-} from '../src/providers/anthropic';
+} from '../../src/providers/anthropic';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
-jest.mock('../src/logger');
+jest.mock('../../src/logger');
 
 describe('Anthropic', () => {
   afterEach(async () => {

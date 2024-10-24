@@ -1,8 +1,8 @@
-import { OpenAiChatCompletionProvider } from '../src/providers/openai';
-import { createXAIProvider } from '../src/providers/xai';
-import type { ProviderOptions } from '../src/types/providers';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai';
+import { createXAIProvider } from '../../src/providers/xai';
+import type { ProviderOptions } from '../../src/types/providers';
 
-jest.mock('../src/providers/openai');
+jest.mock('../../src/providers/openai');
 
 describe('xAI Provider', () => {
   beforeEach(() => {

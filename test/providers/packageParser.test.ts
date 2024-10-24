@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { importModule } from '../src/esm';
-import { parsePackageProvider } from '../src/providers/packageParser';
-import type { ProviderOptions } from '../src/types/providers';
+import { importModule } from '../../src/esm';
+import { parsePackageProvider } from '../../src/providers/packageParser';
+import type { ProviderOptions } from '../../src/types/providers';
 
 jest.mock('fs');
-jest.mock('../src/esm', () => ({
+jest.mock('../../src/esm', () => ({
   importModule: jest.fn(async (modulePath: string, functionName?: string) => {
     const mockModule = {
       default: jest.fn((data) => data.defaultField),
@@ -17,7 +17,7 @@ jest.mock('../src/esm', () => ({
     return mockModule;
   }),
 }));
-jest.mock('../src/logger');
+jest.mock('../../src/logger');
 
 describe('parsePackageProvider', () => {
   const mockBasePath = '/mock/base/path';

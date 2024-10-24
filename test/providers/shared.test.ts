@@ -1,7 +1,7 @@
-import { getEnvBool } from '../src/envars';
-import { parseChatPrompt, toTitleCase, calculateCost } from '../src/providers/shared';
+import { getEnvBool } from '../../src/envars';
+import { parseChatPrompt, toTitleCase, calculateCost } from '../../src/providers/shared';
 
-jest.mock('../src/envars');
+jest.mock('../../src/envars');
 
 describe('Shared Provider Functions', () => {
   describe('parseChatPrompt', () => {

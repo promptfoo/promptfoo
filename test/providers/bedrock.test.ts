@@ -3,7 +3,7 @@ import type {
   BedrockAI21GenerationOptions,
   BedrockClaudeMessagesCompletionOptions,
   LlamaMessage,
-} from '../src/providers/bedrock';
+} from '../../src/providers/bedrock';
 import {
   addConfigParam,
   AwsBedrockGenericProvider,
@@ -13,7 +13,7 @@ import {
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
-} from '../src/providers/bedrock';
+} from '../../src/providers/bedrock';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => {
   return {
@@ -37,12 +37,12 @@ jest.mock(
 
 jest.mock('proxy-agent', () => jest.fn());
 
-jest.mock('../src/cache', () => ({
+jest.mock('../../src/cache', () => ({
   getCache: jest.fn(),
   isCacheEnabled: jest.fn(),
 }));
 
-jest.mock('../src/logger', () => ({
+jest.mock('../../src/logger', () => ({
   debug: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),

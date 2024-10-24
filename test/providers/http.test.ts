@@ -1,20 +1,20 @@
 import dedent from 'dedent';
 import path from 'path';
-import { fetchWithCache } from '../src/cache';
-import { importModule } from '../src/esm';
-import { HttpProvider, processBody, createResponseParser } from '../src/providers/http';
-import { maybeLoadFromExternalFile } from '../src/util';
+import { fetchWithCache } from '../../src/cache';
+import { importModule } from '../../src/esm';
+import { HttpProvider, processBody, createResponseParser } from '../../src/providers/http';
+import { maybeLoadFromExternalFile } from '../../src/util';
 
-jest.mock('../src/cache', () => ({
+jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-jest.mock('../src/util', () => ({
-  ...jest.requireActual('../src/util'),
+jest.mock('../../src/util', () => ({
+  ...jest.requireActual('../../src/util'),
   maybeLoadFromExternalFile: jest.fn((input) => input),
 }));
 
-jest.mock('../src/esm', () => ({
+jest.mock('../../src/esm', () => ({
   importModule: jest.fn(async (modulePath: string, functionName?: string) => {
     const mockModule = {
       default: jest.fn((data) => data.defaultField),
@@ -27,7 +27,7 @@ jest.mock('../src/esm', () => ({
   }),
 }));
 
-jest.mock('../src/cliState', () => ({
+jest.mock('../../src/cliState', () => ({
   basePath: '/mock/base/path',
 }));
 

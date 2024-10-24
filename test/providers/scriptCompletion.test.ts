@@ -1,18 +1,18 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
-import * as cacheModule from '../src/cache';
+import * as cacheModule from '../../src/cache';
 import {
   parseScriptParts,
   getFileHashes,
   ScriptCompletionProvider,
-} from '../src/providers/scriptCompletion';
+} from '../../src/providers/scriptCompletion';
 
 jest.mock('fs');
 jest.mock('crypto');
 jest.mock('child_process');
-jest.mock('../src/cache');
-jest.mock('../src/logger');
+jest.mock('../../src/cache');
+jest.mock('../../src/logger');
 
 describe('parseScriptParts', () => {
   it('should parse script parts correctly', () => {

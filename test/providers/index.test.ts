@@ -4,16 +4,16 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import * as path from 'path';
 import Stream from 'stream';
-import { clearCache, disableCache, enableCache } from '../src/cache';
-import { importModule } from '../src/esm';
-import logger from '../src/logger';
-import { loadApiProvider, loadApiProviders } from '../src/providers';
-import { AnthropicCompletionProvider } from '../src/providers/anthropic';
+import { clearCache, disableCache, enableCache } from '../../src/cache';
+import { importModule } from '../../src/esm';
+import logger from '../../src/logger';
+import { loadApiProvider, loadApiProviders } from '../../src/providers';
+import { AnthropicCompletionProvider } from '../../src/providers/anthropic';
 import {
   AzureOpenAiChatCompletionProvider,
   AzureOpenAiCompletionProvider,
-} from '../src/providers/azureopenai';
-import { AwsBedrockCompletionProvider } from '../src/providers/bedrock';
+} from '../../src/providers/azureopenai';
+import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import {
   CloudflareAiChatCompletionProvider,
   CloudflareAiCompletionProvider,
@@ -22,37 +22,37 @@ import {
   type ICloudflareTextGenerationResponse,
   type ICloudflareEmbeddingResponse,
   type ICloudflareProviderConfig,
-} from '../src/providers/cloudflare-ai';
+} from '../../src/providers/cloudflare-ai';
 import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
-} from '../src/providers/huggingface';
-import { LlamaProvider } from '../src/providers/llama';
+} from '../../src/providers/huggingface';
+import { LlamaProvider } from '../../src/providers/llama';
 import {
   OllamaChatProvider,
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
-} from '../src/providers/ollama';
+} from '../../src/providers/ollama';
 import {
   OpenAiAssistantProvider,
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
-} from '../src/providers/openai';
-import { PythonProvider } from '../src/providers/pythonCompletion';
+} from '../../src/providers/openai';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
-} from '../src/providers/replicate';
-import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
-import { VertexChatProvider, VertexEmbeddingProvider } from '../src/providers/vertex';
-import { VoyageEmbeddingProvider } from '../src/providers/voyage';
-import { WebhookProvider } from '../src/providers/webhook';
-import RedteamIterativeProvider from '../src/redteam/providers/iterative';
-import RedteamImageIterativeProvider from '../src/redteam/providers/iterativeImage';
-import RedteamIterativeTreeProvider from '../src/redteam/providers/iterativeTree';
-import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
+} from '../../src/providers/replicate';
+import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/vertex';
+import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
+import { WebhookProvider } from '../../src/providers/webhook';
+import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
+import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
+import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+import type { ProviderOptionsMap, ProviderFunction } from '../../src/types';
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -74,8 +74,8 @@ jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('../src/esm', () => ({
-  ...jest.requireActual('../src/esm'),
+jest.mock('../../src/esm', () => ({
+  ...jest.requireActual('../../src/esm'),
   importModule: jest.fn(),
 }));
 
@@ -89,10 +89,10 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('../src/database', () => ({
+jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
 }));
-jest.mock('../src/logger', () => ({
+jest.mock('../../src/logger', () => ({
   error: jest.fn(),
   debug: jest.fn(),
   info: jest.fn(),
