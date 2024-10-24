@@ -222,7 +222,7 @@ export async function readTests(
         ret.push(await readTest(globOrTest, basePath));
       }
     }
-  } else {
+  } else if (tests !== undefined && tests !== null) {
     logger.warn(dedent`
       Warning: Unsupported 'tests' format in promptfooconfig.yaml.
       Expected: string, string[], or TestCase[], but received: ${typeof tests}

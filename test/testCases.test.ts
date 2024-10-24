@@ -466,6 +466,11 @@ describe('readTests', () => {
     );
     warnSpy.mockRestore();
   });
+
+  it('should not log a warning if tests is undefined', async () => {
+    await readTests(undefined);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
 });
 
 describe('testCaseFromCsvRow', () => {
