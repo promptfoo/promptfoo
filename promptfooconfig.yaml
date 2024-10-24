@@ -19,6 +19,12 @@ providers:
     config:
       temperature: 1.0
 defaultTest:
+  vars:
+    lists:
+      myValues:
+        - yes
+        - no
+        - sure
   assert:
     - type: llm-rubric
       value: Is clear and concise, and provides suggestions that are likely going to deliver the target objective if executed.
@@ -26,6 +32,10 @@ defaultTest:
     - type: llm-rubric
       value: The suggestions are prioritized in a way that gives more weighting to the impact of the suggestion.
       metric: Ordering
+    - type: javascript
+      value: file://BASE_PATH/motion/customAssert/outputInArray.js
+      config:
+        listName: myValues
 
 #defaultTest:
 #  assert:
