@@ -145,16 +145,16 @@ const config = {
                 label: 'About',
               },
               {
+                href: '/blog/',
+                label: 'Blog',
+              },
+              {
                 href: '/contact/',
                 label: 'Contact',
               },
               {
                 href: '/careers/',
                 label: 'Careers',
-              },
-              {
-                href: '/blog/',
-                label: 'Blog',
               },
             ],
           },
