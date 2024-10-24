@@ -3,7 +3,6 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
-import Snackbar from '@mui/material/Snackbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
@@ -13,11 +12,8 @@ interface EvalIdChipProps {
 }
 
 export const EvalIdChip: React.FC<EvalIdChipProps> = ({ evalId, onCopy }) => {
-  const [copied, setCopied] = React.useState(false);
-
   const handleCopy = () => {
     onCopy();
-    setCopied(true);
   };
 
   return (
@@ -51,12 +47,6 @@ export const EvalIdChip: React.FC<EvalIdChipProps> = ({ evalId, onCopy }) => {
           </IconButton>
         </Tooltip>
       </Box>
-      <Snackbar
-        open={copied}
-        autoHideDuration={2000}
-        onClose={() => setCopied(false)}
-        message="Eval ID copied to clipboard"
-      />
     </>
   );
 };

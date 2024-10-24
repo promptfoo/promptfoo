@@ -37,12 +37,6 @@ describe('EvalIdChip', () => {
     expect(mockOnCopy).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a snackbar message when the ID is copied', async () => {
-    render(<EvalIdChip {...defaultProps} />);
-    await userEvent.click(screen.getByLabelText('Copy Eval ID'));
-    expect(screen.getByText('Eval ID copied to clipboard')).toBeInTheDocument();
-  });
-
   it('displays a tooltip on hover', async () => {
     render(<EvalIdChip {...defaultProps} />);
     await userEvent.hover(screen.getByLabelText('Copy Eval ID'));

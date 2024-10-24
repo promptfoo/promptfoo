@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
@@ -84,7 +85,7 @@ export default function ResultsView({
     setAuthor,
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
-
+  const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
   const [debouncedSearchText] = useDebounce(searchText, 1000);
   const handleSearchTextChange = (text: string) => {
@@ -335,8 +336,11 @@ export default function ResultsView({
   const handleEvalIdCopyClick = () => {
     if (evalId) {
       navigator.clipboard.writeText(evalId).then(
-        () => {},
         () => {
+          showToast('Eval ID copied to clipboard', 'success');
+        },
+        () => {
+          showToast('Failed to copy Eval ID to clipboard', 'error');
           console.error('Failed to copy to clipboard');
         },
       );
@@ -408,6 +412,7 @@ export default function ResultsView({
           author={author}
           onEditAuthor={handleEditAuthor}
           currentUserEmail={currentUserEmail}
+          editable
         />
         {Object.keys(config?.tags || {}).map((tag) => (
           <Chip
