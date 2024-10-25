@@ -814,16 +814,16 @@ export const strategyDescriptions: Record<Strategy, string> = {
 
 export const strategyDisplayNames: Record<Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
-  'jailbreak:tree': 'Tree-based Optimization',
-  'math-prompt': 'Mathematical Encoding',
-  'prompt-injection': 'Prompt Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
+  goat: 'GOAT',
+  'jailbreak:tree': 'Tree-based Optimization',
   jailbreak: 'Single-shot Optimization',
   leetspeak: 'Leetspeak',
+  'math-prompt': 'Mathematical Encoding',
   multilingual: 'Multilingual',
+  'prompt-injection': 'Prompt Injection',
   rot13: 'ROT13 Encoding',
-  goat: 'GOAT',
 };
