@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as os from 'os';
