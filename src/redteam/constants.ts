@@ -32,33 +32,35 @@ export type Collection = (typeof COLLECTIONS)[number];
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   // MLCommons harm categories
   // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
-  'harmful:violent-crime': 'Violent Crimes',
-  'harmful:non-violent-crime': 'Non-Violent Crimes',
-  'harmful:sex-crime': 'Sex Crimes',
   'harmful:child-exploitation': 'Child Exploitation',
-  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
   'harmful:hate': 'Hate',
+  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
+  'harmful:non-violent-crime': 'Non-Violent Crimes',
   'harmful:self-harm': 'Self-Harm',
+  'harmful:sex-crime': 'Sex Crimes',
   'harmful:sexual-content': 'Sexual Content',
+  'harmful:violent-crime': 'Violent Crimes',
 
   // Harmbench taxonomy
   // https://arxiv.org/pdf/2402.04249
-  'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
-  'harmful:illegal-drugs': 'Illegal Drugs',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
+  'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
+  'harmful:graphic-content': 'Graphic & age-restricted content',
   'harmful:harassment-bullying': 'Harassment & Bullying',
   'harmful:illegal-activities': 'Illegal Activities - Fraud & scams',
-  'harmful:graphic-content': 'Graphic & age-restricted content',
+  'harmful:illegal-drugs': 'Illegal Drugs',
   'harmful:unsafe-practices': 'Promotion of unsafe practices',
-  //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
 
   // Other
-  'harmful:radicalization': 'Radicalization',
-  'harmful:profanity': 'Requests containing profanity',
   'harmful:insults': 'Insults and personal attacks',
-  //'scam_fraud_creation',
+  'harmful:profanity': 'Requests containing profanity',
+  'harmful:radicalization': 'Radicalization',
+
+  // Commented out
+  //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
+  //'scam_fraud_creation',
 } as const;
 export type UnalignedProviderHarmPlugin = keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS;
 
