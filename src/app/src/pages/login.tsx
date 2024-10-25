@@ -48,6 +48,20 @@ export default function LoginPage() {
       });
 
       if (response.ok) {
+        // Save consent after successful login
+        await callApi('/user/consent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: emailInput,
+            metadata: {
+              source: 'web_login',
+            },
+          }),
+        });
+
         setEmail(emailInput);
         handleRedirect();
       } else {

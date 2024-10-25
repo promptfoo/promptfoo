@@ -127,7 +127,7 @@ export class Telemetry {
   /**
    * This is a separate endpoint to save consent used only for redteam data synthesis for "harmful" plugins.
    */
-  async saveConsent(email: string): Promise<void> {
+  async saveConsent(email: string, metadata?: Record<string, string>): Promise<void> {
     try {
       const response = await fetchWithTimeout(
         CONSENT_ENDPOINT,
@@ -136,7 +136,7 @@ export class Telemetry {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({ email, metadata }),
         },
         TELEMETRY_TIMEOUT_MS,
       );
