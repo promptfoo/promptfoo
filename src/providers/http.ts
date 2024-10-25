@@ -92,14 +92,14 @@ function processValue(value: any, vars: Record<string, any>): any {
   return value;
 }
 
-export function processJsonBody(
+function processObjects(
   body: Record<string, any> | any[],
   vars: Record<string, any>,
 ): Record<string, any> | any[] {
   if (Array.isArray(body)) {
     return body.map((item) =>
       typeof item === 'object' && item !== null
-        ? processJsonBody(item, vars)
+        ? processObjects(item, vars)
         : processValue(item, vars),
     );
   }
@@ -108,12 +108,27 @@ export function processJsonBody(
 
   for (const [key, value] of Object.entries(body)) {
     if (typeof value === 'object' && value !== null) {
-      processedBody[key] = processJsonBody(value, vars);
+      processedBody[key] = processObjects(value, vars);
     } else {
       processedBody[key] = processValue(value, vars);
     }
   }
   return processedBody;
+}
+
+export function processJsonBody(
+  body: Record<string, any> | any[],
+  vars: Record<string, any>,
+): Record<string, any> | any[] {
+  // attempting to process a string as a stringifiedJSON object
+  if (typeof body === 'string') {
+    body = processValue(body, vars);
+    if (typeof body == 'string') {
+      return body;
+    }
+    return processObjects(body, vars);
+  }
+  return processObjects(body, vars);
 }
 
 export function processTextBody(body: string, vars: Record<string, any>): string {
@@ -185,7 +200,7 @@ export class HttpProvider implements ApiProvider {
     if (typeof body === 'object' && body !== null) {
       return { 'content-type': 'application/json' };
     } else if (typeof body === 'string') {
-      return { 'content-type': 'text/plain' };
+      return { 'content-type': 'application/x-www-form-urlencoded' };
     }
     return {};
   }

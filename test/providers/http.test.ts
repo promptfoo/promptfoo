@@ -582,10 +582,10 @@ describe('HttpProvider', () => {
       expect(result).toEqual({ 'content-type': 'application/json' });
     });
 
-    it('should return text/plain for string body', () => {
+    it('should return application/x-www-form-urlencoded for string body', () => {
       const provider = new HttpProvider(mockUrl, { config: { method: 'POST', body: 'test' } });
       const result = provider['getDefaultHeaders']('string body');
-      expect(result).toEqual({ 'content-type': 'text/plain' });
+      expect(result).toEqual({ 'content-type': 'application/x-www-form-urlencoded' });
     });
   });
 
@@ -603,7 +603,10 @@ describe('HttpProvider', () => {
     it('should throw for non-json content-type with object body', () => {
       const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
       expect(() => {
-        provider['validateContentTypeAndBody']({ 'content-type': 'text/plain' }, { key: 'value' });
+        provider['validateContentTypeAndBody'](
+          { 'content-type': 'application/x-www-form-urlencoded' },
+          { key: 'value' },
+        );
       }).toThrow('Content-Type is not application/json, but body is an object or array');
     });
   });
@@ -694,7 +697,7 @@ describe('HttpProvider', () => {
     );
   });
 
-  it('should default to text/plain for content-type if body is not an object', async () => {
+  it('should default to application/x-www-form-urlencoded for content-type if body is not an object', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         method: 'POST',
@@ -715,7 +718,7 @@ describe('HttpProvider', () => {
       mockUrl,
       expect.objectContaining({
         method: 'POST',
-        headers: { 'content-type': 'text/plain' },
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: 'test',
       }),
       expect.any(Number),
@@ -760,7 +763,7 @@ describe('HttpProvider', () => {
         mockUrl,
         expect.objectContaining({
           method: 'POST',
-          headers: { 'content-type': 'text/plain' },
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
           body: 'Hello world',
         }),
         expect.any(Number),
@@ -806,6 +809,37 @@ describe('HttpProvider', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: { key: '{{ prompt }}' },
+        },
+      });
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'test' }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+      );
+    });
+
+    it('should render a stringified object body when content-type is application/json', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: '{{ prompt }}' }),
         },
       });
       const mockResponse = {
