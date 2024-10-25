@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
+import { neverGenerateRemote } from '../util';
 import { addBase64Encoding } from './base64';
 import { addCrescendo } from './crescendo';
 import { addGoatTestCases } from './goat';
@@ -44,6 +45,9 @@ export const Strategies: Strategy[] = [
     key: 'goat',
     action: async (testCases, injectVar, config) => {
       logger.debug('Adding GOAT to all test cases');
+      if (neverGenerateRemote()) {
+        throw new Error(`GOAT strategy requires remote generation to be enabled`);
+      }
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
       return newTestCases;
