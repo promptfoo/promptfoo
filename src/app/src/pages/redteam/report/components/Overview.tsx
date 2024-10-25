@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography';
 import {
   Severity,
   riskCategorySeverityMap,
+  severityDisplayNames,
   type Plugin as PluginType,
 } from '@promptfoo/redteam/constants';
 import './Overview.css';
@@ -16,9 +17,7 @@ interface OverviewProps {
 }
 
 const Overview: React.FC<OverviewProps> = ({ categoryStats }) => {
-  const severities = [Severity.Critical, Severity.High, Severity.Medium, Severity.Low];
-
-  const severityCounts = severities.reduce(
+  const severityCounts = Object.values(Severity).reduce(
     (acc, severity) => {
       acc[severity] = Object.keys(categoryStats).reduce((count, category) => {
         if (riskCategorySeverityMap[category as PluginType] === severity) {
@@ -33,12 +32,12 @@ const Overview: React.FC<OverviewProps> = ({ categoryStats }) => {
 
   return (
     <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
-      {severities.map((severity) => (
+      {Object.values(Severity).map((severity) => (
         <Box key={severity} flex={1}>
           <Card className={`severity-card card-${severity.toLowerCase()}`}>
             <CardContent onClick={() => (window.location.hash = '#table')}>
               <Typography variant="h6" gutterBottom>
-                {severity}
+                {severityDisplayNames[severity]}
               </Typography>
               <Typography variant="h4" color="text.primary">
                 {severityCounts[severity]}

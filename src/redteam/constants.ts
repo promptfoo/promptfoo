@@ -524,11 +524,18 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
 };
 
 export enum Severity {
-  Critical = 'Critical',
-  High = 'High',
-  Medium = 'Medium',
-  Low = 'Low',
+  Critical = 'critical',
+  High = 'high',
+  Medium = 'medium',
+  Low = 'low',
 }
+
+export const severityDisplayNames: Record<Severity, string> = {
+  [Severity.Critical]: 'Critical',
+  [Severity.High]: 'High',
+  [Severity.Medium]: 'Medium',
+  [Severity.Low]: 'Low',
+};
 
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
