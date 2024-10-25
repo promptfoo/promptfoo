@@ -459,6 +459,60 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
 }
 
 export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvider {
+  getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Record<string, any> {
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
+    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+    let stop: string;
+    try {
+      stop = getEnvString('OPENAI_STOP')
+        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
+        : config?.stop;
+    } catch (err) {
+      throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
+    }
+
+    const body = {
+      model: this.deploymentName,
+      messages,
+      max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+      top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
+      presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
+      frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
+      ...(config.functions
+        ? {
+            functions: maybeLoadFromExternalFile(
+              renderVarsInObject(config.functions, context?.vars),
+            ),
+          }
+        : {}),
+      ...(config.function_call ? { function_call: config.function_call } : {}),
+      ...(config.seed === undefined ? {} : { seed: config.seed }),
+      ...(config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
+        : {}),
+      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
+      ...(config.dataSources ? { dataSources: config.dataSources } : {}),
+      ...(config.response_format ? { response_format: config.response_format } : {}),
+      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
+      ...(stop ? { stop } : {}),
+      ...(config.passthrough || {}),
+    };
+
+    return body;
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -467,56 +521,17 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
     const apiKey = await this.getApiKey();
     if (!apiKey) {
       throw new Error(
-        'Azure OpenAI API key is not set. Set the AZURE_OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Azure OpenAI API key is not set. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
       );
     }
     if (!this.getApiBaseUrl()) {
       throw new Error('Azure OpenAI API host must be set');
     }
 
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const body = this.getOpenAiBody(prompt, context, callApiOptions);
 
-    let stop: string;
-    try {
-      stop = getEnvString('OPENAI_STOP')
-        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
-        : this.config?.stop;
-    } catch (err) {
-      throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
-    }
-    const body = {
-      model: this.deploymentName,
-      messages,
-      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
-      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
-      top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
-      presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
-      frequency_penalty:
-        this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
-      ...(this.config.functions
-        ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(this.config.functions, context?.vars),
-            ),
-          }
-        : {}),
-      ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
-      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
-      ...(this.config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
-        : {}),
-      ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
-      ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
-      ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
-      ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(stop ? { stop } : {}),
-      ...(this.config.passthrough || {}),
-    };
-    logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
-
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
     try {
       const url = this.config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
