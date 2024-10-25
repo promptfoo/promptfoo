@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
-import { HttpProvider, processBody, createResponseParser } from '../../src/providers/http';
+import { HttpProvider, createResponseParser, processJsonBody } from '../../src/providers/http';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
 jest.mock('../../src/cache', () => ({
@@ -363,11 +363,11 @@ describe('HttpProvider', () => {
     });
   });
 
-  describe('processBody', () => {
+  describe('processJsonBody', () => {
     it('should process simple key-value pairs', () => {
       const body = { key: 'value', prompt: '{{ prompt }}' };
       const vars = { prompt: 'test prompt' };
-      const result = processBody(body, vars);
+      const result = processJsonBody(body, vars);
       expect(result).toEqual({ key: 'value', prompt: 'test prompt' });
     });
 
@@ -379,7 +379,7 @@ describe('HttpProvider', () => {
         },
       };
       const vars = { prompt: 'test prompt' };
-      const result = processBody(body, vars);
+      const result = processJsonBody(body, vars);
       expect(result).toEqual({
         outer: {
           inner: 'test prompt',
@@ -393,7 +393,7 @@ describe('HttpProvider', () => {
         list: ['{{ prompt }}', 'static', '{{ prompt }}'],
       };
       const vars = { prompt: 'test prompt' };
-      const result = processBody(body, vars);
+      const result = processJsonBody(body, vars);
       expect(result).toEqual({
         list: ['test prompt', 'static', 'test prompt'],
       });
@@ -401,7 +401,7 @@ describe('HttpProvider', () => {
 
     it('should handle empty vars', () => {
       const body = { key: '{{ prompt }}' };
-      const result = processBody(body, {});
+      const result = processJsonBody(body, {});
       expect(result).toEqual({ key: '' });
     });
 
@@ -414,14 +414,14 @@ describe('HttpProvider', () => {
         jsonArray: '[1, 2, "{{ prompt }}"]',
       };
       const vars = { prompt: 'test prompt' };
-      const result = processBody(body, vars);
+      const result = processJsonBody(body, vars);
 
       expect(result).toEqual({
         outer: {
           inner: ['test prompt', { nestedKey: 'test prompt' }],
           static: 'value',
         },
-        jsonArray: `[1, 2, \"test prompt\"]`,
+        jsonArray: [1, 2, 'test prompt'],
       });
     });
   });
@@ -582,10 +582,10 @@ describe('HttpProvider', () => {
       expect(result).toEqual({ 'content-type': 'application/json' });
     });
 
-    it('should return empty object for string body', () => {
+    it('should return application/x-www-form-urlencoded for string body', () => {
       const provider = new HttpProvider(mockUrl, { config: { method: 'POST', body: 'test' } });
       const result = provider['getDefaultHeaders']('string body');
-      expect(result).toEqual({});
+      expect(result).toEqual({ 'content-type': 'application/x-www-form-urlencoded' });
     });
   });
 
@@ -603,7 +603,10 @@ describe('HttpProvider', () => {
     it('should throw for non-json content-type with object body', () => {
       const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
       expect(() => {
-        provider['validateContentTypeAndBody']({ 'content-type': 'text/plain' }, { key: 'value' });
+        provider['validateContentTypeAndBody'](
+          { 'content-type': 'application/x-www-form-urlencoded' },
+          { key: 'value' },
+        );
       }).toThrow('Content-Type is not application/json, but body is an object or array');
     });
   });
@@ -694,7 +697,7 @@ describe('HttpProvider', () => {
     );
   });
 
-  it('should not default to application/json for content-type if body is not an object', async () => {
+  it('should default to application/x-www-form-urlencoded for content-type if body is not an object', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         method: 'POST',
@@ -715,7 +718,7 @@ describe('HttpProvider', () => {
       mockUrl,
       expect.objectContaining({
         method: 'POST',
-        headers: {},
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: 'test',
       }),
       expect.any(Number),
@@ -736,5 +739,240 @@ describe('HttpProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow(
       'Content-Type is not application/json, but body is an object or array',
     );
+  });
+
+  describe('Content-Type and body handling', () => {
+    it('should render string body when content-type is not set', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          body: 'Hello {{ prompt }}',
+        },
+      });
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('world');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: 'Hello world',
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+      );
+    });
+
+    it('should default to JSON when content-type is not set and body is an object', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          body: { key: 'test' },
+        },
+      });
+
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'test' }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+      );
+    });
+
+    it('should render object body when content-type is application/json', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+        },
+      });
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'test' }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+      );
+    });
+
+    it('should render a stringified object body when content-type is application/json', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: '{{ prompt }}' }),
+        },
+      });
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'test' }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+      );
+    });
+
+    it('should render nested object variables correctly when content-type is application/json', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: {
+            details: {
+              names: '{{ names | dump }}',
+            },
+          },
+        },
+      });
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const vars = {
+        names: [
+          { firstName: 'Jane', lastName: 'Smith' },
+          { firstName: 'John', lastName: 'Doe' },
+        ],
+      };
+
+      await provider.callApi('test', { vars, prompt: { raw: 'test', label: 'test' } });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            details: {
+              names: vars.names,
+            },
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+      );
+    });
+
+    it('should render nested array variables correctly when content-type is application/json', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: [
+            {
+              id: 1,
+              details: {
+                names: '{{ names | dump }}',
+              },
+            },
+            {
+              id: 2,
+              details: {
+                names: '{{ names | dump }}',
+              },
+            },
+          ],
+        },
+      });
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const vars = {
+        names: [
+          { firstName: 'Jane', lastName: 'Smith' },
+          { firstName: 'John', lastName: 'Doe' },
+        ],
+      };
+
+      await provider.callApi('test', { vars, prompt: { raw: 'test', label: 'test' } });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify([
+            {
+              id: 1,
+              details: {
+                names: vars.names,
+              },
+            },
+            {
+              id: 2,
+              details: {
+                names: vars.names,
+              },
+            },
+          ]),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+      );
+    });
   });
 });

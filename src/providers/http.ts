@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import httpZ from 'http-z';
 import path from 'path';
 import invariant from 'tiny-invariant';
@@ -79,33 +80,66 @@ export async function createResponseParser(
   );
 }
 
-export function processBody(
-  body: Record<string, any> | string | any[] | undefined,
-  vars: Record<string, any>,
-): Record<string, any> | string | any[] | undefined {
-  if (body === undefined) {
-    return undefined;
-  }
-
-  if (typeof body === 'string') {
-    return nunjucks.renderString(body, vars);
-  }
-
-  // Handle JSON content type (objects and arrays)
-  if (Array.isArray(body)) {
-    return body.map((item) => processBody(item, vars));
-  }
-
-  if (typeof body === 'object' && body !== null) {
-    const processedBody: Record<string, any> = {};
-    for (const [key, value] of Object.entries(body)) {
-      processedBody[key] = processBody(value, vars);
+function processValue(value: any, vars: Record<string, any>): any {
+  if (typeof value === 'string') {
+    const renderedValue = nunjucks.renderString(value, vars || {});
+    try {
+      return JSON.parse(renderedValue);
+    } catch {
+      return renderedValue;
     }
-    return processedBody;
+  }
+  return value;
+}
+
+function processObjects(
+  body: Record<string, any> | any[],
+  vars: Record<string, any>,
+): Record<string, any> | any[] {
+  if (Array.isArray(body)) {
+    return body.map((item) =>
+      typeof item === 'object' && item !== null
+        ? processObjects(item, vars)
+        : processValue(item, vars),
+    );
   }
 
-  // For any other types, return as is
-  return body;
+  const processedBody: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(body)) {
+    if (typeof value === 'object' && value !== null) {
+      processedBody[key] = processObjects(value, vars);
+    } else {
+      processedBody[key] = processValue(value, vars);
+    }
+  }
+  return processedBody;
+}
+
+export function processJsonBody(
+  body: Record<string, any> | any[],
+  vars: Record<string, any>,
+): Record<string, any> | any[] {
+  // attempting to process a string as a stringifiedJSON object
+  if (typeof body === 'string') {
+    body = processValue(body, vars);
+    if (typeof body == 'string') {
+      return body;
+    }
+    return processObjects(body, vars);
+  }
+  return processObjects(body, vars);
+}
+
+export function processTextBody(body: string, vars: Record<string, any>): string {
+  if (body == null) {
+    return body;
+  }
+  invariant(
+    typeof body !== 'object',
+    'Expected body to be a string when content type is not application/json',
+  );
+  return nunjucks.renderString(body, vars);
 }
 
 function parseRawRequest(input: string) {
@@ -165,21 +199,26 @@ export class HttpProvider implements ApiProvider {
     }
     if (typeof body === 'object' && body !== null) {
       return { 'content-type': 'application/json' };
+    } else if (typeof body === 'string') {
+      return { 'content-type': 'application/x-www-form-urlencoded' };
     }
     return {};
   }
 
   private validateContentTypeAndBody(headers: Record<string, string>, body: any): void {
-    const contentType = this.getContentType(headers);
-    if (
-      contentType &&
-      !contentType.includes('application/json') &&
-      typeof body === 'object' &&
-      body !== null
-    ) {
-      throw new Error(
-        'Content-Type is not application/json, but body is an object or array. The body must be a string if the Content-Type is not application/json.',
-      );
+    if (body != null) {
+      if (typeof body == 'object' && !contentTypeIsJson(headers)) {
+        throw new Error(
+          'Content-Type is not application/json, but body is an object or array. The body must be a string if the Content-Type is not application/json.',
+        );
+      }
+      if (typeof body === 'string' && contentTypeIsJson(headers)) {
+        console.warn(
+          chalk.yellow(
+            'Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
+          ),
+        );
+      }
     }
   }
 
@@ -225,7 +264,10 @@ export class HttpProvider implements ApiProvider {
       url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
       headers,
-      body: processBody(this.config.body, vars),
+      // We validate the content type and body with this.validateContentTypeAndBody
+      body: contentTypeIsJson(headers)
+        ? processJsonBody(this.config.body as Record<string, any> | any[], vars)
+        : processTextBody(this.config.body as string, vars),
       queryParams: this.config.queryParams
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
