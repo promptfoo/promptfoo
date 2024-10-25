@@ -19,8 +19,8 @@ const MemoizedSlider = React.memo(
     onChangeCommitted,
   }: {
     value: number;
-    onChange: (event: Event | React.SyntheticEvent, value: number | number[]) => void;
-    onChangeCommitted: (event: Event | React.SyntheticEvent, value: number | number[]) => void;
+    onChange: (event: Event | React.SyntheticEvent, value: number[] | number) => void;
+    onChangeCommitted: (event: Event | React.SyntheticEvent, value: number[] | number) => void;
   }) => (
     <Slider
       min={25}
@@ -72,14 +72,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
   );
 
   const handleSliderChange = useCallback(
-    (_event: Event | React.SyntheticEvent, value: number | number[]) => {
+    (_event: Event | React.SyntheticEvent, value: number[] | number) => {
       setLocalMaxTextLength(value as number);
     },
     [],
   );
 
   const handleSliderChangeCommitted = useCallback(
-    (_event: Event | React.SyntheticEvent, value: number | number[]) => {
+    (_event: Event | React.SyntheticEvent, value: number[] | number) => {
       const newValue = value === 1001 ? Number.POSITIVE_INFINITY : (value as number);
       setMaxTextLength(newValue);
     },

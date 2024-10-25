@@ -17,7 +17,7 @@ function textLength(node: React.ReactNode): number {
 }
 
 export interface TruncatedTextProps {
-  text: string | number | React.ReactNode;
+  text: React.ReactNode | number | string;
   maxLength: number;
 }
 

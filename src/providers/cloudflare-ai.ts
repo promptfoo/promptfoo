@@ -20,7 +20,7 @@ import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
  */
 type ICloudflareParamsToIgnore = keyof Pick<
   Cloudflare.Workers.AI.AIRunParams.TextGeneration,
-  'messages' | 'prompt' | 'raw' | 'stream' | 'account_id'
+  'account_id' | 'messages' | 'prompt' | 'raw' | 'stream'
 >;
 
 export type ICloudflareProviderBaseConfig = {
@@ -58,7 +58,7 @@ export type IBuildCloudflareResponse<SuccessData extends Record<string, unknown>
   | { success: false; errors: unknown[]; messages: unknown[] };
 
 abstract class CloudflareAiGenericProvider implements ApiProvider {
-  abstract readonly modelType: 'embedding' | 'chat' | 'completion';
+  abstract readonly modelType: 'chat' | 'completion' | 'embedding';
 
   deploymentName: string;
   public readonly config: ICloudflareProviderConfig;
@@ -339,9 +339,9 @@ export class CloudflareAiChatCompletionProvider extends CloudflareAiGenericProvi
   ): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    const body: { [K in keyof ICloudflareTextGenerationOptions]: any } & {
+    const body: {
       messages: { role: string; content: string }[];
-    } = {
+    } & { [K in keyof ICloudflareTextGenerationOptions]: any } = {
       messages,
       max_tokens: this.config.max_tokens,
       temperature: this.config.temperature,

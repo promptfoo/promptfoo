@@ -6,7 +6,7 @@ import MenuItem from '@mui/material/MenuItem';
 
 export default function LoggedInAs() {
   const { user } = { user: null };
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);

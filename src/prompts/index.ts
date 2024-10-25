@@ -172,7 +172,7 @@ export async function processPrompt(
  * @returns Promise resolving to an array of processed prompts.
  */
 export async function readPrompts(
-  promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
+  promptPathOrGlobs: (Partial<Prompt> | string)[] | Record<string, string> | string,
   basePath: string = '',
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);

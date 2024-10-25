@@ -168,7 +168,7 @@ export const RedteamConfigSchema = z
     };
 
     const expandCollection = (
-      collection: string[] | ReadonlySet<Plugin>,
+      collection: ReadonlySet<Plugin> | string[],
       config: any,
       numTests: number | undefined,
     ) => {
@@ -191,7 +191,7 @@ export const RedteamConfigSchema = z
       }
     };
 
-    const handlePlugin = (plugin: string | RedteamPluginObject) => {
+    const handlePlugin = (plugin: RedteamPluginObject | string) => {
       const pluginObj =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined }

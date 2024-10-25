@@ -7,9 +7,9 @@ export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
-export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
+export type ProviderType = 'classification' | 'embedding' | 'moderation' | 'text';
 
-export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
+export type ProviderTypeMap = Partial<Record<ProviderType, ApiProvider | ProviderOptions | string>>;
 
 export interface ProviderModerationResponse {
   error?: string;
@@ -39,7 +39,7 @@ export interface CallApiContextParams {
   logger?: winston.Logger;
   originalProvider?: ApiProvider;
   prompt: Prompt;
-  vars: Record<string, string | object>;
+  vars: Record<string, object | string>;
   debug?: boolean;
 }
 
@@ -83,8 +83,8 @@ export interface ProviderResponse {
     redteamFinalPrompt?: string;
     [key: string]: any;
   };
-  raw?: string | any;
-  output?: string | any;
+  raw?: any | string;
+  output?: any | string;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
 }

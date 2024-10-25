@@ -14,8 +14,8 @@ interface DashboardChartsProps {
   attackSuccessRateData: AttackSuccessRateDataPoint[];
   issuesResolvedData: IssuesResolvedDataPoint[];
   applicationAttackSuccessData: ApplicationAttackSuccessDataPoint[];
-  activeChart: 'attackSuccess' | 'issuesResolved' | 'applicationSuccess';
-  setActiveChart: (value: 'attackSuccess' | 'issuesResolved' | 'applicationSuccess') => void;
+  activeChart: 'applicationSuccess' | 'attackSuccess' | 'issuesResolved';
+  setActiveChart: (value: 'applicationSuccess' | 'attackSuccess' | 'issuesResolved') => void;
 }
 
 export default function DashboardCharts({

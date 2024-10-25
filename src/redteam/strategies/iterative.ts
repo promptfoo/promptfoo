@@ -3,7 +3,7 @@ import type { TestCase } from '../../types';
 export function addIterativeJailbreaks(
   testCases: TestCase[],
   injectVar: string,
-  strategy: 'iterative' | 'iterative:tree' = 'iterative',
+  strategy: 'iterative:tree' | 'iterative' = 'iterative',
 ): TestCase[] {
   const providerName =
     strategy === 'iterative' ? 'promptfoo:redteam:iterative' : 'promptfoo:redteam:iterative:tree';

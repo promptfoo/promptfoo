@@ -60,7 +60,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
 }
 
 function Dropdown() {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
   const location = useLocation();
 

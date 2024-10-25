@@ -358,7 +358,7 @@ export class WatsonXProvider implements ApiProvider {
     return `[Watsonx Provider ${this.modelName}]`;
   }
 
-  async getAuth(): Promise<IamAuthenticator | BearerTokenAuthenticator> {
+  async getAuth(): Promise<BearerTokenAuthenticator | IamAuthenticator> {
     const { IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core');
 
     const apiKey =

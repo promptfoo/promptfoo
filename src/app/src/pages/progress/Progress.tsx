@@ -22,7 +22,7 @@ export default function Cols() {
   const [cols, setCols] = useState<StandaloneEval[]>([]);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [page, setPage] = React.useState(1);
   const [filter, setFilter] = useState({ evalId: '', datasetId: '', provider: '', promptId: '' });
 

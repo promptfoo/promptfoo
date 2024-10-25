@@ -42,8 +42,8 @@ interface TableState {
 
   maxTextLength: number;
   setMaxTextLength: (maxTextLength: number) => void;
-  wordBreak: 'break-word' | 'break-all';
-  setWordBreak: (wordBreak: 'break-word' | 'break-all') => void;
+  wordBreak: 'break-all' | 'break-word';
+  setWordBreak: (wordBreak: 'break-all' | 'break-word') => void;
   showInferenceDetails: boolean;
   setShowInferenceDetails: (showInferenceDetails: boolean) => void;
   renderMarkdown: boolean;
@@ -90,7 +90,7 @@ export const useStore = create<TableState>()(
       maxTextLength: 250,
       setMaxTextLength: (maxTextLength: number) => set(() => ({ maxTextLength })),
       wordBreak: 'break-word',
-      setWordBreak: (wordBreak: 'break-word' | 'break-all') => set(() => ({ wordBreak })),
+      setWordBreak: (wordBreak: 'break-all' | 'break-word') => set(() => ({ wordBreak })),
       showInferenceDetails: true,
       setShowInferenceDetails: (showInferenceDetails: boolean) =>
         set(() => ({ showInferenceDetails })),

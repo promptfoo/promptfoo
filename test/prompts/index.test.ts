@@ -369,7 +369,7 @@ describe('readPrompts', () => {
   it('should read a .js file with named function', async () => {
     const promptPath = 'prompt.js:functionName';
     const mockFunction = (context: {
-      vars: Record<string, string | object>;
+      vars: Record<string, object | string>;
       provider?: ApiProvider;
     }) => 'dummy prompt result';
 
@@ -387,7 +387,7 @@ describe('readPrompts', () => {
     ]);
 
     const promptFunction = result[0].function as unknown as (context: {
-      vars: Record<string, string | object>;
+      vars: Record<string, object | string>;
       provider?: ApiProvider;
     }) => string;
     expect(promptFunction({ vars: {}, provider: { id: () => 'foo' } as ApiProvider })).toBe(

@@ -31,11 +31,11 @@ export default function Review() {
     URL.revokeObjectURL(url);
   };
 
-  const getPluginLabel = (plugin: string | RedteamPlugin) => {
+  const getPluginLabel = (plugin: RedteamPlugin | string) => {
     return typeof plugin === 'string' ? plugin : plugin.id;
   };
 
-  const getStrategyLabel = (strategy: string | RedteamStrategy) => {
+  const getStrategyLabel = (strategy: RedteamStrategy | string) => {
     return typeof strategy === 'string' ? strategy : strategy.id;
   };
 

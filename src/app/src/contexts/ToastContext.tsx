@@ -13,7 +13,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setOpen(true);
   };
 
-  const handleClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
+  const handleClose = (event?: Event | React.SyntheticEvent, reason?: string) => {
     if (reason === 'clickaway') {
       return;
     }

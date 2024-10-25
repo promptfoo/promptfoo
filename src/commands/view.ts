@@ -16,14 +16,14 @@ export function viewCommand(program: Command) {
     .action(
       async (
         directory: string | undefined,
-        cmdObj: {
+        cmdObj: Command & {
           port: number;
           yes: boolean;
           no: boolean;
           apiBaseUrl?: string;
           envPath?: string;
           filterDescription?: string;
-        } & Command,
+        },
       ) => {
         setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {

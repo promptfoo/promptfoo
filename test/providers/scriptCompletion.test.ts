@@ -108,7 +108,7 @@ describe('ScriptCompletionProvider', () => {
   it('should handle UTF-8 characters in script output', async () => {
     const utf8Output = 'Hello, 世界!';
     jest.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
-      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+      (callback as (error: Error | null, stdout: Buffer | string, stderr: Buffer | string) => void)(
         null,
         Buffer.from(utf8Output),
         '',

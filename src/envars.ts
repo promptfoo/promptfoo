@@ -1,8 +1,8 @@
 import type { EnvOverrides } from './types';
 
 // Define the supported environment variables and their types
-export type EnvVars = {
-  LOG_LEVEL?: 'error' | 'warn' | 'info' | 'debug';
+export type EnvVars = EnvOverrides & {
+  LOG_LEVEL?: 'debug' | 'error' | 'info' | 'warn';
   NEXT_PUBLIC_PROMPTFOO_BASE_URL?: string;
   NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
   PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY?: number;
@@ -12,7 +12,7 @@ export type EnvVars = {
   PROMPTFOO_CACHE_MAX_SIZE?: number;
   PROMPTFOO_CACHE_PATH?: string;
   PROMPTFOO_CACHE_TTL?: number;
-  PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
+  PROMPTFOO_CACHE_TYPE?: 'disk' | 'memory';
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_DELAY_MS?: number;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
@@ -131,7 +131,7 @@ export type EnvVars = {
   BUDDY?: boolean;
   BUILDKITE?: boolean;
   TEAMCITY_VERSION?: boolean;
-} & EnvOverrides;
+};
 
 type EnvVarKey = keyof EnvVars;
 

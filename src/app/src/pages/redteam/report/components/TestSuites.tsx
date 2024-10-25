@@ -83,7 +83,7 @@ const TestSuites: React.FC<{
   };
 
   const [order, setOrder] = React.useState<'asc' | 'desc'>('asc');
-  const [orderBy, setOrderBy] = React.useState<'passRate' | 'severity' | 'default'>('default');
+  const [orderBy, setOrderBy] = React.useState<'default' | 'passRate' | 'severity'>('default');
   const handleSort = (property: 'passRate' | 'severity') => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');

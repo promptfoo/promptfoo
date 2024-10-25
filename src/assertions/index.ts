@@ -78,7 +78,7 @@ const ajv = createAjv();
 
 const nunjucks = getNunjucksEngine();
 
-function coerceString(value: string | object): string {
+function coerceString(value: object | string): string {
   if (typeof value === 'string') {
     return value;
   }
@@ -92,7 +92,7 @@ function handleRougeScore(
   output: string,
   inverted: boolean,
 ): GradingResult {
-  const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
+  const fnName = baseType[baseType.length - 1] as 'l' | 'n' | 's';
   const rougeMethod = rouge[fnName];
   const score = rougeMethod(output, expected, {});
   const pass = score >= (assertion.threshold || 0.75) != inverted;
@@ -304,7 +304,7 @@ export async function runAssertion({
 
   // Render assertion values
   let renderedValue = assertion.value;
-  let valueFromScript: string | boolean | number | GradingResult | object | undefined;
+  let valueFromScript: GradingResult | boolean | number | object | string | undefined;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -743,7 +743,7 @@ export async function runAssertion({
 
   if (baseType === 'javascript') {
     try {
-      const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
+      const validateResult = async (result: any): Promise<GradingResult | boolean | number> => {
         result = await Promise.resolve(result);
         if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
           return result;
@@ -783,7 +783,7 @@ export async function runAssertion({
        */
       renderedValue = renderedValue.trimEnd();
 
-      let result: boolean | number | GradingResult;
+      let result: GradingResult | boolean | number;
       if (typeof valueFromScript === 'undefined') {
         const functionBody = renderedValue.includes('\n')
           ? renderedValue
@@ -834,7 +834,7 @@ ${renderedValue}`,
   if (baseType === 'python') {
     invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
     try {
-      let result: string | number | boolean | object | GradingResult | undefined;
+      let result: GradingResult | boolean | number | object | string | undefined;
       if (typeof valueFromScript === 'undefined') {
         const isMultiline = renderedValue.includes('\n');
         let indentStyle = '    ';
@@ -1135,7 +1135,7 @@ ${
     if (promptToModerate[0] === '[' || promptToModerate[0] === '{') {
       // Try to extract the last user message from OpenAI-style prompts.
       try {
-        const parsedPrompt = parseChatPrompt<null | { role: string; content: string }[]>(
+        const parsedPrompt = parseChatPrompt<{ role: string; content: string }[] | null>(
           promptToModerate,
           null,
         );

@@ -5,7 +5,7 @@ export function calculateTrend(current: number, previous: number, increaseIsBad:
   const difference = current - previous;
   const percentChange = difference / previous;
 
-  let direction: 'up' | 'down' | 'flat';
+  let direction: 'down' | 'flat' | 'up';
   if (percentChange > 0.01) {
     direction = 'up';
   } else if (percentChange < -0.01) {
@@ -14,7 +14,7 @@ export function calculateTrend(current: number, previous: number, increaseIsBad:
     direction = 'flat';
   }
 
-  let sentiment: 'good' | 'bad' | 'flat';
+  let sentiment: 'bad' | 'flat' | 'good';
   if (increaseIsBad) {
     sentiment = direction === 'up' ? 'bad' : direction === 'down' ? 'good' : 'flat';
   } else {

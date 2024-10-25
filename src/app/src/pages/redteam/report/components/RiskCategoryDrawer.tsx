@@ -40,7 +40,7 @@ function getPromptDisplayString(prompt: string): string {
   return prompt;
 }
 
-function getOutputDisplay(output: string | object) {
+function getOutputDisplay(output: object | string) {
   if (typeof output === 'string') {
     return output;
   }

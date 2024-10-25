@@ -60,6 +60,7 @@ export default [
       ],
       '@typescript-eslint/no-use-before-define': 'error',
       '@typescript-eslint/no-var-requires': 0,
+      '@typescript-eslint/sort-type-constituents': 'error',
       curly: 'error',
       'no-case-declarations': 0,
       'no-control-regex': 0,
@@ -73,6 +74,20 @@ export default [
       'unicorn/no-negated-condition': 'error',
       'unicorn/prefer-number-properties': 'error',
       'unused-imports/no-unused-imports': 'error',
+    },
+  },
+  {
+    files: ['**/constants.ts'],
+    rules: {
+      'sort-keys': [
+        'error',
+        'asc',
+        {
+          caseSensitive: true,
+          natural: true,
+          minKeys: 2,
+        },
+      ],
     },
   },
   {

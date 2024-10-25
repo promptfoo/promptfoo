@@ -246,7 +246,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
 
 export function redteamGenerateCommand(
   program: Command,
-  command: 'redteam' | 'generate',
+  command: 'generate' | 'redteam',
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
 ) {

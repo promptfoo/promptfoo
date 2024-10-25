@@ -247,7 +247,7 @@ export async function redteamInit(directory: string | undefined) {
     );
   }
 
-  let providers: (string | ProviderOptions)[];
+  let providers: (ProviderOptions | string)[];
   let writeChatPy = false;
   if (useCustomProvider) {
     if (redTeamChoice === 'http_endpoint' || redTeamChoice === 'not_sure') {

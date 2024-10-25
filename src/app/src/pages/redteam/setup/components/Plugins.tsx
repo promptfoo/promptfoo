@@ -93,7 +93,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const handlePresetSelect = (preset: {
     name: string;
-    plugins: Set<Plugin> | ReadonlySet<Plugin>;
+    plugins: ReadonlySet<Plugin> | Set<Plugin>;
   }) => {
     if (preset.name === 'Custom') {
       setIsCustomMode(true);
@@ -125,7 +125,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     });
   }, [searchTerm]);
 
-  const presets: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }[] = [
+  const presets: { name: string; plugins: ReadonlySet<Plugin> | Set<Plugin> }[] = [
     { name: 'Default', plugins: DEFAULT_PLUGINS },
     {
       name: 'NIST',

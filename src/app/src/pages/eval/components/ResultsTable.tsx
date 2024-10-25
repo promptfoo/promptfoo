@@ -106,7 +106,7 @@ function TableHeader({
 interface ResultsTableProps {
   maxTextLength: number;
   columnVisibility: VisibilityState;
-  wordBreak: 'break-word' | 'break-all';
+  wordBreak: 'break-all' | 'break-word';
   filterMode: FilterMode;
   failureFilter: { [key: string]: boolean };
   searchText: string;
