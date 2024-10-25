@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as os from 'os';
@@ -24,7 +23,7 @@ export function setConfigDirectoryPath(newPath: string): void {
 export function writePromptfooConfig(config: Partial<UnifiedConfig>, outputPath: string) {
   const orderedConfig = orderKeys(config, [
     'description',
-    'targets' as never,
+    'targets',
     'prompts',
     'providers',
     'redteam',
@@ -39,9 +38,6 @@ export function writePromptfooConfig(config: Partial<UnifiedConfig>, outputPath:
   }
   fs.writeFileSync(
     outputPath,
-    dedent`
-    # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-    ${yamlContent}
-  `,
+    `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n${yamlContent}`,
   );
 }

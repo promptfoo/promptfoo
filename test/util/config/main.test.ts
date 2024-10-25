@@ -84,10 +84,7 @@ describe('writePromptfooConfig', () => {
 
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       mockOutputPath,
-      dedent`
-      # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-      ${mockYaml}
-    `,
+      `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n${mockYaml}`,
     );
   });
 
