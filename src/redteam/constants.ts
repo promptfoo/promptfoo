@@ -528,6 +528,13 @@ export enum Severity {
   Low = 'low',
 }
 
+export const severityDisplayNames: Record<Severity, string> = {
+  [Severity.Critical]: 'Critical',
+  [Severity.High]: 'High',
+  [Severity.Medium]: 'Medium',
+  [Severity.Low]: 'Low',
+};
+
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
   'cross-session-leak': Severity.Medium,
