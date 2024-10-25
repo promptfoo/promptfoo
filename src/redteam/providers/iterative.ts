@@ -32,7 +32,7 @@ async function runRedteamConversation({
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
-  vars: Record<string, object | string>;
+  vars: Record<string, string | object>;
   redteamProvider: ApiProvider;
   targetProvider: ApiProvider;
   injectVar: string;
@@ -46,7 +46,7 @@ async function runRedteamConversation({
 
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
-  const redteamHistory: { role: 'assistant' | 'system' | 'user'; content: string }[] = [
+  const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
     {
       role: 'system',
       content: redteamSystemPrompt,
@@ -182,7 +182,7 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly redteamProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
 
-  constructor(readonly config: Record<string, object | string>) {
+  constructor(readonly config: Record<string, string | object>) {
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 

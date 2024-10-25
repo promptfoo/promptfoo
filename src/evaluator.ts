@@ -58,10 +58,10 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
 }
 
 export function generateVarCombinations(
-  vars: Record<string, string[] | any | string>,
-): Record<string, any[] | string>[] {
+  vars: Record<string, string | string[] | any>,
+): Record<string, string | any[]>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, any[] | string>[] = [{}];
+  const combinations: Record<string, string | any[]>[] = [{}];
 
   for (const key of keys) {
     let values: any[] = [];
@@ -105,9 +105,9 @@ class Evaluator {
   stats: EvaluateStats;
   conversations: Record<
     string,
-    { prompt: object | string; input: string; output: object | string }[]
+    { prompt: string | object; input: string; output: string | object }[]
   >;
-  registers: Record<string, object | string>;
+  registers: Record<string, string | object>;
 
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -485,11 +485,11 @@ class Evaluator {
 
     // Prepare vars
     const varNames: Set<string> = new Set();
-    const varsWithSpecialColsRemoved: Record<string, string[] | object | string>[] = [];
+    const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
     const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
       if (testCase.vars) {
-        const varWithSpecialColsRemoved: Record<string, string[] | object | string> = {};
+        const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
         const inputTransform = inputTransformForIndividualTest || inputTransformDefault;
         if (inputTransform) {

@@ -123,7 +123,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
-  let providerOutput: object | string | undefined;
+  let providerOutput: string | object | undefined;
   let description: string | undefined;
   let metric: string | undefined;
   let threshold: number | undefined;

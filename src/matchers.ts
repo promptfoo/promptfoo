@@ -47,7 +47,7 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
   return dotProduct / (vecAMagnitude * vecBMagnitude);
 }
 
-function fromVars(vars?: Record<string, object | string>) {
+function fromVars(vars?: Record<string, string | object>) {
   if (!vars) {
     return {};
   }
@@ -334,7 +334,7 @@ export function renderLlmRubricPrompt(
   rubric: string,
   llmOutput: string,
   grading?: GradingConfig,
-  vars?: Record<string, object | string>,
+  vars?: Record<string, string | object>,
 ) {
   let rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
 
@@ -353,7 +353,7 @@ export async function matchesLlmRubric(
   rubric: string,
   llmOutput: string,
   grading?: GradingConfig,
-  vars?: Record<string, object | string>,
+  vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -418,7 +418,7 @@ export async function matchesFactuality(
   expected: string,
   output: string,
   grading?: GradingConfig,
-  vars?: Record<string, object | string>,
+  vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -514,7 +514,7 @@ export async function matchesClosedQa(
   expected: string,
   output: string,
   grading?: GradingConfig,
-  vars?: Record<string, object | string>,
+  vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -674,7 +674,7 @@ export async function matchesContextRecall(
   groundTruth: string,
   threshold: number,
   grading?: GradingConfig,
-  vars?: Record<string, object | string>,
+  vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -773,7 +773,7 @@ export async function matchesContextFaithfulness(
   context: string,
   threshold: number,
   grading?: GradingConfig,
-  vars?: Record<string, object | string>,
+  vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -854,7 +854,7 @@ export async function matchesSelectBest(
   criteria: string,
   outputs: string[],
   grading?: GradingConfig,
-  vars?: Record<string, object | string>,
+  vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
     outputs.length >= 2,

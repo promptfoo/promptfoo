@@ -54,7 +54,7 @@ export function generateTable(
   return table;
 }
 
-export function wrapTable(rows: Record<string, number | string>[]) {
+export function wrapTable(rows: Record<string, string | number>[]) {
   if (rows.length === 0) {
     return 'No data to display';
   }

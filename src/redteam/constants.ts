@@ -29,28 +29,35 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES = [
 export const COLLECTIONS = ['default', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
-// MLCommons harm categories - https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
-// Harmbench taxonomy - https://arxiv.org/pdf/2402.04249
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
-  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
+  // MLCommons harm categories
+  // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
   'harmful:child-exploitation': 'Child Exploitation',
+  'harmful:hate': 'Hate',
+  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
+  'harmful:non-violent-crime': 'Non-Violent Crimes',
+  'harmful:self-harm': 'Self-Harm',
+  'harmful:sex-crime': 'Sex Crimes',
+  'harmful:sexual-content': 'Sexual Content',
+  'harmful:violent-crime': 'Violent Crimes',
+
+  // Harmbench taxonomy
+  // https://arxiv.org/pdf/2402.04249
+  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
   'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
   'harmful:graphic-content': 'Graphic & age-restricted content',
   'harmful:harassment-bullying': 'Harassment & Bullying',
-  'harmful:hate': 'Hate',
   'harmful:illegal-activities': 'Illegal Activities - Fraud & scams',
   'harmful:illegal-drugs': 'Illegal Drugs',
-  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
+  'harmful:unsafe-practices': 'Promotion of unsafe practices',
+
+  // Other
   'harmful:insults': 'Insults and personal attacks',
-  'harmful:non-violent-crime': 'Non-Violent Crimes',
   'harmful:profanity': 'Requests containing profanity',
   'harmful:radicalization': 'Radicalization',
-  'harmful:self-harm': 'Self-Harm',
-  'harmful:sex-crime': 'Sex Crimes',
-  'harmful:sexual-content': 'Sexual Content',
-  'harmful:unsafe-practices': 'Promotion of unsafe practices',
-  'harmful:violent-crime': 'Violent Crimes',
+
+  // Commented out
   //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
   //'scam_fraud_creation',
@@ -108,12 +115,12 @@ export const CONFIG_REQUIRED_PLUGINS = ['policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 export type Plugin =
-  | AdditionalPlugin
-  | BasePlugin
   | Collection
-  | ConfigRequiredPlugin
   | HarmPlugin
-  | PIIPlugin;
+  | PIIPlugin
+  | BasePlugin
+  | AdditionalPlugin
+  | ConfigRequiredPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...COLLECTIONS,
@@ -387,6 +394,7 @@ export const ALL_STRATEGIES = [
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  default: 'Includes common plugins',
   'ascii-smuggling': 'Attempts to obfuscate malicious content using ASCII smuggling',
   base64: 'Attempts to obfuscate malicious content using Base64 encoding',
   basic: 'Single-shot, unoptimized attacks using raw prompts based on plugin description',
@@ -397,7 +405,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   crescendo: 'Conversational attack strategy (high cost)',
   'cross-session-leak': 'Checks for information sharing between unrelated sessions',
   'debug-access': 'Attempts to access or use debugging commands',
-  default: 'Includes common plugins',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities',
   hallucination: 'Model generating false or misleading information',
   harmful: 'All harmful categories',
@@ -585,6 +592,36 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
+  'Security Risk': [
+    'bola',
+    'bfla',
+    'debug-access',
+    'hijacking',
+    'pii',
+    'prompt-extraction',
+    'rbac',
+    'shell-injection',
+    'sql-injection',
+    'ssrf',
+    'indirect-prompt-injection',
+    'cross-session-leak',
+  ],
+  'Legal Risk': [
+    'contracts',
+    'harmful:child-exploitation',
+    'harmful:copyright-violations',
+    'harmful:cybercrime',
+    'harmful:hate',
+    'harmful:illegal-activities',
+    'harmful:illegal-drugs',
+    'harmful:intellectual-property',
+    'harmful:privacy',
+    'harmful:self-harm',
+    'harmful:sex-crime',
+    'harmful:sexual-content',
+    'harmful:specialized-advice',
+    'harmful:violent-crime',
+  ],
   'Brand Risk': [
     'policy',
     'competitors',
@@ -603,36 +640,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'overreliance',
     'politics',
     'religion',
-  ],
-  'Legal Risk': [
-    'contracts',
-    'harmful:child-exploitation',
-    'harmful:copyright-violations',
-    'harmful:cybercrime',
-    'harmful:hate',
-    'harmful:illegal-activities',
-    'harmful:illegal-drugs',
-    'harmful:intellectual-property',
-    'harmful:privacy',
-    'harmful:self-harm',
-    'harmful:sex-crime',
-    'harmful:sexual-content',
-    'harmful:specialized-advice',
-    'harmful:violent-crime',
-  ],
-  'Security Risk': [
-    'bola',
-    'bfla',
-    'debug-access',
-    'hijacking',
-    'pii',
-    'prompt-extraction',
-    'rbac',
-    'shell-injection',
-    'sql-injection',
-    'ssrf',
-    'indirect-prompt-injection',
-    'cross-session-leak',
   ],
 };
 
@@ -669,8 +676,8 @@ export const categoryAliases: Record<Plugin, string> = {
   'excessive-agency': 'ExcessiveAgency',
   hallucination: 'Hallucination',
   harmful: 'Harmful',
-  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
+  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
   'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
   'harmful:graphic-content': 'Graphic & age-restricted content',
@@ -810,15 +817,15 @@ export const strategyDescriptions: Record<Strategy, string> = {
 
 export const strategyDisplayNames: Record<Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
+  'jailbreak:tree': 'Tree-based Optimization',
+  'math-prompt': 'Mathematical Encoding',
+  'prompt-injection': 'Prompt Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
   jailbreak: 'Single-shot Optimization',
-  'jailbreak:tree': 'Tree-based Optimization',
   leetspeak: 'Leetspeak',
-  'math-prompt': 'Mathematical Encoding',
   multilingual: 'Multilingual',
-  'prompt-injection': 'Prompt Injection',
   rot13: 'ROT13 Encoding',
 };

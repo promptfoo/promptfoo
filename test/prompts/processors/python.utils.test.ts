@@ -14,7 +14,7 @@ jest.mock('../../../src/python/pythonUtils');
 
 describe('pythonPromptFunction', () => {
   interface PythonContext {
-    vars: Record<string, object | string>;
+    vars: Record<string, string | object>;
     provider: ApiProvider;
   }
 

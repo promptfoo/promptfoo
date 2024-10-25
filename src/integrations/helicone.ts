@@ -22,7 +22,7 @@ export interface ResultSuccess<T> {
   error: null;
 }
 
-export type Result<T, K> = ResultError<K> | ResultSuccess<T>;
+export type Result<T, K> = ResultSuccess<T> | ResultError<K>;
 
 const buildFilter = (majorVersion?: number, minorVersion?: number): any => {
   const filter: any = {};

@@ -935,8 +935,8 @@ export function providerToIdentifier(provider: TestCase['provider']): string | u
 }
 
 export function varsMatch(
-  vars1: Record<string, string[] | object | string> | undefined,
-  vars2: Record<string, string[] | object | string> | undefined,
+  vars1: Record<string, string | string[] | object> | undefined,
+  vars2: Record<string, string | string[] | object> | undefined,
 ) {
   return deepEqual(vars1, vars2);
 }
@@ -949,7 +949,7 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   return varsMatch(testCase.vars, result.vars) && providersMatch;
 }
 
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, object | string>): T {
+export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
@@ -1039,7 +1039,7 @@ export function parsePathOrGlob(
  *
  * @throws {Error} If the specified file does not exist.
  */
-export function maybeLoadFromExternalFile(filePath: Function | object | string | null | undefined) {
+export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
       const content: any = maybeLoadFromExternalFile(path);

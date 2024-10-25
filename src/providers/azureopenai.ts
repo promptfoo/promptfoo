@@ -51,7 +51,7 @@ interface AzureOpenAiCompletionOptions {
     description?: string;
     parameters: any;
   }[];
-  function_call?: 'auto' | 'none' | { name: string };
+  function_call?: 'none' | 'auto' | { name: string };
   tools?: {
     type: string;
     function: {
@@ -60,7 +60,7 @@ interface AzureOpenAiCompletionOptions {
       parameters: any;
     };
   }[];
-  tool_choice?: 'auto' | 'none' | { type: 'function'; function?: { name: string } };
+  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
   response_format?: { type: 'json_object' };
   stop?: string[];
   seed?: number;

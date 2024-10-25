@@ -62,7 +62,7 @@ async function doRedteamRun(options: RedteamRunOptions) {
       write: true, // Write results to database
       filterProviders: options.filterProviders,
       filterTargets: options.filterTargets,
-    } as Partial<Command & CommandLineOptions>,
+    } as Partial<CommandLineOptions & Command>,
     defaultConfig,
     redteamPath,
     {

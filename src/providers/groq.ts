@@ -25,7 +25,7 @@ interface GroqCompletionOptions {
       parameters?: Record<string, any>;
     };
   }>;
-  tool_choice?: 'auto' | 'none' | { type: 'function'; function: { name: string } };
+  tool_choice?: 'none' | 'auto' | { type: 'function'; function: { name: string } };
   functionToolCallbacks?: Record<string, (arg: string) => Promise<string>>;
   systemPrompt?: string;
 }
@@ -65,7 +65,7 @@ export class GroqProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const messages: Array<{ role: 'assistant' | 'system' | 'user'; content: string }> = [
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       {
         role: 'system',
         content: this.config.systemPrompt || 'You are a helpful assistant.',

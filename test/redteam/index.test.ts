@@ -50,7 +50,7 @@ describe('synthesize', () => {
     jest.mocked(extractEntities).mockResolvedValue(['entity1', 'entity2']);
     jest.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
     jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
-    jest.spyOn(process, 'exit').mockImplementation((code?: number | string | null | undefined) => {
+    jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null | undefined) => {
       throw new Error(`Process.exit called with code ${code}`);
     });
     jest.mocked(validateStrategies).mockImplementation(() => {});

@@ -3,7 +3,7 @@ import { importModule } from '../../esm';
 import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types';
 
 export const transformContext = (context: {
-  vars: Record<string, object | string>;
+  vars: Record<string, string | object>;
   provider?: ApiProvider;
   config?: Record<string, any>;
 }): PromptFunctionContext => {

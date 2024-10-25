@@ -80,7 +80,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
         return options;
       },
       {} as Partial<
-        Record<keyof HuggingfaceTextGenerationOptions, boolean | number | string | undefined>
+        Record<keyof HuggingfaceTextGenerationOptions, number | boolean | string | undefined>
       >,
     );
   }

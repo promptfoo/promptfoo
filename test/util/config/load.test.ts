@@ -117,8 +117,8 @@ describe('combineConfigs', () => {
       .mockImplementation(
         (
           path: fs.PathOrFileDescriptor,
-          options?: BufferEncoding | fs.ObjectEncodingOptions | null,
-        ): Buffer | string => {
+          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+        ): string | Buffer => {
           if (typeof path === 'string' && path === 'config1.json') {
             return JSON.stringify(config1);
           } else if (typeof path === 'string' && path === 'config2.json') {
@@ -302,8 +302,8 @@ describe('combineConfigs', () => {
       .mockImplementation(
         (
           path: fs.PathOrFileDescriptor,
-          options?: BufferEncoding | fs.ObjectEncodingOptions | null,
-        ): Buffer | string => {
+          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+        ): string | Buffer => {
           if (typeof path === 'string' && path === 'config1.json') {
             return JSON.stringify({
               description: 'test1',
@@ -337,8 +337,8 @@ describe('combineConfigs', () => {
       .mockImplementation(
         (
           path: fs.PathOrFileDescriptor,
-          options?: BufferEncoding | fs.ObjectEncodingOptions | null,
-        ): Buffer | string => {
+          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+        ): string | Buffer => {
           if (typeof path === 'string' && path === 'config1.json') {
             return JSON.stringify({
               description: 'test1',

@@ -144,9 +144,9 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   presence_penalty?: number;
   best_of?: number;
   functions?: OpenAiFunction[];
-  function_call?: 'auto' | 'none' | { name: string };
+  function_call?: 'none' | 'auto' | { name: string };
   tools?: OpenAiTool[];
-  tool_choice?: 'auto' | 'none' | 'required' | { type: 'function'; function?: { name: string } };
+  tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
   response_format?:
     | {
         type: 'json_object';
@@ -682,10 +682,10 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
   metadata?: object[];
   temperature?: number;
   toolChoice?:
-    | 'auto'
     | 'none'
-    | { type: 'file_search' }
-    | { type: 'function'; function?: { name: string } };
+    | 'auto'
+    | { type: 'function'; function?: { name: string } }
+    | { type: 'file_search' };
   attachments?: OpenAI.Beta.Threads.Message.Attachment[];
 };
 
@@ -957,11 +957,11 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
           n: 1,
           size:
             ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
+              | '1024x1024'
               | '256x256'
               | '512x512'
-              | '1024x1024'
-              | '1024x1792'
               | '1792x1024'
+              | '1024x1792'
               | undefined) || '1024x1024',
         });
       } catch (error) {

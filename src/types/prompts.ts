@@ -11,7 +11,7 @@ export type PromptConfig = {
 };
 
 export type PromptFunctionContext = {
-  vars: Record<string, object | string>;
+  vars: Record<string, string | object>;
   config: Record<string, any>;
   provider: {
     id: string;
@@ -20,9 +20,9 @@ export type PromptFunctionContext = {
 };
 
 export type PromptFunction = (context: {
-  vars: Record<string, any | string>;
+  vars: Record<string, string | any>;
   provider?: ApiProvider;
-}) => Promise<any | string>;
+}) => Promise<string | any>;
 
 export type Prompt = {
   id?: string;

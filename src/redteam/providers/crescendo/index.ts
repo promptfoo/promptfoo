@@ -29,7 +29,7 @@ interface CrescendoConfig {
 }
 
 interface ConversationMessage {
-  role: 'assistant' | 'system' | 'user';
+  role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
@@ -145,7 +145,7 @@ class CrescendoProvider implements ApiProvider {
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
-    vars: Record<string, object | string>;
+    vars: Record<string, string | object>;
     provider: ApiProvider;
   }) {
     logger.debug(
@@ -335,7 +335,7 @@ class CrescendoProvider implements ApiProvider {
   private async sendPrompt(
     attackPrompt: string,
     originalPrompt: Prompt,
-    vars: Record<string, object | string>,
+    vars: Record<string, string | object>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
     roundNum: number,
