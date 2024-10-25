@@ -52,3 +52,20 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
     }
   }
 });
+
+userRouter.post('/consent', async (req: Request, res: Response) => {
+  const { email, metadata } = req.body;
+
+  if (!email) {
+    res.status(400).json({ error: 'Email is required' });
+    return;
+  }
+
+  try {
+    await telemetry.saveConsent(email, metadata);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    logger.error(`Error saving consent: ${error}`);
+    res.status(500).json({ error: 'Failed to save consent' });
+  }
+});
