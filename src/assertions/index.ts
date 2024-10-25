@@ -6,7 +6,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { distance as levenshtein } from 'fastest-levenshtein';
 import fs from 'fs';
 import * as rouge from 'js-rouge';
-import yaml, { load } from 'js-yaml';
+import yaml from 'js-yaml';
 import { type Option as sqlParserOption } from 'node-sql-parser';
 import util from 'node:util';
 import path from 'path';
