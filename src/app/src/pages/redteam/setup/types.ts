@@ -15,15 +15,44 @@ export interface ProviderOptions {
   id: string;
   label?: string;
   config: {
-    type?: 'http' | 'websocket';
+    type?: 'http' | 'websocket' | 'browser';
+    // HTTP/WebSocket specific options
     url?: string;
     method?: string;
     headers?: Record<string, string>;
     body?: string;
-    responseParser?: string;
     messageTemplate?: string;
+    // Browser specific options
+    steps?: BrowserStep[];
+    headless?: boolean;
     timeoutMs?: number;
+    responseParser?: string;
+    cookies?:
+      | Array<{
+          name: string;
+          value: string;
+          domain?: string;
+          path?: string;
+        }>
+      | string;
   };
+}
+
+export interface BrowserStep {
+  action: 'navigate' | 'click' | 'type' | 'extract' | 'screenshot' | 'wait' | 'waitForNewChildren';
+  args?: {
+    url?: string;
+    selector?: string;
+    text?: string;
+    path?: string;
+    ms?: number;
+    fullPage?: boolean;
+    parentSelector?: string;
+    delay?: number;
+    timeout?: number;
+    optional?: boolean;
+  };
+  name?: string;
 }
 
 export interface UpdateConfigFunction {
