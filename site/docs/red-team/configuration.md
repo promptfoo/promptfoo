@@ -119,6 +119,7 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 - `indirect-prompt-injection`: Tests if the prompt is vulnerable to instructions injected into variables in the prompt.
 
   - Takes a `config` object with `systemPrompt` and `indirectInjectionVar` property. These properties are **required** for the plugin to work properly. For example:
+
     ```yaml
     redteam:
       plugins:
