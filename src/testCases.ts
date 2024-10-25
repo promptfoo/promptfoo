@@ -95,7 +95,7 @@ export async function readStandaloneTestsFile(
 
   return rows.map((row, idx) => {
     const test = testCaseFromCsvRow(row);
-    test.description = `Row #${idx + 1}`;
+    test.description ||= `Row #${idx + 1}`;
     return test;
   });
 }

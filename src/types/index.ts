@@ -191,7 +191,7 @@ export interface PromptWithMetadata {
 
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
-  description?: string; // on the new version 2, this is stored per-result
+  description?: string; // on the new version 2, this is stored per-result // FIXME(ian): The EvalResult model doesn't pass this through, but that's ok since we can use testCase.description?
   promptIdx: number; // on the new version 2, this is stored per-result
   testIdx: number; // on the new version 2, this is stored per-result
   testCase: AtomicTestCase; // on the new version 2, this is stored per-result
