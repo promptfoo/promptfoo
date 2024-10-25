@@ -68,7 +68,6 @@ import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WatsonXProvider } from './providers/watsonx';
 import { WebhookProvider } from './providers/webhook';
 import { WebSocketProvider } from './providers/websocket';
-import { createXAIProvider } from './providers/xai';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
 import RedteamGoatProvider from './redteam/providers/goat';
 import RedteamIterativeProvider from './redteam/providers/iterative';
@@ -217,11 +216,6 @@ export async function loadApiProvider(
     });
   } else if (providerPath.startsWith('togetherai:')) {
     ret = createTogetherAiProvider(providerPath, {
-      config: providerOptions,
-      env: context.env,
-    });
-  } else if (providerPath.startsWith('xai:')) {
-    ret = createXAIProvider(providerPath, {
       config: providerOptions,
       env: context.env,
     });
