@@ -6,6 +6,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import * as React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 import { useToast } from '@app/hooks/useToast';
@@ -16,11 +17,13 @@ import type {
   EvaluateTable,
 } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
+import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
@@ -122,6 +125,32 @@ interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
 
 interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
+}
+
+function useScrollHandler() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isSticky, setIsSticky] = useState(true);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const shouldCollapse = currentScrollY > 500;
+
+      if (shouldCollapse !== isCollapsed || currentScrollY < 100) {
+        setIsCollapsed(shouldCollapse);
+      }
+
+      lastScrollY.current = currentScrollY;
+    };
+
+    if (isSticky) {
+      window.addEventListener('scroll', handleScroll, { passive: true });
+      return () => window.removeEventListener('scroll', handleScroll);
+    }
+  }, [isSticky]);
+
+  return { isCollapsed, isSticky, setIsSticky };
 }
 
 function ResultsTable({
@@ -631,6 +660,8 @@ function ResultsTable({
     },
   });
 
+  const { isCollapsed, isSticky, setIsSticky } = useScrollHandler();
+
   return (
     <div>
       <table
@@ -639,7 +670,18 @@ function ResultsTable({
           wordBreak,
         }}
       >
-        <thead>
+        <thead className={`${isCollapsed ? 'collapsed' : ''} ${isSticky ? 'sticky' : ''}`}>
+          {isSticky && isCollapsed && (
+            <div className="header-dismiss">
+              <IconButton
+                onClick={() => setIsSticky(false)}
+                size="small"
+                sx={{ color: 'text.primary' }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </div>
+          )}
           {reactTable.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id} className="header">
               {headerGroup.headers.map((header) => (
