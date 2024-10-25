@@ -522,10 +522,10 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
 };
 
 export enum Severity {
-  Critical = 'Critical',
-  High = 'High',
-  Medium = 'Medium',
-  Low = 'Low',
+  Critical = 'critical',
+  High = 'high',
+  Medium = 'medium',
+  Low = 'low',
 }
 
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
