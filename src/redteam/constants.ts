@@ -394,9 +394,9 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
-  basic: 'Single-shot, unoptimized attacks using raw prompts based on plugin description',
   'ascii-smuggling': 'Attempts to obfuscate malicious content using ASCII smuggling',
   base64: 'Attempts to obfuscate malicious content using Base64 encoding',
+  basic: 'Single-shot, unoptimized attacks using raw prompts based on plugin description',
   bfla: 'Broken Function Level Authorization (BFLA) tests',
   bola: 'Broken Object Level Authorization (BOLA) tests',
   competitors: 'Competitor mentions and endorsements',
@@ -405,6 +405,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'cross-session-leak': 'Checks for information sharing between unrelated sessions',
   'debug-access': 'Attempts to access or use debugging commands',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities',
+  goat: 'GOAT (Generative Offensive Agent Tester) - An automated system that dynamically combines multiple adversarial prompting techniques in multi-turn conversations to identify model vulnerabilities',
   hallucination: 'Model generating false or misleading information',
   harmful: 'All harmful categories',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
@@ -455,19 +456,23 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Attempts to execute shell commands through the model',
   'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries',
   ssrf: 'Server-Side Request Forgery (SSRF) tests',
-  goat: 'GOAT (Goal-oriented Adversarial Testing) strategy',
 };
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'ASCII smuggling',
+  base64: 'Base64 Encoding',
+  basic: 'Basic',
   bfla: 'Privilege Escalation',
   bola: 'Unauthorized Data Access',
   competitors: 'Competitor Endorsements',
   contracts: 'Unsupervised Contracts',
+  crescendo: 'Crescendo',
   'cross-session-leak': 'Cross-Session Leak',
   'debug-access': 'Debug Access',
+  default: 'Default',
   'excessive-agency': 'Excessive Agency',
+  goat: 'GOAT',
   hallucination: 'Hallucination',
   harmful: 'Harmful Content',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
@@ -494,11 +499,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'harmful:unsafe-practices': 'Unsafe Practices',
   'harmful:violent-crime': 'Violent Crime',
   hijacking: 'Hijacking',
-  goat: 'GOAT',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   jailbreak: 'Single-shot optimization',
   'jailbreak:tree': 'Tree-based optimization',
+  leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Math Prompt',
   multilingual: 'Multilingual',
   overreliance: 'Overreliance',
@@ -513,15 +518,10 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   rbac: 'RBAC Enforcement',
   religion: 'Religious Sensitivity',
+  rot13: 'ROT13 Encoding',
   'shell-injection': 'Shell Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'Malicious Resource Fetching',
-  default: 'Default',
-  basic: 'Basic',
-  base64: 'Base64 Encoding',
-  crescendo: 'Crescendo',
-  leetspeak: 'Leetspeak Encoding',
-  rot13: 'ROT13 Encoding',
 };
 
 export enum Severity {
@@ -533,9 +533,17 @@ export enum Severity {
 
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
+  bfla: Severity.High,
+  bola: Severity.High,
+  competitors: Severity.Low,
+  contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
   'debug-access': Severity.High,
+  default: Severity.Low,
   'excessive-agency': Severity.Medium,
+  hallucination: Severity.Medium,
+  harmful: Severity.Medium,
+  'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
   'harmful:cybercrime': Severity.Low,
@@ -558,31 +566,23 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'harmful:specialized-advice': Severity.Medium,
   'harmful:unsafe-practices': Severity.Low,
   'harmful:violent-crime': Severity.High,
-  'shell-injection': Severity.High,
-  'sql-injection': Severity.High,
-  competitors: Severity.Low,
-  contracts: Severity.Medium,
-  hallucination: Severity.Medium,
   hijacking: Severity.High,
   imitation: Severity.Low,
+  'indirect-prompt-injection': Severity.High,
   overreliance: Severity.Low,
   pii: Severity.High,
-  politics: Severity.Low,
-  rbac: Severity.High,
-  policy: Severity.High,
-  bola: Severity.High,
-  bfla: Severity.High,
-  religion: Severity.Low,
-  ssrf: Severity.High,
-  'indirect-prompt-injection': Severity.High,
-  'prompt-extraction': Severity.Medium,
-  harmful: Severity.Medium,
-  default: Severity.Low,
-  'harmful:chemical-biological-weapons': Severity.High,
   'pii:api-db': Severity.High,
   'pii:direct': Severity.High,
   'pii:session': Severity.High,
   'pii:social': Severity.High,
+  policy: Severity.High,
+  politics: Severity.Low,
+  'prompt-extraction': Severity.Medium,
+  rbac: Severity.High,
+  religion: Severity.Low,
+  'shell-injection': Severity.High,
+  'sql-injection': Severity.High,
+  ssrf: Severity.High,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -659,14 +659,20 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
-  'cross-session-leak': 'CrossSessionLeak',
   'ascii-smuggling': 'AsciiSmuggling',
-  bola: 'BOLAEnforcement',
   bfla: 'BFLAEnforcement',
-  ssrf: 'SSRFEnforcement',
+  bola: 'BOLAEnforcement',
+  competitors: 'CompetitorEndorsement',
+  contracts: 'ContractualCommitment',
+  'cross-session-leak': 'CrossSessionLeak',
   'debug-access': 'DebugAccess',
+  default: 'Default',
   'excessive-agency': 'ExcessiveAgency',
+  hallucination: 'Hallucination',
+  harmful: 'Harmful',
   'harmful:child-exploitation': 'Child Exploitation',
+  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
+  'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
   'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
   'harmful:graphic-content': 'Graphic & age-restricted content',
   'harmful:harassment-bullying': 'Harassment & Bullying',
@@ -688,29 +694,23 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Specialized Advice - Financial',
   'harmful:unsafe-practices': 'Promotion of unsafe practices',
   'harmful:violent-crime': 'Violent Crimes',
-  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
-  'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
-  'shell-injection': 'ShellInjection',
-  'sql-injection': 'SqlInjection',
-  competitors: 'CompetitorEndorsement',
-  contracts: 'ContractualCommitment',
-  hallucination: 'Hallucination',
   hijacking: 'Hijacking',
   imitation: 'Imitation',
+  'indirect-prompt-injection': 'IndirectPromptInjection',
   overreliance: 'Overreliance',
   pii: 'PIILeak',
-  politics: 'PoliticalStatement',
-  religion: 'Religion',
-  rbac: 'RbacEnforcement',
-  policy: 'PolicyViolation',
-  'indirect-prompt-injection': 'IndirectPromptInjection',
-  'prompt-extraction': 'PromptExtraction',
-  harmful: 'Harmful',
-  default: 'Default',
   'pii:api-db': 'PIILeak',
   'pii:direct': 'PIILeak',
   'pii:session': 'PIILeak',
   'pii:social': 'PIILeak',
+  policy: 'PolicyViolation',
+  politics: 'PoliticalStatement',
+  'prompt-extraction': 'PromptExtraction',
+  rbac: 'RbacEnforcement',
+  religion: 'Religion',
+  'shell-injection': 'ShellInjection',
+  'sql-injection': 'SqlInjection',
+  ssrf: 'SSRFEnforcement',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -722,10 +722,6 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 );
 
 export const pluginDescriptions: Record<Plugin, string> = {
-  'sql-injection':
-    'SQL injection is a vulnerability that allows attackers to execute unauthorized database queries, potentially leading to data theft or manipulation.',
-  'cross-session-leak':
-    'Cross-session leak occurs when sensitive information from one user session is inadvertently exposed to another session, compromising data privacy.',
   'ascii-smuggling':
     'ASCII smuggling is a technique used to obfuscate malicious content using ASCII characters, potentially bypassing security filters.',
   bfla: 'Broken Function Level Authorization (BFLA) is a vulnerability where an application fails to properly restrict access to sensitive functions based on user roles.',
@@ -734,34 +730,19 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Competitor mentions and endorsements can lead to unintended promotion of rival products or services.',
   contracts:
     'Unauthorized contract creation or modification can lead to legal and financial risks for the organization.',
+  'cross-session-leak':
+    'Cross-session leak occurs when sensitive information from one user session is inadvertently exposed to another session, compromising data privacy.',
   'debug-access':
     'Debug access vulnerabilities can expose sensitive system information or provide unauthorized control over the application.',
+  default: 'Default plugin behavior',
   'excessive-agency':
     'Excessive agency occurs when the AI model takes actions or makes decisions beyond its intended scope, potentially leading to unintended consequences.',
   hallucination:
     'AI hallucination refers to the generation of false or misleading information, which can lead to misinformation or incorrect decision-making.',
-  hijacking:
-    'Hijacking vulnerabilities allow attackers to take control of user sessions or system resources, compromising security and privacy.',
-  imitation:
-    'Imitation vulnerabilities occur when the AI impersonates individuals, brands, or organizations without authorization, potentially leading to fraud or reputational damage.',
-  'indirect-prompt-injection':
-    "Indirect prompt injection allows attackers to manipulate the AI's behavior by injecting malicious content into variables used in prompts.",
-  overreliance:
-    'Overreliance on AI systems without proper validation can lead to errors in decision-making or actions based on incorrect assumptions.',
-  pii: 'Personal Identifiable Information (PII) leaks can compromise user privacy and lead to legal and reputational consequences.',
-  policy:
-    'Policy violations occur when the AI system acts in ways that contradict established organizational policies or guidelines.',
-  politics:
-    'Political statements or biases in AI responses can lead to controversy or alienation of users with different political views.',
-  'prompt-extraction':
-    'Prompt extraction vulnerabilities allow attackers to reveal the system prompts used to guide the AI, potentially exposing sensitive information or enabling further attacks.',
-  rbac: 'Role-Based Access Control (RBAC) vulnerabilities occur when the system fails to properly enforce access restrictions based on user roles.',
-  religion:
-    'Religious statements or biases in AI responses can lead to controversy or alienation of users with different religious beliefs.',
-  'shell-injection':
-    'Shell injection vulnerabilities allow attackers to execute unauthorized system commands, potentially leading to system compromise.',
-  ssrf: 'Server-Side Request Forgery (SSRF) vulnerabilities allow attackers to make unauthorized requests from the server, potentially accessing internal resources or services.',
+  harmful: 'Content that may be harmful or dangerous in various ways',
+  'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
   'harmful:child-exploitation': 'Content exploiting or harming children',
+  'harmful:copyright-violations': 'Content violating copyright laws',
   'harmful:cybercrime': 'Content related to cybercriminal activities',
   'harmful:graphic-content': 'Displaying graphic or violent content',
   'harmful:harassment-bullying': 'Content that harasses or bullies individuals',
@@ -782,32 +763,51 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Providing advice in specialized fields without expertise',
   'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices',
   'harmful:violent-crime': 'Content related to violent criminal activities',
-  'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
-  'harmful:copyright-violations': 'Content violating copyright laws',
-  harmful: 'Content that may be harmful or dangerous in various ways',
-  default: 'Default plugin behavior',
+  hijacking:
+    'Hijacking vulnerabilities allow attackers to take control of user sessions or system resources, compromising security and privacy.',
+  imitation:
+    'Imitation vulnerabilities occur when the AI impersonates individuals, brands, or organizations without authorization, potentially leading to fraud or reputational damage.',
+  'indirect-prompt-injection':
+    "Indirect prompt injection allows attackers to manipulate the AI's behavior by injecting malicious content into variables used in prompts.",
+  overreliance:
+    'Overreliance on AI systems without proper validation can lead to errors in decision-making or actions based on incorrect assumptions.',
+  pii: 'Personal Identifiable Information (PII) leaks can compromise user privacy and lead to legal and reputational consequences.',
   'pii:api-db': 'PII exposed through API or database',
   'pii:direct': 'Direct exposure of PII',
   'pii:session': 'PII exposed in session data',
   'pii:social': 'PII exposed through social engineering',
+  policy:
+    'Policy violations occur when the AI system acts in ways that contradict established organizational policies or guidelines.',
+  politics:
+    'Political statements or biases in AI responses can lead to controversy or alienation of users with different political views.',
+  'prompt-extraction':
+    'Prompt extraction vulnerabilities allow attackers to reveal the system prompts used to guide the AI, potentially exposing sensitive information or enabling further attacks.',
+  rbac: 'Role-Based Access Control (RBAC) vulnerabilities occur when the system fails to properly enforce access restrictions based on user roles.',
+  religion:
+    'Religious statements or biases in AI responses can lead to controversy or alienation of users with different religious beliefs.',
+  'shell-injection':
+    'Shell injection vulnerabilities allow attackers to execute unauthorized system commands, potentially leading to system compromise.',
+  'sql-injection':
+    'SQL injection is a vulnerability that allows attackers to execute unauthorized database queries, potentially leading to data theft or manipulation.',
+  ssrf: 'Server-Side Request Forgery (SSRF) vulnerabilities allow attackers to make unauthorized requests from the server, potentially accessing internal resources or services.',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
   'ascii-smuggling': 'Obfuscates malicious content using ASCII characters to bypass filters',
   base64: 'Encodes malicious content in Base64 to evade detection',
+  basic: 'Single-shot',
   crescendo:
     'A multi-turn attack that gradually escalates the conversation to probe for vulnerabilities',
-  'jailbreak:tree': 'Uses a tree-based search approach for more sophisticated jailbreaking',
+  default: 'Single-shot',
+  goat: 'GOAT (Generative Offensive Agent Tester) - An automated system that dynamically combines multiple adversarial prompting techniques in multi-turn conversations to identify model vulnerabilities',
   jailbreak:
     'An optimized single shot attack generatedby iteratively refining the prompt to bypass security measures',
+  'jailbreak:tree': 'Uses a tree-based search approach for more sophisticated jailbreaking',
   leetspeak: 'Replaces characters with similar-looking numbers or symbols to obfuscate content',
   'math-prompt': 'Encodes harmful content using mathematical concepts and notation',
   multilingual: 'Translates malicious content into low-resource languages to evade detection',
   'prompt-injection': 'Injects malicious instructions into prompts via user input',
   rot13: 'Applies a simple letter substitution cipher to obfuscate malicious content',
-  default: 'Single-shot',
-  basic: 'Single-shot',
-  goat: 'GOAT (Goal-oriented Adversarial Testing) strategy',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
