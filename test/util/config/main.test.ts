@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as os from 'os';
@@ -84,10 +83,7 @@ describe('writePromptfooConfig', () => {
 
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       mockOutputPath,
-      dedent`
-      # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-      ${mockYaml}
-    `,
+      `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n${mockYaml}`,
     );
   });
 
