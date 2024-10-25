@@ -220,15 +220,15 @@ export async function loadApiProvider(
       config: providerOptions,
       env: context.env,
     });
-  } else if (providerPath.startsWith('portkey:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new PortkeyChatCompletionProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('xai:')) {
     ret = createXAIProvider(providerPath, {
       config: providerOptions,
       env: context.env,
     });
+  } else if (providerPath.startsWith('portkey:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new PortkeyChatCompletionProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('anthropic:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
