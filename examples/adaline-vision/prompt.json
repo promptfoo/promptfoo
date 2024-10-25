@@ -1,0 +1,19 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "modality": "text",
+        "value": "{{question}}"
+      },
+      {
+        "modality": "image",
+        "detail": "auto",
+        "value": {
+          "type": "url",
+          "url": "{{url}}"
+        }
+      }
+    ]
+  }
+]

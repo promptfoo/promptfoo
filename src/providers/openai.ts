@@ -479,17 +479,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.config = options.config || {};
   }
 
-  async callApi(
+  getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
-    }
-
+  ) {
     // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
@@ -545,6 +539,24 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
+
+    return { body, config };
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    if (!this.getApiKey()) {
+      throw new Error(
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
+
     let data, status, statusText;
     let cached = false;
     try {
