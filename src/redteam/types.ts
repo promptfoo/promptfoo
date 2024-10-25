@@ -16,10 +16,10 @@ type WithNumTests = {
 
 // Derived types
 export type RedteamPluginObject = ConfigurableObject & WithNumTests;
-export type RedteamPlugin = string | RedteamPluginObject;
+export type RedteamPlugin = RedteamPluginObject | string;
 
 export type RedteamStrategyObject = ConfigurableObject;
-export type RedteamStrategy = string | RedteamStrategyObject;
+export type RedteamStrategy = RedteamStrategyObject | string;
 
 // Shared redteam options
 type CommonOptions = {
@@ -27,7 +27,7 @@ type CommonOptions = {
   language?: string;
   numTests?: number;
   plugins?: RedteamPluginObject[];
-  provider?: string | ProviderOptions | ApiProvider;
+  provider?: ApiProvider | ProviderOptions | string;
   purpose?: string;
   strategies?: RedteamStrategy[];
   delay?: number;

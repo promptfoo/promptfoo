@@ -120,7 +120,7 @@ export function parseMessages(messages: string): {
     .filter((line) => line);
   let system: Anthropic.TextBlockParam[] | undefined;
   const extractedMessages: Anthropic.MessageParam[] = [];
-  let currentRole: 'user' | 'assistant' | null = null;
+  let currentRole: 'assistant' | 'user' | null = null;
   let currentContent: string[] = [];
 
   const pushMessage = () => {

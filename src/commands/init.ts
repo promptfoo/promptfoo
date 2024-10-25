@@ -102,7 +102,7 @@ export async function selectExample(): Promise<string> {
 
 async function handleExampleDownload(
   directory: string | null,
-  example: string | boolean | undefined,
+  example: boolean | string | undefined,
 ): Promise<string | undefined> {
   let exampleName: string | undefined;
 
@@ -158,7 +158,7 @@ async function handleExampleDownload(
 
 interface InitCommandOptions {
   interactive: boolean;
-  example: string | boolean | undefined;
+  example: boolean | string | undefined;
 }
 
 export function initCommand(program: Command) {

@@ -249,7 +249,7 @@ function recordOnboardingStep(step: string, properties: EventProperties = {}) {
  * Iterate through user choices and determine if the user has selected a provider that needs an API key
  * but has not set and API key in their environment.
  */
-export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[]): string[] {
+export function reportProviderAPIKeyWarnings(providerChoices: (object | string)[]): string[] {
   const ids = providerChoices.map((c) => (typeof c === 'object' ? (c as any).id : c));
 
   const map: Record<string, keyof EnvOverrides> = {
@@ -302,7 +302,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
   // Rest of the onboarding flow
   const prompts: string[] = [];
-  const providers: (string | object)[] = [];
+  const providers: (object | string)[] = [];
   let action: string;
   let language: string;
 
@@ -351,7 +351,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       });
     }
 
-    const choices: { name: string; value: (string | object)[] }[] = [
+    const choices: { name: string; value: (object | string)[] }[] = [
       { name: `I'll choose later`, value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
       {
         name: '[OpenAI] GPT 4o, GPT 4o-mini, GPT-3.5, ...',
@@ -445,7 +445,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
      * The potential of the object type here is given by the agent action conditional
      * for openai as a value choice
      */
-    const providerChoices: (string | object)[] = (
+    const providerChoices: (object | string)[] = (
       await checkbox({
         message: 'Which model providers would you like to use?',
         choices,

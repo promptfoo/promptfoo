@@ -303,7 +303,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
-  const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
+  const makeAbsolute = (configPath: string, relativePath: Prompt | string) => {
     if (typeof relativePath === 'string') {
       if (relativePath.startsWith('file://')) {
         relativePath =
@@ -324,8 +324,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     }
   };
 
-  const seenPrompts = new Set<string | Prompt>();
-  const addSeenPrompt = (prompt: string | Prompt) => {
+  const seenPrompts = new Set<Prompt | string>();
+  const addSeenPrompt = (prompt: Prompt | string) => {
     if (typeof prompt === 'string') {
       seenPrompts.add(prompt);
     } else if (typeof prompt === 'object' && prompt.id) {
@@ -350,7 +350,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           'Invalid prompt',
         );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as Prompt | string));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -433,7 +433,7 @@ export async function resolveConfigs(
     }
     const modelOutputs = JSON.parse(
       fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
-    ) as string[] | { output: string; tags?: string[] }[];
+    ) as { output: string; tags?: string[] }[] | string[];
     const assertions = await readAssertions(cmdObj.assertions);
     fileConfig.prompts = ['{{output}}'];
     fileConfig.providers = ['echo'];
@@ -462,7 +462,7 @@ export async function resolveConfigs(
   cliState.basePath = basePath;
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
-  const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
+  const config: Omit<UnifiedConfig, 'commandLineOptions' | 'evaluateOptions'> = {
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],

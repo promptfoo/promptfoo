@@ -101,7 +101,7 @@ export default function YamlPreview({ config }: YamlPreviewProps) {
   const validateAndImportYaml = (yamlString: string) => {
     try {
       const parsedYaml = yaml.load(yamlString) as UnifiedConfig & {
-        targets?: (string | ProviderOptions)[];
+        targets?: (ProviderOptions | string)[];
       };
       // Add more detailed validation here
       if (!parsedYaml.description || !parsedYaml.prompts || !parsedYaml.targets) {

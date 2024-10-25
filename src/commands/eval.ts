@@ -58,7 +58,7 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 }
 
 export async function doEval(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: Partial<Command & CommandLineOptions>,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
@@ -546,7 +546,7 @@ export function evalCommand(
       }
 
       doEval(
-        validatedOpts as Partial<CommandLineOptions & Command>,
+        validatedOpts as Partial<Command & CommandLineOptions>,
         defaultConfig,
         defaultConfigPath,
         evaluateOptions,

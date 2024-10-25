@@ -880,12 +880,12 @@ describe('call provider apis', () => {
             args: readonly string[] | null | undefined,
             options: child_process.ExecFileOptions | null | undefined,
             callback?:
-              | null
               | ((
                   error: child_process.ExecFileException | null,
-                  stdout: string | Buffer,
-                  stderr: string | Buffer,
-                ) => void),
+                  stdout: Buffer | string,
+                  stderr: Buffer | string,
+                ) => void)
+              | null,
           ) => {
             process.nextTick(
               () => callback && callback(null, Buffer.from(mockResponse), Buffer.from('')),

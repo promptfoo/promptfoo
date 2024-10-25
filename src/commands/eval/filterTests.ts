@@ -2,7 +2,7 @@ import type { TestSuite } from '../../types';
 import { filterFailingTests } from './filterFailingTests';
 
 interface Args {
-  firstN?: string | number;
+  firstN?: number | string;
   pattern?: string;
   failing?: string;
 }

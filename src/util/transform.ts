@@ -125,11 +125,11 @@ async function getTransformFunction(
  */
 export async function transform(
   codeOrFilepath: string,
-  transformInput: string | object | undefined,
+  transformInput: object | string | undefined,
   context: TransformContext,
   validateReturn: boolean = true,
   inputType: TransformInputType = TransformInputType.OUTPUT,
-): Promise<string | object | undefined> {
+): Promise<object | string | undefined> {
   const postprocessFn = await getTransformFunction(codeOrFilepath, inputType);
 
   const ret = await Promise.resolve(postprocessFn(transformInput, context));

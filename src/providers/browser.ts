@@ -21,7 +21,7 @@ interface BrowserAction {
 
 interface BrowserProviderConfig {
   steps: BrowserAction[];
-  responseParser?: string | Function;
+  responseParser?: Function | string;
   timeoutMs?: number;
   headless?: boolean;
   cookies?:

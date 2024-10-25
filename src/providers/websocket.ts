@@ -15,7 +15,7 @@ const nunjucks = getNunjucksEngine();
 interface WebSocketProviderConfig {
   messageTemplate: string;
   url?: string;
-  responseParser?: string | Function;
+  responseParser?: Function | string;
   timeoutMs?: number;
 }
 

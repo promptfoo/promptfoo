@@ -14,12 +14,12 @@ export function redteamReportCommand(program: Command) {
     .action(
       async (
         directory: string | undefined,
-        cmdObj: {
+        cmdObj: Command & {
           port: number;
           apiBaseUrl?: string;
           envPath?: string;
           filterDescription?: string;
-        } & Command,
+        },
       ) => {
         setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {

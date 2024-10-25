@@ -18,7 +18,7 @@ export const pythonPromptFunction = async (
   filePath: string,
   functionName: string,
   context: {
-    vars: Record<string, string | object>;
+    vars: Record<string, object | string>;
     provider?: ApiProvider;
     config?: Record<string, any>;
   },
@@ -46,7 +46,7 @@ export const pythonPromptFunction = async (
 export const pythonPromptFunctionLegacy = async (
   filePath: string,
   context: {
-    vars: Record<string, string | object>;
+    vars: Record<string, object | string>;
     provider?: ApiProvider;
     config?: Record<string, any>;
   },

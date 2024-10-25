@@ -32,7 +32,7 @@ export function shareCommand(program: Command) {
     .action(
       async (
         evalId: string | undefined,
-        cmdObj: { yes: boolean; envPath?: string; showAuth: boolean } & Command,
+        cmdObj: Command & { yes: boolean; envPath?: string; showAuth: boolean },
       ) => {
         setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {
@@ -40,7 +40,7 @@ export function shareCommand(program: Command) {
         });
         await telemetry.send();
 
-        let eval_: Eval | undefined | null = null;
+        let eval_: Eval | null | undefined = null;
         if (evalId) {
           eval_ = await Eval.findById(evalId);
         } else {
