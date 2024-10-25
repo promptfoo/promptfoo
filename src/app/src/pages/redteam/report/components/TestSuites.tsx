@@ -16,6 +16,7 @@ import {
   displayNameOverrides,
   riskCategories,
   riskCategorySeverityMap,
+  Severity,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import './TestSuites.css';
@@ -142,10 +143,10 @@ const TestSuites: React.FC<{
                     return -1;
                   }
                   const severityOrder = {
-                    Critical: 4,
-                    High: 3,
-                    Medium: 2,
-                    Low: 1,
+                    [Severity.Critical]: 4,
+                    [Severity.High]: 3,
+                    [Severity.Medium]: 2,
+                    [Severity.Low]: 1,
                   };
                   return order === 'asc'
                     ? severityOrder[a.severity] - severityOrder[b.severity]
@@ -153,10 +154,10 @@ const TestSuites: React.FC<{
                 } else {
                   // Default sort: severity desc tiebroken by pass rate asc, N/A passRate goes to the bottom
                   const severityOrder = {
-                    Critical: 4,
-                    High: 3,
-                    Medium: 2,
-                    Low: 1,
+                    [Severity.Critical]: 4,
+                    [Severity.High]: 3,
+                    [Severity.Medium]: 2,
+                    [Severity.Low]: 1,
                   };
                   if (a.severity === b.severity) {
                     return Number.parseFloat(a.passRate) - Number.parseFloat(b.passRate);
