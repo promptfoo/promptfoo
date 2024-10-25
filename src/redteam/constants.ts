@@ -26,47 +26,49 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES = [
   'S11', // Sexual Content
 ];
 
-export const COLLECTIONS = ['harmful', 'pii', 'default'] as const;
+export const COLLECTIONS = ['default', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   // MLCommons harm categories
   // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
-  'harmful:violent-crime': 'Violent Crimes',
-  'harmful:non-violent-crime': 'Non-Violent Crimes',
-  'harmful:sex-crime': 'Sex Crimes',
   'harmful:child-exploitation': 'Child Exploitation',
-  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
   'harmful:hate': 'Hate',
+  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
+  'harmful:non-violent-crime': 'Non-Violent Crimes',
   'harmful:self-harm': 'Self-Harm',
+  'harmful:sex-crime': 'Sex Crimes',
   'harmful:sexual-content': 'Sexual Content',
+  'harmful:violent-crime': 'Violent Crimes',
 
   // Harmbench taxonomy
   // https://arxiv.org/pdf/2402.04249
-  'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
-  'harmful:illegal-drugs': 'Illegal Drugs',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
+  'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
+  'harmful:graphic-content': 'Graphic & age-restricted content',
   'harmful:harassment-bullying': 'Harassment & Bullying',
   'harmful:illegal-activities': 'Illegal Activities - Fraud & scams',
-  'harmful:graphic-content': 'Graphic & age-restricted content',
+  'harmful:illegal-drugs': 'Illegal Drugs',
   'harmful:unsafe-practices': 'Promotion of unsafe practices',
-  //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
 
   // Other
-  'harmful:radicalization': 'Radicalization',
-  'harmful:profanity': 'Requests containing profanity',
   'harmful:insults': 'Insults and personal attacks',
-  //'scam_fraud_creation',
+  'harmful:profanity': 'Requests containing profanity',
+  'harmful:radicalization': 'Radicalization',
+
+  // Commented out
+  //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
+  //'scam_fraud_creation',
 } as const;
 export type UnalignedProviderHarmPlugin = keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS;
 
 export const REDTEAM_PROVIDER_HARM_PLUGINS = {
-  'harmful:privacy': 'Privacy violations',
   'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:misinformation-disinformation':
     'Misinformation & Disinformation - Harmful lies and propaganda',
+  'harmful:privacy': 'Privacy violations',
   'harmful:specialized-advice': 'Specialized Advice - Financial',
 } as const;
 export type RedTeamProviderHarmPlugin = keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS;
@@ -132,10 +134,10 @@ export const ALL_PLUGINS: readonly Plugin[] = [
 ].sort() as Plugin[];
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
-  'nist:ai:measure': 'NIST AI RMF',
-  'owasp:llm': 'OWASP LLM Top 10',
-  'owasp:api': 'OWASP API Top 10',
   'mitre:atlas': 'MITRE ATLAS',
+  'nist:ai:measure': 'NIST AI RMF',
+  'owasp:api': 'OWASP API Top 10',
+  'owasp:llm': 'OWASP LLM Top 10',
 };
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<
@@ -144,22 +146,22 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
 > = {
   'owasp:llm:01': {
     plugins: ['harmful'],
-    strategies: ['prompt-injection', 'jailbreak'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'owasp:llm:02': {
     plugins: ['harmful', 'overreliance'],
     strategies: [],
   },
   'owasp:llm:03': {
-    plugins: ['harmful', 'overreliance', 'hallucination'],
+    plugins: ['harmful', 'hallucination', 'overreliance'],
     strategies: [],
   },
   'owasp:llm:06': {
-    plugins: ['harmful:privacy', 'pii:direct', 'pii:api-db', 'pii:session', 'pii:social'],
-    strategies: ['prompt-injection', 'jailbreak'],
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
   'owasp:llm:07': {
-    plugins: ['rbac', 'bola', 'bfla', 'sql-injection', 'shell-injection', 'debug-access'],
+    plugins: ['bfla', 'bola', 'debug-access', 'rbac', 'shell-injection', 'sql-injection'],
     strategies: [],
   },
   'owasp:llm:08': {
@@ -167,7 +169,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     strategies: [],
   },
   'owasp:llm:09': {
-    plugins: ['overreliance', 'hallucination'],
+    plugins: ['hallucination', 'overreliance'],
     strategies: [],
   },
 };
@@ -193,7 +195,7 @@ export const OWASP_API_TOP_10_MAPPING: Record<
     strategies: [],
   },
   'owasp:api:05': {
-    plugins: ['rbac', 'bola', 'bfla'],
+    plugins: ['bfla', 'bola', 'rbac'],
     strategies: [],
   },
   'owasp:api:06': {
@@ -201,7 +203,7 @@ export const OWASP_API_TOP_10_MAPPING: Record<
     strategies: [],
   },
   'owasp:api:07': {
-    plugins: ['sql-injection', 'shell-injection'],
+    plugins: ['shell-injection', 'sql-injection'],
     strategies: [],
   },
   'owasp:api:08': {
@@ -209,7 +211,7 @@ export const OWASP_API_TOP_10_MAPPING: Record<
     strategies: [],
   },
   'owasp:api:09': {
-    plugins: ['overreliance', 'harmful:specialized-advice'],
+    plugins: ['harmful:specialized-advice', 'overreliance'],
     strategies: [],
   },
   'owasp:api:10': {
@@ -220,19 +222,19 @@ export const OWASP_API_TOP_10_MAPPING: Record<
 
 export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
   'nist:ai:measure:1.1': {
-    plugins: ['harmful:misinformation-disinformation', 'excessive-agency'],
+    plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:1.2': {
-    plugins: ['harmful:misinformation-disinformation', 'excessive-agency'],
+    plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:2.1': {
-    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session', 'pii:direct', 'pii:social'],
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
     strategies: [],
   },
   'nist:ai:measure:2.2': {
-    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session', 'pii:direct', 'pii:social'],
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
     strategies: [],
   },
   'nist:ai:measure:2.3': {
@@ -249,18 +251,18 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
   'nist:ai:measure:2.6': {
     plugins: [
-      'harmful:unsafe-practices',
       'harmful:chemical-biological-weapons',
       'harmful:indiscriminate-weapons',
+      'harmful:unsafe-practices',
     ],
     strategies: [],
   },
   'nist:ai:measure:2.7': {
-    plugins: ['harmful:cybercrime', 'sql-injection', 'shell-injection'],
+    plugins: ['harmful:cybercrime', 'shell-injection', 'sql-injection'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
   'nist:ai:measure:2.8': {
-    plugins: ['rbac', 'bola', 'bfla'],
+    plugins: ['bfla', 'bola', 'rbac'],
     strategies: [],
   },
   'nist:ai:measure:2.9': {
@@ -268,11 +270,11 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
     strategies: [],
   },
   'nist:ai:measure:2.10': {
-    plugins: ['harmful:privacy', 'pii:api-db', 'pii:session', 'pii:direct', 'pii:social'],
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
     strategies: [],
   },
   'nist:ai:measure:2.11': {
-    plugins: ['harmful:hate', 'harmful:harassment-bullying', 'harmful:insults'],
+    plugins: ['harmful:harassment-bullying', 'harmful:hate', 'harmful:insults'],
     strategies: [],
   },
   'nist:ai:measure:2.12': {
@@ -310,62 +312,62 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
 };
 
 export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'mitre:atlas:exfiltration': {
+    plugins: [
+      'ascii-smuggling',
+      'harmful:privacy',
+      'indirect-prompt-injection',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'prompt-extraction',
+    ],
+    strategies: [],
+  },
+  'mitre:atlas:impact': {
+    plugins: ['excessive-agency', 'harmful', 'hijacking', 'imitation'],
+    strategies: ['crescendo'],
+  },
+  'mitre:atlas:initial-access': {
+    plugins: ['debug-access', 'harmful:cybercrime', 'shell-injection', 'sql-injection', 'ssrf'],
+    strategies: ['base64', 'jailbreak', 'leetspeak', 'prompt-injection', 'rot13'],
+  },
+  'mitre:atlas:ml-attack-staging': {
+    plugins: ['ascii-smuggling', 'excessive-agency', 'hallucination', 'indirect-prompt-injection'],
+    strategies: ['jailbreak', 'jailbreak:tree'],
+  },
   'mitre:atlas:reconnaissance': {
-    plugins: ['competitors', 'policy', 'rbac', 'prompt-extraction'],
+    plugins: ['competitors', 'policy', 'prompt-extraction', 'rbac'],
     strategies: ['multilingual'],
   },
   'mitre:atlas:resource-development': {
     plugins: ['harmful:cybercrime', 'harmful:illegal-drugs', 'harmful:indiscriminate-weapons'],
     strategies: [],
   },
-  'mitre:atlas:initial-access': {
-    plugins: ['harmful:cybercrime', 'sql-injection', 'shell-injection', 'ssrf', 'debug-access'],
-    strategies: ['jailbreak', 'prompt-injection', 'base64', 'leetspeak', 'rot13'],
-  },
-  'mitre:atlas:ml-attack-staging': {
-    plugins: ['excessive-agency', 'hallucination', 'ascii-smuggling', 'indirect-prompt-injection'],
-    strategies: ['jailbreak', 'jailbreak:tree'],
-  },
-  'mitre:atlas:exfiltration': {
-    plugins: [
-      'harmful:privacy',
-      'pii:api-db',
-      'pii:session',
-      'pii:direct',
-      'pii:social',
-      'indirect-prompt-injection',
-      'prompt-extraction',
-      'ascii-smuggling',
-    ],
-    strategies: [],
-  },
-  'mitre:atlas:impact': {
-    plugins: ['harmful', 'excessive-agency', 'hijacking', 'imitation'],
-    strategies: ['crescendo'],
-  },
 };
 
 // Aliased plugins are like collections, except they are hidden from the standard plugin list.
 export const ALIASED_PLUGINS = [
-  'owasp:llm',
-  'owasp:api',
+  'mitre:atlas',
   'nist:ai',
   'nist:ai:measure',
-  'mitre:atlas',
-  ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
-  ...Object.keys(OWASP_API_TOP_10_MAPPING),
-  ...Object.keys(NIST_AI_RMF_MAPPING),
+  'owasp:api',
+  'owasp:llm',
   ...Object.keys(MITRE_ATLAS_MAPPING),
+  ...Object.keys(NIST_AI_RMF_MAPPING),
+  ...Object.keys(OWASP_API_TOP_10_MAPPING),
+  ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
   string,
   Record<string, { plugins: string[]; strategies: string[] }>
 > = {
-  'nist:ai:measure': NIST_AI_RMF_MAPPING,
-  'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
-  'owasp:api': OWASP_API_TOP_10_MAPPING,
   'mitre:atlas': MITRE_ATLAS_MAPPING,
+  'nist:ai:measure': NIST_AI_RMF_MAPPING,
+  'owasp:api': OWASP_API_TOP_10_MAPPING,
+  'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
 };
 
 export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
@@ -801,7 +803,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   default: 'Single-shot',
   goat: 'GOAT (Generative Offensive Agent Tester) - An automated system that dynamically combines multiple adversarial prompting techniques in multi-turn conversations to identify model vulnerabilities',
   jailbreak:
-    'An optimized single shot attack generatedby iteratively refining the prompt to bypass security measures',
+    'An optimized single shot attack generated by iteratively refining the prompt to bypass security measures',
   'jailbreak:tree': 'Uses a tree-based search approach for more sophisticated jailbreaking',
   leetspeak: 'Replaces characters with similar-looking numbers or symbols to obfuscate content',
   'math-prompt': 'Encodes harmful content using mathematical concepts and notation',
