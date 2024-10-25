@@ -198,7 +198,7 @@ export interface EvaluateResult {
   promptId: string; // on the new version 2, this is stored per-result
   provider: Pick<ProviderOptions, 'id' | 'label'>;
   prompt: Prompt;
-  vars: Record<string, object | string>;
+  vars: Record<string, string | object>;
   response?: ProviderResponse;
   error?: string | null;
   success: boolean;
@@ -423,8 +423,8 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
-  vars: Record<string, object | string>;
-  test: AtomicTestCase<Record<string, object | string>>;
+  vars: Record<string, string | object>;
+  test: AtomicTestCase<Record<string, string | object>>;
 }
 
 export type AssertionValueFunction = (
@@ -432,9 +432,9 @@ export type AssertionValueFunction = (
   context: AssertionValueFunctionContext,
 ) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
 
-export type AssertionValue = AssertionValueFunction | string[] | object | string;
+export type AssertionValue = string | string[] | object | AssertionValueFunction;
 
-export type AssertionValueFunctionResult = GradingResult | boolean | number;
+export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
 // Used when building prompts index from files.
 export const TestCasesWithMetadataPromptSchema = z.object({
@@ -509,7 +509,7 @@ export const TestCaseSchema = z.object({
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type TestCase<vars = Record<string, string[] | object | string>> = z.infer<
+export type TestCase<vars = Record<string, string | string[] | object>> = z.infer<
   typeof TestCaseSchema
 >;
 
@@ -551,7 +551,7 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
 }).strict();
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type AtomicTestCase<vars = Record<string, object | string>> = z.infer<
+export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
 
@@ -753,10 +753,10 @@ export interface EvalWithMetadata {
 }
 
 // node.js package interface
-export type EvaluateTestSuite = Omit<TestSuiteConfig, 'prompts'> & {
-  prompts: (PromptFunction | object | string)[];
+export type EvaluateTestSuite = {
+  prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
-};
+} & Omit<TestSuiteConfig, 'prompts'>;
 
 export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {
   evaluateOptions: EvaluateOptions;
@@ -770,7 +770,7 @@ export interface SharedResults {
 export interface ResultsFile {
   version: number;
   createdAt: string;
-  results: EvaluateSummaryV2 | EvaluateSummaryV3;
+  results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   author: string | null;
   prompts?: CompletedPrompt[];
@@ -792,17 +792,17 @@ export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
-  results: EvaluateSummaryV2 | EvaluateSummaryV3;
+  results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
 }
 
 // Live eval job state
 export interface Job {
-  status: 'complete' | 'in-progress';
+  status: 'in-progress' | 'complete';
   progress: number;
   total: number;
-  result: EvaluateSummaryV2 | EvaluateSummaryV3 | null;
+  result: EvaluateSummaryV3 | EvaluateSummaryV2 | null;
 }
 
 // used for writing eval results

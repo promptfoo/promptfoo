@@ -38,14 +38,14 @@ function parseJson(json: string): any | undefined {
 }
 
 export async function readVarsFiles(
-  pathOrGlobs: string[] | string,
+  pathOrGlobs: string | string[],
   basePath: string = '',
-): Promise<Record<string, string[] | object | string>> {
+): Promise<Record<string, string | string[] | object>> {
   if (typeof pathOrGlobs === 'string') {
     pathOrGlobs = [pathOrGlobs];
   }
 
-  const ret: Record<string, string[] | object | string> = {};
+  const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
     const paths = globSync(resolvedPath, {
@@ -114,7 +114,7 @@ async function loadTestWithVars(
 }
 
 export async function readTest(
-  test: TestCaseWithVarsFile | string,
+  test: string | TestCaseWithVarsFile,
   basePath: string = '',
 ): Promise<TestCase> {
   let testCase: TestCase;
@@ -173,7 +173,7 @@ export async function readTests(
       return (await $RefParser.dereference(testCases)) as TestCase[];
     };
 
-    const ret: TestCase<Record<string, string[] | object | string>>[] = [];
+    const ret: TestCase<Record<string, string | string[] | object>>[] = [];
     if (testFiles.length < 1) {
       logger.error(`No test files found for path: ${loadTestsGlob}`);
       return ret;

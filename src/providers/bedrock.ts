@@ -79,7 +79,7 @@ interface BedrockCohereCommandGenerationOptions extends BedrockOptions {
 interface BedrockCohereCommandRGenerationOptions extends BedrockOptions {
   message?: string;
   chat_history?: Array<{
-    role: 'CHATBOT' | 'USER';
+    role: 'USER' | 'CHATBOT';
     message: string;
   }>;
   documents?: Array<{
@@ -125,7 +125,7 @@ interface BedrockCohereCommandRGenerationOptions extends BedrockOptions {
 interface CohereCommandRRequestParams {
   message: string;
   chat_history: {
-    role: 'CHATBOT' | 'USER';
+    role: 'USER' | 'CHATBOT';
     message: string;
   }[];
   documents?: {
@@ -191,7 +191,7 @@ interface IBedrockModel {
   output: (responseJson: any) => any;
 }
 
-export function parseValue(value: number | string, defaultValue: any) {
+export function parseValue(value: string | number, defaultValue: any) {
   if (typeof defaultValue === 'number') {
     if (typeof value === 'string') {
       return Number.isNaN(Number.parseFloat(value)) ? defaultValue : Number.parseFloat(value);
@@ -205,7 +205,7 @@ export function addConfigParam(
   params: any,
   key: string,
   configValue: any,
-  envValue?: number | string | undefined,
+  envValue?: string | number | undefined,
   defaultValue?: any,
 ) {
   if (configValue !== undefined || envValue !== undefined || defaultValue !== undefined) {
@@ -222,7 +222,7 @@ export enum LlamaVersion {
 }
 
 export interface LlamaMessage {
-  role: 'assistant' | 'system' | 'user';
+  role: 'system' | 'user' | 'assistant';
   content: string;
 }
 

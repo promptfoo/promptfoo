@@ -39,7 +39,7 @@ export function maybeFilePath(str: string): boolean {
  * @throws If the input is invalid or empty.
  */
 export function normalizeInput(
-  promptPathOrGlobs: (Partial<Prompt> | string)[] | Record<string, string> | string,
+  promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
 ): Partial<Prompt>[] {
   if (
     !promptPathOrGlobs ||

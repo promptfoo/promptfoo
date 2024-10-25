@@ -12,7 +12,7 @@ const langfuse = new Langfuse(langfuseParams);
 export async function getPrompt(
   id: string,
   vars: Record<string, any>,
-  type: 'chat' | 'text' | undefined,
+  type: 'text' | 'chat' | undefined,
   version?: number,
 ): Promise<string> {
   let prompt;

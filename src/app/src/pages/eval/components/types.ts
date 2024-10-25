@@ -1,3 +1,3 @@
-export type FilterMode = 'all' | 'different' | 'failures' | 'highlights';
+export type FilterMode = 'all' | 'failures' | 'different' | 'highlights';
 
 export * from '@promptfoo/types';

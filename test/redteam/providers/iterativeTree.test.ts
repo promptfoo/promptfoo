@@ -110,7 +110,7 @@ describe('RedteamIterativeProvider', () => {
       };
       mockRedteamProvider.callApi.mockResolvedValue({ output: JSON.stringify(mockResponse) });
 
-      const redteamHistory: { role: 'assistant' | 'system' | 'user'; content: string }[] = [
+      const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
         { role: 'system', content: 'System prompt' },
         { role: 'user', content: 'User message' },
       ];
@@ -133,7 +133,7 @@ describe('RedteamIterativeProvider', () => {
     it('should throw an error for invalid API response', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid json' });
 
-      const redteamHistory: { role: 'assistant' | 'system' | 'user'; content: string }[] = [
+      const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
         { role: 'system', content: 'System prompt' },
       ];
       // eslint-disable-next-line jest/require-to-throw-message

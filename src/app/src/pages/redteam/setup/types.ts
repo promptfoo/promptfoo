@@ -15,7 +15,7 @@ export interface ProviderOptions {
   id: string;
   label?: string;
   config: {
-    type?: 'browser' | 'http' | 'websocket';
+    type?: 'http' | 'websocket' | 'browser';
     // HTTP/WebSocket specific options
     url?: string;
     method?: string;
@@ -39,7 +39,7 @@ export interface ProviderOptions {
 }
 
 export interface BrowserStep {
-  action: 'click' | 'extract' | 'navigate' | 'screenshot' | 'type' | 'wait' | 'waitForNewChildren';
+  action: 'navigate' | 'click' | 'type' | 'extract' | 'screenshot' | 'wait' | 'waitForNewChildren';
   args?: {
     url?: string;
     selector?: string;
@@ -89,6 +89,6 @@ export interface LocalPluginConfig {
     targetSystems?: string[];
     indirectInjectionVar?: string;
     targetUrls?: string[];
-    [key: string]: string[] | string | undefined;
+    [key: string]: string | string[] | undefined;
   };
 }

@@ -53,7 +53,7 @@ export default function Dashboard() {
     { date: string; resolved: number }[]
   >([]);
   const [activeChart, setActiveChart] = useState<
-    'applicationSuccess' | 'attackSuccess' | 'issuesResolved'
+    'attackSuccess' | 'issuesResolved' | 'applicationSuccess'
   >('attackSuccess');
   const [applicationAttackSuccessData, setApplicationAttackSuccessData] = useState<
     ApplicationAttackSuccessDataPoint[]

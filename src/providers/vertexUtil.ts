@@ -2,14 +2,14 @@ import type { GoogleAuth } from 'google-auth-library';
 import { z } from 'zod';
 import logger from '../logger';
 
-type Probability = 'HIGH' | 'LOW' | 'MEDIUM' | 'NEGLIGIBLE';
+type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
 interface SafetyRating {
   category:
-    | 'HARM_CATEGORY_DANGEROUS_CONTENT'
     | 'HARM_CATEGORY_HARASSMENT'
     | 'HARM_CATEGORY_HATE_SPEECH'
-    | 'HARM_CATEGORY_SEXUALLY_EXPLICIT';
+    | 'HARM_CATEGORY_SEXUALLY_EXPLICIT'
+    | 'HARM_CATEGORY_DANGEROUS_CONTENT';
   probability: Probability;
   blocked: boolean;
 }
@@ -25,7 +25,7 @@ interface PartFunctionCall {
   };
 }
 
-type Part = PartFunctionCall | PartText;
+type Part = PartText | PartFunctionCall;
 
 interface Content {
   parts: Part[];
@@ -34,7 +34,7 @@ interface Content {
 
 interface Candidate {
   content: Content;
-  finishReason?: 'FINISH_REASON_STOP' | 'SAFETY' | 'STOP';
+  finishReason?: 'FINISH_REASON_STOP' | 'STOP' | 'SAFETY';
   safetyRatings: SafetyRating[];
 }
 
@@ -72,9 +72,9 @@ interface GeminiBlockedResponse {
 }
 
 export type GeminiApiResponse = (
-  | GeminiBlockedResponse
-  | GeminiErrorResponse
   | GeminiResponseData
+  | GeminiErrorResponse
+  | GeminiBlockedResponse
 )[];
 
 export interface Palm2ApiResponse {
@@ -144,7 +144,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
   ) {
     // This looks like an OpenAI chat format
     coercedContents = contents.map((item) => ({
-      role: item.role as 'model' | 'user' | undefined,
+      role: item.role as 'user' | 'model' | undefined,
       parts: [{ text: item.content }],
     }));
     coerced = true;

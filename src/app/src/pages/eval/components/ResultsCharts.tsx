@@ -281,7 +281,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${xAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback(value: number | string, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: any[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -296,7 +296,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${yAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback(value: number | string, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: any[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -389,7 +389,7 @@ function MetricChart({ table }: ChartProps) {
           },
           y: {
             ticks: {
-              callback(value: number | string, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: any[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';

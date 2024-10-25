@@ -14,7 +14,7 @@ export const RedTeamGenerationResponse = z.object({
   result: z.union([z.string(), z.array(z.string())]),
 });
 
-export type RedTeamTask = 'entities' | 'purpose';
+export type RedTeamTask = 'purpose' | 'entities';
 
 /**
  * Fetches remote generation results for a given task and prompts.
@@ -33,7 +33,7 @@ export type RedTeamTask = 'entities' | 'purpose';
 export async function fetchRemoteGeneration(
   task: RedTeamTask,
   prompts: string[],
-): Promise<string[] | string> {
+): Promise<string | string[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteGeneration should never be called when remote generation is disabled',

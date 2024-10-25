@@ -14,7 +14,7 @@ import { runPython } from './pythonUtils';
 export async function runPythonCode(
   code: string,
   method: string,
-  args: (object | string | undefined)[],
+  args: (string | object | undefined)[],
 ): Promise<any> {
   const tempFilePath = path.join(
     os.tmpdir(),

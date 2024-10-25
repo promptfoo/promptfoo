@@ -87,7 +87,7 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
 export async function runPython(
   scriptPath: string,
   method: string,
-  args: (number | object | string | undefined)[],
+  args: (string | number | object | undefined)[],
   options: { pythonExecutable?: string } = {},
 ): Promise<any> {
   const absPath = path.resolve(scriptPath);

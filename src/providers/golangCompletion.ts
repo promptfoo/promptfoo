@@ -52,7 +52,7 @@ export class GolangProvider implements ApiProvider {
   private async executeGolangScript(
     prompt: string,
     context: CallApiContextParams | undefined,
-    apiType: 'call_api' | 'call_classification_api' | 'call_embedding_api',
+    apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);

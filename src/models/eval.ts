@@ -365,7 +365,7 @@ export default class Eval {
     this.results = await EvalResult.findManyByEvalId(this.id);
   }
 
-  async getResults(): Promise<EvalResult[] | EvaluateResult[]> {
+  async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       return this.oldResults.results;
@@ -373,7 +373,7 @@ export default class Eval {
     await this.loadResults();
     return this.results;
   }
-  async toEvaluateSummary(): Promise<EvaluateSummaryV2 | EvaluateSummaryV3> {
+  async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       return {

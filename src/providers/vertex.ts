@@ -84,7 +84,7 @@ interface VertexCompletionOptions {
 
   toolConfig?: {
     functionCallingConfig?: {
-      mode?: 'ANY' | 'AUTO' | 'MODE_UNSPECIFIED' | 'NONE';
+      mode?: 'MODE_UNSPECIFIED' | 'AUTO' | 'ANY' | 'NONE';
       allowedFunctionNames?: string[];
     };
   };

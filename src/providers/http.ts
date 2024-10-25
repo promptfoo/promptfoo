@@ -24,9 +24,9 @@ interface HttpProviderConfig {
   url?: string;
   method?: string;
   headers?: Record<string, string>;
-  body?: any[] | Record<string, any> | string;
+  body?: Record<string, any> | string | any[];
   queryParams?: Record<string, string>;
-  responseParser?: Function | string;
+  responseParser?: string | Function;
   request?: string;
 }
 
@@ -43,7 +43,7 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
 }
 
 export async function createResponseParser(
-  parser: Function | string | undefined,
+  parser: string | Function | undefined,
 ): Promise<(data: any, text: string) => ProviderResponse> {
   if (!parser) {
     return (data, text) => ({ output: data || text });
@@ -93,9 +93,9 @@ function processValue(value: any, vars: Record<string, any>): any {
 }
 
 function processObjects(
-  body: any[] | Record<string, any>,
+  body: Record<string, any> | any[],
   vars: Record<string, any>,
-): any[] | Record<string, any> {
+): Record<string, any> | any[] {
   if (Array.isArray(body)) {
     return body.map((item) =>
       typeof item === 'object' && item !== null
@@ -117,9 +117,9 @@ function processObjects(
 }
 
 export function processJsonBody(
-  body: any[] | Record<string, any>,
+  body: Record<string, any> | any[],
   vars: Record<string, any>,
-): any[] | Record<string, any> {
+): Record<string, any> | any[] {
   // attempting to process a string as a stringifiedJSON object
   if (typeof body === 'string') {
     body = processValue(body, vars);
@@ -266,7 +266,7 @@ export class HttpProvider implements ApiProvider {
       headers,
       // We validate the content type and body with this.validateContentTypeAndBody
       body: contentTypeIsJson(headers)
-        ? processJsonBody(this.config.body as any[] | Record<string, any>, vars)
+        ? processJsonBody(this.config.body as Record<string, any> | any[], vars)
         : processTextBody(this.config.body as string, vars),
       queryParams: this.config.queryParams
         ? Object.fromEntries(

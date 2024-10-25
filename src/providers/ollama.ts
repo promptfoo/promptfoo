@@ -147,7 +147,7 @@ export class OllamaCompletionProvider implements ApiProvider {
           return options;
         },
         {} as Partial<
-          Record<keyof OllamaCompletionOptions, string[] | boolean | number | undefined>
+          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
         >,
       ),
     };
@@ -241,7 +241,7 @@ export class OllamaChatProvider implements ApiProvider {
           return options;
         },
         {} as Partial<
-          Record<keyof OllamaCompletionOptions, string[] | boolean | number | undefined>
+          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
         >,
       ),
     };

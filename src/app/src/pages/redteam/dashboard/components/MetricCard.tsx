@@ -9,9 +9,9 @@ import Typography from '@mui/material/Typography';
 interface MetricCardProps {
   title: string;
   value: string;
-  trend?: 'down' | 'flat' | 'up';
+  trend?: 'up' | 'down' | 'flat';
   trendValue?: string;
-  sentiment?: 'bad' | 'flat' | 'good';
+  sentiment?: 'good' | 'bad' | 'flat';
   subtitle?: string;
 }
 

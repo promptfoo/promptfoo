@@ -129,7 +129,7 @@ export async function evaluateResponse(
  */
 export async function getNewPrompt(
   redteamProvider: ApiProvider,
-  redteamHistory: { role: 'assistant' | 'system' | 'user'; content: string }[],
+  redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
 ): Promise<{ improvement: string; prompt: string }> {
   const redteamBody = JSON.stringify(redteamHistory);
   const redteamResp = await redteamProvider.callApi(redteamBody, {
@@ -201,7 +201,7 @@ export function updateRedteamHistory(
   score: number,
   isOnTopic: boolean,
   containsPenalizedPhrase: boolean,
-): { role: 'assistant' | 'system' | 'user'; content: string } {
+): { role: 'user' | 'assistant' | 'system'; content: string } {
   return {
     role: 'user',
     content: `LANGUAGE MODEL OUTPUT: ${targetResponse}\n\nOBJECTIVE: ${goal}\n\nSCORE: ${score} ${
@@ -322,7 +322,7 @@ export async function runRedteamConversation({
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
-  vars: Record<string, object | string>;
+  vars: Record<string, string | object>;
   redteamProvider: ApiProvider;
   targetProvider: ApiProvider;
   injectVar: string;
@@ -341,7 +341,7 @@ export async function runRedteamConversation({
     goal,
   );
 
-  const redteamHistory: { role: 'assistant' | 'system' | 'user'; content: string }[] = [
+  const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
     {
       role: 'system',
       content: redteamSystemPrompt,
@@ -511,7 +511,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
    * @param config - The configuration object for the provider.
    * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
-  constructor(readonly config: Record<string, object | string>) {
+  constructor(readonly config: Record<string, string | object>) {
     logger.debug(`RedteamIterativeTreeProvider config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;

@@ -121,7 +121,7 @@ export default function ResultsView({
   const [shareLoading, setShareLoading] = React.useState(false);
 
   // State for anchor element
-  const [anchorEl, setAnchorEl] = React.useState<HTMLElement | null>(null);
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
