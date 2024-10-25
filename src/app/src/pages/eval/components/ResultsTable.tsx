@@ -129,7 +129,7 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
 
 function useScrollHandler() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isSticky, setIsSticky] = useState(true);
+  const { stickyHeader } = useResultsViewStore();
   const lastScrollY = useRef(0);
 
   useEffect(() => {
@@ -144,13 +144,13 @@ function useScrollHandler() {
       lastScrollY.current = currentScrollY;
     };
 
-    if (isSticky) {
+    if (stickyHeader) {
       window.addEventListener('scroll', handleScroll, { passive: true });
       return () => window.removeEventListener('scroll', handleScroll);
     }
-  }, [isSticky]);
+  }, [stickyHeader]);
 
-  return { isCollapsed, isSticky, setIsSticky };
+  return { isCollapsed };
 }
 
 function ResultsTable({
@@ -660,7 +660,8 @@ function ResultsTable({
     },
   });
 
-  const { isCollapsed, isSticky, setIsSticky } = useScrollHandler();
+  const { isCollapsed } = useScrollHandler();
+  const { stickyHeader, setStickyHeader } = useResultsViewStore();
 
   return (
     <div>
@@ -670,11 +671,11 @@ function ResultsTable({
           wordBreak,
         }}
       >
-        <thead className={`${isCollapsed ? 'collapsed' : ''} ${isSticky ? 'sticky' : ''}`}>
-          {isSticky && isCollapsed && (
+        <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
+          {stickyHeader && isCollapsed && (
             <div className="header-dismiss">
               <IconButton
-                onClick={() => setIsSticky(false)}
+                onClick={() => setStickyHeader(false)}
                 size="small"
                 sx={{ color: 'text.primary' }}
               >
