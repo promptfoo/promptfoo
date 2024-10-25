@@ -31,6 +31,7 @@ import {
 } from '../matchers';
 import type { OpenAiChatCompletionProvider } from '../providers/openai';
 import { validateFunctionCall } from '../providers/openaiUtil';
+import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { parseChatPrompt } from '../providers/shared';
 import { runPython } from '../python/pythonUtils';
 import { runPythonCode } from '../python/wrapper';
@@ -338,6 +339,16 @@ export async function runAssertion({
       } else {
         renderedValue = processFileReference(renderedValue);
       }
+    } else if (isPackagePath(renderedValue)) {
+      const basePath = cliState.basePath || '';
+      const requiredModule = await loadFromPackage(renderedValue, basePath);
+      if (typeof requiredModule !== 'function') {
+        throw new Error(
+          `Assertion malformed: ${renderedValue} must be a function. Received: ${typeof requiredModule}`,
+        );
+      }
+
+      valueFromScript = await Promise.resolve(requiredModule(output, context));
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
