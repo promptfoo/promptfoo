@@ -68,6 +68,7 @@ import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WatsonXProvider } from './providers/watsonx';
 import { WebhookProvider } from './providers/webhook';
 import { WebSocketProvider } from './providers/websocket';
+import { createXAIProvider } from './providers/xai';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
 import RedteamGoatProvider from './redteam/providers/goat';
 import RedteamIterativeProvider from './redteam/providers/iterative';
@@ -223,6 +224,11 @@ export async function loadApiProvider(
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':');
     ret = new PortkeyChatCompletionProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('xai:')) {
+    ret = createXAIProvider(providerPath, {
+      config: providerOptions,
+      env: context.env,
+    });
   } else if (providerPath.startsWith('anthropic:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
