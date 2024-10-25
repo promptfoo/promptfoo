@@ -377,10 +377,10 @@ export const ADDITIONAL_STRATEGIES = [
   'ascii-smuggling',
   'base64',
   'crescendo',
+  'goat',
   'jailbreak:tree',
   'leetspeak',
   'math-prompt',
-  'goat',
   'multilingual',
   'rot13',
 ] as const;

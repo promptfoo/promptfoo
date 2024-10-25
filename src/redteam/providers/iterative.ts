@@ -170,8 +170,6 @@ async function runRedteamConversation({
     });
   }
 
-  logger.warn(`Redteam final prompt: ${targetPrompt}`);
-
   return {
     output: bestResponse,
     metadata: {
