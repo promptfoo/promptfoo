@@ -28,8 +28,7 @@ import {
 } from '../constants';
 import { doGenerateRedteam } from './generate';
 
-const REDTEAM_CONFIG_TEMPLATE = `
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
 # Red teaming configuration
 
