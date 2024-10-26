@@ -270,11 +270,11 @@ export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
   console.clear();
 
-  if (directory && !fs.existsSync(directory)) {
-    fs.mkdirSync(directory);
-  }
-
   directory = directory || '.';
+
+  if (!fs.existsSync(directory)) {
+    fs.mkdirSync(directory, { recursive: true });
+  }
 
   // Check for existing files and prompt for overwrite
   const filesToCheck = ['promptfooconfig.yaml', 'README.md'];
@@ -520,10 +520,10 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
     if (action === 'rag' || action === 'agent') {
       if (language === 'javascript') {
-        fs.writeFileSync(path.join(process.cwd(), directory, 'context.js'), JAVASCRIPT_VAR);
+        fs.writeFileSync(path.join(directory, 'context.js'), JAVASCRIPT_VAR);
         logger.info('⌛ Wrote context.js');
       } else {
-        fs.writeFileSync(path.join(process.cwd(), directory, 'context.py'), PYTHON_VAR);
+        fs.writeFileSync(path.join(directory, 'context.py'), PYTHON_VAR);
         logger.info('⌛ Wrote context.py');
       }
     }
@@ -546,8 +546,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     language,
   });
 
-  fs.writeFileSync(path.join(process.cwd(), directory, 'promptfooconfig.yaml'), config);
-  fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
+  fs.writeFileSync(path.join(directory, 'promptfooconfig.yaml'), config);
+  fs.writeFileSync(path.join(directory, 'README.md'), DEFAULT_README);
 
   const isNpx = getEnvString('npm_execpath')?.includes('npx');
   const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
