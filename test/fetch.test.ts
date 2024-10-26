@@ -10,7 +10,6 @@ import {
 import logger from '../src/logger';
 import { sleep } from '../src/util/time';
 
-// Mock all time-based functions
 jest.mock('../src/util/time', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
 }));
