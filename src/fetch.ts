@@ -7,10 +7,38 @@ export async function fetchWithProxy(
   url: RequestInfo,
   options: RequestInit = {},
 ): Promise<Response> {
+  // Parse the URL to extract any basic auth credentials
+  let finalUrl = url;
+  const finalOptions = { ...options };
+
+  if (typeof url === 'string') {
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.username || parsedUrl.password) {
+        // Move credentials to Authorization header
+        const credentials = Buffer.from(`${parsedUrl.username}:${parsedUrl.password}`).toString(
+          'base64',
+        );
+        finalOptions.headers = {
+          ...finalOptions.headers,
+          Authorization: `Basic ${credentials}`,
+        };
+
+        // Remove credentials from URL
+        parsedUrl.username = '';
+        parsedUrl.password = '';
+        finalUrl = parsedUrl.toString();
+      }
+    } catch {
+      logger.debug('URL parsing failed in fetchWithProxy');
+    }
+  }
+
   const agent = new ProxyAgent({
     rejectUnauthorized: false, // Don't check SSL cert
   });
-  return fetch(url, { ...options, agent } as RequestInit);
+
+  return fetch(finalUrl, { ...finalOptions, agent } as RequestInit);
 }
 
 export function fetchWithTimeout(
