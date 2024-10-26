@@ -169,6 +169,35 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
   return prompt;
 }
 
+export function renderRedteamConfig({
+  descriptions,
+  numTests,
+  plugins,
+  prompts,
+  providers,
+  purpose,
+  strategies,
+}: {
+  descriptions: Record<string, string>;
+  numTests: number;
+  plugins: (Plugin | RedteamPluginObject)[];
+  prompts: string[];
+  providers: (string | ProviderOptions)[];
+  purpose: string | undefined;
+  strategies: Strategy[];
+}): string {
+  const nunjucks = getNunjucksEngine();
+  return nunjucks.renderString(REDTEAM_CONFIG_TEMPLATE, {
+    descriptions,
+    numTests,
+    plugins,
+    prompts,
+    providers,
+    purpose,
+    strategies,
+  });
+}
+
 export async function redteamInit(directory: string | undefined) {
   telemetry.record('command_used', { name: 'redteam init - started' });
   recordOnboardingStep('start');
@@ -527,9 +556,7 @@ export async function redteamInit(directory: string | undefined) {
 
   const numTests = 5;
 
-  const nunjucks = getNunjucksEngine();
-
-  const redteamConfig = nunjucks.renderString(REDTEAM_CONFIG_TEMPLATE, {
+  const redteamConfig = renderRedteamConfig({
     purpose,
     numTests,
     plugins,
