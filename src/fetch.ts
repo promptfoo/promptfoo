@@ -2,6 +2,7 @@ import { ProxyAgent } from 'proxy-agent';
 import invariant from 'tiny-invariant';
 import { getEnvInt, getEnvBool } from './envars';
 import logger from './logger';
+import { sleep } from './util/time';
 
 export async function fetchWithProxy(
   url: RequestInfo,
@@ -108,7 +109,7 @@ export async function handleRateLimit(response: Response): Promise<void> {
   }
 
   logger.debug(`Rate limited, waiting ${waitTime}ms before retry`);
-  await new Promise((resolve) => setTimeout(resolve, waitTime));
+  await sleep(waitTime);
 }
 
 export async function fetchWithRetries(
@@ -141,7 +142,7 @@ export async function fetchWithRetries(
     } catch (error) {
       lastError = error;
       const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
+      await sleep(waitTime);
     }
   }
   throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);

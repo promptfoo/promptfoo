@@ -1,6 +1,19 @@
 import { ProxyAgent } from 'proxy-agent';
-import { fetchWithProxy, fetchWithTimeout } from '../src/fetch';
+import { getEnvBool } from '../src/envars';
+import {
+  fetchWithProxy,
+  fetchWithRetries,
+  fetchWithTimeout,
+  handleRateLimit,
+  isRateLimited,
+} from '../src/fetch';
 import logger from '../src/logger';
+import { sleep } from '../src/util/time';
+
+// Mock all time-based functions
+jest.mock('../src/util/time', () => ({
+  sleep: jest.fn().mockResolvedValue(undefined),
+}));
 
 jest.mock('proxy-agent');
 jest.mock('../src/logger');
@@ -8,6 +21,11 @@ jest.mock('../src/envars', () => ({
   ...jest.requireActual('../src/envars'),
   getEnvInt: jest.fn().mockReturnValue(100),
   getEnvBool: jest.fn().mockReturnValue(false),
+}));
+
+jest.mock('../src/fetch', () => ({
+  ...jest.requireActual('../src/fetch'),
+  sleep: jest.fn(),
 }));
 
 function createMockResponse(options: Partial<Response> = {}): Response {
@@ -169,5 +187,176 @@ describe('fetchWithTimeout', () => {
     jest.advanceTimersByTime(5000);
 
     await expect(fetchPromise).rejects.toThrow('Request timed out after 5000 ms');
+  });
+});
+
+describe('isRateLimited', () => {
+  it('should detect standard rate limit headers', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'X-RateLimit-Remaining': '0',
+      }),
+      status: 200,
+    });
+    expect(isRateLimited(response)).toBe(true);
+  });
+
+  it('should detect 429 status code', () => {
+    const response = createMockResponse({
+      status: 429,
+    });
+    expect(isRateLimited(response)).toBe(true);
+  });
+
+  it('should detect OpenAI specific rate limits', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-remaining-requests': '0',
+      }),
+    });
+    expect(isRateLimited(response)).toBe(true);
+
+    const tokenResponse = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-remaining-tokens': '0',
+      }),
+    });
+    expect(isRateLimited(tokenResponse)).toBe(true);
+  });
+
+  it('should return false when not rate limited', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'X-RateLimit-Remaining': '10',
+      }),
+      status: 200,
+    });
+    expect(isRateLimited(response)).toBe(false);
+  });
+});
+
+describe('handleRateLimit', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.mocked(sleep).mockClear();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('should handle OpenAI reset headers', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-reset-requests': '5',
+      }),
+    });
+
+    const promise = handleRateLimit(response);
+    jest.advanceTimersByTime(5000);
+    await promise;
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+  });
+
+  it('should handle standard rate limit reset headers', async () => {
+    const futureTime = Math.floor((Date.now() + 5000) / 1000);
+    const response = createMockResponse({
+      headers: new Headers({
+        'X-RateLimit-Reset': futureTime.toString(),
+      }),
+    });
+
+    const promise = handleRateLimit(response);
+    // No need to advance timers, sleep will resolve immediately
+    await promise;
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringMatching(/Rate limited, waiting \d+ms before retry/),
+    );
+  });
+
+  it('should handle Retry-After headers', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'Retry-After': '5',
+      }),
+    });
+
+    const promise = handleRateLimit(response);
+    jest.advanceTimersByTime(5000);
+    await promise;
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+  });
+
+  it('should use default wait time when no headers present', async () => {
+    const response = createMockResponse();
+
+    const promise = handleRateLimit(response);
+    jest.advanceTimersByTime(60000);
+    await promise;
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 60000ms before retry');
+  });
+});
+
+describe('fetchWithRetries', () => {
+  beforeEach(() => {
+    jest.mocked(sleep).mockClear();
+    jest.spyOn(global, 'fetch').mockImplementation();
+    jest.clearAllMocks();
+  });
+
+  it('should handle 5XX errors when PROMPTFOO_RETRY_5XX is true', async () => {
+    jest.mocked(getEnvBool).mockReturnValueOnce(true);
+
+    const errorResponse = createMockResponse({
+      status: 502,
+      statusText: 'Bad Gateway',
+    });
+    const successResponse = createMockResponse();
+
+    jest
+      .mocked(global.fetch)
+      .mockResolvedValueOnce(errorResponse)
+      .mockResolvedValueOnce(successResponse);
+
+    await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle rate limits with proper backoff', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 429,
+      headers: new Headers({
+        'Retry-After': '1',
+      }),
+    });
+    const successResponse = createMockResponse();
+
+    jest
+      .mocked(global.fetch)
+      .mockResolvedValueOnce(rateLimitedResponse)
+      .mockResolvedValueOnce(successResponse);
+
+    await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should respect maximum retry count', async () => {
+    jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
+      'Request failed after 2 retries: Network error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(2);
   });
 });
