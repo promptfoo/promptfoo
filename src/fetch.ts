@@ -2,15 +2,47 @@ import { ProxyAgent } from 'proxy-agent';
 import invariant from 'tiny-invariant';
 import { getEnvInt, getEnvBool } from './envars';
 import logger from './logger';
+import { sleep } from './util/time';
 
 export async function fetchWithProxy(
   url: RequestInfo,
   options: RequestInit = {},
 ): Promise<Response> {
+  let finalUrl = url;
+  const finalOptions = { ...options };
+
+  if (typeof url === 'string') {
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.username || parsedUrl.password) {
+        if (finalOptions.headers && 'Authorization' in finalOptions.headers) {
+          logger.warn(
+            'Both URL credentials and Authorization header present - URL credentials will be ignored',
+          );
+        } else {
+          // Move credentials to Authorization header
+          const username = parsedUrl.username || '';
+          const password = parsedUrl.password || '';
+          const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+          finalOptions.headers = {
+            ...finalOptions.headers,
+            Authorization: `Basic ${credentials}`,
+          };
+        }
+        parsedUrl.username = '';
+        parsedUrl.password = '';
+        finalUrl = parsedUrl.toString();
+      }
+    } catch (e) {
+      logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
+    }
+  }
+
   const agent = new ProxyAgent({
-    rejectUnauthorized: false, // Don't check SSL cert
+    rejectUnauthorized: false,
   });
-  return fetch(url, { ...options, agent } as RequestInit);
+
+  return fetch(finalUrl, { ...finalOptions, agent } as RequestInit);
 }
 
 export function fetchWithTimeout(
@@ -41,7 +73,7 @@ export function fetchWithTimeout(
   });
 }
 
-function isRateLimited(response: Response): boolean {
+export function isRateLimited(response: Response): boolean {
   // These checks helps make sure we set up tests correctly.
   invariant(response.headers, 'Response headers are missing');
   invariant(response.status, 'Response status is missing');
@@ -56,7 +88,7 @@ function isRateLimited(response: Response): boolean {
   );
 }
 
-async function handleRateLimit(response: Response): Promise<void> {
+export async function handleRateLimit(response: Response): Promise<void> {
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
   const retryAfter = response.headers.get('Retry-After');
   // OpenAI specific headers
@@ -77,7 +109,7 @@ async function handleRateLimit(response: Response): Promise<void> {
   }
 
   logger.debug(`Rate limited, waiting ${waitTime}ms before retry`);
-  await new Promise((resolve) => setTimeout(resolve, waitTime));
+  await sleep(waitTime);
 }
 
 export async function fetchWithRetries(
@@ -110,7 +142,7 @@ export async function fetchWithRetries(
     } catch (error) {
       lastError = error;
       const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
+      await sleep(waitTime);
     }
   }
   throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);

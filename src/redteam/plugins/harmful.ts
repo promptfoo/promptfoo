@@ -5,6 +5,7 @@ import { PromptfooHarmfulCompletionProvider } from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
+import { sleep } from '../../util/time';
 import {
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
@@ -254,7 +255,7 @@ async function generateTestsForCategory(
       results.push(result);
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        await sleep(delayMs);
       }
     }
     return results.map((result) => createTestCase(injectVar, result.output || '', harmCategory));
