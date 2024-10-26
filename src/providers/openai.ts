@@ -18,6 +18,7 @@ import type {
 import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
+import { sleep } from '../util/time';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
@@ -823,7 +824,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         continue;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await sleep(1000);
 
       logger.debug(`Calling OpenAI API, getting thread run ${run.id} status`);
       try {
