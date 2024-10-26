@@ -76,8 +76,69 @@ describe('fetchWithProxy', () => {
     const invalidUrl = 'not-a-url';
     await fetchWithProxy(invalidUrl);
 
-    expect(logger.debug).toHaveBeenCalledWith('URL parsing failed in fetchWithProxy');
+    expect(logger.debug).toHaveBeenCalledWith(
+      'URL parsing failed in fetchWithProxy: TypeError: Invalid URL',
+    );
     expect(global.fetch).toHaveBeenCalledWith(invalidUrl, expect.any(Object));
+  });
+
+  it('should preserve existing Authorization headers when no URL credentials', async () => {
+    const url = 'https://example.com/api';
+    const options = {
+      headers: {
+        Authorization: 'Bearer token123',
+        'Content-Type': 'application/json',
+      },
+    };
+
+    await fetchWithProxy(url, options);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer token123',
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+  });
+
+  it('should warn and prefer existing Authorization header over URL credentials', async () => {
+    const url = 'https://username:password@example.com/api';
+    const options = {
+      headers: {
+        Authorization: 'Bearer token123',
+      },
+    };
+
+    await fetchWithProxy(url, options);
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Both URL credentials and Authorization header present'),
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer token123',
+        },
+      }),
+    );
+  });
+
+  it('should handle empty username or password in URL', async () => {
+    const url = 'https://:password@example.com/api';
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Basic OnBhc3N3b3Jk',
+        },
+      }),
+    );
   });
 });
 

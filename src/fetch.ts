@@ -7,7 +7,6 @@ export async function fetchWithProxy(
   url: RequestInfo,
   options: RequestInit = {},
 ): Promise<Response> {
-  // Parse the URL to extract any basic auth credentials
   let finalUrl = url;
   const finalOptions = { ...options };
 
@@ -15,27 +14,31 @@ export async function fetchWithProxy(
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.username || parsedUrl.password) {
-        // Move credentials to Authorization header
-        const credentials = Buffer.from(`${parsedUrl.username}:${parsedUrl.password}`).toString(
-          'base64',
-        );
-        finalOptions.headers = {
-          ...finalOptions.headers,
-          Authorization: `Basic ${credentials}`,
-        };
-
-        // Remove credentials from URL
+        if (finalOptions.headers && 'Authorization' in finalOptions.headers) {
+          logger.warn(
+            'Both URL credentials and Authorization header present - URL credentials will be ignored',
+          );
+        } else {
+          // Move credentials to Authorization header
+          const username = parsedUrl.username || '';
+          const password = parsedUrl.password || '';
+          const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+          finalOptions.headers = {
+            ...finalOptions.headers,
+            Authorization: `Basic ${credentials}`,
+          };
+        }
         parsedUrl.username = '';
         parsedUrl.password = '';
         finalUrl = parsedUrl.toString();
       }
-    } catch {
-      logger.debug('URL parsing failed in fetchWithProxy');
+    } catch (e) {
+      logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
     }
   }
 
   const agent = new ProxyAgent({
-    rejectUnauthorized: false, // Don't check SSL cert
+    rejectUnauthorized: false,
   });
 
   return fetch(finalUrl, { ...finalOptions, agent } as RequestInit);
@@ -69,7 +72,7 @@ export function fetchWithTimeout(
   });
 }
 
-function isRateLimited(response: Response): boolean {
+export function isRateLimited(response: Response): boolean {
   // These checks helps make sure we set up tests correctly.
   invariant(response.headers, 'Response headers are missing');
   invariant(response.status, 'Response status is missing');
@@ -84,7 +87,7 @@ function isRateLimited(response: Response): boolean {
   );
 }
 
-async function handleRateLimit(response: Response): Promise<void> {
+export async function handleRateLimit(response: Response): Promise<void> {
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
   const retryAfter = response.headers.get('Retry-After');
   // OpenAI specific headers
