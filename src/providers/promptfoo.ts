@@ -181,7 +181,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     const messages = JSON.parse(prompt);
     const body = {
       task: 'tau',
-      instruction: this.options.instructions,
+      instructions: this.options.instructions,
       history: messages,
       email: getUserEmail(),
       version: VERSION,
