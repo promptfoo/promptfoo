@@ -158,6 +158,57 @@ describe('fetchWithProxy', () => {
       }),
     );
   });
+
+  it('should handle URLs with empty credentials', async () => {
+    const url = 'https://:@example.com/api';
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Basic Og==', // Base64 encoded ':' (empty username and password)
+        },
+      }),
+    );
+  });
+
+  it('should handle URLs with only username', async () => {
+    const url = 'https://username@example.com/api';
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Basic dXNlcm5hbWU6', // Base64 encoded 'username:'
+        },
+      }),
+    );
+  });
+
+  it('should preserve existing headers when adding Authorization from URL credentials', async () => {
+    const url = 'https://username:password@example.com/api';
+    const options = {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Custom-Header': 'value',
+      },
+    };
+
+    await fetchWithProxy(url, options);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Custom-Header': 'value',
+          Authorization: 'Basic dXNlcm5hbWU6cGFzc3dvcmQ=',
+        },
+      }),
+    );
+  });
 });
 
 describe('fetchWithTimeout', () => {
