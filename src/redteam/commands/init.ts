@@ -8,7 +8,7 @@ import select from '@inquirer/select';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
-import * as fs from 'fs';
+import fs from 'fs';
 import * as path from 'path';
 import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
