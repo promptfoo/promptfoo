@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: 'TAU Agent'
+description: 'TAU Simulated User'
 
 prompts:
   - file://agent_policy.txt
@@ -10,7 +10,7 @@ providers:
 
 defaultTest:
   provider:
-    id: 'promptfoo:agent'
+    id: 'promptfoo:simulated-user'
     config:
       maxTurns: 10
 
