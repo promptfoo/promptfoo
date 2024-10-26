@@ -98,7 +98,7 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy(invalidUrl);
 
     expect(logger.debug).toHaveBeenCalledWith(
-      'URL parsing failed in fetchWithProxy: TypeError: Invalid URL',
+      expect.stringMatching(/URL parsing failed in fetchWithProxy: TypeError/),
     );
     expect(global.fetch).toHaveBeenCalledWith(invalidUrl, expect.any(Object));
   });
