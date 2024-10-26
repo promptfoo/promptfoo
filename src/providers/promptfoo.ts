@@ -158,7 +158,7 @@ interface PromptfooAgentOptions {
   instructions?: string;
 }
 
-export class PromptfooAgentProvider implements ApiProvider {
+export class PromptfooSimulatedUserProvider implements ApiProvider {
   private options: PromptfooAgentOptions;
 
   constructor(options: PromptfooAgentOptions = {}) {
