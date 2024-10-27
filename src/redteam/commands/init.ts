@@ -400,6 +400,7 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   if (plugins.includes('prompt-extraction')) {
+    plugins = plugins.filter((p) => p !== 'prompt-extraction');
     plugins.push({
       id: 'prompt-extraction',
       config: { systemPrompt: prompts[0] },
@@ -419,7 +420,7 @@ export async function redteamInit(directory: string | undefined) {
         })),
       });
       recordOnboardingStep('chose indirect prompt injection variable');
-
+      plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
       plugins.push({
         id: 'indirect-prompt-injection',
         config: {
@@ -427,17 +428,22 @@ export async function redteamInit(directory: string | undefined) {
         },
       } as RedteamPluginObject);
     } else {
+      plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
       recordOnboardingStep('skip indirect prompt injection');
       logger.warn(
-        `Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt. Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection/`,
+        dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt.
+        
+        Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection`,
       );
     }
   }
 
-  console.clear();
-
-  logger.info(chalk.bold('Strategy Configuration'));
-  logger.info('Strategies are attack methods.\n');
+  logger.info(
+    dedent`
+    ${chalk.bold('Strategy Configuration')}
+    Strategies are attack methods.
+  `,
+  );
 
   const strategyConfigChoice = await select({
     message: 'How would you like to configure strategies?',
