@@ -1,6 +1,13 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+import type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+  TestCase,
+} from '../../types';
 import { isBasicRefusal } from '../util';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
@@ -101,6 +108,8 @@ export class PromptExtractionGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
+    isRefusal: boolean | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const { systemPrompt, ...restMetadata } = test.metadata || {};
 
@@ -125,7 +134,8 @@ export class PromptExtractionGrader extends RedteamGraderBase {
         },
       },
       provider,
-      undefined,
+      renderedValue,
+      isRefusal,
     );
   }
 }

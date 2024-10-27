@@ -377,7 +377,14 @@ describe('RedteamGraderBase', () => {
   it('should throw an error if test is missing purpose metadata', async () => {
     const testWithoutPurpose = { ...mockTest, metadata: {} };
     await expect(
-      grader.getResult('prompt', 'output', testWithoutPurpose, undefined /* provider */, undefined),
+      grader.getResult(
+        'prompt',
+        'output',
+        testWithoutPurpose,
+        undefined /* provider */,
+        undefined,
+        undefined,
+      ),
     ).rejects.toThrow('Test is missing purpose metadata');
   });
 
@@ -394,6 +401,7 @@ describe('RedteamGraderBase', () => {
       'test output',
       mockTest,
       undefined /* provider */,
+      undefined,
       undefined,
     );
 
@@ -417,6 +425,7 @@ describe('RedteamGraderBase', () => {
       'test output',
       mockTest,
       undefined /* provider */,
+      undefined,
       undefined,
     );
 

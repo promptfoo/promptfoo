@@ -230,16 +230,10 @@ export abstract class RedteamGraderBase {
   }): ResultSuggestion[] {
     return [];
   }
-
-  async getResult(
-    prompt: string,
-    llmOutput: string,
-    test: AtomicTestCase,
-    provider: ApiProvider | undefined,
-    renderedValue: AssertionValue | undefined,
-    isRefusal: boolean | undefined = false,
-  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
-    invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+  protected handleRefusal(
+    isRefusal: boolean | undefined,
+    provider?: ApiProvider,
+  ): { grade: GradingResult; rubric: string } | undefined {
     if (isRefusal) {
       return {
         grade: {
@@ -249,6 +243,23 @@ export abstract class RedteamGraderBase {
         },
         rubric: 'N/A',
       };
+    }
+    return undefined;
+  }
+
+  async getResult(
+    prompt: string,
+    llmOutput: string,
+    test: AtomicTestCase,
+    provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
+    isRefusal: boolean | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
+    invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+
+    const refusalResult = this.handleRefusal(isRefusal, provider);
+    if (refusalResult) {
+      return refusalResult;
     }
 
     const vars = {

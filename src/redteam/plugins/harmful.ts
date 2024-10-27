@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import { getEnvBool, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { PromptfooHarmfulCompletionProvider } from '../../providers/promptfoo';
-import type { ApiProvider, Assertion, TestCase } from '../../types';
+import type { ApiProvider, Assertion, AssertionValue, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { sleep } from '../../util/time';
@@ -388,6 +388,8 @@ export class HarmfulGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
+    isRefusal: boolean | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     if (isBasicRefusal(llmOutput)) {
       return {
@@ -400,7 +402,7 @@ export class HarmfulGrader extends RedteamGraderBase {
       };
     }
 
-    return super.getResult(prompt, llmOutput, test, provider, undefined);
+    return super.getResult(prompt, llmOutput, test, provider, renderedValue, isRefusal);
   }
 }
 

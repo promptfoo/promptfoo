@@ -1,6 +1,13 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import type { Assertion, ApiProvider, TestCase, AtomicTestCase, GradingResult } from '../../types';
+import type {
+  Assertion,
+  ApiProvider,
+  TestCase,
+  AtomicTestCase,
+  GradingResult,
+  AssertionValue,
+} from '../../types';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:policy';
@@ -95,6 +102,8 @@ export class PolicyViolationGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
+    isRefusal: boolean | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const { policy, ...restMetadata } = test.metadata || {};
     return super.getResult(
@@ -108,7 +117,8 @@ export class PolicyViolationGrader extends RedteamGraderBase {
         },
       },
       provider,
-      undefined,
+      renderedValue,
+      isRefusal,
     );
   }
 }
