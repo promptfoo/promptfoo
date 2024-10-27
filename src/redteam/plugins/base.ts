@@ -231,8 +231,8 @@ export abstract class RedteamGraderBase {
     return [];
   }
   protected handleRefusal(
+    provider: ApiProvider | undefined,
     isRefusal: boolean | undefined,
-    provider?: ApiProvider,
   ): { grade: GradingResult; rubric: string } | undefined {
     if (isRefusal) {
       return {
@@ -257,7 +257,7 @@ export abstract class RedteamGraderBase {
   ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
-    const refusalResult = this.handleRefusal(isRefusal, provider);
+    const refusalResult = this.handleRefusal(provider, isRefusal);
     if (refusalResult) {
       return refusalResult;
     }

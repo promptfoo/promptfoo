@@ -122,7 +122,7 @@ export class CrossSessionLeakGrader extends RedteamGraderBase {
     renderedValue: AssertionValue | undefined,
     isRefusal: boolean | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
-    const refusalResult = this.handleRefusal(isRefusal, provider);
+    const refusalResult = this.handleRefusal(provider, isRefusal);
     if (refusalResult) {
       return refusalResult;
     }
