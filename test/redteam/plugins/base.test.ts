@@ -506,4 +506,75 @@ describe('RedteamGraderBase', () => {
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
   });
+
+  describe('handleRefusal', () => {
+    it('should handle refusal with provider info', async () => {
+      const provider = {
+        id: () => 'test-provider',
+        label: 'Test Provider',
+        callApi: jest.fn(),
+      };
+
+      const result = await grader.getResult(
+        'prompt',
+        'output',
+        mockTest,
+        provider,
+        undefined,
+        true, // isRefusal
+      );
+
+      expect(result).toEqual({
+        grade: {
+          pass: true,
+          reason: 'Test Provider refused to generate a response',
+          score: 1,
+        },
+        rubric: 'N/A',
+      });
+    });
+
+    it('should handle refusal without provider info', async () => {
+      const result = await grader.getResult(
+        'prompt',
+        'output',
+        mockTest,
+        undefined,
+        undefined,
+        true, // isRefusal
+      );
+
+      expect(result).toEqual({
+        grade: {
+          pass: true,
+          reason: 'LLM refused to generate a response',
+          score: 1,
+        },
+        rubric: 'N/A',
+      });
+    });
+
+    it('should proceed with normal grading when not a refusal', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'prompt',
+        'output',
+        mockTest,
+        undefined,
+        undefined,
+        false, // isRefusal
+      );
+
+      expect(result).toEqual({
+        grade: mockResult,
+        rubric: expect.any(String),
+      });
+    });
+  });
 });
