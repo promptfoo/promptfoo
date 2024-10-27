@@ -47,6 +47,16 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          df -h
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -128,11 +138,18 @@ jobs:
             exit 1
           fi
 
+      - name: Clean up Docker images
+        if: always()
+        run: |
+          docker system prune -af
+          docker volume prune -f
+          df -h
+
       - name: Stop and remove Docker container
         if: always()
         run: |
-          docker stop promptfoo-container
-          docker rm promptfoo-container
+          docker stop promptfoo-container || true
+          docker rm promptfoo-container || true
 
       - name: Log in to the Container registry
         if: success() && (github.event_name != 'pull_request')
