@@ -1375,6 +1375,7 @@ ${
       test,
       provider,
       renderedValue,
+      providerResponse.isRefusal,
     );
     return {
       assertion: {
