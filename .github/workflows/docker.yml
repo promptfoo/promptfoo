@@ -148,8 +148,8 @@ jobs:
       - name: Stop and remove Docker container
         if: always()
         run: |
-          docker stop promptfoo-container || true
-          docker rm promptfoo-container || true
+          docker stop promptfoo-container
+          docker rm promptfoo-container
 
       - name: Log in to the Container registry
         if: success() && (github.event_name != 'pull_request')
