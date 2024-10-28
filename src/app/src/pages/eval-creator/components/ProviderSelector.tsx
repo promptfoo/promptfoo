@@ -240,13 +240,12 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           throw new Error('Failed to upload provider');
         }
 
-        const { id, path, label } = await response.json();
-        const fileProvider = {
+        const { id, label } = await response.json();
+        const fileProvider: ProviderOptions = {
           id,
           config: {},
           label,
-          metadata: { path },
-        } as ProviderOptions;
+        };
 
         addCustomProvider(fileProvider);
         onChange([...providers, fileProvider]);

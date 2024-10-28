@@ -42,9 +42,8 @@ evalRouter.post('/provider/upload', async (req: Request, res: Response): Promise
     fs.writeFileSync(tempFilePath, fileContent, 'utf8');
 
     res.json({
-      path: tempFilePath,
       id: `file://${tempFilePath}`,
-      label: fileName,
+      label: `file://${fileName}`,
     });
   } catch (error) {
     console.error('Failed to save provider file:', error);
