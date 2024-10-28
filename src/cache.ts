@@ -73,7 +73,7 @@ export async function fetchWithCache<T = any>(
 
   const copy = Object.assign({}, options);
   delete copy.headers;
-  const cacheKey = `fetch:${url}:${JSON.stringify(copy)}`;
+  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
 
   let cached = true;
   let errorResponse = null;
