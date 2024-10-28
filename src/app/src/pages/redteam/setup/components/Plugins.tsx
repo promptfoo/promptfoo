@@ -4,7 +4,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import SearchIcon from '@mui/icons-material/Search';
-import SettingsIcon from '@mui/icons-material/Settings';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -19,6 +19,7 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { alpha } from '@mui/material/styles';
 import {
   COLLECTIONS,
   HARM_PLUGINS,
@@ -54,7 +55,13 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
-const PLUGINS_REQUIRING_CONFIG = ['policy', 'prompt-extraction', 'indirect-prompt-injection'];
+const PLUGINS_REQUIRING_CONFIG = [
+  'policy',
+  'prompt-extraction',
+  'indirect-prompt-injection',
+  'unauthorized-data-access', // Added this plugin
+];
+
 const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
@@ -244,77 +251,91 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   sx={{
                     p: 2,
                     height: '100%',
-                    border: (theme) =>
-                      selectedPlugins.has(plugin) &&
-                      PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                      !isPluginConfigured(plugin)
-                        ? `1px solid ${theme.palette.error.main}`
-                        : 'none',
+                    borderRadius: 2,
+                    border: (theme) => {
+                      if (selectedPlugins.has(plugin)) {
+                        if (
+                          PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                          !isPluginConfigured(plugin)
+                        ) {
+                          return `1px solid ${theme.palette.error.main}`; // Error state border
+                        }
+                        return `1px solid ${theme.palette.primary.main}`; // Selected state border
+                      }
+                      return '1px solid transparent';
+                    },
+                    backgroundColor: (theme) =>
+                      selectedPlugins.has(plugin)
+                        ? alpha(theme.palette.primary.main, 0.04)
+                        : 'background.paper',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      backgroundColor: (theme) =>
+                        selectedPlugins.has(plugin)
+                          ? alpha(theme.palette.primary.main, 0.08)
+                          : alpha(theme.palette.action.hover, 0.04),
+                    },
                   }}
                 >
-                  <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
-                      <FormControlLabel
-                        sx={{ flex: 1 }}
-                        control={
-                          <Checkbox
-                            checked={selectedPlugins.has(plugin)}
-                            onChange={() => handlePluginToggle(plugin)}
-                            color="primary"
-                          />
-                        }
-                        label={
-                          <Box>
-                            <Typography variant="subtitle1">
-                              {displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
-                                categoryAliases[plugin as keyof typeof categoryAliases] ||
-                                plugin}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {
-                                subCategoryDescriptions[
-                                  plugin as keyof typeof subCategoryDescriptions
-                                ]
-                              }
-                            </Typography>
-                            {selectedPlugins.has(plugin) &&
-                              PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                              !isPluginConfigured(plugin) && (
-                                <Typography
-                                  variant="caption"
-                                  color="error"
-                                  sx={{ display: 'block', mt: 0.5 }}
-                                >
-                                  Configuration required
-                                </Typography>
-                              )}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      height: '100%',
+                      position: 'relative',
+                    }}
+                  >
+                    <FormControlLabel
+                      sx={{ flex: 1 }}
+                      control={
+                        <Checkbox
+                          checked={selectedPlugins.has(plugin)}
+                          onChange={() => handlePluginToggle(plugin)}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
                           </Box>
+                          <Typography variant="body2" color="text.secondary">
+                            {subCategoryDescriptions[plugin]}
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                    {selectedPlugins.has(plugin) && PLUGINS_SUPPORTING_CONFIG.includes(plugin) && (
+                      <IconButton
+                        size="small"
+                        title={
+                          isPluginConfigured(plugin)
+                            ? 'Edit Configuration'
+                            : 'Configuration Required'
                         }
-                      />
-                      {selectedPlugins.has(plugin) &&
-                        PLUGINS_SUPPORTING_CONFIG.includes(plugin) && (
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConfigClick(plugin);
-                            }}
-                            sx={{
-                              ml: 1,
-                              color: (theme) =>
-                                PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                                !isPluginConfigured(plugin)
-                                  ? theme.palette.error.main
-                                  : 'action.active',
-                              '&:hover': {
-                                color: 'primary.main',
-                              },
-                            }}
-                          >
-                            <SettingsIcon fontSize="small" />
-                          </IconButton>
-                        )}
-                    </Box>
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConfigClick(plugin);
+                        }}
+                        sx={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          opacity: 0.6,
+                          '&:hover': {
+                            opacity: 1,
+                            backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                          },
+                          ...(PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                            !isPluginConfigured(plugin) && {
+                              color: 'error.main',
+                              opacity: 1,
+                            }),
+                        }}
+                      >
+                        <SettingsOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    )}
                   </Box>
                 </Paper>
               </Grid>
