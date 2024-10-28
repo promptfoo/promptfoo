@@ -1,19 +1,21 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Bedrock vs. Anthropic Claude 3.5 Sonnet Comparison'
+description: 'Claude vs GPT Image Analysis'
 
 prompts:
-  - "Please answer the following question: {{query}}"
+  - ./prompt.py:format_image_prompt
+  - ./prompt.js:formatImagePrompt
 
 providers:
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
-    config:
-      temperature: 0
+  - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
   - id: anthropic:messages:claude-3-5-sonnet-20241022
-    config:
-      temperature: 0
-
+  - id: openai:gpt-4o
+    label: custom label for gpt-4o
 
 tests:
   - vars:
-      query: Generate a random sequence of 20 numbers
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Great_Wave_off_Kanagawa2.jpg/640px-Great_Wave_off_Kanagawa2.jpg
+      label: Great Wave off Kanagawa
 
+assert:
+  - type: icontains
+    value: '{{label}}'
