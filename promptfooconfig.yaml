@@ -5,7 +5,7 @@ extensions:
 
 prompts:
   - BASE_PATH/motion/prompts/prompt_one.txt
-  - BASE_PATH/motion/prompts/prompt_two.txt
+#  - BASE_PATH/motion/prompts/prompt_two.txt
 providers:
   #  - id: openai:chat:gpt-4o
   #    config:
@@ -42,22 +42,16 @@ defaultTest:
         - no
         - sure
   assert:
-    - type: llm-rubric
-      value: Is clear and concise, and provides suggestions that are likely going to deliver the target objective if executed.
-      metric: Effective
-    - type: llm-rubric
-      value: The suggestions are prioritized in a way that gives more weighting to the impact of the suggestion.
-      metric: Ordering
+#    - type: javascript
+#      value: file://BASE_PATH/motion/customAssert/outputInArray.js
+#      config:
+#        listName: availableFormats
     - type: javascript
-      value: file://BASE_PATH/motion/customAssert/outputInArray.js
+      value: file://BASE_PATH/motion/customAssert/accuracy.js
       config:
-        listName: availableFormats
-    - type: javascript
-      value: file://BASE_PATH/motion/customAssert/falseNegatives.js
-    - type: javascript
-      value: file://BASE_PATH/motion/customAssert/falsePositives.js
-    - type: javascript
-      value: file://BASE_PATH/motion/customAssert/truePositives.js
+        falseNegativeThreshold: 0.0
+        falsePositiveThreshold: 0
+        truePositiveThreshold: 100.0
 
 #defaultTest:
 #  assert:
@@ -66,17 +60,18 @@ defaultTest:
 #evaluateOptions:
 #  maxConcurrency: 5
 #  repeat: 2
-tests:
-  - vars:
-      correctAnswers:
-        - one
-      CTR: 4.42%
-      CPR: 1.06%
-    fileUrl:
-      - "https://motionaccountassets.blob.core.windows.net/65007302c2f5f5e85c5b601d/creativeassetfacebook/66d6f4c01cf0ed433f6f8921/video.mp4"
-
-  - vars:
-      CTR: 2.48%
-      CPR: 2.29%
-    fileUrl:
-      - "https://motionaccountassets.blob.core.windows.net/65007302c2f5f5e85c5b601d/creativeassetfacebook/66d6f4c01cf0ed433f6f8921/video.mp4"
+#tests:
+#  - vars:
+#      correctAnswers:
+#        - one
+#      CTR: 4.42%
+#      CPR: 1.06%
+#    fileUrl:
+#      - "https://motionaccountassets.blob.core.windows.net/65007302c2f5f5e85c5b601d/creativeassetfacebook/66d6f4c01cf0ed433f6f8921/video.mp4"
+#
+#  - vars:
+#      CTR: 2.48%
+#      CPR: 2.29%
+#    fileUrl:
+#      - "https://motionaccountassets.blob.core.windows.net/65007302c2f5f5e85c5b601d/creativeassetfacebook/66d6f4c01cf0ed433f6f8921/video.mp4"
+tests: https://docs.google.com/spreadsheets/d/1gkkkVUhj1JN66kiUtKYtj1bn4SbgOKpjYjo1v1K2s_Q/edit?usp=sharing

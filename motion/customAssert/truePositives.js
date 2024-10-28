@@ -1,8 +1,9 @@
-const { parseJson, getCorrectAnswers } = require('./shared');
+const { gte, parseJson, getCorrectAnswers } = require('./shared');
 
 module.exports = (output, context) => {
   const parsed = parseJson(output);
   const correctAnswers = getCorrectAnswers(context);
   const foundCorrect = parsed.filter((answer) => correctAnswers.includes(answer.label));
-  return (foundCorrect / correctAnswers) * 100.0;
+  const score = (foundCorrect.length / correctAnswers.length) * 100.0;
+  return gte(score, context.config.threshold);
 }

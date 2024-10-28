@@ -1,9 +1,10 @@
-const { parseJson, getCorrectAnswers } = require('./shared');
+const { lte, parseJson, getCorrectAnswers } = require('./shared');
 
 module.exports = (output, context) => {
   const parsed = parseJson(output);
   const justLabels = parsed.map((answer) => answer.label);
   const correctAnswers = getCorrectAnswers(context);
   const foundMissing = correctAnswers.filter((i) => !justLabels.includes(i));
-  return (foundMissing / correctAnswers) * 100.0;
+  const score = (foundMissing.length / correctAnswers.length) * 100.0;
+  return lte(score, context.config.threshold);
 }
