@@ -256,6 +256,16 @@ class GeminiApiService {
   }
 }
 
+export const addVars = async (hookName, context) => {
+  if (hookName !== 'afterEach') {
+    return;
+  }
+
+  for (const index in context.suite.tests) {
+    const test = context.suite.tests[index];
+  }
+}
+
 export const metricsHandling = async (hookName, context) => {
   if (hookName !== 'afterAll') {
     return;
