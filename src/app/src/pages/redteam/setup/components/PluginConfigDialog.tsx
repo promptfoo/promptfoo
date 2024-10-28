@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
@@ -27,27 +27,52 @@ export default function PluginConfigDialog({
   onClose,
   onSave,
 }: PluginConfigDialogProps) {
+  // Initialize localConfig with config or empty object
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config || {});
 
+  // Reset localConfig when dialog opens with new config
+  useEffect(() => {
+    setLocalConfig(config || {});
+  }, [config]);
+
   const handleArrayInputChange = (key: string, index: number, value: string) => {
-    setLocalConfig((prev) => ({
-      ...prev,
-      [key]: [...((prev[key] as string[]) || [])].map((item, i) => (i === index ? value : item)),
-    }));
+    setLocalConfig((prev) => {
+      const currentArray = [...((prev[key] as string[]) || [''])];
+      currentArray[index] = value;
+      return {
+        ...prev,
+        [key]: currentArray,
+      };
+    });
   };
 
   const addArrayItem = (key: string) => {
-    setLocalConfig((prev) => ({
-      ...prev,
-      [key]: [...((prev[key] as string[]) || []), ''],
-    }));
+    setLocalConfig((prev) => {
+      const currentArray = [...((prev[key] as string[]) || [])];
+      return {
+        ...prev,
+        [key]: [...currentArray, ''],
+      };
+    });
   };
 
   const removeArrayItem = (key: string, index: number) => {
-    setLocalConfig((prev) => ({
-      ...prev,
-      [key]: ((prev[key] as string[]) || []).filter((_, i) => i !== index),
-    }));
+    setLocalConfig((prev) => {
+      const currentArray = [...((prev[key] as string[]) || [])];
+      currentArray.splice(index, 1);
+      // Ensure at least one empty item remains
+      if (currentArray.length === 0) {
+        currentArray.push('');
+      }
+      return {
+        ...prev,
+        [key]: currentArray,
+      };
+    });
+  };
+
+  const hasEmptyArrayItems = (array: string[] | undefined) => {
+    return array?.some((item) => item.trim() === '') ?? false;
   };
 
   const renderConfigInputs = () => {
@@ -80,10 +105,12 @@ export default function PluginConfigDialog({
             : plugin === 'bola'
               ? 'targetSystems'
               : 'targetUrls';
+        // Ensure we always have at least one item
+        const currentArray = (localConfig[arrayKey] as string[]) || [''];
         return (
           <>
-            {((localConfig[arrayKey] as string[]) || ['']).map((item: string, index: number) => (
-              <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            {currentArray.map((item: string, index: number) => (
+              <Box key={index} sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
                 <TextField
                   fullWidth
                   label={`${arrayKey} ${index + 1}`}
@@ -92,9 +119,12 @@ export default function PluginConfigDialog({
                   onChange={(e) => handleArrayInputChange(arrayKey, index, e.target.value)}
                   sx={{ mr: 1 }}
                 />
-                <IconButton onClick={() => removeArrayItem(arrayKey, index)} size="small">
-                  <RemoveIcon />
-                </IconButton>
+                {/* Only show remove button if there's more than one item */}
+                {currentArray.length > 1 && (
+                  <IconButton onClick={() => removeArrayItem(arrayKey, index)} size="small">
+                    <RemoveIcon />
+                  </IconButton>
+                )}
               </Box>
             ))}
             <Button
@@ -103,8 +133,9 @@ export default function PluginConfigDialog({
               variant="outlined"
               size="small"
               sx={{ mt: 1 }}
+              disabled={hasEmptyArrayItems(currentArray)}
             >
-              New
+              Add
             </Button>
           </>
         );
