@@ -248,6 +248,30 @@ class GeminiApiService {
   }
 }
 
+export const testsRepeat = async (hookName, context) => {
+  if (hookName !== 'beforeAll') {
+    return;
+  }
+
+  const repeatCount = context.suite.defaultTest.vars.repeatCount || 1;
+  const repeatedTests = [];
+  for (const test of context.suite.tests) {
+    if (!test.vars) {
+      test.vars = {};
+    }
+    for (let i = 0; i < repeatCount; i++) {
+      repeatedTests.push({
+        ...test,
+        vars: {
+          ...test.vars,
+          testId: `${test.vars.fileId}:::${i + 1}`,
+        }
+      });
+    }
+  }
+  context.suite.tests = repeatedTests;
+};
+
 export const replaceCurlyBrackets = async (hookName, context) => {
   if (hookName !== 'beforeAll') {
     return;
@@ -311,7 +335,7 @@ export const geminiUploadExtension = async (hookName, context) => {
       const videoUrlsString = fileUrl;
       const videoId = videoIds[videoUrlsString] || uuidV4();
       videoIds[videoUrlsString] = videoId;
-      test.vars.filesId = videoId;
+      test.vars.fileId = videoId;
     });
   } catch (error) {
     console.error('GeminiApiService:geminiUploadExtension - Error uploading files', {

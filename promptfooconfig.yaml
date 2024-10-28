@@ -1,5 +1,6 @@
 extensions:
   - file://BASE_PATH/geminiFileUploadInJs.mjs:geminiUploadExtension
+  - file://BASE_PATH/geminiFileUploadInJs.mjs:testsRepeat
   - file://BASE_PATH/geminiFileUploadInJs.mjs:replaceCurlyBrackets
   - file://BASE_PATH/geminiFileUploadInJs.mjs:returnCurlyBrackets
 
@@ -20,6 +21,7 @@ providers:
       temperature: 1.0
 defaultTest:
   vars:
+    repeatCount: 2
     lists:
       formats:
         - 'Before and After'
