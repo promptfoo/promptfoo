@@ -16,6 +16,7 @@ import Strategies from './components/Strategies';
 import Targets from './components/Targets';
 import YamlPreview from './components/YamlPreview';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
+import { useSetupState } from './hooks/useSetupState';
 import './page.css';
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
@@ -119,7 +120,8 @@ const StyledFab = styled(Fab)(({ theme }) => ({
 export default function GeneratePage() {
   const [value, setValue] = useState(0);
   const [yamlPreviewOpen, setYamlPreviewOpen] = useState(false);
-  const [setupModalOpen, setSetupModalOpen] = useState(true);
+  const { hasSeenSetup, markSetupAsSeen } = useSetupState();
+  const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
   const { config } = useRedTeamConfig();
 
   const handleNext = () => {
@@ -140,6 +142,7 @@ export default function GeneratePage() {
 
   const closeSetupModal = () => {
     setSetupModalOpen(false);
+    markSetupAsSeen();
   };
 
   return (
