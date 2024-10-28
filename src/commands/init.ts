@@ -137,7 +137,7 @@ async function handleExampleDownload(
     logger.info(
       dedent`View the README file at ${chalk.bold(`${exampleName}/README.md`)} or run 
         
-        \`${chalk.bold(runCommand)}\` 
+        \`${chalk.bold(`cd ${exampleName} && ${runCommand}`)}\`
         
         to get started!`,
     );
@@ -147,7 +147,7 @@ async function handleExampleDownload(
         dedent`
         View the README file at: ${chalk.bold(`${directory}/${exampleName}/README.md`)} or run
 
-        \`${chalk.bold(`cd ${directory}`)}\` and then \`${chalk.bold(runCommand)}\`
+        \`${chalk.bold(`cd ${directory}/${exampleName} && ${runCommand}`)}\`
         
         to get started!`,
     );

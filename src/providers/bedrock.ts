@@ -315,7 +315,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         'temperature',
         config?.temperature,
         getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
-        0.01,
+        0,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1);
       if ([LlamaVersion.V2, LlamaVersion.V3, LlamaVersion.V3_1].includes(version)) {

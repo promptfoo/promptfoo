@@ -18,6 +18,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { sleep } from '../util/time';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase, calculateCost } from './shared';
 
 interface AzureOpenAiCompletionOptions {
@@ -728,7 +729,7 @@ export class AzureOpenAiAssistantProvider extends AzureOpenAiGenericProvider {
         run = await this.assistantsClient.submitToolOutputsToRun(run.threadId, run.id, toolOutputs);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await sleep(1000);
 
       logger.debug(`Calling Azure API, getting thread run ${run.id} status`);
       run = await this.assistantsClient.getRun(run.threadId, run.id);

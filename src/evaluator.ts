@@ -28,6 +28,7 @@ import type {
   RunEvalOptions,
   TestSuite,
 } from './types';
+import { sleep } from './util/time';
 import { transform, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -229,13 +230,13 @@ class Evaluator {
       });
 
       if (!response.cached) {
-        let sleep = provider.delay ?? delay;
-        if (!sleep) {
-          sleep = getEnvInt('PROMPTFOO_DELAY_MS', 0);
+        let sleepMs = provider.delay ?? delay;
+        if (!sleepMs) {
+          sleepMs = getEnvInt('PROMPTFOO_DELAY_MS', 0);
         }
-        if (sleep) {
-          logger.debug(`Sleeping for ${sleep}ms`);
-          await new Promise((resolve) => setTimeout(resolve, sleep));
+        if (sleepMs) {
+          logger.debug(`Sleeping for ${sleepMs}ms`);
+          await sleep(sleepMs);
         }
       }
 
@@ -535,6 +536,7 @@ class Evaluator {
       testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
       testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
+      testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
 
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
