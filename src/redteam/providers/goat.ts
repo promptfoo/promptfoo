@@ -18,18 +18,9 @@ export default class GoatProvider implements ApiProvider {
         headers: {
           'Content-Type': 'application/json',
         },
-        transformPayload: (input: string) => ({
+        body: {
           task: 'goat',
-          input,
-        }),
-        transformResponse: (response: {
-          result: { reason: string; score: number; pass: boolean; tokensUsed?: number };
-        }) => ({
-          output: response.result.reason,
-          score: response.result.score,
-          pass: response.result.pass,
-          tokensUsed: response.result.tokensUsed,
-        }),
+        },
       },
     });
   }
@@ -39,6 +30,12 @@ export default class GoatProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: any, options?: any) {
-    return this.httpProvider.callApi(prompt, context);
+    return this.httpProvider.callApi(prompt, {
+      ...context,
+      body: {
+        task: 'goat',
+        prompt,
+      },
+    });
   }
 }
