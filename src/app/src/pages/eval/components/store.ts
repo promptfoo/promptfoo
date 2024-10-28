@@ -57,6 +57,8 @@ interface TableState {
 
   inComparisonMode: boolean;
   setInComparisonMode: (inComparisonMode: boolean) => void;
+  stickyHeader: boolean;
+  setStickyHeader: (stickyHeader: boolean) => void;
 
   columnStates: Record<string, ColumnState>;
   setColumnState: (evalId: string, state: ColumnState) => void;
@@ -105,6 +107,8 @@ export const useStore = create<TableState>()(
 
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
+      stickyHeader: true,
+      setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
 
       columnStates: {},
       setColumnState: (evalId: string, state: ColumnState) =>
