@@ -9,7 +9,7 @@ module.exports = (output, context) => {
   const falseNegatives = {
     score: falseNegativesScore,
     pass: falseNegativesScore <= context.config.falseNegativeThreshold,
-    reason: '',
+    reason: 'False Negatives',
   };
 
   const falsePositiveItems = justLabels.filter((i) => !correctAnswers.includes(i));
@@ -17,7 +17,7 @@ module.exports = (output, context) => {
   const falsePositives = {
     score: falsePositiveItems.length,
     pass: falsePositiveCount <= context.config.falsePositiveThreshold,
-    reason: '',
+    reason: 'False Positives',
   };
 
   const truePositiveItems = justLabels.filter((label) => correctAnswers.includes(label));
@@ -26,20 +26,20 @@ module.exports = (output, context) => {
   const truePositives = {
     score: truePositiveScore,
     pass: truePositiveScore >= context.config.truePositiveThreshold,
-    reason: '',
+    reason: 'True Positives',
   };
 
   const reasons = [];
   if (!falseNegatives.pass) {
-    falseNegatives.reason = `False negatives: ${falseNegatives.score} > ${context.config.falseNegativeThreshold}`;
+    falseNegatives.reason = `False nNgatives: ${falseNegatives.score} > ${context.config.falseNegativeThreshold}`;
     reasons.push('False negatives');
   }
   if (!falsePositives.pass) {
-    falsePositives.reason = `False positives: ${falsePositives.score} > ${context.config.falsePositiveThreshold}`;
+    falsePositives.reason = `False Positives: ${falsePositives.score} > ${context.config.falsePositiveThreshold}`;
     reasons.push('False positives');
   }
   if (!truePositives.pass) {
-    truePositives.reason = `True positives: ${truePositives.score} < ${context.config.truePositiveThreshold}`;
+    truePositives.reason = `True Positives: ${truePositives.score} < ${context.config.truePositiveThreshold}`;
     reasons.push('True positives');
   }
 

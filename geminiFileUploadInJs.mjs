@@ -150,7 +150,15 @@ class GeminiApiService {
 
   async _uploadFile(assetUrl, mimeType) {
     if (!mimeType) {
-      const foundMimeType = mime.lookup(path.basename(assetUrl));
+      let basename = path.basename(assetUrl);
+      const splitted = basename.split('.');
+      const fileExtension = splitted[1];
+      if (fileExtension === 'bin') {
+        console.log('GeminiApiService:_uploadFile - Renaming .bin to .mp4', assetUrl);
+        splitted[1] = 'mp4';
+      }
+      basename = splitted.join('.');
+      const foundMimeType = mime.lookup(basename);
       if (!foundMimeType) {
         throw new Error(`Unable to determine mime type for ${assetUrl}`);
       }
@@ -245,6 +253,25 @@ class GeminiApiService {
         })
       )
     );
+  }
+}
+
+export const metricsHandling = async (hookName, context) => {
+  if (hookName !== 'afterAll') {
+    return;
+  }
+
+  for (const index in context.suite.tests) {
+    const test = context.suite.tests[index];
+    const testResults = context.results[index];
+    for (const index in testResults.gradingResult.componentResults) {
+      if (index === '0') {
+        continue; // skip the aggregate
+      }
+
+      const result = testResults.gradingResult.componentResults[index];
+      test.vars[result.reason.split(':')[0].replace(/\s/g, '')] = `(${result.pass ? 'P' : 'F'}) ${result.score}`;
+    }
   }
 }
 

@@ -3,6 +3,7 @@ extensions:
   - file://BASE_PATH/geminiFileUploadInJs.mjs:testsRepeat
   - file://BASE_PATH/geminiFileUploadInJs.mjs:replaceCurlyBrackets
   - file://BASE_PATH/geminiFileUploadInJs.mjs:returnCurlyBrackets
+  - file://BASE_PATH/geminiFileUploadInJs.mjs:metricsHandling
 
 prompts:
   - BASE_PATH/motion/prompts/prompt_one.txt
