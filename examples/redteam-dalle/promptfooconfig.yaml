@@ -6,9 +6,8 @@ providers:
   - openai:image:dall-e-3
 
 defaultTest:
-  options:
-    # Use the iterative red team technique for each test
-    provider: promptfoo:redteam:iterative:image
+  # Use the iterative red team technique for each test
+  provider: promptfoo:redteam:iterative:image
 
 tests:
   - vars:
