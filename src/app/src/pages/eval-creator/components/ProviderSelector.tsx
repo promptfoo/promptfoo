@@ -1,9 +1,14 @@
 import React from 'react';
+import { callApi } from '@app/utils/api';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import TextField from '@mui/material/TextField';
+import { styled } from '@mui/material/styles';
 import type { ProviderOptions } from '@promptfoo/types';
+import { useProvidersStore } from '../../../store/providersStore';
 import ProviderConfigDialog from './ProviderConfigDialog';
 
 const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: string })[])
@@ -184,110 +189,133 @@ function getGroupName(label?: string) {
   return PREFIX_TO_PROVIDER[name] || name;
 }
 
+const VisuallyHiddenInput = styled('input')({
+  clip: 'rect(0 0 0 0)',
+  clipPath: 'inset(50%)',
+  height: 1,
+  overflow: 'hidden',
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  whiteSpace: 'nowrap',
+  width: 1,
+});
+
 interface ProviderSelectorProps {
   providers: ProviderOptions[];
   onChange: (providers: ProviderOptions[]) => void;
 }
 
 const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
+  const { customProviders, addCustomProvider } = useProvidersStore();
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
 
-  const getProviderLabel = (provider: string | ProviderOptions): string => {
-    if (typeof provider === 'string') {
-      return provider;
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) {return;}
+
+    for (const file of Array.from(files)) {
+      if (!file.name.endsWith('.py') && !file.name.endsWith('.js')) {
+        alert('Only .py and .js files are supported');
+        continue;
+      }
+
+      try {
+        const fileContent = await file.text();
+        const response = await callApi('/eval/provider/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileContent,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to upload provider');
+        }
+
+        const { id, path, label } = await response.json();
+        const fileProvider = {
+          id,
+          config: {},
+          label,
+          metadata: { path },
+        } as ProviderOptions;
+
+        addCustomProvider(fileProvider);
+        onChange([...providers, fileProvider]);
+      } catch (error) {
+        console.error('Failed to upload provider:', error);
+        alert(`Failed to upload ${file.name}`);
+      }
     }
-    return provider.id || 'Unknown provider';
+
+    // Reset file input
+    event.target.value = '';
   };
 
-  const getProviderKey = (provider: string | ProviderOptions, index: number): string | number => {
-    if (typeof provider === 'string') {
-      return provider;
-    }
-    return provider.id || index;
+  const allProviders = React.useMemo(() => {
+    return [...defaultProviders, ...customProviders];
+  }, [customProviders]);
+
+  const handleProviderClick = (provider: ProviderOptions) => {
+    setSelectedProvider(provider);
   };
 
-  const handleProviderClick = (provider: string | ProviderOptions): void => {
-    if (typeof provider === 'string') {
-      alert('Cannot edit custom providers');
-    } else if (provider.config) {
-      setSelectedProvider(provider as ProviderOptions);
-    } else {
-      alert('There is no config for this provider');
-    }
+  const handleSave = (providerId: string, config: Record<string, any>) => {
+    onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
+    setSelectedProvider(null);
   };
 
-  const handleSave = (config: ProviderOptions['config']): void => {
-    if (selectedProvider) {
-      const updatedProviders = providers.map((provider) =>
-        provider.id === selectedProvider.id ? { ...provider, config } : provider,
-      );
-      onChange(updatedProviders);
-      setSelectedProvider(null);
-    }
+  const getOptionLabel = (option: string | ProviderOptions) => {
+    if (typeof option === 'string') {return option;}
+    return option.label || option.id;
   };
 
   return (
     <Box mt={2}>
-      <Autocomplete
-        multiple
-        freeSolo
-        options={defaultProviders}
-        value={providers}
-        groupBy={(option) => getGroupName(option.id)}
-        onChange={(event, newValue: (string | ProviderOptions)[]) => {
-          onChange(newValue.map((value) => (typeof value === 'string' ? { id: value } : value)));
-        }}
-        getOptionLabel={(option) => {
-          if (!option) {
-            return '';
-          }
-
-          let optionString: string = '';
-          if (typeof option === 'string') {
-            optionString = option;
-          }
-          if (
-            (option as ProviderOptions).id &&
-            typeof (option as ProviderOptions).id === 'string'
-          ) {
-            optionString = (option as ProviderOptions).id!;
-          }
-          const splits = optionString.split(':');
-          if (splits.length > 1) {
-            // account for Anthropic messages ID format having the descriptive text in the third split
-            if (splits.length > 2 && splits[0] === 'anthropic') {
-              return splits[2];
-            } else {
-              return splits[1];
-            }
-          }
-          return 'Unknown provider';
-        }}
-        renderTags={(value, getTagProps) =>
-          value.map((provider, index: number) => {
-            const label = getProviderLabel(provider);
-            const key = getProviderKey(provider, index);
-
-            return (
+      <Box display="flex" gap={2} alignItems="flex-start">
+        <Autocomplete
+          sx={{ flex: 1 }}
+          multiple
+          freeSolo
+          options={allProviders}
+          value={providers}
+          groupBy={(option) => getGroupName(option.id)}
+          onChange={(event, newValue: (string | ProviderOptions)[]) => {
+            onChange(newValue.map((value) => (typeof value === 'string' ? { id: value } : value)));
+          }}
+          getOptionLabel={getOptionLabel}
+          renderTags={(value, getTagProps) =>
+            value.map((provider, index: number) => (
               <Chip
                 variant="outlined"
-                label={label}
+                label={getOptionLabel(provider)}
                 {...getTagProps({ index })}
-                key={key}
+                key={provider.id || index}
                 onClick={() => handleProviderClick(provider)}
               />
-            );
-          })
-        }
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            variant="outlined"
-            placeholder="Select LLM providers"
-            helperText={providers.length > 0 ? 'Click a provider to configure its settings.' : null}
-          />
-        )}
-      />
+            ))
+          }
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              variant="outlined"
+              placeholder="Select LLM providers"
+              helperText={
+                providers.length > 0 ? 'Click a provider to configure its settings.' : null
+              }
+            />
+          )}
+        />
+        <Button component="label" variant="outlined" startIcon={<UploadFileIcon />}>
+          Upload Provider
+          <VisuallyHiddenInput type="file" accept=".py,.js" multiple onChange={handleFileUpload} />
+        </Button>
+      </Box>
       {selectedProvider && selectedProvider.id && (
         <ProviderConfigDialog
           open={!!selectedProvider}
