@@ -598,6 +598,10 @@ export const riskCategories: Record<string, Plugin[]> = {
     'debug-access',
     'hijacking',
     'pii',
+    'pii:api-db',
+    'pii:direct',
+    'pii:session',
+    'pii:social',
     'prompt-extraction',
     'rbac',
     'shell-injection',
@@ -608,6 +612,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   ],
   'Legal Risk': [
     'contracts',
+    'harmful:chemical-biological-weapons',
     'harmful:child-exploitation',
     'harmful:copyright-violations',
     'harmful:cybercrime',
