@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
 import CloseIcon from '@mui/icons-material/Close';
 import Box from '@mui/material/Box';
@@ -118,21 +119,59 @@ const StyledFab = styled(Fab)(({ theme }) => ({
 */
 
 export default function GeneratePage() {
-  const [value, setValue] = useState(0);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Get initial tab from URL hash or default to first page
+  const [value, setValue] = useState(() => {
+    const hash = location.hash.replace('#', '');
+    return hash ? Number.parseInt(hash, 10) : 0;
+  });
+
   const [yamlPreviewOpen, setYamlPreviewOpen] = useState(false);
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
   const { config } = useRedTeamConfig();
 
+  // Handle browser back/forward
+  useEffect(() => {
+    const hash = location.hash.replace('#', '');
+    if (hash) {
+      const newValue = Number.parseInt(hash, 10);
+      if (!Number.isNaN(newValue) && newValue >= 0 && newValue <= 4) {
+        setValue(newValue);
+      } else {
+        setValue(0);
+      }
+    } else {
+      setValue(0);
+    }
+  }, [location.hash]);
+
+  const updateHash = (newValue: number) => {
+    if (location.hash !== `#${newValue}`) {
+      navigate(`#${newValue}`);
+    }
+  };
+
   const handleNext = () => {
-    setValue((prevValue) => prevValue + 1);
+    setValue((prevValue) => {
+      const newValue = prevValue + 1;
+      updateHash(newValue);
+      return newValue;
+    });
   };
 
   const handleBack = () => {
-    setValue((prevValue) => prevValue - 1);
+    setValue((prevValue) => {
+      const newValue = prevValue - 1;
+      updateHash(newValue);
+      return newValue;
+    });
   };
 
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+    updateHash(newValue);
     setValue(newValue);
   };
 
