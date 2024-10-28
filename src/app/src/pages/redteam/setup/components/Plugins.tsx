@@ -202,6 +202,27 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     setConfigDialogOpen(true);
   };
 
+  const isPluginConfigured = (plugin: Plugin) => {
+    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      return true;
+    }
+    const config = pluginConfig[plugin];
+    if (!config || Object.keys(config).length === 0) {
+      return false;
+    }
+
+    for (const key in config) {
+      const value = config[key];
+      if (Array.isArray(value) && value.length === 0) {
+        return false;
+      }
+      if (typeof value === 'string' && value.trim() === '') {
+        return false;
+      }
+    }
+    return true;
+  };
+
   const renderPluginCategory = (category: string, plugins: readonly Plugin[]) => {
     const pluginsToShow = plugins.filter((plugin) => filteredPlugins.includes(plugin));
     if (pluginsToShow.length === 0) {
@@ -218,7 +239,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           <Grid container spacing={2}>
             {pluginsToShow.map((plugin) => (
               <Grid item xs={12} sm={6} md={4} key={plugin}>
-                <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
+                <Paper
+                  elevation={1}
+                  sx={{
+                    p: 2,
+                    height: '100%',
+                    border: (theme) =>
+                      selectedPlugins.has(plugin) &&
+                      PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                      !isPluginConfigured(plugin)
+                        ? `1px solid ${theme.palette.error.main}`
+                        : 'none',
+                  }}
+                >
                   <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
                       <FormControlLabel
@@ -244,6 +277,17 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                                 ]
                               }
                             </Typography>
+                            {selectedPlugins.has(plugin) &&
+                              PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                              !isPluginConfigured(plugin) && (
+                                <Typography
+                                  variant="caption"
+                                  color="error"
+                                  sx={{ display: 'block', mt: 0.5 }}
+                                >
+                                  Configuration required
+                                </Typography>
+                              )}
                           </Box>
                         }
                       />
@@ -257,7 +301,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                             }}
                             sx={{
                               ml: 1,
-                              color: 'action.active',
+                              color: (theme) =>
+                                PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                                !isPluginConfigured(plugin)
+                                  ? theme.palette.error.main
+                                  : 'action.active',
                               '&:hover': {
                                 color: 'primary.main',
                               },
