@@ -263,8 +263,8 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
     return [...defaultProviders, ...customProviders];
   }, [customProviders]);
 
-  const handleProviderClick = (provider: ProviderOptions) => {
-    setSelectedProvider(provider);
+  const handleProviderClick = (provider: ProviderOptions | string) => {
+    setSelectedProvider(typeof provider === 'string' ? { id: provider } : provider);
   };
 
   const handleSave = (providerId: string, config: Record<string, any>) => {
@@ -272,11 +272,11 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
     setSelectedProvider(null);
   };
 
-  const getOptionLabel = (option: string | ProviderOptions) => {
+  const getOptionLabel = (option: string | ProviderOptions): string => {
     if (typeof option === 'string') {
       return option;
     }
-    return option.label || option.id;
+    return option.label || option.id || '';  
   };
 
   return (
@@ -299,7 +299,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
                 variant="outlined"
                 label={getOptionLabel(provider)}
                 {...getTagProps({ index })}
-                key={provider.id || index}
+                key={typeof provider === 'string' ? provider : provider.id || index}
                 onClick={() => handleProviderClick(provider)}
               />
             ))
