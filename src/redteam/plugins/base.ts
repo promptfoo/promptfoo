@@ -15,6 +15,7 @@ import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
 import { loadRedteamProvider } from '../providers/shared';
 import { removePrefix } from '../util';
 
@@ -82,7 +83,7 @@ export abstract class RedteamPluginBase {
       const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        await sleep(delayMs);
       }
 
       if (error) {

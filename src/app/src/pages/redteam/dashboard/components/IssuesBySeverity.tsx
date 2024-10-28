@@ -17,11 +17,11 @@ export default function IssuesBySeverity({ severityCounts, totalIssues }: Issues
     { severity: 'Low', count: severityCounts[Severity.Low] },
   ].filter((item) => item.count > 0);
 
-  const COLORS = {
-    Critical: '#d32f2f',
-    High: '#f57c00',
-    Medium: '#fbc02d',
-    Low: '#388e3c',
+  const COLORS: Record<Severity, string> = {
+    [Severity.Critical]: '#d32f2f',
+    [Severity.High]: '#f57c00',
+    [Severity.Medium]: '#fbc02d',
+    [Severity.Low]: '#388e3c',
   };
 
   return (

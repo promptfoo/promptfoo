@@ -7,6 +7,10 @@ import invariant from 'tiny-invariant';
 import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
+import {
+  AdalineGatewayChatProvider,
+  AdalineGatewayEmbeddingProvider,
+} from './providers/adaline.gateway';
 import { AI21ChatCompletionProvider } from './providers/ai21';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
@@ -62,6 +66,7 @@ import {
   ReplicateProvider,
 } from './providers/replicate';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
+import { SimulatedUser } from './providers/simulatedUser';
 import { createTogetherAiProvider } from './providers/togetherai';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
@@ -427,6 +432,22 @@ export async function loadApiProvider(
     } else {
       ret = new LocalAiChatProvider(modelType, providerOptions);
     }
+  } else if (providerPath.startsWith('adaline:')) {
+    const splits = providerPath.split(':');
+    if (splits.length < 4) {
+      throw new Error(
+        `Invalid adaline provider path: ${providerPath}. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'`,
+      );
+    }
+    const providerName = splits[1];
+    const modelType = splits[2];
+    const modelName = splits[3];
+
+    if (modelType === 'embedding' || modelType === 'embeddings') {
+      ret = new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
+    } else {
+      ret = new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
+    }
   } else if (
     providerPath.startsWith('http:') ||
     providerPath.startsWith('https:') ||
@@ -456,6 +477,8 @@ export async function loadApiProvider(
     ret = new RedteamGoatProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
+  } else if (providerPath === 'promptfoo:simulated-user') {
+    ret = new SimulatedUser(providerOptions);
   } else if (providerPath.startsWith('groq:')) {
     const modelName = providerPath.split(':')[1];
     ret = new GroqProvider(modelName, providerOptions);

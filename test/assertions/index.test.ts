@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import * as fs from 'fs';
+import { createRequire } from 'node:module';
 import * as path from 'path';
 import {
   containsXml,
@@ -29,6 +30,15 @@ import { TestGrader } from '../util/utils';
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
+
+jest.mock('node:module', () => {
+  const mockRequire: NodeJS.Require = {
+    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+  } as unknown as NodeJS.Require;
+  return {
+    createRequire: jest.fn().mockReturnValue(mockRequire),
+  };
+});
 
 jest.mock('../../src/fetch', () => {
   const actual = jest.requireActual('../../src/fetch');
@@ -2434,6 +2444,81 @@ describe('runAssertion', () => {
       const fileAssertion: Assertion = {
         type: 'javascript',
         value: 'file:///path/to/assert.js',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: fileAssertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(mockFn).toHaveBeenCalledWith('Expected output', {
+        prompt: 'Some prompt',
+        vars: {},
+        test: {},
+      });
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        reason: expect.stringContaining(expectedReason),
+      });
+    },
+  );
+
+  it.each([
+    [
+      'boolean',
+      jest.fn((output: string) => output === 'Expected output'),
+      true,
+      'Assertion passed',
+    ],
+    ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
+    [
+      'GradingResult',
+      jest.fn((output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
+      true,
+      'Custom reason',
+    ],
+    [
+      'boolean',
+      jest.fn((output: string) => output !== 'Expected output'),
+      false,
+      'Custom function returned false',
+    ],
+    ['number', jest.fn((output: string) => 0), false, 'Custom function returned false'],
+    [
+      'GradingResult',
+      jest.fn((output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
+      false,
+      'Custom reason',
+    ],
+    [
+      'boolean Promise',
+      jest.fn((output: string) => Promise.resolve(true)),
+      true,
+      'Assertion passed',
+    ],
+  ])(
+    'should pass when assertion is a package path',
+    async (type, mockFn, expectedPass, expectedReason) => {
+      const output = 'Expected output';
+
+      const require = createRequire('');
+      jest.spyOn(require, 'resolve').mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+      jest.doMock(
+        path.resolve('/node_modules/@promptfoo/fake/index.js'),
+        () => {
+          return {
+            assertionFunction: mockFn,
+          };
+        },
+        { virtual: true },
+      );
+
+      const fileAssertion: Assertion = {
+        type: 'javascript',
+        value: 'package:@promptfoo/fake:assertionFunction',
       };
 
       const result: GradingResult = await runAssertion({
