@@ -40,6 +40,7 @@ export interface CallApiContextParams {
   originalProvider?: ApiProvider;
   prompt: Prompt;
   vars: Record<string, string | object>;
+  debug?: boolean;
 }
 
 export interface CallApiOptionsParams {
@@ -82,8 +83,10 @@ export interface ProviderResponse {
     redteamFinalPrompt?: string;
     [key: string]: any;
   };
+  raw?: string | any;
   output?: string | any;
   tokenUsage?: TokenUsage;
+  isRefusal?: boolean;
 }
 
 export interface ProviderEmbeddingResponse {
@@ -140,6 +143,9 @@ export type EnvOverrides = {
   VERTEX_PROJECT_ID?: string;
   VERTEX_PUBLISHER?: string;
   VERTEX_REGION?: string;
+  WATSONX_AI_APIKEY?: string;
+  WATSONX_AI_PROJECT_ID?: string;
+  WATSONX_AI_BEARER_TOKEN?: string;
 };
 
 export type FilePath = string;

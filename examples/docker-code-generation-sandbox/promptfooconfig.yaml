@@ -1,10 +1,11 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Code generation with sandboxed verification
 
 prompts: code_generation_prompt.txt
 
 providers:
   - openai:gpt-4
-  - anthropic:messages:claude-3-5-sonnet-20240620
+  - anthropic:messages:claude-3-5-sonnet-20241022
 
 tests:
   - vars:

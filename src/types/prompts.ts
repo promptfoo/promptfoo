@@ -12,6 +12,7 @@ export type PromptConfig = {
 
 export type PromptFunctionContext = {
   vars: Record<string, string | object>;
+  config: Record<string, any>;
   provider: {
     id: string;
     label?: string;

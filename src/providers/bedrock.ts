@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import dedent from 'dedent';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
@@ -17,7 +18,9 @@ import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
+  accessKeyId?: string;
   region?: string;
+  secretAccessKey?: string;
 }
 
 interface TextGenerationOptions {
@@ -312,7 +315,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         'temperature',
         config?.temperature,
         getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
-        0.01,
+        0,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1);
       if ([LlamaVersion.V2, LlamaVersion.V3, LlamaVersion.V3_1].includes(version)) {
@@ -574,6 +577,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -663,6 +667,16 @@ export abstract class AwsBedrockGenericProvider {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
   }
 
+  getCredentials(): AwsCredentialIdentity | undefined {
+    if (this.config.accessKeyId && this.config.secretAccessKey) {
+      return {
+        accessKeyId: this.config.accessKeyId,
+        secretAccessKey: this.config.secretAccessKey,
+      };
+    }
+    return undefined;
+  }
+
   async getBedrockInstance() {
     if (!this.bedrock) {
       let handler;
@@ -682,8 +696,10 @@ export abstract class AwsBedrockGenericProvider {
       }
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
+        const credentials = this.getCredentials();
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
+          ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
         });
         this.bedrock = bedrock;

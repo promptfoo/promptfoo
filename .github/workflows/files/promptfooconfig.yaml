@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - echo
+  - echo
+  - id: echo
+    config:
+      label: 'test'
+tags:
+  env: 'ci'
+
+prompts:
+  - 'Summarize this: {{text}}'
+  - 'Summarize this: {{text}}'
+  - 'Do not Summarize this: {{text}}'
+  - 'This is the prompt {{text}}'
+
+tests:
+  - vars:
+      text: 'The quick brown fox jumps over the lazy dog.'
+    assert:
+      - type: contains
+        value: 'quick brown fox'

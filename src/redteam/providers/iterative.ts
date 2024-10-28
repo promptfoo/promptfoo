@@ -14,7 +14,7 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { shouldGenerateRemote } from '../util';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
-import { loadRedteamProvider } from './shared';
+import { getTargetResponse, loadRedteamProvider } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -68,6 +68,9 @@ async function runRedteamConversation({
       },
       vars: {},
     });
+    if (redteamResp.error) {
+      throw new Error(`Error from redteam provider: ${redteamResp.error}`);
+    }
     invariant(
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
@@ -107,20 +110,15 @@ async function runRedteamConversation({
       },
       vars: {},
     });
+    if (isOnTopicResp.error) {
+      throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
+    }
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
     const isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean })
       .onTopic;
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
-    const targetResp = await targetProvider.callApi(targetPrompt);
-    invariant(targetResp.output, 'Expected output to be defined');
-    let targetResponse;
-    if (typeof targetResp.output === 'string') {
-      targetResponse = targetResp.output;
-    } else {
-      targetResponse = JSON.stringify(targetResp.output);
-    }
-
+    const targetResponse = await getTargetResponse(targetProvider, targetPrompt);
     const penalizedPhrases = ['in the face of impending doom'];
     const containsPenalizedPhrase = penalizedPhrases.some((phrase) =>
       targetResponse.toLowerCase().includes(phrase),
@@ -144,6 +142,9 @@ async function runRedteamConversation({
       },
       vars: {},
     });
+    if (judgeResp.error) {
+      throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
+    }
     invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
     let { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
 

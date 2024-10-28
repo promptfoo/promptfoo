@@ -1,49 +1,43 @@
-import type { ReactNode } from 'react';
-import React, { createContext, useContext, useState } from 'react';
-import type { AlertColor } from '@mui/material';
-import { Snackbar, Alert } from '@mui/material';
+import React, { useState, type ReactNode } from 'react';
+import { Snackbar, Alert, type AlertColor } from '@mui/material';
+import { ToastContext } from './ToastContextDef';
 
-interface ToastContextType {
-  showToast: (message: string, severity?: AlertColor) => void;
-}
-
-const ToastContext = createContext<ToastContextType | undefined>(undefined);
-
-export const useToast = (): ToastContextType => {
-  const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error('useToast must be used within a ToastProvider');
-  }
-  return context;
-};
-
-interface ToastProviderProps {
-  children: ReactNode;
-}
-
-interface ToastState {
-  message: string;
-  severity: AlertColor;
-  open: boolean;
-}
-
-export const ToastProvider = ({ children }: ToastProviderProps) => {
-  const [toast, setToast] = useState<ToastState>({ message: '', severity: 'info', open: false });
+export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState('');
+  const [severity, setSeverity] = useState<AlertColor>('info');
 
   const showToast = (message: string, severity: AlertColor = 'info') => {
-    setToast({ message, severity, open: true });
+    setMessage(message);
+    setSeverity(severity);
+    setOpen(true);
   };
 
-  const handleClose = () => {
-    setToast((prev) => ({ ...prev, open: false }));
+  const handleClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setOpen(false);
   };
 
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <Snackbar open={toast.open} autoHideDuration={6000} onClose={handleClose}>
-        <Alert onClose={handleClose} severity={toast.severity}>
-          {toast.message}
+      <Snackbar
+        open={open}
+        autoHideDuration={2000}
+        onClose={handleClose}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert
+          severity={severity}
+          sx={{
+            width: '100%',
+            maxWidth: '600px',
+            boxShadow: (theme) => theme.shadows[3],
+          }}
+        >
+          {message}
         </Alert>
       </Snackbar>
     </ToastContext.Provider>

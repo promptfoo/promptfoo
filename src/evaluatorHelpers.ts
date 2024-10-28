@@ -6,6 +6,7 @@ import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
 import logger from './logger';
+import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
@@ -103,6 +104,23 @@ export async function renderPrompt(
       } else {
         vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
       }
+    } else if (isPackagePath(value)) {
+      const basePath = cliState.basePath || '';
+      const javascriptOutput = (await (
+        await loadFromPackage(value, basePath)
+      )(varName, basePrompt, vars, provider)) as {
+        output?: string;
+        error?: string;
+      };
+      if (javascriptOutput.error) {
+        throw new Error(`Error running ${value}: ${javascriptOutput.error}`);
+      }
+      if (!javascriptOutput.output) {
+        throw new Error(
+          `Expected ${value} to return { output: string } but got ${javascriptOutput}`,
+        );
+      }
+      vars[varName] = javascriptOutput.output;
     }
   }
 

@@ -14,7 +14,7 @@ import type {
 } from '../types';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
-import type { GeminiErrorResponse, Palm2ApiResponse } from './vertexUtil';
+import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
 import {
   getGoogleClient,
   maybeCoerceToGeminiFormat,
@@ -168,39 +168,6 @@ class VertexGenericProvider implements ApiProvider {
 export class VertexChatProvider extends VertexGenericProvider {
   // TODO(ian): Completion models
   // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning#gemini-model-versions
-  static CHAT_MODELS = [
-    'aqa',
-    'chat-bison',
-    'chat-bison-32k',
-    'chat-bison-32k@001',
-    'chat-bison-32k@002',
-    'chat-bison@001',
-    'chat-bison@002',
-    'codechat-bison',
-    'codechat-bison-32k',
-    'codechat-bison-32k@001',
-    'codechat-bison-32k@002',
-    'codechat-bison@001',
-    'codechat-bison@002',
-    'gemini-1.0-pro',
-    'gemini-1.0-pro-001',
-    'gemini-1.0-pro-002',
-    'gemini-1.0-pro-vision',
-    'gemini-1.0-pro-vision-001',
-    'gemini-1.0-pro-vision-001',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-001',
-    'gemini-1.5-flash-preview-0514',
-    'gemini-1.5-pro',
-    'gemini-1.5-pro-001',
-    'gemini-1.5-pro-latest',
-    'gemini-1.5-pro-preview-0409',
-    'gemini-1.5-pro-preview-0514',
-    'gemini-pro',
-    'gemini-pro-vision',
-    'gemini-ultra',
-  ];
-
   constructor(
     modelName: string,
     options: { config?: VertexCompletionOptions; id?: string; env?: EnvOverrides } = {},
@@ -217,20 +184,27 @@ export class VertexChatProvider extends VertexGenericProvider {
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
-    let contents = parseChatPrompt(prompt, {
-      role: 'user',
-      parts: {
-        text: prompt,
+    let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(
+      prompt,
+      {
+        role: 'user',
+        parts: {
+          text: prompt,
+        },
       },
-    });
-    const { contents: updatedContents, coerced } = maybeCoerceToGeminiFormat(contents);
+    );
+    const {
+      contents: updatedContents,
+      coerced,
+      systemInstruction: parsedSystemInstruction,
+    } = maybeCoerceToGeminiFormat(contents);
     if (coerced) {
       logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
       contents = updatedContents;
     }
 
-    let systemInstruction: Content | undefined;
-    if (this.config.systemInstruction) {
+    let systemInstruction: Content | undefined = parsedSystemInstruction;
+    if (this.config.systemInstruction && !systemInstruction) {
       // Make a copy
       systemInstruction = clone(this.config.systemInstruction);
       if (systemInstruction && context?.vars) {
@@ -242,10 +216,9 @@ export class VertexChatProvider extends VertexGenericProvider {
         }
       }
     }
-
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
-      contents,
+      contents: contents as GeminiFormat,
       generationConfig: {
         context: this.config.context,
         examples: this.config.examples,

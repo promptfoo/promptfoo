@@ -4,6 +4,7 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../src/csv';
 import { fetchCsvFromGoogleSheet } from '../src/googleSheets';
+import logger from '../src/logger';
 import { loadApiProvider } from '../src/providers';
 import {
   generatePersonasPrompt,
@@ -16,7 +17,6 @@ import {
 } from '../src/testCases';
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../src/types';
 
-jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
@@ -183,7 +183,7 @@ describe('readTest', () => {
     const input: any = 123;
 
     await expect(readTest(input)).rejects.toThrow(
-      'Test case must have either assert, vars, options, or metadata property. Instead got {}',
+      'Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold.\n\nInstead got:\n{}',
     );
   });
 
@@ -454,6 +454,22 @@ describe('readTests', () => {
       vars: { var1: 'value3', var2: 'value4' },
       assert: [{ type: 'equals', value: 'expected2' }],
     });
+  });
+
+  it('should log a warning for unsupported test format', async () => {
+    const warnSpy = jest.spyOn(logger, 'warn');
+    const unsupportedTests = { invalid: 'format' };
+
+    await readTests(unsupportedTests as any);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Warning: Unsupported 'tests' format in promptfooconfig.yaml."),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('should not log a warning if tests is undefined', async () => {
+    await readTests(undefined);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });
 

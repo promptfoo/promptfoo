@@ -190,10 +190,12 @@ export class BrowserProvider implements ApiProvider {
           `Expected headless action to have a selector when using 'click'`,
         );
         logger.debug(`Waiting for and clicking on ${renderedArgs.selector}`);
-        const clickElement = await getTargetElement(renderedArgs.selector);
-        if (clickElement) {
-          await clickElement.click();
-        } else if (!renderedArgs.strict) {
+        const element = await getTargetElement(renderedArgs.selector);
+        if (element) {
+          await page.click(renderedArgs.selector);
+        } else if (renderedArgs.optional) {
+          logger.debug(`Optional element ${renderedArgs.selector} not found, continuing`);
+        } else {
           throw new Error(`Element not found: ${renderedArgs.selector}`);
         }
         break;

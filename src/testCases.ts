@@ -95,7 +95,7 @@ export async function readStandaloneTestsFile(
 
   return rows.map((row, idx) => {
     const test = testCaseFromCsvRow(row);
-    test.description = `Row #${idx + 1}`;
+    test.description ||= `Row #${idx + 1}`;
     return test;
   });
 }
@@ -140,10 +140,19 @@ export async function readTest(
     }
   }
 
-  // Validate the shape of the test case
-  if (!testCase.assert && !testCase.vars && !testCase.options && !testCase.metadata) {
+  if (
+    !testCase.assert &&
+    !testCase.vars &&
+    !testCase.options &&
+    !testCase.metadata &&
+    !testCase.provider &&
+    !testCase.providerOutput &&
+    typeof testCase.threshold !== 'number'
+  ) {
+    // Validate the shape of the test case
+    // We skip validation when loading the default test case, since it may not have all the properties
     throw new Error(
-      `Test case must have either assert, vars, options, or metadata property. Instead got ${JSON.stringify(
+      `Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold.\n\nInstead got:\n${JSON.stringify(
         testCase,
         null,
         2,
@@ -222,6 +231,14 @@ export async function readTests(
         ret.push(await readTest(globOrTest, basePath));
       }
     }
+  } else if (tests !== undefined && tests !== null) {
+    logger.warn(dedent`
+      Warning: Unsupported 'tests' format in promptfooconfig.yaml.
+      Expected: string, string[], or TestCase[], but received: ${typeof tests}
+
+      Please check your configuration file and ensure the 'tests' field is correctly formatted.
+      For more information, visit: https://promptfoo.dev/docs/configuration/reference/#test-case
+    `);
   }
 
   if (

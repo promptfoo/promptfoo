@@ -1,5 +1,4 @@
 import type { Cache } from 'cache-manager';
-import fetch from 'node-fetch';
 import Replicate from 'replicate';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';

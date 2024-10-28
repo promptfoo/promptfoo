@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import httpZ from 'http-z';
 import path from 'path';
 import invariant from 'tiny-invariant';
@@ -23,10 +24,22 @@ interface HttpProviderConfig {
   url?: string;
   method?: string;
   headers?: Record<string, string>;
-  body?: Record<string, any>;
+  body?: Record<string, any> | string | any[];
   queryParams?: Record<string, string>;
   responseParser?: string | Function;
   request?: string;
+}
+
+function contentTypeIsJson(headers: Record<string, string> | undefined) {
+  if (!headers) {
+    return false;
+  }
+  return Object.keys(headers).some((key) => {
+    if (key.toLowerCase().startsWith('content-type')) {
+      return headers?.[key].includes('application/json');
+    }
+    return false;
+  });
 }
 
 export async function createResponseParser(
@@ -67,36 +80,66 @@ export async function createResponseParser(
   );
 }
 
-export function processBody(
-  body: Record<string, any>,
+function processValue(value: any, vars: Record<string, any>): any {
+  if (typeof value === 'string') {
+    const renderedValue = nunjucks.renderString(value, vars || {});
+    try {
+      return JSON.parse(renderedValue);
+    } catch {
+      return renderedValue;
+    }
+  }
+  return value;
+}
+
+function processObjects(
+  body: Record<string, any> | any[],
   vars: Record<string, any>,
-): Record<string, any> {
+): Record<string, any> | any[] {
+  if (Array.isArray(body)) {
+    return body.map((item) =>
+      typeof item === 'object' && item !== null
+        ? processObjects(item, vars)
+        : processValue(item, vars),
+    );
+  }
+
   const processedBody: Record<string, any> = {};
 
   for (const [key, value] of Object.entries(body)) {
     if (typeof value === 'object' && value !== null) {
-      if (Array.isArray(value)) {
-        processedBody[key] = value.map((item) =>
-          typeof item === 'object' && item !== null
-            ? processBody(item, vars)
-            : nunjucks.renderString(item, vars),
-        );
-      } else {
-        processedBody[key] = processBody(value, vars);
-      }
-    } else if (typeof value === 'string') {
-      const renderedValue = nunjucks.renderString(value, vars || {});
-      try {
-        processedBody[key] = JSON.parse(renderedValue);
-      } catch {
-        processedBody[key] = renderedValue;
-      }
+      processedBody[key] = processObjects(value, vars);
     } else {
-      processedBody[key] = value;
+      processedBody[key] = processValue(value, vars);
     }
   }
-
   return processedBody;
+}
+
+export function processJsonBody(
+  body: Record<string, any> | any[],
+  vars: Record<string, any>,
+): Record<string, any> | any[] {
+  // attempting to process a string as a stringifiedJSON object
+  if (typeof body === 'string') {
+    body = processValue(body, vars);
+    if (typeof body == 'string') {
+      return body;
+    }
+    return processObjects(body, vars);
+  }
+  return processObjects(body, vars);
+}
+
+export function processTextBody(body: string, vars: Record<string, any>): string {
+  if (body == null) {
+    return body;
+  }
+  invariant(
+    typeof body !== 'object',
+    'Expected body to be a string when content type is not application/json',
+  );
+  return nunjucks.renderString(body, vars);
 }
 
 function parseRawRequest(input: string) {
@@ -150,6 +193,59 @@ export class HttpProvider implements ApiProvider {
     return `[HTTP Provider ${this.url}]`;
   }
 
+  private getDefaultHeaders(body: any): Record<string, string> {
+    if (this.config.method === 'GET') {
+      return {};
+    }
+    if (typeof body === 'object' && body !== null) {
+      return { 'content-type': 'application/json' };
+    } else if (typeof body === 'string') {
+      return { 'content-type': 'application/x-www-form-urlencoded' };
+    }
+    return {};
+  }
+
+  private validateContentTypeAndBody(headers: Record<string, string>, body: any): void {
+    if (body != null) {
+      if (typeof body == 'object' && !contentTypeIsJson(headers)) {
+        throw new Error(
+          'Content-Type is not application/json, but body is an object or array. The body must be a string if the Content-Type is not application/json.',
+        );
+      }
+      if (typeof body === 'string' && contentTypeIsJson(headers)) {
+        console.warn(
+          chalk.yellow(
+            'Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
+          ),
+        );
+      }
+    }
+  }
+
+  private getContentType(headers: Record<string, string>): string | undefined {
+    const contentTypeHeader = Object.keys(headers).find(
+      (key) => key.toLowerCase() === 'content-type',
+    );
+    return contentTypeHeader ? headers[contentTypeHeader] : undefined;
+  }
+
+  private getHeaders(
+    defaultHeaders: Record<string, string>,
+    vars: Record<string, any>,
+  ): Record<string, string> {
+    const configHeaders = this.config.headers || {};
+    // Convert all keys in configHeaders to lowercase
+    const headers = Object.fromEntries(
+      Object.entries(configHeaders).map(([key, value]) => [key.toLowerCase(), value]),
+    );
+    return Object.fromEntries(
+      Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
+        key,
+        nunjucks.renderString(value, vars),
+      ]),
+    );
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const vars = {
       ...(context?.vars || {}),
@@ -160,16 +256,18 @@ export class HttpProvider implements ApiProvider {
       return this.callApiWithRawRequest(vars);
     }
 
+    const defaultHeaders = this.getDefaultHeaders(this.config.body);
+    const headers = this.getHeaders(defaultHeaders, vars);
+    this.validateContentTypeAndBody(headers, this.config.body);
+
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
-      headers: Object.fromEntries(
-        Object.entries(
-          this.config.headers ||
-            (this.config.method === 'GET' ? {} : { 'content-type': 'application/json' }),
-        ).map(([key, value]) => [key, nunjucks.renderString(value, vars)]),
-      ),
-      body: processBody(this.config.body || {}, vars),
+      headers,
+      // We validate the content type and body with this.validateContentTypeAndBody
+      body: contentTypeIsJson(headers)
+        ? processJsonBody(this.config.body as Record<string, any> | any[], vars)
+        : processTextBody(this.config.body as string, vars),
       queryParams: this.config.queryParams
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
@@ -182,7 +280,7 @@ export class HttpProvider implements ApiProvider {
     };
 
     const method = renderedConfig.method || 'POST';
-    const headers = renderedConfig.headers || { 'Content-Type': 'application/json' };
+
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
@@ -201,10 +299,15 @@ export class HttpProvider implements ApiProvider {
         {
           method: renderedConfig.method,
           headers: renderedConfig.headers,
-          ...(method !== 'GET' && { body: JSON.stringify(renderedConfig.body) }),
+          ...(method !== 'GET' && {
+            body: contentTypeIsJson(headers)
+              ? JSON.stringify(renderedConfig.body)
+              : String(renderedConfig.body)?.trim(),
+          }),
         },
         REQUEST_TIMEOUT_MS,
         'text',
+        context?.debug,
       );
     } catch (err) {
       return {
@@ -212,6 +315,10 @@ export class HttpProvider implements ApiProvider {
       };
     }
     logger.debug(`\tHTTP response: ${response.data}`);
+    const ret: ProviderResponse = {};
+    if (context?.debug) {
+      ret.raw = response.data;
+    }
 
     const rawText = response.data as string;
     let parsedData;
@@ -220,11 +327,14 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
-
-    const parsedOutput = (await this.responseParser)(parsedData, rawText);
-    return {
-      output: parsedOutput.output || parsedOutput,
-    };
+    try {
+      const parsedOutput = (await this.responseParser)(parsedData, rawText);
+      ret.output = parsedOutput.output || parsedOutput;
+      return ret;
+    } catch (err) {
+      ret.error = `Error parsing response: ${String(err)}`;
+      return ret;
+    }
   }
 
   private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
@@ -239,6 +349,7 @@ export class HttpProvider implements ApiProvider {
     ).toString();
 
     logger.debug(`Calling HTTP provider with raw request: ${url}`);
+    logger.debug(`Calling HTTP provider with raw request: ${parsedRequest}`);
     let response;
     try {
       response = await fetchWithCache(

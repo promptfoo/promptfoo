@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../../../src/cache';
+import { VERSION } from '../../../src/constants';
 import { extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
 import type { ApiProvider } from '../../../src/types';
 
@@ -41,6 +42,8 @@ describe('System Purpose Extractor', () => {
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
     jest.mocked(fetchWithCache).mockResolvedValue({
       data: { task: 'purpose', result: 'Remote extracted purpose' },
+      status: 200,
+      statusText: 'OK',
       cached: false,
     });
 
@@ -51,7 +54,11 @@ describe('System Purpose Extractor', () => {
       'https://api.promptfoo.dev/v1/generate',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ task: 'purpose', prompts: ['prompt1', 'prompt2'] }),
+        body: JSON.stringify({
+          task: 'purpose',
+          prompts: ['prompt1', 'prompt2'],
+          version: VERSION,
+        }),
       }),
       expect.any(Number),
       'json',

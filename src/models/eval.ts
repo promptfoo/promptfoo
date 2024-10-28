@@ -12,8 +12,8 @@ import {
   tagsTable,
   evalsToTagsTable,
   evalResultsTable,
-  evalsToProvidersTable,
 } from '../database/tables';
+import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import type {
@@ -32,7 +32,6 @@ import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
-import type Provider from './provider';
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
@@ -159,31 +158,27 @@ export default class Eval {
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
     const evalId = opts?.id || createEvalId(createdAt);
+    const author = opts?.author || getUserEmail();
     const db = getDb();
-    await db.transaction((tx) => {
-      tx.insert(evalsTable)
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(evalsTable)
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
-          author: opts?.author,
+          author,
           description: config.description,
           config,
           results: {},
         })
         .run();
-      if (opts?.results) {
-        const res = tx
-          .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
-          .run();
-        logger.debug(`Inserted ${res.changes} eval results`);
-      }
 
       for (const prompt of renderedPrompts) {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
 
-        tx.insert(promptsTable)
+        await tx
+          .insert(promptsTable)
           .values({
             id: promptId,
             prompt: label,
@@ -191,7 +186,8 @@ export default class Eval {
           .onConflictDoNothing()
           .run();
 
-        tx.insert(evalsToPromptsTable)
+        await tx
+          .insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
@@ -201,10 +197,18 @@ export default class Eval {
 
         logger.debug(`Inserting prompt ${promptId}`);
       }
+      if (opts?.results) {
+        const res = await tx
+          .insert(evalResultsTable)
+          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
+          .run();
+        logger.debug(`Inserted ${res.changes} eval results`);
+      }
 
       // Record dataset relation
       const datasetId = sha256(JSON.stringify(config.tests || []));
-      tx.insert(datasetsTable)
+      await tx
+        .insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
@@ -212,7 +216,8 @@ export default class Eval {
         .onConflictDoNothing()
         .run();
 
-      tx.insert(evalsToDatasetsTable)
+      await tx
+        .insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
@@ -227,7 +232,8 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          tx.insert(tagsTable)
+          await tx
+            .insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -236,7 +242,8 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          tx.insert(evalsToTagsTable)
+          await tx
+            .insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,
@@ -354,24 +361,6 @@ export default class Eval {
     }
   }
 
-  async addProviders(providers: Provider[]) {
-    if (this.persisted) {
-      const db = getDb();
-      await db.transaction(async (tx) => {
-        for (const provider of providers) {
-          const id = provider.id;
-          tx.insert(evalsToProvidersTable)
-            .values({
-              evalId: this.id,
-              providerId: id,
-            })
-            .onConflictDoNothing()
-            .run();
-        }
-      });
-    }
-  }
-
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
   }
@@ -447,14 +436,14 @@ export default class Eval {
       db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
       db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
       db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
-      db.delete(evalsToProvidersTable).where(eq(evalsToProvidersTable.evalId, this.id)).run();
+
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
 }
 
-export async function getSummaryofLatestEvals(
+export async function getSummaryOfLatestEvals(
   limit: number = DEFAULT_QUERY_LIMIT,
   filterDescription?: string,
   datasetId?: string,

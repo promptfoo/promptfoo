@@ -1,6 +1,5 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
-import type { Response } from 'node-fetch';
 import { URL } from 'url';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { getEnvBool, isCI } from './envars';
@@ -167,7 +166,7 @@ export async function createShareableUrl(
   let fullUrl = SHARE_VIEW_BASE_URL;
   if (cloudConfig.isEnabled()) {
     appBaseUrl = cloudConfig.getAppUrl();
-    fullUrl = `${appBaseUrl}/results/${evalId}`;
+    fullUrl = `${appBaseUrl}/eval/${evalId}`;
   } else {
     const appBaseUrl =
       typeof evalRecord.config.sharing === 'object'

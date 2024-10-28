@@ -8,7 +8,7 @@ import {
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
-import { useToast } from '@app/contexts/ToastContext';
+import { useToast } from '@app/hooks/useToast';
 import type {
   EvaluateTableRow,
   EvaluateTableOutput,
@@ -593,10 +593,10 @@ function ResultsTable({
   ]);
 
   const descriptionColumn = React.useMemo(() => {
-    const hasAnyDescriptions = body.some((row) => row.description);
+    const hasAnyDescriptions = body.some((row) => row.test.description);
     if (hasAnyDescriptions) {
       return {
-        accessorFn: (row: EvaluateTableRow) => row.description || '',
+        accessorFn: (row: EvaluateTableRow) => row.test.description || '',
         id: 'description',
         header: () => <span className="font-bold">Description</span>,
         cell: (info: CellContext<EvaluateTableRow, unknown>) => (

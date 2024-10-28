@@ -1,4 +1,6 @@
 import type { GoogleAuth } from 'google-auth-library';
+import { z } from 'zod';
+import logger from '../logger';
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -91,19 +93,91 @@ export interface Palm2ApiResponse {
   ];
 }
 
-export function maybeCoerceToGeminiFormat(contents: any) {
+const PartSchema = z.object({
+  text: z.string().optional(),
+  inline_data: z
+    .object({
+      mime_type: z.string(),
+      data: z.string(),
+    })
+    .optional(),
+});
+
+const ContentSchema = z.object({
+  role: z.enum(['user', 'model']).optional(),
+  parts: z.array(PartSchema),
+});
+
+const GeminiFormatSchema = z.array(ContentSchema);
+
+export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
+export type GeminiPart = z.infer<typeof PartSchema>;
+
+export function maybeCoerceToGeminiFormat(contents: any): {
+  contents: GeminiFormat;
+  coerced: boolean;
+  systemInstruction: { parts: [GeminiPart, ...GeminiPart[]] } | undefined;
+} {
   let coerced = false;
-  if (Array.isArray(contents) && typeof contents[0].content === 'string') {
-    // This looks like an OpenAI chat prompt.  Convert it to a compatible format
-    contents = {
-      role: 'user',
-      parts: {
-        text: contents.map((item) => item.content).join(''),
-      },
+  const parseResult = GeminiFormatSchema.safeParse(contents);
+
+  if (parseResult.success) {
+    return {
+      contents: parseResult.data,
+      coerced,
+      systemInstruction: undefined,
     };
-    coerced = true;
   }
-  return { contents, coerced };
+
+  let coercedContents: GeminiFormat;
+
+  if (typeof contents === 'string') {
+    coercedContents = [
+      {
+        parts: [{ text: contents }],
+      },
+    ];
+    coerced = true;
+  } else if (
+    Array.isArray(contents) &&
+    contents.every((item) => typeof item.content === 'string')
+  ) {
+    // This looks like an OpenAI chat format
+    coercedContents = contents.map((item) => ({
+      role: item.role as 'user' | 'model' | undefined,
+      parts: [{ text: item.content }],
+    }));
+    coerced = true;
+  } else if (typeof contents === 'object' && 'parts' in contents) {
+    // This might be a single content object
+    coercedContents = [contents as z.infer<typeof ContentSchema>];
+    coerced = true;
+  } else {
+    logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
+    return { contents: contents as GeminiFormat, coerced: false, systemInstruction: undefined };
+  }
+
+  const systemPromptParts: { text: string }[] = [];
+  coercedContents = coercedContents.filter((message) => {
+    if (message.role === ('system' as any) && message.parts.length > 0) {
+      systemPromptParts.push(
+        ...message.parts.filter(
+          (part): part is { text: string } => 'text' in part && typeof part.text === 'string',
+        ),
+      );
+      return false;
+    }
+    return true;
+  });
+
+  return {
+    contents: coercedContents,
+    coerced,
+    systemInstruction:
+      systemPromptParts.length > 0
+        ? { parts: systemPromptParts as [GeminiPart, ...GeminiPart[]] }
+        : undefined,
+  };
 }
 
 let cachedAuth: GoogleAuth | undefined;

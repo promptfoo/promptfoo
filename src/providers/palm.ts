@@ -3,7 +3,9 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, CallApiContextParams } from '../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { CHAT_MODELS } from './googleShared';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { maybeCoerceToGeminiFormat } from './vertexUtil';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
@@ -73,14 +75,12 @@ class PalmGenericProvider implements ApiProvider {
 }
 
 export class PalmChatProvider extends PalmGenericProvider {
-  static CHAT_MODELS = ['chat-bison-001', 'gemini-pro', 'gemini-pro-vision'];
-
   constructor(
     modelName: string,
     options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (!PalmChatProvider.CHAT_MODELS.includes(modelName)) {
-      logger.warn(`Using unknown Google chat model: ${modelName}`);
+    if (!CHAT_MODELS.includes(modelName)) {
+      logger.debug(`Using unknown Google chat model: ${modelName}`);
     }
     super(modelName, options);
   }
@@ -154,7 +154,9 @@ export class PalmChatProvider extends PalmGenericProvider {
   }
 
   async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const contents = parseChatPrompt(prompt, [{ parts: [{ text: prompt }] }]);
+    const { contents, systemInstruction } = maybeCoerceToGeminiFormat(
+      parseChatPrompt(prompt, [{ content: prompt }]),
+    );
     const body: Record<string, any> = {
       contents,
       generationConfig: {
@@ -166,6 +168,7 @@ export class PalmChatProvider extends PalmGenericProvider {
         ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
+      ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
     if (this.config.responseSchema) {

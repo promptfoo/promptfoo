@@ -7,6 +7,10 @@ import invariant from 'tiny-invariant';
 import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
+import {
+  AdalineGatewayChatProvider,
+  AdalineGatewayEmbeddingProvider,
+} from './providers/adaline.gateway';
 import { AI21ChatCompletionProvider } from './providers/ai21';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
@@ -52,6 +56,7 @@ import {
   OpenAiImageProvider,
   OpenAiModerationProvider,
 } from './providers/openai';
+import { parsePackageProvider } from './providers/packageParser';
 import { PalmChatProvider } from './providers/palm';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { PythonProvider } from './providers/pythonCompletion';
@@ -61,10 +66,14 @@ import {
   ReplicateProvider,
 } from './providers/replicate';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
+import { SimulatedUser } from './providers/simulatedUser';
+import { createTogetherAiProvider } from './providers/togetherai';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
+import { WatsonXProvider } from './providers/watsonx';
 import { WebhookProvider } from './providers/webhook';
 import { WebSocketProvider } from './providers/websocket';
+import { createXAIProvider } from './providers/xai';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
@@ -199,6 +208,27 @@ export async function loadApiProvider(
         apiKeyEnvar: 'OPENROUTER_API_KEY',
       },
     });
+  } else if (providerPath.startsWith('github:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://models.inference.ai.azure.com',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      },
+    });
+  } else if (providerPath.startsWith('togetherai:')) {
+    ret = createTogetherAiProvider(providerPath, {
+      config: providerOptions,
+      env: context.env,
+    });
+  } else if (providerPath.startsWith('xai:')) {
+    ret = createXAIProvider(providerPath, {
+      config: providerOptions,
+      env: context.env,
+    });
   } else if (providerPath.startsWith('portkey:')) {
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':');
@@ -221,6 +251,10 @@ export async function loadApiProvider(
     }
   } else if (providerPath.startsWith('voyage:')) {
     ret = new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+  } else if (providerPath.startsWith('watsonx:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new WatsonXProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('bedrock:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
@@ -397,6 +431,22 @@ export async function loadApiProvider(
     } else {
       ret = new LocalAiChatProvider(modelType, providerOptions);
     }
+  } else if (providerPath.startsWith('adaline:')) {
+    const splits = providerPath.split(':');
+    if (splits.length < 4) {
+      throw new Error(
+        `Invalid adaline provider path: ${providerPath}. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'`,
+      );
+    }
+    const providerName = splits[1];
+    const modelType = splits[2];
+    const modelName = splits[3];
+
+    if (modelType === 'embedding' || modelType === 'embeddings') {
+      ret = new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
+    } else {
+      ret = new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
+    }
   } else if (
     providerPath.startsWith('http:') ||
     providerPath.startsWith('https:') ||
@@ -424,6 +474,8 @@ export async function loadApiProvider(
     ret = new RedteamCrescendoProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
+  } else if (providerPath === 'promptfoo:simulated-user') {
+    ret = new SimulatedUser(providerOptions);
   } else if (providerPath.startsWith('groq:')) {
     const modelName = providerPath.split(':')[1];
     ret = new GroqProvider(modelName, providerOptions);
@@ -439,6 +491,8 @@ export async function loadApiProvider(
       ? providerPath.slice('file://'.length)
       : providerPath.split(':').slice(1).join(':');
     ret = new GolangProvider(scriptPath, providerOptions);
+  } else if (providerPath.startsWith('package:')) {
+    ret = await parsePackageProvider(providerPath, basePath || process.cwd(), providerOptions);
   } else if (isJavascriptFile(providerPath)) {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
@@ -568,4 +622,5 @@ export default {
   WebhookProvider,
   WebSocketProvider,
   loadApiProvider,
+  WatsonXProvider,
 };

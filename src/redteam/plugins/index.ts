@@ -1,11 +1,12 @@
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
+import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginConfig, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS, REMOTE_GENERATION_URL } from '../constants';
-import { shouldGenerateRemote } from '../util';
+import { neverGenerateRemote, shouldGenerateRemote } from '../util';
 import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
@@ -61,6 +62,7 @@ async function fetchRemoteTestCases(
     injectVar,
     n,
     config,
+    version: VERSION,
   });
   logger.debug(`Using remote redteam generation for ${key}:\n${body}`);
   try {
@@ -158,6 +160,9 @@ function createRemotePlugin<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async (provider, purpose, injectVar, n, delayMs, config) => {
+      if (neverGenerateRemote()) {
+        throw new Error(`${key} plugin requires remote generation to be enabled`);
+      }
       return fetchRemoteTestCases(key, purpose, injectVar, n, config);
     },
   };

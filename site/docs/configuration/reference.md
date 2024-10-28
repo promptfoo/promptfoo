@@ -8,20 +8,20 @@ Here is the main structure of the promptfoo configuration file:
 
 ### Config
 
-| Property                        | Type                                                                                                                   | Required | Description                                                                                                                                                                                                 |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| description                     | string                                                                                                                 | No       | Optional description of what your LLM is trying to do                                                                                                                                                       |
-| tags                            | Record\<string, string\>                                                                                               | No       | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`)                                                                                                                   |
-| providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](/docs/providers/openai#using-functions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use                                                                                                                                                              |
-| prompts                         | string \| string[]                                                                                                     | Yes      | One or more prompts to load                                                                                                                                                                                 |
-| tests                           | string \| [Test Case](#test-case)[]                                                                                    | Yes      | Path to a test file, OR list of LLM prompt variations (aka "test case")                                                                                                                                     |
-| defaultTest                     | Partial [Test Case](#test-case)                                                                                        | No       | Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.                                                                                            |
-| outputPath                      | string                                                                                                                 | No       | Where to write output. Writes to console/web viewer if not set.                                                                                                                                             |
-| evaluateOptions.maxConcurrency  | number                                                                                                                 | No       | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                        |
-| evaluateOptions.repeat          | number                                                                                                                 | No       | Number of times to run each test case . Defaults to 1                                                                                                                                                       |
-| evaluateOptions.delay           | number                                                                                                                 | No       | Force the test runner to wait after each API call (milliseconds)                                                                                                                                            |
-| evaluateOptions.showProgressBar | boolean                                                                                                                | No       | Whether to display the progress bar                                                                                                                                                                         |
-| extensions                      | string[]                                                                                                               | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
+| Property                        | Type                                                                                             | Required | Description                                                                                                                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| description                     | string                                                                                           | No       | Optional description of what your LLM is trying to do                                                                                                                                                       |
+| tags                            | Record\<string, string\>                                                                         | No       | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`)                                                                                                                   |
+| providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](#provideroptions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use                                                                                                                                                              |
+| prompts                         | string \| string[]                                                                               | Yes      | One or more prompts to load                                                                                                                                                                                 |
+| tests                           | string \| [Test Case](#test-case)[]                                                              | Yes      | Path to a test file, OR list of LLM prompt variations (aka "test case")                                                                                                                                     |
+| defaultTest                     | Partial [Test Case](#test-case)                                                                  | No       | Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.                                                                                            |
+| outputPath                      | string                                                                                           | No       | Where to write output. Writes to console/web viewer if not set.                                                                                                                                             |
+| evaluateOptions.maxConcurrency  | number                                                                                           | No       | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                        |
+| evaluateOptions.repeat          | number                                                                                           | No       | Number of times to run each test case . Defaults to 1                                                                                                                                                       |
+| evaluateOptions.delay           | number                                                                                           | No       | Force the test runner to wait after each API call (milliseconds)                                                                                                                                            |
+| evaluateOptions.showProgressBar | boolean                                                                                          | No       | Whether to display the progress bar                                                                                                                                                                         |
+| extensions                      | string[]                                                                                         | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
 
 ### Test Case
 
@@ -166,6 +166,10 @@ interface ProviderOptions {
   id?: ProviderId;
   config?: any;
 
+  // A label is required when running a redteam
+  // It can be used to uniquely identify targets even if the provider id changes.
+  label?: string;
+
   // List of prompt display strings
   prompts?: string[];
 
@@ -194,6 +198,7 @@ interface ProviderResponse {
   cached?: boolean;
   cost?: number; // required for cost assertion
   logProbs?: number[]; // required for perplexity assertion
+  isRefusal?: boolean; // the provider has explicitly refused to generate a response
 }
 ```
 
@@ -303,6 +308,7 @@ interface Prompt {
   // A function to generate a prompt on a per-input basis. Overrides the raw prompt.
   function?: (context: {
     vars: Record<string, string | object>;
+    config?: Record<string, any>;
     provider?: ApiProvider;
   }) => Promise<string | object>;
 }

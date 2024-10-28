@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'WatsonX Image Analysis'
+
+prompts:
+  - 'Analyze the content of the image located at {{image_url}}.'
+
+providers:
+  - id: watsonx:meta-llama/llama-3-2-11b-vision-instruct
+    label: 'LLaMA-3 Vision Instruct'
+
+defaultTest:
+  options:
+    transformVars: |
+      return { ...vars, image_markdown: `![image](${vars.image_url})` }
+
+tests:
+  - vars:
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Great_Wave_off_Kanagawa2.jpg/640px-Great_Wave_off_Kanagawa2.jpg
+      expected_text: Great Wave off Kanagawa
+
+    assert:
+      - type: icontains
+        value: '{{expected_text}}'

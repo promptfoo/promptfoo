@@ -13,7 +13,6 @@ import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
-import Provider from './models/provider';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -29,6 +28,7 @@ import type {
   RunEvalOptions,
   TestSuite,
 } from './types';
+import { sleep } from './util/time';
 import { transform, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -230,13 +230,13 @@ class Evaluator {
       });
 
       if (!response.cached) {
-        let sleep = provider.delay ?? delay;
-        if (!sleep) {
-          sleep = getEnvInt('PROMPTFOO_DELAY_MS', 0);
+        let sleepMs = provider.delay ?? delay;
+        if (!sleepMs) {
+          sleepMs = getEnvInt('PROMPTFOO_DELAY_MS', 0);
         }
-        if (sleep) {
-          logger.debug(`Sleeping for ${sleep}ms`);
-          await new Promise((resolve) => setTimeout(resolve, sleep));
+        if (sleepMs) {
+          logger.debug(`Sleeping for ${sleepMs}ms`);
+          await sleep(sleepMs);
         }
       }
 
@@ -536,6 +536,7 @@ class Evaluator {
       testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
       testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
+      testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
 
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
@@ -840,8 +841,6 @@ class Evaluator {
     }
 
     await this.evalRecord.addPrompts(prompts);
-    const providers = await Provider.createMultiple(testSuite.providers);
-    await this.evalRecord.addProviders(providers);
 
     // Finish up
     if (multibar) {

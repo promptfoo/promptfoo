@@ -9,11 +9,14 @@ import path from 'path';
 import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
-import telemetry, { type EventValue } from './telemetry';
+import telemetry, { type EventProperties } from './telemetry';
 import type { EnvOverrides } from './types';
 import { getNunjucksEngine } from './util/templates';
 
-export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+export const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+
 description: "My eval"
 
 prompts:
@@ -134,7 +137,6 @@ def call_api(prompt, options, context):
 
 export const JAVASCRIPT_PROVIDER = `// Learn more about building a JavaScript provider: https://promptfoo.dev/docs/providers/custom-api
 // customApiProvider.js
-import fetch from 'node-fetch';
 
 class CustomApiProvider {
   constructor(options) {
@@ -234,7 +236,7 @@ promptfoo eval
 Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
-function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+function recordOnboardingStep(step: string, properties: EventProperties = {}) {
   telemetry.recordAndSend('funnel', {
     type: 'eval onboarding',
     step,
@@ -385,7 +387,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-3-5-sonnet-20240620',
+          'anthropic:messages:claude-3-5-sonnet-20241022',
           'anthropic:messages:claude-3-opus-20240307',
         ],
       },
@@ -428,6 +430,13 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       {
         name: '[Ollama] Llama 3, Mixtral, ...',
         value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
+      },
+      {
+        name: '[WatsonX] Llama 3.2, IBM Granite, ...',
+        value: [
+          'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
+          'watsonx:ibm/granite-13b-chat-v2',
+        ],
       },
     ];
 

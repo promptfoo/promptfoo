@@ -1,16 +1,25 @@
 import * as fs from 'fs';
+import { createRequire } from 'node:module';
 import * as path from 'path';
 import { renderPrompt, resolveVariables, runExtensionHook } from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
 import { transform } from '../src/util/transform';
 
-jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
+
+jest.mock('node:module', () => {
+  const mockRequire: NodeJS.Require = {
+    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+  } as unknown as NodeJS.Require;
+  return {
+    createRequire: jest.fn().mockReturnValue(mockRequire),
+  };
+});
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -117,6 +126,32 @@ describe('renderPrompt', () => {
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
     expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
+  });
+
+  it('should load external js package in renderPrompt and execute the exported function', async () => {
+    const prompt = toPrompt('Test prompt with {{ var1 }}');
+    const vars = {
+      var1: 'package:@promptfoo/fake:testFunction',
+    };
+    const evaluateOptions = {};
+
+    const require = createRequire('');
+    jest.spyOn(require, 'resolve').mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+
+    jest.doMock(
+      path.resolve('/node_modules/@promptfoo/fake/index.js'),
+      () => {
+        return {
+          testFunction: (varName: any, prompt: any, vars: any) => ({
+            output: `Dynamic value for ${varName}`,
+          }),
+        };
+      },
+      { virtual: true },
+    );
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+    expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
   });
 
   it('should load external json files in renderPrompt and parse the JSON content', async () => {

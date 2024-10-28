@@ -18,7 +18,6 @@ import {
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
-  evalsToProvidersTable,
   evalsToTagsTable,
   promptsTable,
   tagsTable,
@@ -29,8 +28,7 @@ import { getDirectory, importModule } from '../esm';
 import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import { runDbMigrations } from '../migrate';
-import Eval, { createEvalId, getSummaryofLatestEvals } from '../models/eval';
+import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -375,7 +373,7 @@ export async function listPreviousResults(
 
   const endTime = performance.now();
   const executionTime = endTime - startTime;
-  const evalResults = await getSummaryofLatestEvals(undefined, filterDescription, datasetId);
+  const evalResults = await getSummaryOfLatestEvals(undefined, filterDescription, datasetId);
   logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
   const combinedResults = [...evalResults, ...mappedResults];
   return combinedResults;
@@ -474,12 +472,6 @@ export function readResult_fileSystem(
   } catch (err) {
     logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
   }
-}
-
-export async function migrateResultsFromFileSystemToDatabase() {
-  // First run db migrations
-  logger.debug('Running db migrations...');
-  await runDbMigrations();
 }
 
 export async function readResult(
@@ -760,7 +752,7 @@ export async function deleteEval(evalId: string) {
     await db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
     await db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
     await db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
-    await db.delete(evalsToProvidersTable).where(eq(evalsToProvidersTable.evalId, evalId)).run();
+
     // Finally, delete the eval record
     const deletedIds = await db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
     if (deletedIds.changes === 0) {
@@ -777,6 +769,7 @@ export async function deleteEval(evalId: string) {
 export async function deleteAllEvals(): Promise<void> {
   const db = getDb();
   await db.transaction(async (tx) => {
+    await tx.delete(evalResultsTable).run();
     await tx.delete(evalsToPromptsTable).run();
     await tx.delete(evalsToDatasetsTable).run();
     await tx.delete(evalsToTagsTable).run();

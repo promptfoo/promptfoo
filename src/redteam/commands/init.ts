@@ -14,7 +14,7 @@ import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
-import telemetry, { type EventValue } from '../../telemetry';
+import telemetry, { type EventProperties } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
@@ -28,9 +28,11 @@ import {
 } from '../constants';
 import { doGenerateRedteam } from './generate';
 
-const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
-# Docs: https://promptfoo.dev/docs/red-team/configuration
+const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
+# Red teaming configuration
+
+# Docs: https://promptfoo.dev/docs/red-team/configuration
 description: "My first red team"
 
 {% if prompts.length > 0 -%}
@@ -53,6 +55,7 @@ targets:
   - {{ provider }}
   {% else -%}
   - id: {{ provider.id }}
+    label: {{ provider.label }}
     config:
       {% for k, v in provider.config -%}
       {{ k }}: {{ v | dump }}
@@ -124,7 +127,7 @@ def call_api(prompt, options, context):
     }
 `;
 
-function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+function recordOnboardingStep(step: string, properties: EventProperties = {}) {
   telemetry.recordAndSend('funnel', {
     type: 'redteam onboarding',
     step,
@@ -178,6 +181,11 @@ export async function redteamInit(directory: string | undefined) {
 
   console.clear();
   logger.info(chalk.bold('Red Team Configuration\n'));
+
+  const label = await input({
+    message:
+      "What's the name of the target you want to red team? (e.g. 'helpdesk-agent', 'customer-service-chatbot')\n",
+  });
 
   const redTeamChoice = await select({
     message: 'What would you like to do?',
@@ -245,6 +253,7 @@ export async function redteamInit(directory: string | undefined) {
       providers = [
         {
           id: 'https://example.com/generate',
+          label,
           config: {
             method: 'POST',
             headers: {
@@ -268,7 +277,7 @@ export async function redteamInit(directory: string | undefined) {
       { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
       {
         name: 'anthropic:claude-3-5-sonnet-20240620',
-        value: 'anthropic:messages:claude-3-5-sonnet-20240620',
+        value: 'anthropic:messages:claude-3-5-sonnet-20241022',
       },
       {
         name: 'anthropic:claude-3-opus-20240307',
@@ -286,9 +295,9 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = ['openai:gpt-4o-mini'];
+      providers = [{ id: 'openai:gpt-4o-mini', label }];
     } else {
-      providers = [selectedProvider];
+      providers = [{ id: selectedProvider, label }];
     }
   }
 
@@ -391,6 +400,7 @@ export async function redteamInit(directory: string | undefined) {
   }
 
   if (plugins.includes('prompt-extraction')) {
+    plugins = plugins.filter((p) => p !== 'prompt-extraction');
     plugins.push({
       id: 'prompt-extraction',
       config: { systemPrompt: prompts[0] },
@@ -410,7 +420,7 @@ export async function redteamInit(directory: string | undefined) {
         })),
       });
       recordOnboardingStep('chose indirect prompt injection variable');
-
+      plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
       plugins.push({
         id: 'indirect-prompt-injection',
         config: {
@@ -418,17 +428,22 @@ export async function redteamInit(directory: string | undefined) {
         },
       } as RedteamPluginObject);
     } else {
+      plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
       recordOnboardingStep('skip indirect prompt injection');
       logger.warn(
-        `Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt. Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection/`,
+        dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt.
+        
+        Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection`,
       );
     }
   }
 
-  console.clear();
-
-  logger.info(chalk.bold('Strategy Configuration'));
-  logger.info('Strategies are attack methods.\n');
+  logger.info(
+    dedent`
+    ${chalk.bold('Strategy Configuration')}
+    Strategies are attack methods.
+  `,
+  );
 
   const strategyConfigChoice = await select({
     message: 'How would you like to configure strategies?',

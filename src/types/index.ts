@@ -51,6 +51,7 @@ export const CommandLineOptionsSchema = z.object({
   filterFirstN: z.coerce.number().int().positive().optional(),
   filterPattern: z.string().optional(),
   filterProviders: z.string().optional(),
+  filterTargets: z.string().optional(),
   var: z.record(z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
@@ -190,7 +191,7 @@ export interface PromptWithMetadata {
 
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
-  description?: string; // on the new version 2, this is stored per-result
+  description?: string; // on the new version 2, this is stored per-result // FIXME(ian): The EvalResult model doesn't pass this through, but that's ok since we can use testCase.description?
   promptIdx: number; // on the new version 2, this is stored per-result
   testIdx: number; // on the new version 2, this is stored per-result
   testCase: AtomicTestCase; // on the new version 2, this is stored per-result
@@ -466,6 +467,7 @@ export const VarsSchema = z.record(
 export type Vars = z.infer<typeof VarsSchema>;
 
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
+// HEADS UP: When you add a property here, you probably need to load it from `defaultTest` in evaluator.ts.
 export const TestCaseSchema = z.object({
   // Optional description of what you're testing
   description: z.string().optional(),
@@ -719,7 +721,26 @@ export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
-});
+  providers: ProvidersSchema.optional(),
+  targets: ProvidersSchema.optional(),
+})
+  .refine(
+    (data) => {
+      const hasTargets = Boolean(data.targets);
+      const hasProviders = Boolean(data.providers);
+      return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+    },
+    {
+      message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+    },
+  )
+  .transform((data) => {
+    if (data.targets && !data.providers) {
+      data.providers = data.targets;
+      delete data.targets;
+    }
+    return data;
+  });
 
 export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
 

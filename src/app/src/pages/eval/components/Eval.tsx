@@ -125,7 +125,7 @@ export default function Eval({
 
       socket.on('update', (data) => {
         console.log('Received data update', data);
-        setTable(data.results.table);
+        setTableFromResultsFile(data);
         setConfig(data.config);
         setAuthor(data.author || null);
         fetchRecentFileEvals().then((newRecentEvals) => {
@@ -151,7 +151,7 @@ export default function Eval({
           const defaultEvalId = evals[0].evalId;
           const resp = await callApi(`/results/${defaultEvalId}`);
           const body = await resp.json();
-          setTable(body.data.results.table);
+          setTableFromResultsFile(body.data);
           setConfig(body.data.config);
           setAuthor(body.data.author || null);
           setLoaded(true);

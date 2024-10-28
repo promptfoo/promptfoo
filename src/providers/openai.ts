@@ -18,6 +18,7 @@ import type {
 import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
+import { sleep } from '../util/time';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
@@ -37,14 +38,14 @@ const OPENAI_CHAT_MODELS = [
       output: 12 / 1e6,
     },
   })),
-  ...['gpt-4o-2024-08-06'].map((model) => ({
+  ...['gpt-4o', 'gpt-4o-2024-08-06'].map((model) => ({
     id: model,
     cost: {
       input: 2.5 / 1e6,
       output: 10 / 1e6,
     },
   })),
-  ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
+  ...['gpt-4o-2024-05-13'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1000000,
@@ -430,6 +431,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         REQUEST_TIMEOUT_MS,
       )) as unknown as any);
     } catch (err) {
+      logger.error(`API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -478,6 +480,70 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.config = options.config || {};
   }
 
+  getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
+    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+    // NOTE: Special handling for o1 models which do not support max_tokens and temperature
+    const isO1Model = this.modelName.startsWith('o1-');
+    const maxCompletionTokens = isO1Model
+      ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
+      : undefined;
+    const maxTokens = isO1Model
+      ? undefined
+      : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+    const temperature = isO1Model
+      ? undefined
+      : (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
+
+    const body = {
+      model: this.modelName,
+      messages,
+      seed: config.seed,
+      ...(maxTokens ? { max_tokens: maxTokens } : {}),
+      ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
+      ...(temperature ? { temperature } : {}),
+      top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
+      presence_penalty:
+        config.presence_penalty ?? Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+      frequency_penalty:
+        config.frequency_penalty ?? Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+      ...(config.functions
+        ? {
+            functions: maybeLoadFromExternalFile(
+              renderVarsInObject(config.functions, context?.vars),
+            ),
+          }
+        : {}),
+      ...(config.function_call ? { function_call: config.function_call } : {}),
+      ...(config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
+        : {}),
+      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.response_format
+        ? {
+            response_format: maybeLoadFromExternalFile(
+              renderVarsInObject(config.response_format, context?.vars),
+            ),
+          }
+        : {}),
+      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
+      ...(config.stop ? { stop: config.stop } : {}),
+      ...(config.passthrough || {}),
+    };
+
+    return { body, config };
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -489,63 +555,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-
-    // NOTE: Special handling for o1 models which do not support max_tokens and temperature
-    const isO1Model = this.modelName.startsWith('o1-');
-    const maxCompletionTokens = isO1Model
-      ? (this.config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
-      : undefined;
-    const maxTokens = isO1Model
-      ? undefined
-      : (this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
-    const temperature = isO1Model
-      ? undefined
-      : (this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
-
-    const body = {
-      model: this.modelName,
-      messages,
-      seed: this.config.seed,
-      ...(maxTokens ? { max_tokens: maxTokens } : {}),
-      ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
-      ...(temperature ? { temperature } : {}),
-      top_p: this.config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
-      presence_penalty:
-        this.config.presence_penalty ??
-        Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
-      frequency_penalty:
-        this.config.frequency_penalty ??
-        Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      ...(this.config.functions
-        ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(this.config.functions, context?.vars),
-            ),
-          }
-        : {}),
-      ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
-      ...(this.config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
-        : {}),
-      ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
-      ...(this.config.response_format
-        ? {
-            response_format: maybeLoadFromExternalFile(
-              renderVarsInObject(this.config.response_format, context?.vars),
-            ),
-          }
-        : {}),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(this.config.stop ? { stop: this.config.stop } : {}),
-      ...(this.config.passthrough || {}),
-    };
+    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
-    let data,
-      cached = false;
+    let data, status, statusText;
+    let cached = false;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data, cached, status, statusText } = await fetchWithCache(
         `${this.getApiUrl()}/chat/completions`,
         {
           method: 'POST',
@@ -553,13 +569,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...this.config.headers,
+            ...config.headers,
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      )) as unknown as { data: any; cached: boolean });
+      ));
+
+      if (status < 200 || status >= 300) {
+        return {
+          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+        };
+      }
     } catch (err) {
+      logger.error(`API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -575,13 +598,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const message = data.choices[0].message;
       if (message.refusal) {
         return {
-          error: `Model refused to generate a response: ${message.refusal}`,
+          output: message.refusal,
           tokenUsage: getTokenUsage(data, cached),
+          isRefusal: true,
         };
       }
-
       let output = '';
       if (message.content && (message.function_call || message.tool_calls)) {
+        if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
+          output = message.content;
+        }
         output = message;
       } else if (message.content === null) {
         output = message.function_call || message.tool_calls;
@@ -593,7 +619,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
 
       // Handle structured output
-      if (this.config.response_format?.type === 'json_schema' && typeof output === 'string') {
+      if (config.response_format?.type === 'json_schema' && typeof output === 'string') {
         try {
           output = JSON.parse(output);
         } catch (error) {
@@ -603,13 +629,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
-      if (functionCalls && this.config.functionToolCallbacks) {
+      if (functionCalls && config.functionToolCallbacks) {
         const results = [];
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
-          if (this.config.functionToolCallbacks[functionName]) {
+          if (config.functionToolCallbacks[functionName]) {
             try {
-              const functionResult = await this.config.functionToolCallbacks[functionName](
+              const functionResult = await config.functionToolCallbacks[functionName](
                 functionCall.arguments || functionCall.function?.arguments,
               );
               results.push(functionResult);
@@ -626,7 +652,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             logProbs,
             cost: calculateOpenAICost(
               this.modelName,
-              this.config,
+              config,
               data.usage?.prompt_tokens,
               data.usage?.completion_tokens,
             ),
@@ -641,7 +667,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         logProbs,
         cost: calculateOpenAICost(
           this.modelName,
-          this.config,
+          config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
@@ -798,7 +824,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         continue;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await sleep(1000);
 
       logger.debug(`Calling OpenAI API, getting thread run ${run.id} status`);
       try {
@@ -1034,6 +1060,7 @@ export class OpenAiModerationProvider
         input: assistantResponse,
       });
     } catch (err) {
+      logger.error(`API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,
       };

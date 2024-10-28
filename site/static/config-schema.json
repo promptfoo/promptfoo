@@ -838,6 +838,9 @@
             "filterProviders": {
               "type": "string"
             },
+            "filterTargets": {
+              "type": "string"
+            },
             "var": {
               "type": "object",
               "additionalProperties": {
@@ -858,10 +861,12 @@
             }
           },
           "additionalProperties": false
+        },
+        "targets": {
+          "$ref": "#/definitions/PromptfooConfigSchema/properties/providers"
         }
       },
       "required": [
-        "providers",
         "prompts"
       ],
       "additionalProperties": false

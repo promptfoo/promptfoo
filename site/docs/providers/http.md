@@ -38,7 +38,29 @@ tests:
       language: 'French'
 ```
 
-If not specified, HTTP POST with content-type application/json is assumed.
+`body` can be a string or JSON object. If the body is a string, the `Content-type` header defaults to `text/plain` unless specified otherwise. If the body is an object, then content type is automatically set to `application/json`.
+
+### JSON Example
+
+```yaml
+providers:
+  - id: https
+    config:
+      body:
+        model: '{{model}}'
+        translate: '{{language}}'
+```
+
+### Form-data Example
+
+```yaml
+providers:
+  - id: https
+    config:
+      headers:
+        'Content-Type': 'application/x-www-form-urlencoded'
+      body: 'model={{model}}&translate={{language}}'
+```
 
 ## Sending a raw HTTP request
 

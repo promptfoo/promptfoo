@@ -53,3 +53,7 @@ export async function loadDefaultConfig(
   configCache.set(cacheKey, result);
   return result;
 }
+
+export function clearConfigCache() {
+  configCache.clear();
+}

@@ -49,7 +49,7 @@ const ANTHROPIC_MODELS = [
       output: 0.075 / 1000,
     },
   })),
-  ...['claude-3-5-sonnet-20240620'].map((model) => ({
+  ...['claude-3-5-sonnet-20240620', 'claude-3-5-sonnet-20241022'].map((model) => ({
     id: model,
     cost: {
       input: 3 / 1e6,
@@ -203,6 +203,14 @@ export class AnthropicMessagesProvider implements ApiProvider {
 
   toString(): string {
     return `[Anthropic Messages Provider ${this.modelName || 'claude-2.1'}]`;
+  }
+
+  getApiKey(): string | undefined {
+    return this.apiKey;
+  }
+
+  getApiBaseUrl(): string | undefined {
+    return this.config.apiBaseUrl;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {

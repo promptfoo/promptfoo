@@ -28,6 +28,7 @@ import type {
 } from '../../types';
 import { maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
+import { PromptSchema } from '../../validators/prompts';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
@@ -268,13 +269,15 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     );
   }
 
-  const redteam: UnifiedConfig['redteam'] = {
-    plugins: [],
-    strategies: [],
-  };
-
+  let redteam: UnifiedConfig['redteam'] | undefined;
   for (const config of configs) {
     if (config.redteam) {
+      if (!redteam) {
+        redteam = {
+          plugins: [],
+          strategies: [],
+        };
+      }
       for (const redteamKey of Object.keys(config.redteam) as Array<keyof typeof redteam>) {
         if (['entities', 'plugins', 'strategies'].includes(redteamKey)) {
           if (Array.isArray(config.redteam[redteamKey])) {
@@ -314,6 +317,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
           path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
       }
       return relativePath;
+    } else if (PromptSchema.safeParse(relativePath).success) {
+      return relativePath;
     } else {
       throw new Error(`Invalid prompt object: ${JSON.stringify(relativePath)}`);
     }
@@ -324,6 +329,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     if (typeof prompt === 'string') {
       seenPrompts.add(prompt);
     } else if (typeof prompt === 'object' && prompt.id) {
+      seenPrompts.add(prompt);
+    } else if (PromptSchema.safeParse(prompt).success) {
       seenPrompts.add(prompt);
     } else {
       throw new Error('Invalid prompt object');
@@ -404,13 +411,15 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
-  defaultConfig: Partial<UnifiedConfig>,
+  _defaultConfig: Partial<UnifiedConfig>,
 ): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
-  // Config parsing
   let fileConfig: Partial<UnifiedConfig> = {};
+  let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   if (configPaths) {
     fileConfig = await combineConfigs(configPaths);
+    // The user has provided a config file, so we do not want to use the default config.
+    defaultConfig = {};
   }
 
   // Standalone assertion mode

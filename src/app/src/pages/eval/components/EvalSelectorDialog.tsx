@@ -34,8 +34,8 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
   title,
   description,
 }) => {
-  const [searchText, setSearchText] = useState('');
-  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [searchText, setSearchText] = useState<string>('');
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const tableContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -47,9 +47,9 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
 
   const filteredEvals = recentEvals.filter(
     (_eval) =>
-      fuzzysearch(searchText.toLowerCase(), _eval.label.toLowerCase()) ||
+      fuzzysearch(searchText.toLowerCase(), String(_eval.label).toLowerCase()) ||
       (typeof _eval.description === 'string' &&
-        fuzzysearch(searchText.toLowerCase(), _eval.description.toLowerCase())),
+        fuzzysearch(searchText.toLowerCase(), String(_eval.description).toLowerCase())),
   );
 
   const handleSelectEval = (evalId: string) => {

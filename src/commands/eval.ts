@@ -12,6 +12,7 @@ import cliState from '../cliState';
 import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
+import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
@@ -27,13 +28,8 @@ import type {
 import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
-import {
-  migrateResultsFromFileSystemToDatabase,
-  printBorder,
-  setupEnv,
-  writeMultipleOutputs,
-} from '../util';
-import { loadDefaultConfig } from '../util/config/default';
+import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
@@ -45,6 +41,21 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+
+function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
+  const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);
+  if (hasProviderWithoutLabel) {
+    logger.warn(
+      dedent`
+      ${chalk.bold.yellow('Warning')}: Your target (provider) does not have a label specified.
+
+      Labels are used to uniquely identify redteam targets. Please set a meaningful and unique label (e.g., 'helpdesk-search-agent') for your targets/providers in your redteam config.
+
+      Provider ID will be used as a fallback if no label is specified.
+      `,
+    );
+  }
+}
 
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
@@ -64,6 +75,35 @@ export async function doEval(
       watch: Boolean(cmdObj.watch),
     });
     await telemetry.send();
+
+    if (cmdObj.write) {
+      await runDbMigrations();
+    }
+
+    // Reload default config - because it may have changed.
+    if (defaultConfigPath) {
+      const configDir = path.dirname(defaultConfigPath);
+      const configName = path.basename(defaultConfigPath, path.extname(defaultConfigPath));
+      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName);
+      defaultConfig = newDefaultConfig;
+    }
+
+    if (cmdObj.config !== undefined) {
+      const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
+      for (const configPath of configPaths) {
+        if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
+          const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
+            await loadDefaultConfig(configPath);
+          if (newConfigPath) {
+            cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
+            cmdObj.config.push(newConfigPath);
+            defaultConfig = { ...defaultConfig, ...dirConfig };
+          } else {
+            logger.warn(`No configuration file found in directory: ${configPath}`);
+          }
+        }
+      }
+    }
 
     // Misc settings
     if (cmdObj.verbose) {
@@ -95,7 +135,10 @@ export async function doEval(
       failing: cmdObj.filterFailing,
     });
 
-    testSuite.providers = filterProviders(testSuite.providers, cmdObj.filterProviders);
+    testSuite.providers = filterProviders(
+      testSuite.providers,
+      cmdObj.filterProviders || cmdObj.filterTargets,
+    );
 
     const options: EvaluateOptions = {
       showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
@@ -170,8 +213,6 @@ export async function doEval(
       );
     }
 
-    await migrateResultsFromFileSystemToDatabase();
-
     if (getEnvBool('PROMPTFOO_LIGHTWEIGHT_RESULTS')) {
       const outputPath = config.outputPath;
       config = { outputPath };
@@ -215,10 +256,14 @@ export async function doEval(
     const passRate = (summary.stats.successes / totalTests) * 100;
     logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
     logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
-    logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
-    logger.info(
-      `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
-    );
+    if (!Number.isNaN(passRate)) {
+      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
+    }
+    if (summary.stats.tokenUsage.total > 0) {
+      logger.info(
+        `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
+      );
+    }
 
     telemetry.record('command_used', {
       name: 'eval',
@@ -284,6 +329,7 @@ export async function doEval(
             printBorder();
             logger.info(`File change detected: ${path}`);
             printBorder();
+            clearConfigCache();
             await runEvaluation();
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
@@ -310,6 +356,9 @@ export async function doEval(
       } else {
         logger.info('Done.');
       }
+    }
+    if (testSuite.redteam) {
+      showRedteamProviderLabelMissingWarning(testSuite);
     }
   };
 
@@ -409,7 +458,10 @@ export function evalCommand(
       '--filter-pattern <pattern>',
       'Only run tests whose description matches the regular expression pattern',
     )
-    .option('--filter-providers <providers>', 'Only run tests with these providers')
+    .option(
+      '--filter-providers, --filter-targets <providers>',
+      'Only run tests with these providers (regex match)',
+    )
     .option('--filter-failing <path>', 'Path to json output file')
 
     // Output configuration
@@ -447,8 +499,7 @@ export function evalCommand(
     .option('--description <description>', 'Description of the eval run')
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
-
-    .action(async (opts: EvalCommandOptions) => {
+    .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
         validatedOpts = EvalCommandSchema.parse(opts);
@@ -460,6 +511,9 @@ export function evalCommand(
         `);
         process.exitCode = 1;
         return;
+      }
+      if (command.args.length > 0) {
+        logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
       }
 
       if (validatedOpts.help) {
@@ -491,27 +545,6 @@ export function evalCommand(
           extension,
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
-      }
-
-      if (validatedOpts.config !== undefined) {
-        const configPaths: string[] = Array.isArray(validatedOpts.config)
-          ? validatedOpts.config
-          : [validatedOpts.config];
-        for (const configPath of configPaths) {
-          if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
-            const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-              await loadDefaultConfig(configPath);
-            if (newConfigPath) {
-              validatedOpts.config = validatedOpts.config.filter(
-                (path: string) => path !== configPath,
-              );
-              validatedOpts.config.push(newConfigPath);
-              defaultConfig = { ...defaultConfig, ...dirConfig };
-            } else {
-              logger.warn(`No configuration file found in directory: ${configPath}`);
-            }
-          }
-        }
       }
 
       doEval(
