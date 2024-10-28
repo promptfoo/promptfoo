@@ -1,11 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -14,13 +13,13 @@ import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Checkbox from '@mui/material/Checkbox';
-import Collapse from '@mui/material/Collapse';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { alpha } from '@mui/material/styles';
 import {
   COLLECTIONS,
   HARM_PLUGINS,
@@ -41,6 +40,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
+import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 
 interface PluginsProps {
@@ -57,6 +57,8 @@ const ErrorFallback = ({ error }: { error: Error }) => (
 
 const PLUGINS_REQUIRING_CONFIG = ['policy', 'prompt-extraction', 'indirect-prompt-injection'];
 
+const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
+
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const [isCustomMode, setIsCustomMode] = useState(false);
@@ -65,6 +67,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>({});
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
 
   useEffect(() => {
     updateConfig('plugins', Array.from(selectedPlugins));
@@ -86,6 +90,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           ...prevConfig,
           [plugin]: {},
         }));
+        // Automatically open config dialog for plugins that require config
+        if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+          setSelectedConfigPlugin(plugin);
+          setConfigDialogOpen(true);
+        }
       }
       return newSet;
     });
@@ -190,121 +199,30 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return true;
   }, [selectedPlugins, pluginConfig]);
 
-  const handleArrayInputChange = useCallback(
-    (plugin: string, key: string, index: number, value: string) => {
-      setPluginConfig((prevConfig) => {
-        const pluginConfig = prevConfig[plugin] || {};
-        const newArray = [...((pluginConfig[key] as string[]) || [])];
-        newArray[index] = value;
-        return {
-          ...prevConfig,
-          [plugin]: {
-            ...pluginConfig,
-            [key]: newArray,
-          },
-        };
-      });
-    },
-    [],
-  );
+  const handleConfigClick = (plugin: Plugin) => {
+    setSelectedConfigPlugin(plugin);
+    setConfigDialogOpen(true);
+  };
 
-  const addArrayItem = useCallback((plugin: string, key: string) => {
-    setPluginConfig((prevConfig) => {
-      const pluginConfig = prevConfig[plugin] || {};
-      return {
-        ...prevConfig,
-        [plugin]: {
-          ...pluginConfig,
-          [key]: [...((pluginConfig[key] as string[]) || []), ''],
-        },
-      };
-    });
-  }, []);
-
-  const removeArrayItem = useCallback((plugin: string, key: string, index: number) => {
-    setPluginConfig((prevConfig) => {
-      const pluginConfig = prevConfig[plugin] || {};
-      const currentArray = pluginConfig[key] as string[] | undefined;
-      return {
-        ...prevConfig,
-        [plugin]: {
-          ...pluginConfig,
-          [key]: currentArray?.filter((_, i) => i !== index) || [],
-        },
-      };
-    });
-  }, []);
-
-  const renderPluginConfig = (plugin: Plugin) => {
-    const config = pluginConfig[plugin] || {};
-
-    switch (plugin) {
-      case 'policy':
-      case 'prompt-extraction':
-        const key = plugin === 'policy' ? 'policy' : 'systemPrompt';
-        return (
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            label={plugin === 'policy' ? 'Policy' : 'System Prompt'}
-            variant="outlined"
-            margin="normal"
-            value={config[key] || ''}
-            onChange={(e) => updatePluginConfig(plugin, { [key]: e.target.value })}
-          />
-        );
-      case 'bfla':
-      case 'bola':
-      case 'ssrf':
-        const arrayKey =
-          plugin === 'bfla'
-            ? 'targetIdentifiers'
-            : plugin === 'bola'
-              ? 'targetSystems'
-              : 'targetUrls';
-        return (
-          <>
-            {((config[arrayKey] as string[]) || ['']).map((item: string, index: number) => (
-              <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <TextField
-                  fullWidth
-                  label={`${arrayKey} ${index + 1}`}
-                  variant="outlined"
-                  value={item}
-                  onChange={(e) => handleArrayInputChange(plugin, arrayKey, index, e.target.value)}
-                  sx={{ mr: 1 }}
-                />
-                <IconButton onClick={() => removeArrayItem(plugin, arrayKey, index)} size="small">
-                  <RemoveIcon />
-                </IconButton>
-              </Box>
-            ))}
-            <Button
-              startIcon={<AddIcon />}
-              onClick={() => addArrayItem(plugin, arrayKey)}
-              variant="outlined"
-              size="small"
-              sx={{ mt: 1 }}
-            >
-              Add {arrayKey}
-            </Button>
-          </>
-        );
-      case 'indirect-prompt-injection':
-        return (
-          <TextField
-            fullWidth
-            label="Indirect Injection Variable"
-            variant="outlined"
-            margin="normal"
-            value={config.indirectInjectionVar || ''}
-            onChange={(e) => updatePluginConfig(plugin, { indirectInjectionVar: e.target.value })}
-          />
-        );
-      default:
-        return null;
+  const isPluginConfigured = (plugin: Plugin) => {
+    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      return true;
     }
+    const config = pluginConfig[plugin];
+    if (!config || Object.keys(config).length === 0) {
+      return false;
+    }
+
+    for (const key in config) {
+      const value = config[key];
+      if (Array.isArray(value) && value.length === 0) {
+        return false;
+      }
+      if (typeof value === 'string' && value.trim() === '') {
+        return false;
+      }
+    }
+    return true;
   };
 
   const renderPluginCategory = (category: string, plugins: readonly Plugin[]) => {
@@ -323,30 +241,97 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           <Grid container spacing={2}>
             {pluginsToShow.map((plugin) => (
               <Grid item xs={12} sm={6} md={4} key={plugin}>
-                <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
-                  <FormControlLabel
-                    sx={{ width: '100%' }}
-                    control={
-                      <Checkbox
-                        checked={selectedPlugins.has(plugin)}
-                        onChange={() => handlePluginToggle(plugin)}
-                        color="primary"
-                      />
-                    }
-                    label={
-                      <Box>
-                        <Typography variant="subtitle1">
-                          {displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
-                            categoryAliases[plugin as keyof typeof categoryAliases] ||
-                            plugin}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {subCategoryDescriptions[plugin as keyof typeof subCategoryDescriptions]}
-                        </Typography>
-                      </Box>
-                    }
-                  />
-                  <Collapse in={selectedPlugins.has(plugin)}>{renderPluginConfig(plugin)}</Collapse>
+                <Paper
+                  elevation={1}
+                  sx={{
+                    p: 2,
+                    height: '100%',
+                    borderRadius: 2,
+                    border: (theme) => {
+                      if (selectedPlugins.has(plugin)) {
+                        if (
+                          PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                          !isPluginConfigured(plugin)
+                        ) {
+                          return `1px solid ${theme.palette.error.main}`; // Error state border
+                        }
+                        return `1px solid ${theme.palette.primary.main}`; // Selected state border
+                      }
+                      return '1px solid transparent';
+                    },
+                    backgroundColor: (theme) =>
+                      selectedPlugins.has(plugin)
+                        ? alpha(theme.palette.primary.main, 0.04)
+                        : 'background.paper',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      backgroundColor: (theme) =>
+                        selectedPlugins.has(plugin)
+                          ? alpha(theme.palette.primary.main, 0.08)
+                          : alpha(theme.palette.action.hover, 0.04),
+                    },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      height: '100%',
+                      position: 'relative',
+                    }}
+                  >
+                    <FormControlLabel
+                      sx={{ flex: 1 }}
+                      control={
+                        <Checkbox
+                          checked={selectedPlugins.has(plugin)}
+                          onChange={() => handlePluginToggle(plugin)}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                          </Box>
+                          <Typography variant="body2" color="text.secondary">
+                            {subCategoryDescriptions[plugin]}
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                    {selectedPlugins.has(plugin) && PLUGINS_SUPPORTING_CONFIG.includes(plugin) && (
+                      <IconButton
+                        size="small"
+                        title={
+                          isPluginConfigured(plugin)
+                            ? 'Edit Configuration'
+                            : 'Configuration Required'
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConfigClick(plugin);
+                        }}
+                        sx={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          opacity: 0.6,
+                          '&:hover': {
+                            opacity: 1,
+                            backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                          },
+                          ...(PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                            !isPluginConfigured(plugin) && {
+                              color: 'error.main',
+                              opacity: 1,
+                            }),
+                        }}
+                      >
+                        <SettingsOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Box>
                 </Paper>
               </Grid>
             ))}
@@ -450,6 +435,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             Next
           </Button>
         </Box>
+
+        <PluginConfigDialog
+          open={configDialogOpen}
+          plugin={selectedConfigPlugin}
+          config={selectedConfigPlugin ? pluginConfig[selectedConfigPlugin] || {} : {}}
+          onClose={() => {
+            setConfigDialogOpen(false);
+            setSelectedConfigPlugin(null);
+          }}
+          onSave={(plugin, newConfig) => {
+            updatePluginConfig(plugin, newConfig);
+          }}
+        />
       </Box>
     </ErrorBoundary>
   );
