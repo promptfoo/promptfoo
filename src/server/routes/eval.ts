@@ -22,7 +22,7 @@ import { ApiSchemas } from '../apiSchemas';
 export const evalRouter = Router();
 
 // Running jobs
-const evalJobs = new Map<string, Job>();
+export const evalJobs = new Map<string, Job>();
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;

@@ -1,11 +1,13 @@
 import React, { useCallback, useMemo } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
+import { callApi } from '@app/utils/api';
 import SaveIcon from '@mui/icons-material/Save';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -34,6 +36,8 @@ export default function Review() {
   const { recordEvent } = useTelemetry();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
+  const [isRunning, setIsRunning] = React.useState(false);
+  const [progress, setProgress] = React.useState<{ current: number; total: number } | null>(null);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -118,6 +122,43 @@ export default function Review() {
 
     return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
   }, [config.strategies]);
+
+  const handleRun = async () => {
+    setIsRunning(true);
+    try {
+      const response = await callApi('/redteam/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config),
+      });
+
+      const { id } = await response.json();
+
+      // Poll for job status
+      const pollInterval = setInterval(async () => {
+        const statusResponse = await callApi(`/eval/job/${id}`);
+        const status = await statusResponse.json();
+
+        if (status.status === 'complete') {
+          clearInterval(pollInterval);
+          setIsRunning(false);
+          setProgress(null);
+          // Optionally redirect to results page
+          window.location.href = `/report?id=${status.result.id}`;
+        } else if (status.status === 'in-progress') {
+          setProgress({
+            current: status.progress,
+            total: status.total,
+          });
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('Error running redteam:', error);
+      setIsRunning(false);
+    }
+  };
 
   return (
     <Box maxWidth="lg" mx="auto">
@@ -313,6 +354,25 @@ export default function Review() {
             >
               promptfoo redteam run
             </Box>
+          </li>
+          <li>
+            <Typography variant="body1" paragraph>
+              Or run directly from this interface:
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleRun}
+              disabled={isRunning}
+              startIcon={isRunning && <CircularProgress size={20} color="inherit" />}
+            >
+              {isRunning ? 'Running...' : 'Run Now'}
+            </Button>
+            {progress && (
+              <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+                Progress: {progress.current}/{progress.total}
+              </Typography>
+            )}
           </li>
         </ol>
       </Paper>

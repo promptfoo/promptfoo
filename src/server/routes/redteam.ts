@@ -1,10 +1,51 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import logger from '../../logger';
+import { doRedteamRun } from '../../redteam/commands/run';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
+import { evalJobs } from './eval';
 
 export const redteamRouter = Router();
 
+redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
+  const config = req.body;
+  const id = uuidv4();
+
+  // Initialize job status
+  evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
+
+  // Run redteam in background
+  doRedteamRun({
+    liveRedteamConfig: config,
+    /*
+    progressCallback: (progress: number, total: number) => {
+      const job = evalJobs.get(id);
+      if (job) {
+        job.progress = progress;
+        job.total = total;
+      }
+    },
+    */
+  })
+    .then(() => {
+      const job = evalJobs.get(id);
+      if (job) {
+        job.status = 'complete';
+      }
+    })
+    .catch((error) => {
+      console.error('Error running redteam:', error);
+      const job = evalJobs.get(id);
+      if (job) {
+        job.status = 'error';
+      }
+    });
+
+  res.json({ id });
+});
+
+// NOTE: This comes last, so the other routes take precedence
 redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> => {
   const { task } = req.params;
   const cloudFunctionUrl = getRemoteGenerationUrl();

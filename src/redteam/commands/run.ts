@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import * as fs from 'fs';
+import yaml from 'js-yaml';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { doEval } from '../../commands/eval';
@@ -25,18 +26,28 @@ interface RedteamRunOptions {
   filterProviders?: string;
   filterTargets?: string;
   verbose?: boolean;
+
+  // Used by webui
+  liveRedteamConfig?: any;
 }
 
-async function doRedteamRun(options: RedteamRunOptions) {
+export async function doRedteamRun(options: RedteamRunOptions) {
   const configPath = options.config || 'promptfooconfig.yaml';
-  const redteamPath = options.output || 'redteam.yaml';
+  let redteamPath = options.output || 'redteam.yaml';
 
-  // Check if promptfooconfig.yaml exists, if not, run init
-  if (!fs.existsSync(configPath)) {
-    logger.info('No configuration file found. Running initialization...');
-    await redteamInit(undefined);
-    // User probably needs to edit init and stuff, so it is premature to generate and eval.
-    return;
+  if (options.liveRedteamConfig) {
+    // Write liveRedteamConfig to a temporary file
+    const tmpFile = fs.mkdtempSync('redteam-') + '/redteam.yaml';
+    fs.writeFileSync(tmpFile, yaml.dump(options.liveRedteamConfig));
+    redteamPath = tmpFile;
+  } else {
+    // Check if promptfooconfig.yaml exists, if not, run init
+    if (!fs.existsSync(configPath)) {
+      logger.info('No configuration file found. Running initialization...');
+      await redteamInit(undefined);
+      // User probably needs to edit init and stuff, so it is premature to generate and eval.
+      return;
+    }
   }
 
   // Generate new test cases
