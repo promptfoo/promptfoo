@@ -230,7 +230,7 @@ export const geminiUploadExtension = async (hookName: string, context: any): Pro
   }
 
   const testSuite = context.suite;
-  const fileUrls = testSuite.tests.flatMap((test) => test.fileUrls || []);
+  const fileUrls = testSuite.tests.flatMap((test) => test.fileUrl);
   const geminiApiKey = testSuite.providers.find((provider) => provider.id.startsWith('google:'))?.config?.apiKey || process.env.GOOGLE_API_KEY;
   if (!geminiApiKey) {
     throw new Error('GeminiApiService:geminiUploadExtension - No Google API key found');
@@ -241,14 +241,14 @@ export const geminiUploadExtension = async (hookName: string, context: any): Pro
     await geminiApiService.uploadMultipleFiles(fileUrls);
 
     testSuite.tests.forEach((test) => {
-      if (!test.fileUrls || test.fileUrls.length === 0) {
+      if (!test.fileUrl) {
         return;
       }
 
-      test.llmFiles = test.fileUrls.map((fileUrl) => ({
-        ...fileDb.get(fileUrl),
-        originalUrl: fileUrl,
-      }));
+      test.llmFile = {
+        ...fileDb.get(test.fileUrl),
+        originalUrl: test.fileUrl,
+      };
     });
   } catch (error) {
     console.error('GeminiApiService:geminiUploadExtension - Error uploading files', {

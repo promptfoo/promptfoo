@@ -21,6 +21,22 @@ providers:
 defaultTest:
   vars:
     lists:
+      formats:
+        - 'Before and After'
+        - 'Discount or Offer'
+        - Montage
+        - Showcase
+        - 'Social proof'
+        - Testimonial
+        - UGC
+        - Influencer
+        - Educational
+        - Unboxing
+        - Urgency
+      angles:
+        - one
+        - two
+        - three
       myValues:
         - yes
         - no
@@ -32,10 +48,16 @@ defaultTest:
     - type: llm-rubric
       value: The suggestions are prioritized in a way that gives more weighting to the impact of the suggestion.
       metric: Ordering
-#    - type: javascript
-#      value: file://BASE_PATH/motion/customAssert/outputInArray.js
-#      config:
-#        listName: myValues
+    - type: javascript
+      value: file://BASE_PATH/motion/customAssert/outputInArray.js
+      config:
+        listName: availableFormats
+    - type: javascript
+      value: file://BASE_PATH/motion/customAssert/falseNegatives.js
+    - type: javascript
+      value: file://BASE_PATH/motion/customAssert/falsePositives.js
+    - type: javascript
+      value: file://BASE_PATH/motion/customAssert/truePositives.js
 
 #defaultTest:
 #  assert:
@@ -46,13 +68,15 @@ defaultTest:
 #  repeat: 2
 tests:
   - vars:
+      correctAnswers:
+        - one
       CTR: 4.42%
       CPR: 1.06%
-    fileUrls:
+    fileUrl:
       - "https://motionaccountassets.blob.core.windows.net/65007302c2f5f5e85c5b601d/creativeassetfacebook/66d6f4c01cf0ed433f6f8921/video.mp4"
 
   - vars:
       CTR: 2.48%
       CPR: 2.29%
-    fileUrls:
+    fileUrl:
       - "https://motionaccountassets.blob.core.windows.net/65007302c2f5f5e85c5b601d/creativeassetfacebook/66d6f4c01cf0ed433f6f8921/video.mp4"

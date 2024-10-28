@@ -282,7 +282,7 @@ export const geminiUploadExtension = async (hookName, context) => {
 
   const videoIds = {};
   const testSuite = context.suite;
-  const fileUrls = testSuite.tests.flatMap((test) => test.fileUrls || []);
+  const fileUrl = testSuite.tests.flatMap((test) => test.fileUrl || []);
   const geminiApiKey =
     testSuite.providers.find((provider) => provider.modelName.indexOf('gemini') > -1)?.config?.apiKey ||
     process.env.GOOGLE_API_KEY;
@@ -293,14 +293,14 @@ export const geminiUploadExtension = async (hookName, context) => {
 
   try {
     const geminiApiService = new GeminiApiService(geminiApiKey);
-    await geminiApiService.uploadMultipleFiles(fileUrls);
+    await geminiApiService.uploadMultipleFiles(fileUrl);
     testSuite.tests.forEach((test) => {
-      if (!test.fileUrls || test.fileUrls.length === 0) {
+      if (!test.fileUrl || test.fileUrl.length === 0) {
         return;
       }
 
-      test.fileUrls.sort();
-      test.llmFiles = test.fileUrls.map((fileUrl) => ({
+      test.fileUrl.sort();
+      test.llmFile = test.fileUrl.map((fileUrl) => ({
         ...fileDb.get(fileUrl),
         originalUrl: fileUrl,
       }));
@@ -308,10 +308,10 @@ export const geminiUploadExtension = async (hookName, context) => {
         test.vars = {};
       }
 
-      const videoUrlsString = test.fileUrls.join(',');
+      const videoUrlsString = test.fileUrl.join(',');
       const videoId = videoIds[videoUrlsString] || uuidV4();
       videoIds[videoUrlsString] = videoId;
-      test.vars.fileUrls = test.fileUrls.join(',');
+      test.vars.fileUrl = test.fileUrl.join(',');
       test.vars.filesId = videoId;
     });
   } catch (error) {

@@ -150,7 +150,7 @@ export type CallApiFunction = {
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-    llmFiles?: LLMFile[],
+    llmFile?: LLMFile,
   ): Promise<ProviderResponse>;
   label?: string;
 };

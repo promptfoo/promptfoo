@@ -72,7 +72,7 @@ class PalmGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string, llmFiles?: LLMFile[]): Promise<ProviderResponse> {
+  async callApi(prompt: string, llmFile?: LLMFile): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -101,7 +101,7 @@ export class PalmChatProvider extends PalmGenericProvider {
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-    llmFiles?: LLMFile[],
+    llmFile?: LLMFile,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
@@ -111,7 +111,7 @@ export class PalmChatProvider extends PalmGenericProvider {
 
     const isGemini = this.modelName.startsWith('gemini');
     if (isGemini) {
-      return this.callGemini(prompt, llmFiles);
+      return this.callGemini(prompt, llmFile);
     }
 
     // https://developers.generativeai.google/tutorials/curl_quickstart
@@ -178,13 +178,13 @@ export class PalmChatProvider extends PalmGenericProvider {
     }
   }
 
-  async callGemini(prompt: string, llmFiles?: LLMFile[],): Promise<ProviderResponse> {
-    const geminiFiles = llmFiles?.map((llmFile) => ({
+  async callGemini(prompt: string, llmFile?: LLMFile): Promise<ProviderResponse> {
+    const geminiFiles = llmFile ? [{
       fileData: {
         fileUri: llmFile.url,
         mimeType: llmFile.mimeType,
       }
-    })) || [];
+    }] : [];
 
     const whatWeNeed = [
       {

@@ -214,7 +214,7 @@ class Evaluator {
           {
             includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
           },
-          test.llmFiles,
+          test.llmFile,
         );
       }
       const endTime = Date.now();
