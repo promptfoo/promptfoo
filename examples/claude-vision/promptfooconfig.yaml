@@ -3,8 +3,8 @@ prompts:
   - file://prompt.json
 providers:
   - anthropic:messages:claude-3-haiku-20240307
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
-  - id: anthropic:messages:claude-3-5-sonnet-20241022
+  - anthropic:messages:claude-3-5-sonnet-20240620
+  - bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
 
 tests:
   - assert:
