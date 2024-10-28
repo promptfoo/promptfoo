@@ -212,7 +212,9 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (!files) {return;}
+    if (!files) {
+      return;
+    }
 
     for (const file of Array.from(files)) {
       if (!file.name.endsWith('.py') && !file.name.endsWith('.js')) {
@@ -271,7 +273,9 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
   };
 
   const getOptionLabel = (option: string | ProviderOptions) => {
-    if (typeof option === 'string') {return option;}
+    if (typeof option === 'string') {
+      return option;
+    }
     return option.label || option.id;
   };
 

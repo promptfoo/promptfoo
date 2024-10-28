@@ -1,5 +1,5 @@
-import { create } from 'zustand';
 import type { ProviderOptions } from '@promptfoo/types';
+import { create } from 'zustand';
 
 interface ProvidersState {
   customProviders: ProviderOptions[];
