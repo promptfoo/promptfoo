@@ -40,16 +40,17 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
   .concat(
     [
       'anthropic:messages:claude-3-5-sonnet-20241022',
+      'anthropic:messages:claude-3-5-sonnet-20240620',
       'anthropic:messages:claude-3-haiku-20240307',
-      'anthropic:messages:claude-3-sonnet-20240229',
       'anthropic:messages:claude-3-opus-20240229',
     ].map((id) => ({ id, config: { max_tokens: 1024, temperature: 0.5 } })),
   )
   .concat(
     [
-      'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
-      'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
+      'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+      'bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0',
       'bedrock:anthropic.claude-3-opus-20240307-v1:0',
+      'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
     ].map((id) => ({ id, config: { max_tokens_to_sample: 256, temperature: 0.5 } })),
   )
   .concat(
