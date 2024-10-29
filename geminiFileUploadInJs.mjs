@@ -261,9 +261,7 @@ export const addVars = async (hookName, context) => {
     return;
   }
 
-  for (const index in context.suite.tests) {
-    const test = context.suite.tests[index];
-  }
+  const { test, result } = context;
 }
 
 export const metricsHandling = async (hookName, context) => {
@@ -274,12 +272,15 @@ export const metricsHandling = async (hookName, context) => {
   for (const index in context.suite.tests) {
     const test = context.suite.tests[index];
     const testResults = context.results[index];
-    for (const index in testResults.gradingResult.componentResults) {
-      if (index === '0') {
+    if (!testResults.gradingResult) {
+      continue;
+    }
+    for (const resultIndex in testResults.gradingResult.componentResults) {
+      if (resultIndex === '0') {
         continue; // skip the aggregate
       }
 
-      const result = testResults.gradingResult.componentResults[index];
+      const result = testResults.gradingResult.componentResults[resultIndex];
       test.vars[result.reason.split(':')[0].replace(/\s/g, '')] = `(${result.pass ? 'P' : 'F'}) ${result.score}`;
     }
   }
