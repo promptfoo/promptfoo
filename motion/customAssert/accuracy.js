@@ -32,7 +32,7 @@ module.exports = (output, context) => {
 
   const reasons = [];
   if (!falseNegatives.pass) {
-    falseNegatives.reason = `False nNgatives: ${falseNegatives.score} > ${context.config.falseNegativeThreshold}`;
+    falseNegatives.reason = `False Negatives: ${falseNegatives.score} > ${context.config.falseNegativeThreshold}`;
     reasons.push('False negatives');
   }
   if (!falsePositives.pass) {
