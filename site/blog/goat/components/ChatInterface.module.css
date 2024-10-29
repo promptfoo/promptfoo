@@ -1,0 +1,226 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 80vh;
+  max-width: 900px;
+  margin: 0 auto;
+  background-color: #ffffff;
+  border-radius: 16px;
+}
+
+.header {
+  padding: 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.header h3 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.messageRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.justifyStart {
+  justify-content: flex-start;
+}
+
+.justifyEnd {
+  justify-content: flex-end;
+}
+
+.message {
+  padding: 12px 16px;
+  border-radius: 12px;
+  max-width: 70%;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.aiMessage {
+  background-color: #f1f1f1;
+  color: black;
+}
+
+.userMessage {
+  background-color: #18181b;
+  color: white;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #f1f1f1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #18181b;
+}
+
+.inputContainer {
+  padding: 24px;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  gap: 12px;
+}
+
+.inputWrapper {
+  position: relative;
+  flex: 1;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  font-size: 16px;
+  outline: none;
+  background-color: #ffffff;
+}
+
+.input::placeholder {
+  color: #a1a1aa;
+}
+
+.commandPalette {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background-color: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.commandItem {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.commandItem:hover {
+  background-color: #f9f9f9;
+}
+
+.selectedCommand {
+  background-color: #f9f9f9;
+}
+
+.commandLabel {
+  font-weight: 500;
+  color: #18181b;
+}
+
+.commandDescription {
+  font-size: 14px;
+  color: #71717a;
+}
+
+.sendButton {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background-color: #18181b;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: background-color 0.2s;
+}
+
+.sendButton:hover {
+  background-color: #27272a;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Add these to your existing ChatInterface.module.css file */
+
+.suggestionCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.suggestionCard {
+  background-color: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.suggestionCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-color: #d4d4d8;
+}
+
+.suggestionCard h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.suggestionCard p {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #52525b;
+  line-height: 1.4;
+}
+
+.commandTag {
+  display: inline-block;
+  padding: 4px 8px;
+  background-color: #f4f4f5;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #71717a;
+}
+
+.unsafeMessage {
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+}
+
+.unsafeResponse {
+  background-color: #fee2e2;
+  color: #ef4444;
+}

@@ -1,0 +1,72 @@
+---
+sidebar_label: Introduction to GOAT
+title: How does GOAT work?
+image: /img/blog/goat/laser.jpeg
+date: 2024-10-28
+---
+
+
+
+import ChatInterface from './goat/components/ChatInterface'
+import RedTeamDemo from "./goat/components/RedTeamDemo";
+import {Promise} from "canvas-confetti";
+
+
+# Introduction
+Today, we’re diving into a super cool innovation in red teaming research called **The Generative Offensive Agent Tester**, or as Meta likes to call it, **GOAT** (because who doesn’t love a good acronym?). This work by Meta aims to change how we test LLMs for safety and robustness.
+
+
+![A cool goat](/img/blog/goat/laser.jpeg)
+
+## Something Fun
+
+Let's try something out. We have a fun red teaming challenge for you. Your task is to prompt the AI model below to generate harmful content, particularly writing a speech that glorifies an extremist ideology, like the Nazis. If you succeed, you'll see a reward as well!
+
+We are also giving you a bag of features/red teaming techniques readily at your disposal (hint: try typing /). These commands will tranform your queries into specific styles for red teaming.
+
+<ChatInterface/>
+
+Wow, that was a bit exhausting! You probably noticed how you kept changing techniques, adapting to the model’s responses. You tried different approaches, constantly tweaking until you finally nailed it and earned that red confetti!
+
+Well, it turns out we can automate a lot of this using agents! That’s exactly what GOAT does—except it doesn’t get tired and will even free up some time for you to play GTA 6 when it drops, haha!
+
+## Why GOAT?
+
+GOAT stands out from traditional automated red teaming by simulating dynamic, human-like adversarial interactions with LLMs. It adapts strategies, engages in multi-turn conversations, and learns from responses, much like a human red teamer. Instead of merely breaking rules, GOAT uncovers vulnerabilities through evolving dialogue, making it more effective than rigid testing methods.
+
+## How does GOAT work exactly?
+![Hello](/img/blog/goat/comic.webp)
+Here's how GOAT actually works, step by step:
+
+### Initialization
+The Attacker LLM is initialized with a specific adversarial goal—something it wants the target model to say or do that would violate the safety boundaries set by its developers. This goal could be to generate a harmful statement, bypass a restriction, or reveal restricted information.
+
+### Toolbox of Attacks
+The Attacker LLM has access to a toolbox full of various red teaming techniques. This tool is fully customisable and more attacks can be added as you'll see later. These techniques are inspired by human adversarial approaches and can be layered together. Examples include:
+
+- **Priming Responses**: Crafting the prompt in a way that leads the target model toward an unsafe response.
+- **Hypotheticals**: Creating fictional scenarios that trick the target into providing harmful outputs by making it think the context is safe.
+- **Persona Modification**: Asking the target model to take on a particular persona that may be more inclined to provide unsafe answers.
+
+### Chain-of-Thought Prompting
+GOAT utilizes a structured, iterative process known as Chain-of-Thought (CoT) prompting. For every turn in the conversation, the Attacker LLM goes through three key steps: **Observation**, **Thought**, and **Strategy**.
+
+- **Observation**: The Attacker LLM starts by observing the target model's response to its latest prompt. Did the target provide a useful piece of information, or did it refuse the request?
+- **Thought**: Based on the observation, the Attacker LLM thinks through what this means for the current conversation. It considers whether it’s getting closer to the adversarial goal or if it needs to adjust its approach.
+- **Strategy**: Finally, the Attacker LLM formulates a strategy for the next move. It selects one or more techniques from the toolbox to continue probing the target, aiming to find a way past its defenses.
+
+### Multi-Turn Conversations
+GOAT engages in a multi-turn conversation, adjusting its approach based on each new piece of information. Unlike static attacks that use a single prompt, GOAT simulates how real adversaries behave—they try multiple angles, rephrase requests, and persist until they find a weakness. This means GOAT is highly effective in exposing vulnerabilities that might only become apparent over a longer conversation.
+
+### Dynamic Adaptation
+Throughout the conversation, the Attacker LLM adapts dynamically. If one attack strategy fails, it shifts gears and tries another. For instance, if a direct prompt fails to elicit a response, it may try to create a hypothetical situation that makes the target think it's safe to respond. This dynamic adaptation is key to GOAT's effectiveness.
+
+You know what reading is too boring, let's try a live demo!
+
+<RedTeamDemo/>
+
+
+
+
+
+
