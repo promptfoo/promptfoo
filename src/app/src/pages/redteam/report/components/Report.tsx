@@ -363,7 +363,7 @@ const App: React.FC = () => {
                 </>
               }
             />
-            {selectedPrompt && (
+            {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
               <Chip
                 size="small"
                 label={
