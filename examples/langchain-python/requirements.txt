@@ -1,1 +1,1 @@
-langchain==0.1.14
+langchain==0.3.0
