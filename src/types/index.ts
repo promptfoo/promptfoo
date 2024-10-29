@@ -14,6 +14,7 @@ import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared'
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
+import { LLMFileSchema } from './motion';
 
 export * from './prompts';
 export * from './providers';
@@ -462,16 +463,6 @@ export const VarsSchema = z.record(
     z.array(z.any()),
   ]),
 );
-
-export const LLMFileSchema = z.object({
-  url: z.string(),
-  mimeType: z.string(),
-  uploadTime: z.number(),
-  originalUrl: z.string(),
-});
-
-export type LLMFile = z.infer<typeof LLMFileSchema>;
-
 
 export type Vars = z.infer<typeof VarsSchema>;
 

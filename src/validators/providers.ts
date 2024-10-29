@@ -12,7 +12,7 @@ import type {
 } from '../types/providers';
 import { PromptSchema } from './prompts';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from './shared';
-import { LLMFileSchema } from '../types';
+import { LLMFileSchema } from '../types/motion';
 
 export const ProviderEnvOverridesSchema = z.object({
   AI21_API_BASE_URL: z.string().optional(),
