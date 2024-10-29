@@ -8,7 +8,7 @@ import axios from 'axios';
 
 const geminiFileExpiration = 48 * 60 * 60; // 48 hours in seconds
 const safetyMargin = 2 * 60 * 60; // 2 hours
-const fileTtl = geminiFileExpiration - safetyMargin;
+const fileTtl = (geminiFileExpiration - safetyMargin) * 1000;
 const writeFile = promisify(fs.writeFile);
 const fileDbLocalPath = path.join(process.cwd(), 'fileDb.json');
 const nunjucksSnR = {
