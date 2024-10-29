@@ -375,6 +375,10 @@ export async function synthesize({
 
   progressBar?.update({ task: 'Done.' });
   progressBar?.stop();
+  if (progressBar) {
+    // Newline after progress bar to avoid overlap
+    console.log();
+  }
 
   logger.info(generateReport(pluginResults, strategyResults));
 
