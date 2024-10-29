@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { doEval } from '../../commands/eval';
-import logger from '../../logger';
+import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import type { CommandLineOptions, RedteamCliGenerateOptions } from '../../types';
 import { setupEnv } from '../../util';
@@ -23,6 +23,7 @@ interface RedteamRunOptions {
   force?: boolean;
   filterProviders?: string;
   filterTargets?: string;
+  verbose?: boolean;
 }
 
 async function doRedteamRun(options: RedteamRunOptions) {
@@ -93,6 +94,7 @@ export function redteamRunCommand(program: Command) {
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
+    .option('--verbose', 'Show debug output', false)
     .option(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
@@ -103,6 +105,10 @@ export function redteamRunCommand(program: Command) {
         name: 'redteam run',
       });
       await telemetry.send();
+
+      if (opts.verbose) {
+        setLogLevel('debug');
+      }
 
       try {
         if (opts.remote) {
