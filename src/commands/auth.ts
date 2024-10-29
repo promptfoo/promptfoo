@@ -119,7 +119,7 @@ export function authCommand(program: Command) {
         const apiKey = cloudConfig.getApiKey();
 
         if (!email || !apiKey) {
-          logger.info('Not logged in, run promptfoo auth login.');
+          logger.info(`Not logged in. Run ${chalk.bold('promptfoo auth login')} to login.`);
           return;
         }
 
