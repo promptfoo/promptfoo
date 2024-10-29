@@ -1,7 +1,7 @@
 import type winston from 'winston';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
-import { LLMFile } from './index';
+import type { LLMFile } from './motion';
 
 export type ProviderId = string;
 export type ProviderLabel = string;
