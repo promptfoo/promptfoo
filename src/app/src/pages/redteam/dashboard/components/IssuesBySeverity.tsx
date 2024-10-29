@@ -11,10 +11,10 @@ interface IssuesBySeverityProps {
 
 export default function IssuesBySeverity({ severityCounts, totalIssues }: IssuesBySeverityProps) {
   const data = [
-    { severity: 'Critical', count: severityCounts[Severity.Critical] },
-    { severity: 'High', count: severityCounts[Severity.High] },
-    { severity: 'Medium', count: severityCounts[Severity.Medium] },
-    { severity: 'Low', count: severityCounts[Severity.Low] },
+    { severity: 'critical', count: severityCounts[Severity.Critical] },
+    { severity: 'high', count: severityCounts[Severity.High] },
+    { severity: 'medium', count: severityCounts[Severity.Medium] },
+    { severity: 'low', count: severityCounts[Severity.Low] },
   ].filter((item) => item.count > 0);
 
   const COLORS: Record<Severity, string> = {
