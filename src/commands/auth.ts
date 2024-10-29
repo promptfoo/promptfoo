@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import readline from 'readline';
 import { fetchWithProxy } from '../fetch';
-import { setUserEmail } from '../globalConfig/accounts';
+import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -107,5 +107,49 @@ export function authCommand(program: Command) {
       await cloudConfig.delete();
       logger.info(chalk.green('Successfully logged out'));
       process.exit(0);
+    });
+
+  authCommand
+    .command('whoami')
+    .description('Show current user information')
+    .action(async () => {
+      try {
+        const email = getUserEmail();
+        const apiKey = cloudConfig.getApiKey();
+
+        if (!email || !apiKey) {
+          logger.info('Not logged in');
+          process.exit(0);
+          return;
+        }
+
+        const apiHost = cloudConfig.getApiHost();
+        const response = await fetchWithProxy(`${apiHost}/users/me`, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch user info: ' + response.statusText);
+        }
+
+        const { user, organization } = await response.json();
+
+        logger.info('Currently logged in as:');
+        logger.info(`User: ${user.email}`);
+        logger.info(`Organization: ${organization.name}`);
+        logger.info(`App URL: ${cloudConfig.getAppUrl()}`);
+
+        telemetry.record('command_used', {
+          name: 'auth whoami',
+        });
+        await telemetry.send();
+        process.exit(0);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Failed to get user info: ${errorMessage}`);
+        process.exit(1);
+      }
     });
 }
