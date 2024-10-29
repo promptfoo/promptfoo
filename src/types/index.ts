@@ -425,6 +425,9 @@ export interface AssertionValueFunctionContext {
   prompt: string | undefined;
   vars: Record<string, string | object>;
   test: AtomicTestCase<Record<string, string | object>>;
+  logProbs: number[] | undefined;
+  config?: Record<string, any>;
+  provider: ApiProvider | undefined;
 }
 
 export type AssertionValueFunction = (
