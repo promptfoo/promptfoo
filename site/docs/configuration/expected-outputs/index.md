@@ -222,6 +222,7 @@ type AssertionValueFunctionContext = {
   logProbs: number[] | undefined;
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
+  providerResponse: ProviderResponse | undefined;
 };
 type AssertionResponse = string | boolean | number | GradingResult;
 type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertResponse;

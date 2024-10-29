@@ -428,6 +428,7 @@ export interface AssertionValueFunctionContext {
   logProbs: number[] | undefined;
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
+  providerResponse: ProviderResponse | undefined;
 }
 
 export type AssertionValueFunction = (

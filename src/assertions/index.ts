@@ -301,6 +301,7 @@ export async function runAssertion({
     test,
     logProbs,
     provider,
+    providerResponse,
     ...(assertion.config ? { config: assertion.config } : {}),
   };
 
