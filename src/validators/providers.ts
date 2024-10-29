@@ -83,7 +83,7 @@ const CallApiFunctionSchema = z
     z.string().describe('prompt'),
     CallApiContextParamsSchema.optional(),
     CallApiOptionsParamsSchema.optional(),
-    z.array(LLMFileSchema).optional(),
+    LLMFileSchema.optional(),
   )
   .returns(z.promise(z.custom<ProviderResponse>()))
   .and(z.object({ label: z.string().optional() }));
