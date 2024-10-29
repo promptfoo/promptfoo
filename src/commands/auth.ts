@@ -119,7 +119,6 @@ export function authCommand(program: Command) {
 
         if (!email || !apiKey) {
           logger.info('Not logged in, run promptfoo auth login.');
-          process.exit(0);
           return;
         }
 
@@ -136,20 +135,21 @@ export function authCommand(program: Command) {
 
         const { user, organization } = await response.json();
 
-        logger.info('Currently logged in as:');
-        logger.info(`User: ${user.email}`);
-        logger.info(`Organization: ${organization.name}`);
-        logger.info(`App URL: ${cloudConfig.getAppUrl()}`);
+        logger.info(dedent`
+            Currently logged in as:
+             User: ${user.email}
+             Organization: ${organization.name}
+             App URL: ${cloudConfig.getAppUrl()}`,
+        );
 
         telemetry.record('command_used', {
           name: 'auth whoami',
         });
         await telemetry.send();
-        process.exit(0);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get user info: ${errorMessage}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }
