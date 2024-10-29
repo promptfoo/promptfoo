@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
+import dedent from 'dedent';
 import readline from 'readline';
 import { fetchWithProxy } from '../fetch';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
@@ -139,8 +140,7 @@ export function authCommand(program: Command) {
             Currently logged in as:
              User: ${user.email}
              Organization: ${organization.name}
-             App URL: ${cloudConfig.getAppUrl()}`,
-        );
+             App URL: ${cloudConfig.getAppUrl()}`);
 
         telemetry.record('command_used', {
           name: 'auth whoami',
