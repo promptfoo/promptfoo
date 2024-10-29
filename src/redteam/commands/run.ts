@@ -45,15 +45,17 @@ async function doRedteamRun(options: RedteamRunOptions) {
     config: configPath,
     output: redteamPath,
     force: options.force,
+    inRedteamRun: true,
   } as Partial<RedteamCliGenerateOptions>);
 
   // Check if redteam.yaml exists before running evaluation
   if (!fs.existsSync(redteamPath)) {
-    logger.info('No test cases generated. Skipping evaluation.');
+    logger.info('No test cases generated. Skipping scan.');
     return;
   }
 
   // Run evaluation
+  logger.info('Running scan...');
   const { defaultConfig } = await loadDefaultConfig();
   await doEval(
     {
@@ -71,7 +73,7 @@ async function doRedteamRun(options: RedteamRunOptions) {
     },
   );
 
-  logger.info(chalk.green('\nRed team evaluation complete!'));
+  logger.info(chalk.green('\nRed team scan complete!'));
   logger.info(chalk.blue('To view the results, run: ') + chalk.bold('promptfoo redteam report'));
 }
 
