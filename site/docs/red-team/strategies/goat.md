@@ -4,7 +4,7 @@ sidebar_label: GOAT
 
 # GOAT Strategy
 
-The [GOAT](https://arxiv.org/abs/2410.01606) (Generative Offensive Agent Tester) strategy is an advanced automated red teaming technique that uses an "attacker" LLM to dynamically generate multi-turn conversations aimed at bypassing a target model's safety measures.
+The [GOAT](https://arxiv.org/abs/2410.01606) (Generative Offensive Agent Tester) strategy is an advanced automated red teaming technique that uses an "attacker" LLM to dynamically generate **multi-turn** conversations aimed at bypassing a target model's safety measures.
 
 It was introduced by Meta researchers in 2024 and achieves high success rates against modern LLMs by simulating how real users interact with AI systems.
 
@@ -17,7 +17,7 @@ strategies:
 ```
 
 :::warning
-This is a remote-only strategy and requires an connection to promptfoo's free grading API. Local grading is not supported.
+This is a remote-only strategy and requires an connection to promptfoo's free grading API. Local grading is not supported. Your target model must be able to handle the OpenAI message format.
 :::
 
 ## How It Works
