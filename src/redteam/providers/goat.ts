@@ -1,7 +1,7 @@
 import chalk from 'chalk';
+import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
-import { HttpProvider } from '../../providers/http';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,8 +13,6 @@ import { REMOTE_GENERATION_URL } from '../constants';
 import { neverGenerateRemote } from '../util';
 
 export default class GoatProvider implements ApiProvider {
-  private redteamProvider: HttpProvider;
-  private targetProvider: ApiProvider | undefined;
   private maxTurns: number;
   private readonly injectVar: string;
 
@@ -29,19 +27,7 @@ export default class GoatProvider implements ApiProvider {
     logger.warn(`REMOTE_GENERATION_URL: ${REMOTE_GENERATION_URL}`);
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
-    logger.warn(`injectVar: ${this.injectVar}`);
-    this.maxTurns = options.maxTurns || 2;
-    this.redteamProvider = new HttpProvider(REMOTE_GENERATION_URL, {
-      ...options,
-      config: {
-        ...options.config,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: '{{ body }}',
-      },
-    });
+    this.maxTurns = options.maxTurns || 5;
   }
 
   async callApi(
@@ -51,34 +37,32 @@ export default class GoatProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     let response: Response | undefined = undefined;
 
-    this.targetProvider = context?.originalProvider;
-    invariant(this.targetProvider, 'Expected originalProvider to be set');
-
-    logger.warn(`Starting GOAT attack with goal:\n${prompt}`);
-    logger.warn(chalk.blue(`raw prompt:\n${context?.prompt?.raw}`));
-    logger.warn(`vars:\n${JSON.stringify(context?.vars, null, 2)}`);
+    const targetProvider: ApiProvider | undefined = context?.originalProvider;
+    invariant(targetProvider, 'Expected originalProvider to be set');
 
     const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] = [];
 
     for (let turn = 0; turn < this.maxTurns; turn++) {
-      response = await fetch(this.redteamProvider.url, {
-        method: 'POST',
+      response = await fetch(REMOTE_GENERATION_URL, {
+        body: JSON.stringify({
+          goal: context?.vars[this.injectVar],
+          i: turn,
+          messages,
+          prompt: context?.prompt?.raw,
+          task: 'goat',
+        }),
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          i: turn,
-          goal: context?.vars[this.injectVar],
-          task: 'goat',
-          messages,
-          prompt: context?.prompt?.raw,
-        }),
+        method: 'POST',
       });
       const data = await response.json();
-      logger.error(`data:\n${JSON.stringify(data, null, 2)}`);
       messages.push(...(data.messages || []));
-      logger.warn(
-        `${chalk.green(`GOAT turn ${turn} response:`)}\n${JSON.stringify(data.output, null, 2)}`,
+      logger.info(
+        dedent`
+          ${chalk.bold.green(`GOAT turn ${turn} history:`)}
+          ${chalk.cyan(JSON.stringify(messages, null, 2))}
+        `,
       );
     }
     return { output: messages };
