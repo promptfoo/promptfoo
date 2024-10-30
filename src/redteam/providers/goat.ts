@@ -64,7 +64,22 @@ export default class GoatProvider implements ApiProvider {
           ${chalk.cyan(JSON.stringify(messages, null, 2))}
         `,
       );
+      const targetResponse = await targetProvider.callApi(
+        JSON.stringify(messages),
+        context,
+        options,
+      );
+      invariant(targetResponse.output, 'Expected target response to be set');
+      messages.push({
+        content: targetResponse.output,
+        role: 'assistant',
+      });
     }
-    return { output: messages };
+    return {
+      output: messages[messages.length - 1].content,
+      metadata: {
+        messages: JSON.stringify(messages, null, 2),
+      },
+    };
   }
 }
