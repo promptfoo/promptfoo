@@ -49,7 +49,7 @@ export default class GoatProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    let response: ProviderResponse | undefined = undefined;
+    let response: Response | undefined = undefined;
 
     this.targetProvider = context?.originalProvider;
     invariant(this.targetProvider, 'Expected originalProvider to be set');
@@ -61,20 +61,25 @@ export default class GoatProvider implements ApiProvider {
     const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] = [];
 
     for (let turn = 0; turn < this.maxTurns; turn++) {
-      response = await this.redteamProvider.callApi(prompt, {
-        ...context,
-        prompt: { raw: '', label: 'prompt' },
-        vars: {
-          ...context?.vars,
-          body: JSON.stringify({
-            i: turn,
-            goal: context?.vars[this.injectVar],
-          }),
+      response = await fetch(this.redteamProvider.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          i: turn,
+          goal: context?.vars[this.injectVar],
+          task: 'goat',
+          messages,
+          prompt: context?.prompt?.raw,
+        }),
       });
-      invariant(response, 'No response from the original provider');
-      messages.push(response.output);
-      logger.warn(chalk.green(`GOAT turn ${turn} response:\n${response.output}`));
+      const data = await response.json();
+      logger.error(`data:\n${JSON.stringify(data, null, 2)}`);
+      messages.push(...(data.messages || []));
+      logger.warn(
+        `${chalk.green(`GOAT turn ${turn} response:`)}\n${JSON.stringify(data.output, null, 2)}`,
+      );
     }
     return { output: messages };
   }
