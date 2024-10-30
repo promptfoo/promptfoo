@@ -4,7 +4,7 @@ import type { TestCase, TestCaseWithPlugin } from '../../types';
 export async function addGoatTestCases(
   testCases: TestCaseWithPlugin[],
   injectVar: string,
-  config: Record<string, any>,
+  config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   logger.debug('Adding GOAT test cases');
   return testCases.map((testCase) => ({

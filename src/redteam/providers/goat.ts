@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { HttpProvider } from '../../providers/http';
+import type { Assertion } from '../../types';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -17,6 +18,11 @@ export default class GoatProvider implements ApiProvider {
   private targetProvider: ApiProvider | undefined;
   private maxTurns: number;
   private readonly injectVar: string;
+
+  id() {
+    return 'promptfoo:redteam:goat';
+  }
+
   constructor(options: ProviderOptions & { maxTurns?: number; injectVar?: string } = {}) {
     if (neverGenerateRemote()) {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
@@ -34,19 +40,9 @@ export default class GoatProvider implements ApiProvider {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: {
-          task: 'goat',
-          prompt: '{{ prompt }}',
-          goal: '{{ goal }}',
-          history: '{{ history }}',
-          instructions: '{{ instructions }}',
-        },
+        body: '{{ body }}',
       },
     });
-  }
-
-  id() {
-    return 'promptfoo:redteam:goat';
   }
 
   async callApi(
@@ -55,6 +51,7 @@ export default class GoatProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     let response: ProviderResponse | undefined = undefined;
+
     this.targetProvider = context?.originalProvider;
     invariant(this.targetProvider, 'Expected originalProvider to be set');
 
