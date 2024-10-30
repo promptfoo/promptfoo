@@ -377,7 +377,7 @@ export async function synthesize({
   progressBar?.stop();
   if (progressBar) {
     // Newline after progress bar to avoid overlap
-    console.log();
+    logger.info('');
   }
 
   logger.info(generateReport(pluginResults, strategyResults));

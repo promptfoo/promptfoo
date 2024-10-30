@@ -57,7 +57,7 @@ export default class GoatProvider implements ApiProvider {
       });
       const data = await response.json();
       messages.push(data.message);
-      logger.info(
+      logger.debug(
         dedent`
           ${chalk.bold.green(`GOAT turn ${turn} history:`)}
           ${chalk.cyan(JSON.stringify(messages, null, 2))}
