@@ -2,7 +2,6 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { re } from 'mathjs';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { readAssertions } from '../../assertions';
