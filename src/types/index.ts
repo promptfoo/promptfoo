@@ -191,7 +191,7 @@ export interface PromptWithMetadata {
 
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
-  description?: string; // on the new version 2, this is stored per-result
+  description?: string; // on the new version 2, this is stored per-result // FIXME(ian): The EvalResult model doesn't pass this through, but that's ok since we can use testCase.description?
   promptIdx: number; // on the new version 2, this is stored per-result
   testIdx: number; // on the new version 2, this is stored per-result
   testCase: AtomicTestCase; // on the new version 2, this is stored per-result
@@ -425,6 +425,10 @@ export interface AssertionValueFunctionContext {
   prompt: string | undefined;
   vars: Record<string, string | object>;
   test: AtomicTestCase<Record<string, string | object>>;
+  logProbs: number[] | undefined;
+  config?: Record<string, any>;
+  provider: ApiProvider | undefined;
+  providerResponse: ProviderResponse | undefined;
 }
 
 export type AssertionValueFunction = (
@@ -721,7 +725,26 @@ export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
-});
+  providers: ProvidersSchema.optional(),
+  targets: ProvidersSchema.optional(),
+})
+  .refine(
+    (data) => {
+      const hasTargets = Boolean(data.targets);
+      const hasProviders = Boolean(data.providers);
+      return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+    },
+    {
+      message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+    },
+  )
+  .transform((data) => {
+    if (data.targets && !data.providers) {
+      data.providers = data.targets;
+      delete data.targets;
+    }
+    return data;
+  });
 
 export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
 

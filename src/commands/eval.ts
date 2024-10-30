@@ -45,10 +45,14 @@ type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);
   if (hasProviderWithoutLabel) {
-    console.log(
-      chalk.yellow(
-        'Warning: Your target (provider) does not have a label specified. Labels are used to uniquely identify redteam targets. Make it meaningful and unique eg: helpdesk-search-agent. \n We highly reccomend setting a label on your targets/providers in your redteam config. the provider Id will be used instead. ',
-      ),
+    logger.warn(
+      dedent`
+      ${chalk.bold.yellow('Warning')}: Your target (provider) does not have a label specified.
+
+      Labels are used to uniquely identify redteam targets. Please set a meaningful and unique label (e.g., 'helpdesk-search-agent') for your targets/providers in your redteam config.
+
+      Provider ID will be used as a fallback if no label is specified.
+      `,
     );
   }
 }
@@ -260,9 +264,11 @@ export async function doEval(
     if (!Number.isNaN(passRate)) {
       logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     }
-    logger.info(
-      `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
-    );
+    if (summary.stats.tokenUsage.total > 0) {
+      logger.info(
+        `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
+      );
+    }
 
     telemetry.record('command_used', {
       name: 'eval',
@@ -356,7 +362,7 @@ export async function doEval(
         logger.info('Done.');
       }
     }
-    if (defaultConfig.redteam) {
+    if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
   };

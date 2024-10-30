@@ -7,7 +7,6 @@ image: /img/blog/rag-architecture/promptfoo_panda_rag.png
 
 <div style={{ textAlign: 'center' }}>
     <img src="/img/blog/rag-architecture/promptfoo_panda_rag.png" alt="red panda using rag" style={{ width: '50%' }} />
-    <p>*The Promptfoo panda reaching for the great orb of knowledge, otherwise known as a vector database.*</p>
 </div>
 
 In our [previous blog post](https://www.promptfoo.dev/blog/foundation-model-security/), we discussed the security risks of foundation models. In this post, we will address the concerns around fine-tuning models and deploying RAG architecture.

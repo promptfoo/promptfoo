@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - "You're a translator.  Translate this into {{language}}: {{input}}"
   - 'Speak in {{language}}: {{input}}'

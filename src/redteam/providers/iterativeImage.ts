@@ -11,7 +11,7 @@ import type {
   RedteamFileConfig,
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
+import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { loadRedteamProvider } from './shared';
 
 const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
@@ -247,12 +247,8 @@ async function runRedteamConversation({
 
 class RedteamIterativeProvider implements ApiProvider {
   private readonly redteamProvider: RedteamFileConfig['provider'];
-  private readonly injectVar: string;
 
   constructor(readonly config: Record<string, string | object>) {
-    invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
-    this.injectVar = config.injectVar;
-
     // Redteam provider can be set from the config.
     this.redteamProvider = config.redteamProvider;
   }
@@ -261,10 +257,15 @@ class RedteamIterativeProvider implements ApiProvider {
     return 'promptfoo:redteam:iterative:image';
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams & { injectVar?: string },
+    options?: CallApiOptionsParams,
+  ) {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context.vars, 'Expected vars to be set');
-
+    const injectVar = context.injectVar || extractVariablesFromTemplates([context.prompt.raw])[0];
+    invariant(injectVar, 'Expected injectVar to be set');
     return runRedteamConversation({
       prompt: context.prompt,
       filters: context.filters,
@@ -275,7 +276,7 @@ class RedteamIterativeProvider implements ApiProvider {
         jsonOnly: true,
       }),
       targetProvider: context.originalProvider,
-      injectVar: this.injectVar,
+      injectVar,
     });
   }
 }

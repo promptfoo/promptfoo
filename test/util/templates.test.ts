@@ -177,4 +177,34 @@ describe('getNunjucksEngine', () => {
       engine.renderString('{{ undefined_var }}', {});
     }).toThrow(/attempted to output null or undefined value/);
   });
+
+  describe('environment variables as globals', () => {
+    it('should add environment variables as globals by default', () => {
+      process.env.TEST_VAR = 'test_value';
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+    });
+
+    it('should not add environment variables when PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS is true', () => {
+      process.env.TEST_VAR = 'test_value';
+      process.env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS = 'true';
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('');
+    });
+
+    it('should not add environment variables when in self-hosted mode by default', () => {
+      process.env.TEST_VAR = 'test_value';
+      process.env.PROMPTFOO_SELF_HOSTED = 'true';
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('');
+    });
+
+    it('should add environment variables in self-hosted mode when explicitly enabled', () => {
+      process.env.TEST_VAR = 'test_value';
+      process.env.PROMPTFOO_SELF_HOSTED = 'true';
+      process.env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS = 'false';
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+    });
+  });
 });

@@ -122,8 +122,8 @@ const config = {
             position: 'left',
             items: [
               {
-                to: '/docs/red-team/',
-                label: 'Red Teaming',
+                to: '/security/',
+                label: 'Gen AI Security',
               },
               {
                 to: '/llm-vulnerability-scanner/',
@@ -131,7 +131,7 @@ const config = {
               },
               {
                 to: '/docs/getting-started/',
-                label: 'LLM evaluations',
+                label: 'LLM Evaluations',
               },
             ],
           },
@@ -145,6 +145,10 @@ const config = {
                 label: 'About',
               },
               {
+                href: '/blog/',
+                label: 'Blog',
+              },
+              {
                 href: '/contact/',
                 label: 'Contact',
               },
@@ -152,27 +156,28 @@ const config = {
                 href: '/careers/',
                 label: 'Careers',
               },
-              {
-                href: '/blog/',
-                label: 'Blog',
-              },
             ],
           },
           {
-            href: '/docs/intro/',
-            label: 'Docs',
+            type: 'dropdown',
+            label: 'Resources',
+            position: 'left',
+            items: [
+              {
+                href: '/docs/intro/',
+                label: 'Docs',
+              },
+              {
+                href: 'https://github.com/promptfoo/promptfoo',
+                label: 'GitHub',
+              },
+              {
+                href: 'https://discord.gg/gHPS9jjfbs',
+                label: 'Discord',
+              },
+            ],
           },
           { to: '/pricing/', label: 'Enterprise', position: 'left' },
-          {
-            href: 'https://github.com/promptfoo/promptfoo',
-            label: 'GitHub',
-            position: 'right',
-          },
-          {
-            href: 'https://discord.gg/gHPS9jjfbs',
-            label: 'Discord',
-            position: 'right',
-          },
         ],
       },
       footer: {

@@ -1,11 +1,6 @@
-import React, { createContext, useState, type ReactNode } from 'react';
+import React, { useState, type ReactNode } from 'react';
 import { Snackbar, Alert, type AlertColor } from '@mui/material';
-
-interface ToastContextType {
-  showToast: (message: string, severity?: AlertColor) => void;
-}
-
-export const ToastContext = createContext<ToastContextType | undefined>(undefined);
+import { ToastContext } from './ToastContextDef';
 
 export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [open, setOpen] = useState(false);

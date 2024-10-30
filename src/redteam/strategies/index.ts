@@ -22,51 +22,6 @@ export interface Strategy {
 
 export const Strategies: Strategy[] = [
   {
-    key: 'jailbreak',
-    action: async (testCases, injectVar) => {
-      logger.debug('Adding experimental jailbreaks to all test cases');
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative');
-      logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    key: 'prompt-injection',
-    action: async (testCases, injectVar, config) => {
-      logger.debug('Adding prompt injections to all test cases');
-      const newTestCases = await addInjections(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    key: 'jailbreak:tree',
-    action: async (testCases, injectVar) => {
-      logger.debug('Adding experimental tree jailbreaks to all test cases');
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree');
-      logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    key: 'rot13',
-    action: async (testCases, injectVar) => {
-      logger.debug('Adding ROT13 encoding to all test cases');
-      const newTestCases = addRot13(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    key: 'leetspeak',
-    action: async (testCases, injectVar) => {
-      logger.debug('Adding leetspeak encoding to all test cases');
-      const newTestCases = addLeetspeak(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} leetspeak encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
     key: 'base64',
     action: async (testCases, injectVar) => {
       logger.debug('Adding Base64 encoding to all test cases');
@@ -85,11 +40,29 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    key: 'multilingual',
-    action: async (testCases, injectVar, config) => {
-      logger.debug('Adding multilingual test cases');
-      const newTestCases = await addMultilingual(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} multilingual test cases`);
+    key: 'jailbreak',
+    action: async (testCases, injectVar) => {
+      logger.debug('Adding experimental jailbreaks to all test cases');
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative');
+      logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'jailbreak:tree',
+    action: async (testCases, injectVar) => {
+      logger.debug('Adding experimental tree jailbreaks to all test cases');
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree');
+      logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'leetspeak',
+    action: async (testCases, injectVar) => {
+      logger.debug('Adding leetspeak encoding to all test cases');
+      const newTestCases = addLeetspeak(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} leetspeak encoded test cases`);
       return newTestCases;
     },
   },
@@ -99,6 +72,33 @@ export const Strategies: Strategy[] = [
       logger.debug('Adding MathPrompt encoding to all test cases');
       const newTestCases = await addMathPrompt(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} MathPrompt encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'multilingual',
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding multilingual test cases');
+      const newTestCases = await addMultilingual(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} multilingual test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'prompt-injection',
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding prompt injections to all test cases');
+      const newTestCases = await addInjections(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'rot13',
+    action: async (testCases, injectVar) => {
+      logger.debug('Adding ROT13 encoding to all test cases');
+      const newTestCases = addRot13(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
       return newTestCases;
     },
   },

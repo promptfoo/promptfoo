@@ -64,6 +64,7 @@ The Headless Browser Provider supports the following actions:
 #### click
 
 - `selector`: The CSS selector of the element to click
+- `optional`: If true, then don't throw an error if the selector doesn't exist
 
 #### extract
 
