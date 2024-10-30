@@ -37,7 +37,7 @@ import { runPython } from '../python/pythonUtils';
 import { runPythonCode } from '../python/wrapper';
 import { getGraderById } from '../redteam/graders';
 import telemetry from '../telemetry';
-import type { AssertionValue, ProviderResponse } from '../types';
+import type { AssertionValue, AssertionValueFunctionContext, ProviderResponse } from '../types';
 import {
   type ApiProvider,
   type Assertion,
@@ -295,11 +295,13 @@ export async function runAssertion({
 
   const outputString = coerceString(output);
 
-  const context = {
+  const context: AssertionValueFunctionContext = {
     prompt,
     vars: test.vars || {},
     test,
     logProbs,
+    provider,
+    providerResponse,
     ...(assertion.config ? { config: assertion.config } : {}),
   };
 
