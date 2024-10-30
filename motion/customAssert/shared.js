@@ -9,7 +9,18 @@ const parseJson = (output) => {
 
 const commaDelimitedToArray = (str) => str.split(',').map((i) => i.trim()).filter((i) => !!i);
 
-const getCorrectAnswers = (context) => commaDelimitedToArray(context.vars.correctAnswers);
+const delimitedToArray = (str, delimiter) => str.split(delimiter).map((i) => i.trim()).filter((i) => !!i);
+
+const getCorrectAnswers = (context) => {
+  if (context.vars.correctAnswers.indexOf(',') > 0) {
+    return delimitedToArray(context.vars.correctAnswers, ',');
+  }
+  if (context.vars.correctAnswers.indexOf('\n') > 0) {
+    return delimitedToArray(context.vars.correctAnswers, '\n');
+  }
+
+  return [context.vars.correctAnswers.trim()];
+}
 
 const getGradingResult = (pass, score, reason) => {
   return { pass, score, reason };
@@ -31,6 +42,7 @@ const gte = (score, threshold) => {
 }
 
 module.exports = {
+  delimitedToArray,
   parseJson,
   commaDelimitedToArray,
   getCorrectAnswers,
