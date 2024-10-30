@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { HttpProvider } from '../../providers/http';
-import type { Assertion } from '../../types';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -59,20 +58,24 @@ export default class GoatProvider implements ApiProvider {
     logger.warn(chalk.blue(`raw prompt:\n${context?.prompt?.raw}`));
     logger.warn(`vars:\n${JSON.stringify(context?.vars, null, 2)}`);
 
+    const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] = [];
+
     for (let turn = 0; turn < this.maxTurns; turn++) {
       response = await this.redteamProvider.callApi(prompt, {
         ...context,
-        prompt: context?.prompt || { raw: prompt, label: 'prompt' },
+        prompt: { raw: '', label: 'prompt' },
         vars: {
           ...context?.vars,
-          prompt,
-          goal: 'goal',
-          history: 'history',
-          instructions: 'instructions',
+          body: JSON.stringify({
+            i: turn,
+            goal: context?.vars[this.injectVar],
+          }),
         },
       });
+      invariant(response, 'No response from the original provider');
+      messages.push(response.output);
+      logger.warn(chalk.green(`GOAT turn ${turn} response:\n${response.output}`));
     }
-    invariant(response, 'No response from the original provider');
-    return response;
+    return { output: messages };
   }
 }
