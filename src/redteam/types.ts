@@ -44,6 +44,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   output?: string;
   force?: boolean;
   write: boolean;
+  inRedteamRun?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
