@@ -24,7 +24,6 @@ export default class GoatProvider implements ApiProvider {
     if (neverGenerateRemote()) {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
-    logger.warn(`REMOTE_GENERATION_URL: ${REMOTE_GENERATION_URL}`);
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
     this.maxTurns = options.maxTurns || 5;
