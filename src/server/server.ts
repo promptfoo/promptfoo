@@ -72,6 +72,7 @@ export function createApp() {
         return {
           ...meta,
           label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
+          isRedTeam: meta.isRedteam,
         };
       }),
     });
