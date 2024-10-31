@@ -21,7 +21,7 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { styled } from '@mui/material/styles';
+import { styled, useTheme } from '@mui/material/styles';
 import Plugins from './components/Plugins';
 import Prompts from './components/Prompts';
 import Review from './components/Review';
@@ -34,13 +34,13 @@ import { useSetupState } from './hooks/useSetupState';
 import './page.css';
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
-  borderRight: `1px solid ${theme.palette.divider}`,
   '& .MuiTabs-indicator': {
     left: 0,
     right: 'auto',
   },
   width: '240px',
   minWidth: '240px',
+  backgroundColor: theme.palette.background.paper,
 }));
 
 const StyledTab = styled(Tab)(({ theme }) => ({
@@ -48,19 +48,19 @@ const StyledTab = styled(Tab)(({ theme }) => ({
   textAlign: 'left',
   '&.Mui-selected': {
     backgroundColor: theme.palette.action.selected,
+    paddingLeft: theme.spacing(1.5),
   },
   maxWidth: 'none',
   width: '100%',
   padding: theme.spacing(2),
+  borderBottom: `1px solid ${theme.palette.divider}`,
 }));
 
 const SidebarButtons = styled(Box)(({ theme }) => ({
-  borderRight: `1px solid ${theme.palette.divider}`,
   padding: theme.spacing(2),
   display: 'flex',
   flexDirection: 'column',
   gap: theme.spacing(1),
-  backgroundColor: 'inherit',
 }));
 
 const TabPanel = styled(Box)(({ theme }) => ({
@@ -148,6 +148,7 @@ interface SavedConfig {
 }
 
 export default function RedTeamSetupPage() {
+  const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -294,13 +295,20 @@ export default function RedTeamSetupPage() {
   return (
     <Root>
       <Content>
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            borderRight: `1px solid ${theme.palette.divider}`,
+          }}
+        >
           <StyledTabs
             orientation="vertical"
             variant="scrollable"
             value={value}
             onChange={handleChange}
-            sx={{ borderRight: 1, borderColor: 'divider', width: 200 }}
+            sx={{ width: 200 }}
           >
             <StyledTab label="Targets" {...a11yProps(0)} />
             <StyledTab label="Application" {...a11yProps(1)} />
