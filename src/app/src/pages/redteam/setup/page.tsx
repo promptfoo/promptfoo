@@ -54,6 +54,15 @@ const StyledTab = styled(Tab)(({ theme }) => ({
   padding: theme.spacing(2),
 }));
 
+const SidebarButtons = styled(Box)(({ theme }) => ({
+  borderRight: `1px solid ${theme.palette.divider}`,
+  padding: theme.spacing(2),
+  display: 'flex',
+  flexDirection: 'column',
+  gap: theme.spacing(1),
+  backgroundColor: 'inherit',
+}));
+
 const TabPanel = styled(Box)(({ theme }) => ({
   flexGrow: 1,
   padding: theme.spacing(3),
@@ -285,35 +294,43 @@ export default function RedTeamSetupPage() {
   return (
     <Root>
       <Content>
-        <StyledTabs
-          orientation="vertical"
-          variant="scrollable"
-          value={value}
-          onChange={handleChange}
-          aria-label="Red Team Config Tabs"
-          sx={{ borderRight: 1, borderColor: 'divider', width: 200 }}
-        >
-          <StyledTab label="Targets" {...a11yProps(0)} />
-          <StyledTab label="Application" {...a11yProps(1)} />
-          <StyledTab label="Plugins" {...a11yProps(2)} />
-          <StyledTab label="Strategies" {...a11yProps(3)} />
-          <StyledTab label="Review" {...a11yProps(4)} />
-        </StyledTabs>
-        <TabContent>
-          <Box sx={{ position: 'absolute', top: 24, right: 24, display: 'flex', gap: 1 }}>
-            <Button startIcon={<SaveIcon />} onClick={() => setSaveDialogOpen(true)}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <StyledTabs
+            orientation="vertical"
+            variant="scrollable"
+            value={value}
+            onChange={handleChange}
+            sx={{ borderRight: 1, borderColor: 'divider', width: 200 }}
+          >
+            <StyledTab label="Targets" {...a11yProps(0)} />
+            <StyledTab label="Application" {...a11yProps(1)} />
+            <StyledTab label="Plugins" {...a11yProps(2)} />
+            <StyledTab label="Strategies" {...a11yProps(3)} />
+            <StyledTab label="Review" {...a11yProps(4)} />
+          </StyledTabs>
+          <SidebarButtons>
+            <Button
+              fullWidth
+              startIcon={<SaveIcon />}
+              onClick={() => setSaveDialogOpen(true)}
+              sx={{ justifyContent: 'flex-start' }}
+            >
               Save
             </Button>
             <Button
+              fullWidth
               startIcon={<FolderOpenIcon />}
               onClick={() => {
                 loadConfigs();
                 setLoadDialogOpen(true);
               }}
+              sx={{ justifyContent: 'flex-start' }}
             >
               Load
             </Button>
-          </Box>
+          </SidebarButtons>
+        </Box>
+        <TabContent>
           <CustomTabPanel value={value} index={0}>
             <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
           </CustomTabPanel>
