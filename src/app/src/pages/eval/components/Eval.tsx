@@ -2,7 +2,6 @@ import * as React from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
-import { ToastProvider } from '@app/contexts/ToastContext';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -206,14 +205,12 @@ export default function Eval({
   }
 
   return (
-    <ToastProvider>
-      <ShiftKeyProvider>
-        <ResultsView
-          defaultEvalId={defaultEvalId}
-          recentEvals={recentEvals}
-          onRecentEvalSelected={handleRecentEvalSelection}
-        />
-      </ShiftKeyProvider>
-    </ToastProvider>
+    <ShiftKeyProvider>
+      <ResultsView
+        defaultEvalId={defaultEvalId}
+        recentEvals={recentEvals}
+        onRecentEvalSelected={handleRecentEvalSelection}
+      />
+    </ShiftKeyProvider>
   );
 }

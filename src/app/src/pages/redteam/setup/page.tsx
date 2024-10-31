@@ -1,12 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
+import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import SaveIcon from '@mui/icons-material/Save';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import Plugins from './components/Plugins';
@@ -96,6 +109,7 @@ const TabContent = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   padding: '24px',
+  position: 'relative',
   transition: theme.transitions.create('margin', {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
@@ -118,7 +132,13 @@ const StyledFab = styled(Fab)(({ theme }) => ({
 }));
 */
 
-export default function GeneratePage() {
+interface SavedConfig {
+  id: string;
+  name: string;
+  updatedAt: string;
+}
+
+export default function RedTeamSetupPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -131,7 +151,13 @@ export default function GeneratePage() {
   const [yamlPreviewOpen, setYamlPreviewOpen] = useState(false);
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
-  const { config } = useRedTeamConfig();
+  const { config, setFullConfig } = useRedTeamConfig();
+
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [loadDialogOpen, setLoadDialogOpen] = useState(false);
+  const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
+  const [configName, setConfigName] = useState('');
+  const toast = useToast();
 
   // Handle browser back/forward
   useEffect(() => {
@@ -184,6 +210,78 @@ export default function GeneratePage() {
     markSetupAsSeen();
   };
 
+  const handleSaveConfig = async () => {
+    try {
+      const response = await callApi('/configs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: configName,
+          type: 'redteam',
+          config,
+        }),
+      });
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      toast.showToast('Configuration saved successfully', 'success');
+      setSaveDialogOpen(false);
+      setConfigName('');
+    } catch (error) {
+      console.error('Failed to save configuration', error);
+      toast.showToast(
+        error instanceof Error ? error.message : 'Failed to save configuration',
+        'error',
+      );
+    }
+  };
+
+  const loadConfigs = async () => {
+    try {
+      const response = await callApi('/configs?type=redteam');
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setSavedConfigs(data.configs);
+    } catch (error) {
+      console.error('Failed to load configurations', error);
+      toast.showToast(
+        error instanceof Error ? error.message : 'Failed to load configurations',
+        'error',
+      );
+      setSavedConfigs([]);
+    }
+  };
+
+  const handleLoadConfig = async (id: string) => {
+    try {
+      const response = await callApi(`/configs/redteam/${id}`);
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setFullConfig(data.config);
+      toast.showToast('Configuration loaded successfully', 'success');
+      setLoadDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to load configuration', error);
+      toast.showToast(
+        error instanceof Error ? error.message : 'Failed to load configuration',
+        'error',
+      );
+    }
+  };
+
   return (
     <Root>
       <Content>
@@ -202,6 +300,20 @@ export default function GeneratePage() {
           <StyledTab label="Review" {...a11yProps(4)} />
         </StyledTabs>
         <TabContent>
+          <Box sx={{ position: 'absolute', top: 24, right: 24, display: 'flex', gap: 1 }}>
+            <Button startIcon={<SaveIcon />} onClick={() => setSaveDialogOpen(true)}>
+              Save
+            </Button>
+            <Button
+              startIcon={<FolderOpenIcon />}
+              onClick={() => {
+                loadConfigs();
+                setLoadDialogOpen(true);
+              }}
+            >
+              Load
+            </Button>
+          </Box>
           <CustomTabPanel value={value} index={0}>
             <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
           </CustomTabPanel>
@@ -251,6 +363,74 @@ export default function GeneratePage() {
       */}
       <Setup open={setupModalOpen} onClose={closeSetupModal} />
       <CrispChat />
+      <Dialog
+        open={saveDialogOpen}
+        onClose={() => setSaveDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Save Configuration</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Configuration Name"
+            fullWidth
+            value={configName}
+            onChange={(e) => setConfigName(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSaveConfig} disabled={!configName}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={loadDialogOpen}
+        onClose={() => setLoadDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Load Configuration</DialogTitle>
+        <DialogContent>
+          {savedConfigs.length === 0 ? (
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <Typography color="text.secondary">No saved configurations found</Typography>
+            </Box>
+          ) : (
+            <List>
+              {savedConfigs.map((config) => (
+                <ListItemButton
+                  key={config.id}
+                  onClick={() => handleLoadConfig(config.id)}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    mb: 0.5,
+                    backgroundColor: 'background.paper',
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                      cursor: 'pointer',
+                    },
+                  }}
+                >
+                  <ListItemText
+                    primary={config.name}
+                    secondary={new Date(config.updatedAt).toLocaleString()}
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
     </Root>
   );
 }
