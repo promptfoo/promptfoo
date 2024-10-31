@@ -349,6 +349,9 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           margin="normal"
           required
           autoFocus
+          InputLabelProps={{
+            shrink: true,
+          }}
         />
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>

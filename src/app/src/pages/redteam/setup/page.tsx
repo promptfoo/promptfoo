@@ -26,7 +26,7 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { styled, useTheme } from '@mui/material/styles';
+import { styled } from '@mui/material/styles';
 import Plugins from './components/Plugins';
 import Prompts from './components/Prompts';
 import Review from './components/Review';
@@ -202,7 +202,6 @@ interface SavedConfig {
 }
 
 export default function RedTeamSetupPage() {
-  const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -314,7 +313,12 @@ export default function RedTeamSetupPage() {
         throw new Error(data.error);
       }
 
-      setSavedConfigs(data.configs);
+      setSavedConfigs(
+        data.configs.sort(
+          (a: SavedConfig, b: SavedConfig) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        ),
+      );
     } catch (error) {
       console.error('Failed to load configurations', error);
       toast.showToast(
