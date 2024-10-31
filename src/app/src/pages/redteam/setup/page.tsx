@@ -3,8 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import AppIcon from '@mui/icons-material/Apps';
 import CloseIcon from '@mui/icons-material/Close';
+import PluginIcon from '@mui/icons-material/Extension';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import TargetIcon from '@mui/icons-material/GpsFixed';
+import StrategyIcon from '@mui/icons-material/Psychology';
+import ReviewIcon from '@mui/icons-material/RateReview';
 import SaveIcon from '@mui/icons-material/Save';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -38,22 +43,32 @@ const StyledTabs = styled(Tabs)(({ theme }) => ({
     left: 0,
     right: 'auto',
   },
-  width: '240px',
-  minWidth: '240px',
+  width: '200px',
+  minWidth: '200px',
   backgroundColor: theme.palette.background.paper,
+  '& .MuiTab-root': {
+    minHeight: '48px',
+  },
 }));
 
 const StyledTab = styled(Tab)(({ theme }) => ({
-  alignItems: 'flex-start',
+  alignItems: 'center',
   textAlign: 'left',
+  justifyContent: 'flex-start',
   '&.Mui-selected': {
     backgroundColor: theme.palette.action.selected,
-    paddingLeft: theme.spacing(1.5),
   },
   maxWidth: 'none',
   width: '100%',
-  padding: theme.spacing(2),
+  minHeight: '48px',
+  padding: theme.spacing(1, 2),
   borderBottom: `1px solid ${theme.palette.divider}`,
+  '& .MuiSvgIcon-root': {
+    marginRight: theme.spacing(1),
+    fontSize: '20px',
+  },
+  textTransform: 'none',
+  fontSize: '0.875rem',
 }));
 
 const SidebarButtons = styled(Box)(({ theme }) => ({
@@ -310,11 +325,36 @@ export default function RedTeamSetupPage() {
             onChange={handleChange}
             sx={{ width: 200 }}
           >
-            <StyledTab label="Targets" {...a11yProps(0)} />
-            <StyledTab label="Application" {...a11yProps(1)} />
-            <StyledTab label="Plugins" {...a11yProps(2)} />
-            <StyledTab label="Strategies" {...a11yProps(3)} />
-            <StyledTab label="Review" {...a11yProps(4)} />
+            <StyledTab
+              icon={<TargetIcon />}
+              iconPosition="start"
+              label="Targets"
+              {...a11yProps(0)}
+            />
+            <StyledTab
+              icon={<AppIcon />}
+              iconPosition="start"
+              label="Application"
+              {...a11yProps(1)}
+            />
+            <StyledTab
+              icon={<PluginIcon />}
+              iconPosition="start"
+              label="Plugins"
+              {...a11yProps(2)}
+            />
+            <StyledTab
+              icon={<StrategyIcon />}
+              iconPosition="start"
+              label="Strategies"
+              {...a11yProps(3)}
+            />
+            <StyledTab
+              icon={<ReviewIcon />}
+              iconPosition="start"
+              label="Review"
+              {...a11yProps(4)}
+            />
           </StyledTabs>
           <SidebarButtons>
             <Button
