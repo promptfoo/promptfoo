@@ -65,17 +65,36 @@ const StyledTab = styled(Tab)(({ theme }) => ({
   borderBottom: `1px solid ${theme.palette.divider}`,
   '& .MuiSvgIcon-root': {
     marginRight: theme.spacing(1),
-    fontSize: '20px',
+    fontSize: '18px',
   },
   textTransform: 'none',
   fontSize: '0.875rem',
 }));
 
 const SidebarButtons = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(2),
   display: 'flex',
   flexDirection: 'column',
-  gap: theme.spacing(1),
+  gap: theme.spacing(0.5),
+  padding: theme.spacing(1.5),
+  borderTop: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.background.paper,
+}));
+
+const SidebarButton = styled(Button)(({ theme }) => ({
+  justifyContent: 'flex-start',
+  padding: theme.spacing(1),
+  textTransform: 'none',
+  color: theme.palette.text.secondary,
+  fontSize: '0.875rem',
+  fontWeight: 400,
+  '& .MuiSvgIcon-root': {
+    marginRight: theme.spacing(1),
+    fontSize: '18px',
+  },
+  '&:hover': {
+    backgroundColor: theme.palette.action.hover,
+    color: theme.palette.text.primary,
+  },
 }));
 
 const TabPanel = styled(Box)(({ theme }) => ({
@@ -118,6 +137,26 @@ const Root = styled(Box)(({ theme }) => ({
   minHeight: '100vh',
   position: 'relative',
 }));
+
+const OuterSidebarContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
+  borderRight: `1px solid ${theme.palette.divider}`,
+}));
+
+const InnerSidebarContainer = styled(Box)({
+  position: 'sticky',
+  top: 64, // Account for navbar
+  height: 'calc(100vh - 64px)',
+  display: 'flex',
+  flexDirection: 'column',
+});
+
+const TabsContainer = styled(Box)({
+  flexGrow: 1,
+  overflowY: 'auto',
+});
 
 const Content = styled(Box)(({ theme }) => ({
   flexGrow: 1,
@@ -310,74 +349,71 @@ export default function RedTeamSetupPage() {
   return (
     <Root>
       <Content>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            borderRight: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <StyledTabs
-            orientation="vertical"
-            variant="scrollable"
-            value={value}
-            onChange={handleChange}
-            sx={{ width: 200 }}
-          >
-            <StyledTab
-              icon={<TargetIcon />}
-              iconPosition="start"
-              label="Targets"
-              {...a11yProps(0)}
-            />
-            <StyledTab
-              icon={<AppIcon />}
-              iconPosition="start"
-              label="Application"
-              {...a11yProps(1)}
-            />
-            <StyledTab
-              icon={<PluginIcon />}
-              iconPosition="start"
-              label="Plugins"
-              {...a11yProps(2)}
-            />
-            <StyledTab
-              icon={<StrategyIcon />}
-              iconPosition="start"
-              label="Strategies"
-              {...a11yProps(3)}
-            />
-            <StyledTab
-              icon={<ReviewIcon />}
-              iconPosition="start"
-              label="Review"
-              {...a11yProps(4)}
-            />
-          </StyledTabs>
-          <SidebarButtons>
-            <Button
-              fullWidth
-              startIcon={<SaveIcon />}
-              onClick={() => setSaveDialogOpen(true)}
-              sx={{ justifyContent: 'flex-start' }}
-            >
-              Save
-            </Button>
-            <Button
-              fullWidth
-              startIcon={<FolderOpenIcon />}
-              onClick={() => {
-                loadConfigs();
-                setLoadDialogOpen(true);
-              }}
-              sx={{ justifyContent: 'flex-start' }}
-            >
-              Load
-            </Button>
-          </SidebarButtons>
-        </Box>
+        <OuterSidebarContainer>
+          <InnerSidebarContainer>
+            <TabsContainer>
+              <StyledTabs
+                orientation="vertical"
+                variant="scrollable"
+                value={value}
+                onChange={handleChange}
+                sx={{ width: 200 }}
+              >
+                <StyledTab
+                  icon={<TargetIcon />}
+                  iconPosition="start"
+                  label="Targets"
+                  {...a11yProps(0)}
+                />
+                <StyledTab
+                  icon={<AppIcon />}
+                  iconPosition="start"
+                  label="Application"
+                  {...a11yProps(1)}
+                />
+                <StyledTab
+                  icon={<PluginIcon />}
+                  iconPosition="start"
+                  label="Plugins"
+                  {...a11yProps(2)}
+                />
+                <StyledTab
+                  icon={<StrategyIcon />}
+                  iconPosition="start"
+                  label="Strategies"
+                  {...a11yProps(3)}
+                />
+                <StyledTab
+                  icon={<ReviewIcon />}
+                  iconPosition="start"
+                  label="Review"
+                  {...a11yProps(4)}
+                />
+              </StyledTabs>
+            </TabsContainer>
+            <SidebarButtons>
+              <SidebarButton
+                variant="text"
+                fullWidth
+                startIcon={<SaveIcon />}
+                onClick={() => setSaveDialogOpen(true)}
+              >
+                Save Config
+              </SidebarButton>
+              <SidebarButton
+                variant="text"
+                fullWidth
+                startIcon={<FolderOpenIcon />}
+                onClick={() => {
+                  loadConfigs();
+                  setLoadDialogOpen(true);
+                }}
+              >
+                Load Config
+              </SidebarButton>
+            </SidebarButtons>
+          </InnerSidebarContainer>
+        </OuterSidebarContainer>
         <TabContent>
           <CustomTabPanel value={value} index={0}>
             <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
