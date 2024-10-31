@@ -4,10 +4,13 @@ import CrispChat from '@app/components/CrispChat';
 import { UserProvider } from '@app/contexts/UserContext';
 import { useUserStore } from '@app/stores/userStore';
 import Report from './components/Report';
+import ReportIndex from './components/ReportIndex';
 
 export default function ReportPage() {
   const navigate = useNavigate();
   const { email, isLoading, fetchEmail } = useUserStore();
+  const searchParams = new URLSearchParams(window.location.search);
+  const evalId = searchParams.get('evalId');
 
   useEffect(() => {
     fetchEmail();
@@ -30,7 +33,7 @@ export default function ReportPage() {
 
   return (
     <UserProvider>
-      <Report />
+      {evalId ? <Report /> : <ReportIndex />}
       <CrispChat />
     </UserProvider>
   );
