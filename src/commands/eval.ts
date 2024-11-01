@@ -203,6 +203,7 @@ export async function doEval(
       cached: 0,
     };
 
+    // Calculate our total successes and failures
     for (const prompt of evalRecord.prompts) {
       if (prompt.metrics?.testPassCount) {
         successes += prompt.metrics.testPassCount;

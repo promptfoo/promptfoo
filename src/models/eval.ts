@@ -351,6 +351,8 @@ export default class Eval {
       persist: this.persisted,
     });
     if (!this.persisted) {
+      // We're only going to keep results in memory if the eval isn't persisted in the database
+      // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
     }
   }

@@ -144,10 +144,12 @@ evalRouter.post(
     const successChanged = result.success !== gradingResult.pass;
     const scoreChange = gradingResult.score - result.score;
 
+    // Update the result
     result.gradingResult = gradingResult;
     result.success = gradingResult.pass;
     result.score = gradingResult.score;
 
+    // Update the prompt metrics
     const prompt = eval_.prompts[result.promptIdx];
     invariant(prompt, 'Prompt not found');
     if (!prompt.metrics) {

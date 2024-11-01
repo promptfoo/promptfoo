@@ -96,6 +96,8 @@ export default class EvalResult {
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 
+  // This is a generator that yields batches of results from the database
+  // These are batched by test Id, not just results to ensure we get all results for a given test
   static async *findManyByEvalIdBatched(
     evalId: string,
     opts?: {
