@@ -1,5 +1,6 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
+import { SingleBar, Presets } from 'cli-progress';
 import { URL } from 'url';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { getEnvBool, isCI } from './envars';
@@ -10,6 +11,55 @@ import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
+
+const UPLOAD_CONFIG = {
+  STREAMING_THRESHOLD: 5 * 1024 * 1024, // 5MB
+  BATCH_SIZE: 50,
+  VERSION: 3,
+} as const;
+
+type StreamChunk = {
+  type: 'metadata' | 'results';
+  batch?: number;
+  totalBatches?: number;
+  data?: unknown[];
+  config?: unknown;
+  createdAt?: string | number;
+  totalResults?: number;
+  version: number;
+  author?: string | null;
+};
+
+async function* generateResultsStream(evalRecord: Eval, onProgress?: (progress: number) => void) {
+  // Convert createdAt to string if it's a number
+  const metadata: StreamChunk = {
+    type: 'metadata',
+    config: evalRecord.config,
+    createdAt: evalRecord.createdAt?.toString(),
+    totalResults: evalRecord.results.length,
+    version: UPLOAD_CONFIG.VERSION,
+    author: getAuthor() || undefined,
+  };
+  yield JSON.stringify(metadata) + '\n';
+
+  const totalBatches = Math.ceil(evalRecord.results.length / UPLOAD_CONFIG.BATCH_SIZE);
+  for (let i = 0; i < evalRecord.results.length; i += UPLOAD_CONFIG.BATCH_SIZE) {
+    const batchIndex = Math.floor(i / UPLOAD_CONFIG.BATCH_SIZE);
+    const batch = evalRecord.results.slice(i, i + UPLOAD_CONFIG.BATCH_SIZE);
+
+    const chunk: StreamChunk = {
+      type: 'results',
+      batch: batchIndex,
+      totalBatches,
+      data: batch,
+      version: UPLOAD_CONFIG.VERSION,
+    };
+    yield JSON.stringify(chunk) + '\n';
+
+    onProgress?.((batchIndex + 1) / totalBatches);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
 
 async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
   const response = await fetchWithProxy(`${apiHost}/health`, {
@@ -25,28 +75,101 @@ async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
   return 'version' in responseJson;
 }
 
-async function sendEvalResults(evalRecord: Eval, url: string) {
-  await evalRecord.loadResults();
+// Move helper functions above where they're used
+async function validateResponse(response: Response): Promise<void> {
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    throw new Error(`Failed to send eval results: ${response.statusText} (${errorText})`);
+  }
+}
 
+function getHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
   if (cloudConfig.isEnabled()) {
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
+  return headers;
+}
 
-  const response = await fetchWithProxy(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(evalRecord),
-  });
+async function sendStreamingResults(evalRecord: Eval, url: string): Promise<string> {
+  const headers = getHeaders();
+  headers['X-Upload-Mode'] = 'streaming';
+  headers['Transfer-Encoding'] = 'chunked';
 
-  if (!response.ok) {
-    throw new Error(`Failed to send eval results: ${response.statusText}`);
+  let progressBar: SingleBar | undefined;
+  if (logger.level !== 'debug') {
+    progressBar = new SingleBar(
+      {
+        format: 'Uploading results {bar} {percentage}% | ETA: {eta}s | {value}/{total} batches',
+        hideCursor: true,
+      },
+      Presets.shades_classic,
+    );
+
+    const totalBatches = Math.ceil(evalRecord.results.length / UPLOAD_CONFIG.BATCH_SIZE);
+    progressBar.start(totalBatches, 0);
   }
 
-  const evalId = (await response.json()).id;
-  return evalId;
+  const fetchOptions: RequestInit & { duplex: 'half' } = {
+    method: 'POST',
+    headers,
+    body: new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of generateResultsStream(evalRecord, (progress) => {
+            if (progressBar) {
+              progressBar.update(Math.floor(progress * progressBar.getTotal()));
+            } else {
+              logger.debug(`Upload progress: ${Math.floor(progress * 100)}%`);
+            }
+          })) {
+            controller.enqueue(new TextEncoder().encode(chunk));
+          }
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+          throw error;
+        }
+      },
+    }),
+    duplex: 'half',
+  };
+
+  try {
+    const response = await fetchWithProxy(url, fetchOptions);
+    await validateResponse(response);
+    const { id: evalId } = await response.json();
+    return evalId;
+  } finally {
+    if (progressBar) {
+      progressBar.stop();
+    }
+  }
+}
+
+async function sendEvalResults(evalRecord: Eval, url: string) {
+  await evalRecord.loadResults();
+
+  // Use UPLOAD_CONFIG
+  const estimatedSize = JSON.stringify(evalRecord).length;
+  const useStreaming = estimatedSize > UPLOAD_CONFIG.STREAMING_THRESHOLD;
+
+  if (useStreaming) {
+    return sendStreamingResults(evalRecord, url);
+  } else {
+    const headers = getHeaders();
+    const response = await fetchWithProxy(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(evalRecord),
+    });
+
+    await validateResponse(response);
+    const { id: evalId } = await response.json();
+    return evalId;
+  }
 }
 
 /**
