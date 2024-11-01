@@ -145,7 +145,6 @@ evalRouter.post(
 
 evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    // Check if this is a streaming upload
     const isStreaming = req.headers['x-upload-mode'] === 'streaming';
 
     if (isStreaming) {
@@ -153,7 +152,6 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       let metadata: any;
       const chunks: any[] = [];
 
-      // Process the stream line by line
       for await (const chunk of req) {
         const line = chunk.toString().trim();
         if (!line) {
