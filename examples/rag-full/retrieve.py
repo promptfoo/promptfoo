@@ -59,8 +59,6 @@ def call_api(
             db_chroma.similarity_search_with_score(
                 prompt,
                 k=k,
-                # Optionally add filter if you have metadata to filter on
-                # filter={"source": "your_source"}
             )
         )
         context_text: str = "\n\n".join(
