@@ -789,6 +789,7 @@ export interface ResultLightweight {
   createdAt: number;
   description: string | null;
   numTests: number;
+  isRedteam?: boolean;
 }
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
