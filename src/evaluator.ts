@@ -780,7 +780,9 @@ class Evaluator {
     for (const testIdx of rowsWithSelectBestAssertion) {
       compareCount++;
 
-      const resultsToCompare = this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+      const resultsToCompare = this.evalRecord.persisted
+        ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
+        : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
       if (resultsToCompare.length === 0) {
         logger.warn(`Expected results to be found for test index ${testIdx}`);
         continue;

@@ -350,7 +350,13 @@ export default class Eval {
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, test, {
       persist: this.persisted,
     });
-    this.results.push(newResult);
+    if (!this.persisted) {
+      this.results.push(newResult);
+    }
+  }
+
+  async fetchResultsByTestIdx(testIdx: number) {
+    return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {

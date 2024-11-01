@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { hashPrompt } from '../prompts/utils';
@@ -82,12 +82,17 @@ export default class EvalResult {
     return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
   }
 
-  static async findManyByEvalId(evalId: string) {
+  static async findManyByEvalId(evalId: string, opts?: { testIdx?: number }) {
     const db = getDb();
     const results = await db
       .select()
       .from(evalResultsTable)
-      .where(eq(evalResultsTable.evalId, evalId));
+      .where(
+        and(
+          eq(evalResultsTable.evalId, evalId),
+          opts?.testIdx == null ? undefined : eq(evalResultsTable.testIdx, opts.testIdx),
+        ),
+      );
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 

@@ -194,9 +194,32 @@ export async function doEval(
     const shareableUrl =
       cmdObj.share && config.sharing ? await createShareableUrl(evalRecord) : null;
 
-    const summary = await evalRecord.toEvaluateSummary();
-    const table = await evalRecord.getTable();
+    let successes = 0;
+    let failures = 0;
+    const tokenUsage = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+    };
+
+    for (const prompt of evalRecord.prompts) {
+      if (prompt.metrics?.testPassCount) {
+        successes += prompt.metrics.testPassCount;
+      }
+      if (prompt.metrics?.testFailCount) {
+        failures += prompt.metrics.testFailCount;
+      }
+      tokenUsage.total += prompt.metrics?.tokenUsage?.total || 0;
+      tokenUsage.prompt += prompt.metrics?.tokenUsage?.prompt || 0;
+      tokenUsage.completion += prompt.metrics?.tokenUsage?.completion || 0;
+      tokenUsage.cached += prompt.metrics?.tokenUsage?.cached || 0;
+    }
+    const totalTests = successes + failures;
+    const passRate = (successes / totalTests) * 100;
+
     if (cmdObj.table && getLogLevel() !== 'debug') {
+      const table = await evalRecord.getTable();
       // Output CLI table
       const outputTable = generateTable(table);
 
@@ -205,22 +228,12 @@ export async function doEval(
         const rowsLeft = table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
       }
-    } else if (summary.stats.failures !== 0) {
+    } else if (failures !== 0) {
       logger.debug(
         `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
-          summary.results,
+          evalRecord.prompts,
         )}`,
       );
-    }
-
-    if (getEnvBool('PROMPTFOO_LIGHTWEIGHT_RESULTS')) {
-      const outputPath = config.outputPath;
-      config = { outputPath };
-      summary.results = [];
-      table.head.vars = [];
-      for (const row of table.body) {
-        row.vars = [];
-      }
     }
 
     const { outputPath } = config;
@@ -251,17 +264,17 @@ export async function doEval(
     } else {
       logger.info(`${chalk.green('✔')} Evaluation complete`);
     }
+
     printBorder();
-    const totalTests = summary.stats.successes + summary.stats.failures;
-    const passRate = (summary.stats.successes / totalTests) * 100;
-    logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
-    logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
+
+    logger.info(chalk.green.bold(`Successes: ${successes}`));
+    logger.info(chalk.red.bold(`Failures: ${failures}`));
     if (!Number.isNaN(passRate)) {
       logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     }
-    if (summary.stats.tokenUsage.total > 0) {
+    if (tokenUsage.total > 0) {
       logger.info(
-        `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
+        `Token usage: Total ${tokenUsage.total}, Prompt ${tokenUsage.prompt}, Completion ${tokenUsage.completion}, Cached ${tokenUsage.cached}`,
       );
     }
 
