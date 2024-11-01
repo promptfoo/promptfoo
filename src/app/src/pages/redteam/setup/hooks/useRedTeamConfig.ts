@@ -5,6 +5,7 @@ import type { Config, ProviderOptions } from '../types';
 interface RedTeamConfigState {
   config: Config;
   updateConfig: (section: keyof Config, value: any) => void;
+  setFullConfig: (config: Config) => void;
   resetConfig: () => void;
 }
 
@@ -47,6 +48,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
             [section]: value,
           },
         })),
+      setFullConfig: (config) => set({ config }),
       resetConfig: () => set({ config: defaultConfig }),
     }),
     {

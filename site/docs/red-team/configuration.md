@@ -119,6 +119,7 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 - `indirect-prompt-injection`: Tests if the prompt is vulnerable to instructions injected into variables in the prompt.
 
   - Takes a `config` object with `systemPrompt` and `indirectInjectionVar` property. These properties are **required** for the plugin to work properly. For example:
+
     ```yaml
     redteam:
       plugins:
@@ -701,3 +702,18 @@ redteam:
   strategies:
     - id: 'jailbreak'
 ```
+
+## Adding custom tests
+
+In some cases, you may already have a set of tests that you want to use in addition to the ones that Promptfoo generates.
+
+There are two approaches:
+
+1. Run these tests as a separate evaluation. See the [getting started](https://www.promptfoo.dev/docs/getting-started/) guide for evaluations. For grading, you will likely want to use the [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric/) or [`moderation`](/docs/configuration/expected-outputs/moderation/) assertion types.
+1. You can also add your custom tests to the `tests` section of the generated `redteam.yaml` configuration file.
+
+Either way, this will allow you to evaluate your custom tests.
+
+### Loading custom tests from CSV
+
+Promptfoo supports loading tests from CSV as well as Google Sheets. See [CSV loading](/docs/configuration/guide/#loading-tests-from-csv) and [Google Sheets](/docs/integrations/google-sheets/) for more info.

@@ -71,6 +71,13 @@
       "when": 1729541645771,
       "tag": "0009_strong_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1730348380232,
+      "tag": "0010_needy_bishop",
+      "breakpoints": true
     }
   ]
 }

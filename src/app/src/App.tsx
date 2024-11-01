@@ -9,6 +9,7 @@ import {
   Outlet,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
+import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
@@ -57,7 +58,11 @@ const router = createBrowserRouter(
 );
 
 function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>
+  );
 }
 
 export default App;
