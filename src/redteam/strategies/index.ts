@@ -4,6 +4,7 @@ import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { addBase64Encoding } from './base64';
 import { addCrescendo } from './crescendo';
+import { addGoatTestCases } from './goat';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addMathPrompt } from './mathPrompt';
@@ -36,6 +37,15 @@ export const Strategies: Strategy[] = [
       logger.debug('Adding Crescendo to all test cases');
       const newTestCases = addCrescendo(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'goat',
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding GOAT to all test cases');
+      const newTestCases = await addGoatTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} GOAT test cases`);
       return newTestCases;
     },
   },

@@ -1,4 +1,3 @@
-import chalk from 'chalk';
 import httpZ from 'http-z';
 import path from 'path';
 import invariant from 'tiny-invariant';
@@ -213,10 +212,8 @@ export class HttpProvider implements ApiProvider {
         );
       }
       if (typeof body === 'string' && contentTypeIsJson(headers)) {
-        console.warn(
-          chalk.yellow(
-            'Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
-          ),
+        logger.warn(
+          'Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
         );
       }
     }
