@@ -147,7 +147,6 @@ export async function writeOutput(
       fs.appendFileSync(outputPath, batchCsv);
     }
   } else if (outputExtension === 'json') {
-    // const summary = await evalRecord.toEvaluateSummary();
     const results = await evalRecord.getResults();
     fs.writeFileSync(
       outputPath,
