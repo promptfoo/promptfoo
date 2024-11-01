@@ -197,7 +197,7 @@ export default class Eval {
 
         logger.debug(`Inserting prompt ${promptId}`);
       }
-      if (opts?.results) {
+      if (opts?.results && opts.results.length > 0) {
         const res = await tx
           .insert(evalResultsTable)
           .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))

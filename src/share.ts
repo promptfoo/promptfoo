@@ -16,6 +16,8 @@ const UPLOAD_CONFIG = {
   STREAMING_THRESHOLD: 5 * 1024 * 1024, // 5MB
   BATCH_SIZE: 50,
   VERSION: 3,
+  // TODO: Remove this before release
+  FORCE_STREAMING: process.env.PROMPTFOO_FORCE_STREAMING === 'true',
 } as const;
 
 type StreamChunk = {
@@ -31,7 +33,6 @@ type StreamChunk = {
 };
 
 async function* generateResultsStream(evalRecord: Eval, onProgress?: (progress: number) => void) {
-  // Convert createdAt to string if it's a number
   const metadata: StreamChunk = {
     type: 'metadata',
     config: evalRecord.config,
@@ -75,7 +76,6 @@ async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
   return 'version' in responseJson;
 }
 
-// Move helper functions above where they're used
 async function validateResponse(response: Response): Promise<void> {
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');
@@ -101,6 +101,8 @@ async function sendStreamingResults(evalRecord: Eval, url: string): Promise<stri
     headers['X-Upload-Mode'] = 'streaming';
     headers['Transfer-Encoding'] = 'chunked';
 
+    const totalBatches = Math.ceil(evalRecord.results.length / UPLOAD_CONFIG.BATCH_SIZE);
+
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
         {
@@ -110,11 +112,11 @@ async function sendStreamingResults(evalRecord: Eval, url: string): Promise<stri
         Presets.shades_classic,
       );
 
-      const totalBatches = Math.ceil(evalRecord.results.length / UPLOAD_CONFIG.BATCH_SIZE);
       progressBar.start(totalBatches, 0);
     }
 
-    // Type assertion for fetch options to include duplex
+    let batchIndex = 0;
+
     const fetchOptions: RequestInit & { duplex: 'half' } = {
       method: 'POST',
       headers,
@@ -124,9 +126,12 @@ async function sendStreamingResults(evalRecord: Eval, url: string): Promise<stri
             for await (const chunk of generateResultsStream(evalRecord, (progress) => {
               if (progressBar) {
                 progressBar.update(Math.floor(progress * progressBar.getTotal()));
+              } else {
+                logger.debug(`Upload progress: ${batchIndex + 1}/${totalBatches} chunks`);
               }
             })) {
               controller.enqueue(new TextEncoder().encode(chunk));
+              batchIndex++;
             }
             controller.close();
           } catch (error) {
@@ -146,7 +151,7 @@ async function sendStreamingResults(evalRecord: Eval, url: string): Promise<stri
     const { id: evalId } = await response.json();
     return evalId;
   } catch (error) {
-    logger.error('Failed to send streaming results:', error);
+    logger.error(`Failed to send streaming results: ${error}`);
     throw error;
   } finally {
     if (progressBar) {
@@ -158,9 +163,11 @@ async function sendStreamingResults(evalRecord: Eval, url: string): Promise<stri
 async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | undefined> {
   try {
     const payloadSize = JSON.stringify(evalRecord.results).length;
-    if (payloadSize > UPLOAD_CONFIG.STREAMING_THRESHOLD) {
+    if (UPLOAD_CONFIG.FORCE_STREAMING || payloadSize > UPLOAD_CONFIG.STREAMING_THRESHOLD) {
+      logger.debug('Using streaming upload mode');
       return await sendStreamingResults(evalRecord, url);
     } else {
+      logger.debug('Using regular upload mode');
       const headers = getHeaders();
       const response = await fetchWithProxy(url, {
         method: 'POST',
@@ -205,6 +212,7 @@ export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
+  logger.debug(`Creating shareable URL for eval ${evalRecord.id}`);
   try {
     if (process.stdout.isTTY && !isCI() && !getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
       let email = getUserEmail();
@@ -234,11 +242,14 @@ export async function createShareableUrl(
       url = `${apiBaseUrl}/api/eval`;
     }
 
+    logger.debug(`Using API base URL: ${apiBaseUrl}`);
+
     const canUseNewResults =
       cloudConfig.isEnabled() || (await targetHostCanUseNewResults(apiBaseUrl));
     logger.debug(
-      `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
+      `Upload configuration - URL: ${url}, canUseNewResults: ${canUseNewResults}, useOldResults: ${evalRecord.useOldResults()}`,
     );
+
     let evalId: string | undefined;
     if (canUseNewResults && !evalRecord.useOldResults()) {
       evalId = await sendEvalResults(evalRecord, url);
@@ -254,8 +265,6 @@ export async function createShareableUrl(
         version: 2,
       };
 
-      logger.debug(`Sending eval results (v2 result file) to ${url}`);
-      // check if we're using the cloud
       const sharedResults: SharedResults = {
         data: {
           version: 3,
@@ -265,6 +274,7 @@ export async function createShareableUrl(
           config: evalRecord.config,
         },
       };
+
       if (cloudConfig.isEnabled()) {
         response = await fetchWithProxy(url, {
           method: 'POST',
@@ -294,7 +304,9 @@ export async function createShareableUrl(
       }
       evalId = responseJson.id;
     }
-    logger.debug(`New eval ID on remote instance: ${evalId}`);
+
+    logger.debug(`Generated eval ID: ${evalId}`);
+
     let appBaseUrl = SHARE_VIEW_BASE_URL;
     let fullUrl = SHARE_VIEW_BASE_URL;
     if (cloudConfig.isEnabled()) {
@@ -313,7 +325,7 @@ export async function createShareableUrl(
 
     return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
   } catch (error) {
-    logger.error('Failed to create shareable URL:', error);
+    logger.error(`Failed to create shareable URL: ${error}`);
     return null;
   }
 }
