@@ -136,11 +136,52 @@ describe('createShareableUrl', () => {
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
 
-    jest.mocked(fetchWithProxy).mockRejectedValueOnce(new Error('Network error'));
+    // Mock logger first
+    const mockLogger = jest.requireMock('../src/logger').default;
+    jest.spyOn(mockLogger, 'error').mockImplementation();
+    mockLogger.level = 'error'; // Prevent progress bar creation
+
+    // Mock a failed response
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+      new Response('Network error', {
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: { 'Content-Type': 'text/plain' },
+      }),
+    );
 
     const result = await createShareableUrl(mockEvalLarge as Eval);
     expect(result).toBeNull();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to send eval results'),
+      expect.any(Error),
+    );
+  });
+
+  it('handles streaming upload network errors gracefully', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+
+    // Mock logger first
+    const mockLogger = jest.requireMock('../src/logger').default;
+    jest.spyOn(mockLogger, 'error').mockImplementation();
+    mockLogger.level = 'error'; // Prevent progress bar creation
+
+    // Mock a network error
+    jest.mocked(fetchWithProxy).mockImplementationOnce(() => {
+      throw new Error('Network error');
+    });
+
+    const result = await createShareableUrl(mockEvalLarge as Eval);
+    expect(result).toBeNull();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to send eval results'),
+      expect.any(Error),
+    );
   });
 
   it('falls back to non-streaming for small payloads', async () => {

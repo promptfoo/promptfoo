@@ -94,54 +94,60 @@ function getHeaders(): Record<string, string> {
 }
 
 async function sendStreamingResults(evalRecord: Eval, url: string): Promise<string> {
-  const headers = getHeaders();
-  headers['X-Upload-Mode'] = 'streaming';
-  headers['Transfer-Encoding'] = 'chunked';
-
   let progressBar: SingleBar | undefined;
-  if (logger.level !== 'debug') {
-    progressBar = new SingleBar(
-      {
-        format: 'Uploading results {bar} {percentage}% | ETA: {eta}s | {value}/{total} batches',
-        hideCursor: true,
-      },
-      Presets.shades_classic,
-    );
-
-    const totalBatches = Math.ceil(evalRecord.results.length / UPLOAD_CONFIG.BATCH_SIZE);
-    progressBar.start(totalBatches, 0);
-  }
-
-  const fetchOptions: RequestInit & { duplex: 'half' } = {
-    method: 'POST',
-    headers,
-    body: new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of generateResultsStream(evalRecord, (progress) => {
-            if (progressBar) {
-              progressBar.update(Math.floor(progress * progressBar.getTotal()));
-            } else {
-              logger.debug(`Upload progress: ${Math.floor(progress * 100)}%`);
-            }
-          })) {
-            controller.enqueue(new TextEncoder().encode(chunk));
-          }
-          controller.close();
-        } catch (error) {
-          controller.error(error);
-          throw error;
-        }
-      },
-    }),
-    duplex: 'half',
-  };
 
   try {
+    const headers = getHeaders();
+    headers['X-Upload-Mode'] = 'streaming';
+    headers['Transfer-Encoding'] = 'chunked';
+
+    if (logger.level !== 'debug') {
+      progressBar = new SingleBar(
+        {
+          format: 'Uploading results {bar} {percentage}% | ETA: {eta}s | {value}/{total} batches',
+          hideCursor: true,
+        },
+        Presets.shades_classic,
+      );
+
+      const totalBatches = Math.ceil(evalRecord.results.length / UPLOAD_CONFIG.BATCH_SIZE);
+      progressBar.start(totalBatches, 0);
+    }
+
+    // Type assertion for fetch options to include duplex
+    const fetchOptions: RequestInit & { duplex: 'half' } = {
+      method: 'POST',
+      headers,
+      body: new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of generateResultsStream(evalRecord, (progress) => {
+              if (progressBar) {
+                progressBar.update(Math.floor(progress * progressBar.getTotal()));
+              }
+            })) {
+              controller.enqueue(new TextEncoder().encode(chunk));
+            }
+            controller.close();
+          } catch (error) {
+            controller.error(error);
+          } finally {
+            if (progressBar) {
+              progressBar.stop();
+            }
+          }
+        },
+      }),
+      duplex: 'half',
+    };
+
     const response = await fetchWithProxy(url, fetchOptions);
     await validateResponse(response);
     const { id: evalId } = await response.json();
     return evalId;
+  } catch (error) {
+    logger.error('Failed to send streaming results:', error);
+    throw error;
   } finally {
     if (progressBar) {
       progressBar.stop();
@@ -149,26 +155,26 @@ async function sendStreamingResults(evalRecord: Eval, url: string): Promise<stri
   }
 }
 
-async function sendEvalResults(evalRecord: Eval, url: string) {
-  await evalRecord.loadResults();
+async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | undefined> {
+  try {
+    const payloadSize = JSON.stringify(evalRecord.results).length;
+    if (payloadSize > UPLOAD_CONFIG.STREAMING_THRESHOLD) {
+      return await sendStreamingResults(evalRecord, url);
+    } else {
+      const headers = getHeaders();
+      const response = await fetchWithProxy(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(evalRecord),
+      });
 
-  // Use UPLOAD_CONFIG
-  const estimatedSize = JSON.stringify(evalRecord).length;
-  const useStreaming = estimatedSize > UPLOAD_CONFIG.STREAMING_THRESHOLD;
-
-  if (useStreaming) {
-    return sendStreamingResults(evalRecord, url);
-  } else {
-    const headers = getHeaders();
-    const response = await fetchWithProxy(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(evalRecord),
-    });
-
-    await validateResponse(response);
-    const { id: evalId } = await response.json();
-    return evalId;
+      await validateResponse(response);
+      const { id: evalId } = await response.json();
+      return evalId;
+    }
+  } catch (error) {
+    logger.error('Failed to send eval results:', error);
+    return undefined;
   }
 }
 
@@ -199,107 +205,115 @@ export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
-  if (process.stdout.isTTY && !isCI() && !getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
-    let email = getUserEmail();
-    if (!email) {
-      email = await input({
-        message: `${chalk.bold('Please enter your work email address')} (for managing shared URLs):`,
-        validate: (value) => {
-          return value.includes('@') || 'Please enter a valid email address';
-        },
-      });
-      setUserEmail(email);
+  try {
+    if (process.stdout.isTTY && !isCI() && !getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
+      let email = getUserEmail();
+      if (!email) {
+        email = await input({
+          message: `${chalk.bold('Please enter your work email address')} (for managing shared URLs):`,
+          validate: (value) => {
+            return value.includes('@') || 'Please enter a valid email address';
+          },
+        });
+        setUserEmail(email);
+      }
     }
-  }
 
-  let response: Response;
-  let apiBaseUrl: string;
-  let url: string;
-  if (cloudConfig.isEnabled()) {
-    apiBaseUrl = cloudConfig.getApiHost();
-    url = `${apiBaseUrl}/results`;
-  } else {
-    apiBaseUrl =
-      typeof evalRecord.config.sharing === 'object'
-        ? evalRecord.config.sharing.apiBaseUrl || SHARE_API_BASE_URL
-        : SHARE_API_BASE_URL;
-
-    url = `${apiBaseUrl}/api/eval`;
-  }
-
-  const canUseNewResults =
-    cloudConfig.isEnabled() || (await targetHostCanUseNewResults(apiBaseUrl));
-  logger.debug(
-    `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
-  );
-  let evalId: string | undefined;
-  if (canUseNewResults && !evalRecord.useOldResults()) {
-    evalId = await sendEvalResults(evalRecord, url);
-  } else {
-    const summary = await evalRecord.toEvaluateSummary();
-    const table = await evalRecord.getTable();
-    const v2Summary = {
-      ...summary,
-      table,
-      version: 2,
-    };
-
-    logger.debug(`Sending eval results (v2 result file) to ${url}`);
-    // check if we're using the cloud
-    const sharedResults: SharedResults = {
-      data: {
-        version: 3,
-        createdAt: new Date().toISOString(),
-        author: getAuthor(),
-        results: v2Summary,
-        config: evalRecord.config,
-      },
-    };
+    let response: Response;
+    let apiBaseUrl: string;
+    let url: string;
     if (cloudConfig.isEnabled()) {
-      response = await fetchWithProxy(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${cloudConfig.getApiKey()}`,
-        },
-        body: JSON.stringify(sharedResults),
-      });
+      apiBaseUrl = cloudConfig.getApiHost();
+      url = `${apiBaseUrl}/results`;
     } else {
-      response = await fetchWithProxy(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(sharedResults),
-      });
-    }
-    if (!response.ok) {
-      logger.error(`Failed to create shareable URL: ${response.statusText}`);
-      return null;
-    }
-    const responseJson = (await response.json()) as { id?: string; error?: string };
-    if (responseJson.error) {
-      logger.error(`Failed to create shareable URL: ${responseJson.error}`);
-      return null;
-    }
-    evalId = responseJson.id;
-  }
-  logger.debug(`New eval ID on remote instance: ${evalId}`);
-  let appBaseUrl = SHARE_VIEW_BASE_URL;
-  let fullUrl = SHARE_VIEW_BASE_URL;
-  if (cloudConfig.isEnabled()) {
-    appBaseUrl = cloudConfig.getAppUrl();
-    fullUrl = `${appBaseUrl}/eval/${evalId}`;
-  } else {
-    const appBaseUrl =
-      typeof evalRecord.config.sharing === 'object'
-        ? evalRecord.config.sharing.appBaseUrl
-        : SHARE_VIEW_BASE_URL;
-    fullUrl =
-      SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
-        ? `${appBaseUrl}/eval/${evalId}`
-        : `${appBaseUrl}/eval/?evalId=${evalId}`;
-  }
+      apiBaseUrl =
+        typeof evalRecord.config.sharing === 'object'
+          ? evalRecord.config.sharing.apiBaseUrl || SHARE_API_BASE_URL
+          : SHARE_API_BASE_URL;
 
-  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
+      url = `${apiBaseUrl}/api/eval`;
+    }
+
+    const canUseNewResults =
+      cloudConfig.isEnabled() || (await targetHostCanUseNewResults(apiBaseUrl));
+    logger.debug(
+      `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
+    );
+    let evalId: string | undefined;
+    if (canUseNewResults && !evalRecord.useOldResults()) {
+      evalId = await sendEvalResults(evalRecord, url);
+      if (!evalId) {
+        return null;
+      }
+    } else {
+      const summary = await evalRecord.toEvaluateSummary();
+      const table = await evalRecord.getTable();
+      const v2Summary = {
+        ...summary,
+        table,
+        version: 2,
+      };
+
+      logger.debug(`Sending eval results (v2 result file) to ${url}`);
+      // check if we're using the cloud
+      const sharedResults: SharedResults = {
+        data: {
+          version: 3,
+          createdAt: new Date().toISOString(),
+          author: getAuthor(),
+          results: v2Summary,
+          config: evalRecord.config,
+        },
+      };
+      if (cloudConfig.isEnabled()) {
+        response = await fetchWithProxy(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${cloudConfig.getApiKey()}`,
+          },
+          body: JSON.stringify(sharedResults),
+        });
+      } else {
+        response = await fetchWithProxy(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(sharedResults),
+        });
+      }
+      if (!response.ok) {
+        logger.error(`Failed to create shareable URL: ${response.statusText}`);
+        return null;
+      }
+      const responseJson = (await response.json()) as { id?: string; error?: string };
+      if (responseJson.error) {
+        logger.error(`Failed to create shareable URL: ${responseJson.error}`);
+        return null;
+      }
+      evalId = responseJson.id;
+    }
+    logger.debug(`New eval ID on remote instance: ${evalId}`);
+    let appBaseUrl = SHARE_VIEW_BASE_URL;
+    let fullUrl = SHARE_VIEW_BASE_URL;
+    if (cloudConfig.isEnabled()) {
+      appBaseUrl = cloudConfig.getAppUrl();
+      fullUrl = `${appBaseUrl}/eval/${evalId}`;
+    } else {
+      const appBaseUrl =
+        typeof evalRecord.config.sharing === 'object'
+          ? evalRecord.config.sharing.appBaseUrl
+          : SHARE_VIEW_BASE_URL;
+      fullUrl =
+        SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
+          ? `${appBaseUrl}/eval/${evalId}`
+          : `${appBaseUrl}/eval/?evalId=${evalId}`;
+    }
+
+    return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
+  } catch (error) {
+    logger.error('Failed to create shareable URL:', error);
+    return null;
+  }
 }
