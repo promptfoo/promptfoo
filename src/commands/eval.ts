@@ -241,8 +241,10 @@ export async function doEval(
     }
 
     const { outputPath } = config;
+
+    // We're removing JSONL from paths since we already wrote to that during the evaluation
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
-      (p): p is string => typeof p === 'string' && p.length > 0,
+      (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
     );
     if (paths.length) {
       await writeMultipleOutputs(paths, evalRecord, shareableUrl);

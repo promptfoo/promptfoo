@@ -128,7 +128,7 @@ export async function writeOutput(
     fs.writeFileSync(outputPath, headerCsv);
 
     // Write body rows in batches using the new batch function
-    for await (const batchResults of evalRecord.fetchResultsBatched(100)) {
+    for await (const batchResults of evalRecord.fetchResultsBatched()) {
       // we need split the batch into rows by testIdx
       const tableRows: Record<number, EvalResult[]> = {};
       for (const result of batchResults) {
@@ -191,6 +191,11 @@ export async function writeOutput(
       results: summary,
     });
     fs.writeFileSync(outputPath, htmlOutput);
+  } else if (outputExtension === 'jsonl') {
+    for await (const batchResults of evalRecord.fetchResultsBatched()) {
+      const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
+      fs.appendFileSync(outputPath, text);
+    }
   }
 }
 
