@@ -144,8 +144,48 @@ evalRouter.post(
 );
 
 evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
-  const body = req.body;
   try {
+    // Check if this is a streaming upload
+    const isStreaming = req.headers['x-upload-mode'] === 'streaming';
+
+    if (isStreaming) {
+      logger.debug('[POST /api/eval] Receiving streaming eval results');
+      let metadata: any;
+      const chunks: any[] = [];
+
+      // Process the stream line by line
+      for await (const chunk of req) {
+        const line = chunk.toString().trim();
+        if (!line) {
+          continue;
+        }
+
+        const data = JSON.parse(line);
+        if (data.type === 'metadata') {
+          metadata = data;
+          logger.debug(`[POST /api/eval] Received metadata for ${metadata.totalResults} results`);
+        } else if (data.type === 'results') {
+          chunks.push(...data.data);
+          logger.debug(`[POST /api/eval] Received batch ${data.batch + 1}/${data.totalBatches}`);
+        }
+      }
+
+      // Create eval from streamed data
+      const eval_ = await Eval.create(metadata.config, [], {
+        author: metadata.author,
+        createdAt: new Date(metadata.createdAt),
+        results: chunks,
+      });
+
+      logger.debug(`[POST /api/eval] Created streaming eval with ID: ${eval_.id}`);
+      logger.debug(`[POST /api/eval] Saved ${chunks.length} results to eval ${eval_.id}`);
+
+      res.json({ id: eval_.id });
+      return;
+    }
+
+    // Handle traditional uploads
+    const body = req.body;
     if (body.data) {
       logger.debug('[POST /api/eval] Saving eval results (v3) to database');
       const { data: payload } = req.body as { data: ResultsFile };
@@ -160,13 +200,12 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         results: incEval.results,
       });
       logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
-
       logger.debug(`[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`);
 
       res.json({ id: eval_.id });
     }
   } catch (error) {
-    console.error('Failed to write eval to database', error, body);
+    console.error('Failed to write eval to database', error);
     res.status(500).json({ error: 'Failed to write eval to database' });
   }
 });

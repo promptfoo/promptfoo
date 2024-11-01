@@ -7,10 +7,12 @@ import { stripAuthFromUrl, createShareableUrl } from '../src/share';
 jest.mock('../src/logger');
 jest.mock('../src/globalConfig/cloud');
 jest.mock('../src/fetch', () => ({
-  fetchWithProxy: jest.fn().mockResolvedValue({
-    ok: true,
-    json: jest.fn().mockResolvedValue({ id: 'mock-eval-id' }),
-  }),
+  fetchWithProxy: jest.fn().mockResolvedValue(
+    new Response(JSON.stringify({ id: 'mock-eval-id' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  ),
 }));
 
 jest.mock('cli-progress', () => ({
@@ -67,23 +69,27 @@ describe('createShareableUrl', () => {
     results: new Array(10).fill({}),
     useOldResults: jest.fn().mockReturnValue(false),
     loadResults: jest.fn().mockResolvedValue(undefined),
-    createdAt: '2024-01-01',
+    createdAt: Date.now(),
   };
 
   const mockEvalLarge: Partial<Eval> = {
     config: {},
-    results: new Array(6000).fill({}),
+    results: new Array(1000).fill({
+      large: 'x'.repeat(6000), // 6MB total (6000 chars * 1000 elements)
+    }),
     useOldResults: jest.fn().mockReturnValue(false),
     loadResults: jest.fn().mockResolvedValue(undefined),
-    createdAt: '2024-01-01',
+    createdAt: Date.now(),
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.mocked(fetchWithProxy).mockResolvedValue({
-      ok: true,
-      json: jest.fn().mockResolvedValue({ id: 'mock-eval-id' }),
-    });
+    jest.mocked(fetchWithProxy).mockResolvedValue(
+      new Response(JSON.stringify({ id: 'mock-eval-id' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
   });
 
   it('creates correct URL for cloud config with small payload', async () => {
@@ -108,14 +114,20 @@ describe('createShareableUrl', () => {
     expect(fetchCalls).toHaveLength(1);
     const [url, options] = fetchCalls[0];
     expect(url).toBe('https://api.example.com/results');
-    expect(options.headers).toEqual(
-      expect.objectContaining({
-        'X-Upload-Mode': 'streaming',
-        'Transfer-Encoding': 'chunked',
-      }),
-    );
+
+    if (!options) {
+      throw new Error('Expected options to be defined');
+    }
+
+    expect(options.headers).toEqual({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer mock-api-key',
+      'X-Upload-Mode': 'streaming',
+      'Transfer-Encoding': 'chunked',
+    });
+
     expect(options.method).toBe('POST');
-    expect(options.duplex).toBe('half');
+    expect(options.body).toBeInstanceOf(ReadableStream);
 
     expect(result).toBe('https://app.example.com/eval/mock-eval-id');
   });
@@ -136,14 +148,16 @@ describe('createShareableUrl', () => {
 
     await createShareableUrl(mockEvalSmall as Eval);
 
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        headers: expect.not.objectContaining({
-          'X-Upload-Mode': 'streaming',
-        }),
-      }),
-    );
+    const fetchCalls = jest.mocked(fetchWithProxy).mock.calls;
+    expect(fetchCalls).toHaveLength(1);
+    const [, options] = fetchCalls[0];
+
+    if (!options?.headers) {
+      throw new Error('Expected options and headers to be defined');
+    }
+
+    expect(options.headers).not.toHaveProperty('X-Upload-Mode');
+    expect(options.headers).not.toHaveProperty('Transfer-Encoding');
   });
 
   it('respects useOldResults flag', async () => {
