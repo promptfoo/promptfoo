@@ -341,6 +341,7 @@ class Evaluator {
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
+    const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
     await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
@@ -614,6 +615,11 @@ class Evaluator {
       if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
         rowsWithSelectBestAssertion.add(row.testIdx);
       }
+      for (const assert of evalStep.test.assert || []) {
+        if (assert.type) {
+          assertionTypes.add(assert.type);
+        }
+      }
 
       numComplete++;
       if (options.progressCallback) {
@@ -859,13 +865,16 @@ class Evaluator {
     }
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
-      results: this.evalRecord.results.map((r) => r.toEvaluateResult()),
+      prompts: this.evalRecord.prompts,
       suite: testSuite,
     });
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
-      numTests: tests.length,
+      numTests: prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testPassCount || 0) + (p.metrics?.testFailCount || 0),
+        0,
+      ),
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
@@ -877,12 +886,12 @@ class Evaluator {
           }),
         ),
       ).sort(),
-      assertionTypes: Array.from(
-        new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
-      ).sort(),
+      assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
-      hasAnyPass: this.evalRecord.results.some((r) => r.success),
+      hasAnyPass: this.evalRecord.prompts.some(
+        (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
+      ),
       isRedteam: Boolean(testSuite.redteam),
     });
     return this.evalRecord;
