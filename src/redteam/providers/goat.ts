@@ -68,6 +68,9 @@ export default class GoatProvider implements ApiProvider {
         context,
         options,
       );
+      if (targetResponse.error) {
+        throw new Error(`Error from target provider: ${targetResponse.error}`);
+      }
       invariant(targetResponse.output, 'Expected target response to be set');
       messages.push({
         content: targetResponse.output,
