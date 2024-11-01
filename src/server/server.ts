@@ -32,6 +32,7 @@ import {
   getLatestEval,
   getStandaloneEvals,
 } from '../util';
+import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
@@ -147,6 +148,7 @@ export function createApp() {
   app.use('/api/providers', providersRouter);
   app.use('/api/redteam', redteamRouter);
   app.use('/api/user', userRouter);
+  app.use('/api/configs', configsRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {

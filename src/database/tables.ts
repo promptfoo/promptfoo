@@ -237,6 +237,28 @@ export const evalsToDatasetsRelations = relations(evalsToDatasetsTable, ({ one }
   }),
 }));
 
+// ------------ Configs ------------
+
+export const configsTable = sqliteTable(
+  'configs',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    name: text('name').notNull(),
+    type: text('type').notNull(), // e.g. 'redteam', 'eval', etc.
+    config: text('config', { mode: 'json' }).notNull(),
+  },
+  (table) => ({
+    createdAtIdx: index('configs_created_at_idx').on(table.createdAt),
+    typeIdx: index('configs_type_idx').on(table.type),
+  }),
+);
+
 // ------------ Outputs ------------
 // We're just recording these on eval.results for now...
 
