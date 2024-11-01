@@ -53,8 +53,8 @@ import {
   type EvaluateSummaryV2,
 } from '../types';
 import { getConfigDirectoryPath } from './config/manage';
-import { convertTestResultsToTableRow, getHeaderForTable } from './convertEvalResultsToTable';
 import { sha256 } from './createHash';
+import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
 import { isJavascriptFile } from './file';
 import { getNunjucksEngine } from './templates';
 
