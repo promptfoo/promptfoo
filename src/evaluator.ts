@@ -694,6 +694,8 @@ class Evaluator {
       if (multibar && evalStep) {
         const threadIndex = index % concurrency;
         const progressbar = multiProgressBars[threadIndex];
+        // Update the status line with current progress, control code moves cursor up one line
+        process.stdout.write(`\rRunning step ${completed}/${total}${' '.repeat(20)}\n\x1b[1A`);
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
@@ -752,11 +754,15 @@ class Evaluator {
     }
 
     // Run serial evaluations first
+    logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
     for (const evalStep of serialRunEvalOptions) {
       await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
     }
 
     // Then run concurrent evaluations
+    logger.info(
+      `Running ${concurrentRunEvalOptions.length} concurrent evaluations with ${concurrency} threads...`,
+    );
     await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, processEvalStep);
 
     // Do we have to run comparisons between row outputs?

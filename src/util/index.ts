@@ -351,6 +351,7 @@ export async function listPreviousResults(
       description: evalsTable.description,
       numTests: sql<number>`json_array_length(${evalsTable.results}->'table'->'body')`,
       datasetId: evalsToDatasetsTable.datasetId,
+      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
@@ -369,6 +370,7 @@ export async function listPreviousResults(
     description: result.description,
     numTests: result.numTests,
     datasetId: result.datasetId,
+    isRedteam: result.isRedteam,
   }));
 
   const endTime = performance.now();
