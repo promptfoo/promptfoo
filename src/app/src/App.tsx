@@ -44,6 +44,15 @@ const router = createBrowserRouter(
         <Route path="/eval/:evalId" element={<EvalPage />} />
         <Route path="/progress" element={<ProgressPage />} />
         <Route path="/prompts" element={<PromptsPage />} />
+        <Route
+          path="/redteam"
+          element={
+            <Navigate
+              to={import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL ? '/dashboard' : '/redteam/setup'}
+              replace
+            />
+          }
+        />
         <Route path="/redteam/setup" element={<RedteamSetupPage />} />
         <Route path="/report" element={<ReportPage />} />
         <Route path="/setup" element={<EvalCreatorPage />} />
