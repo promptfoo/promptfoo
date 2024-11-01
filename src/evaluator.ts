@@ -1,6 +1,7 @@
 import async from 'async';
 import chalk from 'chalk';
 import type { MultiBar, SingleBar } from 'cli-progress';
+import fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
@@ -635,6 +636,19 @@ class Evaluator {
         await this.evalRecord.addResult(row, evalStep.test);
       } catch (error) {
         logger.error(`Error saving result: ${error} ${JSON.stringify(row)}`);
+      }
+
+      const outputPath = this.evalRecord.config.outputPath;
+      const jsonlFiles = Array.isArray(outputPath)
+        ? outputPath.filter((p) => p.endsWith('.jsonl'))
+        : outputPath?.endsWith('.jsonl')
+          ? [outputPath]
+          : [];
+      if (jsonlFiles.length) {
+        const jsonl = JSON.stringify(row);
+        for (const path of jsonlFiles) {
+          fs.appendFileSync(path, jsonl + '\n');
+        }
       }
       const { promptIdx } = row;
       const metrics = prompts[promptIdx].metrics;

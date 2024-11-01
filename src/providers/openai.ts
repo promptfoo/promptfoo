@@ -313,7 +313,6 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       logger.error(`API call error: ${err}`);
       throw err;
     }
-    logger.debug(`\tOpenAI embeddings API response: ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;

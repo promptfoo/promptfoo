@@ -355,6 +355,12 @@ export default class Eval {
     }
   }
 
+  async *fetchResultsBatched(batchSize: number = 100) {
+    for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
+      yield batch;
+    }
+  }
+
   async fetchResultsByTestIdx(testIdx: number) {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }

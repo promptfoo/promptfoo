@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, gte, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { hashPrompt } from '../prompts/utils';
@@ -94,6 +94,38 @@ export default class EvalResult {
         ),
       );
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
+  }
+
+  static async *findManyByEvalIdBatched(
+    evalId: string,
+    opts?: {
+      batchSize?: number;
+    },
+  ): AsyncGenerator<EvalResult[]> {
+    const db = getDb();
+    const batchSize = opts?.batchSize || 100;
+    let offset = 0;
+
+    while (true) {
+      const results = await db
+        .select()
+        .from(evalResultsTable)
+        .where(
+          and(
+            eq(evalResultsTable.evalId, evalId),
+            gte(evalResultsTable.testIdx, offset),
+            lt(evalResultsTable.testIdx, offset + batchSize),
+          ),
+        )
+        .all();
+
+      if (results.length === 0) {
+        break;
+      }
+
+      yield results.map((result) => new EvalResult({ ...result, persisted: true }));
+      offset += batchSize;
+    }
   }
 
   id: string;

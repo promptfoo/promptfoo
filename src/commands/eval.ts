@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
-import { getEnvFloat, getEnvInt, getEnvBool } from '../envars';
+import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -218,7 +218,7 @@ export async function doEval(
     const totalTests = successes + failures;
     const passRate = (successes / totalTests) * 100;
 
-    if (cmdObj.table && getLogLevel() !== 'debug') {
+    if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
       // Output CLI table
       const outputTable = generateTable(table);
@@ -234,6 +234,10 @@ export async function doEval(
           evalRecord.prompts,
         )}`,
       );
+    }
+
+    if (totalTests >= 500) {
+      logger.info('No table output will be shown because there are more than 500 tests.');
     }
 
     const { outputPath } = config;

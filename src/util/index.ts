@@ -29,6 +29,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
+import type EvalResult from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -52,6 +53,7 @@ import {
   type EvaluateSummaryV2,
 } from '../types';
 import { getConfigDirectoryPath } from './config/manage';
+import { convertTestResultsToTableRow, getHeaderForTable } from './convertEvalResultsToTable';
 import { sha256 } from './createHash';
 import { isJavascriptFile } from './file';
 import { getNunjucksEngine } from './templates';
@@ -84,10 +86,9 @@ export async function writeOutput(
   evalRecord: Eval,
   shareableUrl: string | null,
 ) {
-  const table = await evalRecord.getTable();
-
-  invariant(table, 'Table is required');
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
+    const table = await evalRecord.getTable();
+    invariant(table, 'Table is required');
     const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
       table.head.vars.forEach((varName, index) => {
@@ -118,22 +119,43 @@ export async function writeOutput(
   }
 
   if (outputExtension === 'csv') {
-    const csvOutput = stringify([
-      [
-        ...table.head.vars,
-        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-      ],
-      ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+    // Write headers first
+    const headers = getHeaderForTable(evalRecord);
+
+    const headerCsv = stringify([
+      [...headers.vars, ...headers.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`)],
     ]);
-    fs.writeFileSync(outputPath, csvOutput);
+    fs.writeFileSync(outputPath, headerCsv);
+
+    // Write body rows in batches using the new batch function
+    for await (const batchResults of evalRecord.fetchResultsBatched(100)) {
+      // we need split the batch into rows by testIdx
+      const tableRows: Record<number, EvalResult[]> = {};
+      for (const result of batchResults) {
+        if (!(result.testIdx in tableRows)) {
+          tableRows[result.testIdx] = [];
+        }
+        tableRows[result.testIdx].push(result);
+      }
+      const batchCsv = stringify(
+        Object.values(tableRows).map((results) => {
+          const row = convertTestResultsToTableRow(results, headers.vars);
+          return [...row.vars, ...row.outputs.map(outputToSimpleString)];
+        }),
+      );
+      console.log({ batchCsv });
+      fs.appendFileSync(outputPath, batchCsv);
+    }
   } else if (outputExtension === 'json') {
-    const summary = await evalRecord.toEvaluateSummary();
+    // const summary = await evalRecord.toEvaluateSummary();
+    const results = await evalRecord.getResults();
     fs.writeFileSync(
       outputPath,
       JSON.stringify(
         {
           evalId: evalRecord.id,
-          results: summary,
+          // @ts-ignore
+          results,
           config: evalRecord.config,
           shareableUrl,
         } satisfies OutputFile,
@@ -153,6 +175,8 @@ export async function writeOutput(
       } as OutputFile),
     );
   } else if (outputExtension === 'html') {
+    const table = await evalRecord.getTable();
+    invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
     const htmlTable = [
