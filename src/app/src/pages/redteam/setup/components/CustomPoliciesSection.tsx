@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -10,10 +10,10 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 interface PolicyInstance {
@@ -23,9 +23,97 @@ interface PolicyInstance {
   isExpanded: boolean;
 }
 
+// Memoized policy input component
+const PolicyInput = memo(
+  ({
+    id,
+    value,
+    onChange,
+  }: {
+    id: string;
+    value: string;
+    onChange: (id: string, value: string) => void;
+  }) => {
+    const [debouncedChange] = useDebounce(onChange, 300);
+
+    const handleChange = useCallback(
+      (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        debouncedChange(id, e.target.value);
+      },
+      [id, debouncedChange],
+    );
+
+    return (
+      <TextField
+        label="Policy Text"
+        value={value}
+        onChange={handleChange}
+        multiline
+        rows={4}
+        fullWidth
+        placeholder="Enter your policy guidelines here..."
+      />
+    );
+  },
+);
+
+PolicyInput.displayName = 'PolicyInput';
+
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
-  const [policies, setPolicies] = useState<PolicyInstance[]>([]);
+  const [policies, setPolicies] = useState<PolicyInstance[]>(() => {
+    // Initialize from existing config
+    const existingPolicies = config.plugins
+      .filter((p) => typeof p === 'object' && p.id === 'policy')
+      .map((p, index) => ({
+        id: `policy-${Date.now()}-${index}`,
+        name: `Custom Policy ${index + 1}`,
+        policy: (p as { config: { policy: string } }).config.policy,
+        isExpanded: true,
+      }));
+    return existingPolicies.length ? existingPolicies : [];
+  });
+
+  // Update config when policies change (debounced)
+  const [debouncedPolicies] = useDebounce(policies, 500);
+
+  useEffect(() => {
+    if (
+      debouncedPolicies.length === 0 &&
+      !config.plugins.some((p) => typeof p === 'object' && p.id === 'policy')
+    ) {
+      return; // Don't update if no policies and none exist in config
+    }
+
+    const policyPlugins = debouncedPolicies
+      .filter((policy) => policy.policy.trim() !== '') // Only include non-empty policies
+      .map((policy) => ({
+        id: 'policy',
+        config: {
+          policy: policy.policy,
+        },
+      }));
+
+    // Update the plugins array, preserving non-policy plugins
+    const otherPlugins = config.plugins.filter((p) =>
+      typeof p === 'string' ? true : p.id !== 'policy',
+    );
+
+    // Compare current and new state to prevent unnecessary updates
+    const currentPolicies = JSON.stringify(
+      config.plugins.filter((p) => typeof p === 'object' && p.id === 'policy'),
+    );
+    const newPolicies = JSON.stringify(policyPlugins);
+
+    if (currentPolicies !== newPolicies) {
+      updateConfig('plugins', [...otherPlugins, ...policyPlugins]);
+    }
+  }, [debouncedPolicies]);
+
+  // Memoized policy update handler
+  const handlePolicyChange = useCallback((policyId: string, newValue: string) => {
+    setPolicies((prev) => prev.map((p) => (p.id === policyId ? { ...p, policy: newValue } : p)));
+  }, []);
 
   const handleAddPolicy = () => {
     const newPolicy: PolicyInstance = {
@@ -36,22 +124,6 @@ export const CustomPoliciesSection = () => {
     };
     setPolicies([...policies, newPolicy]);
   };
-
-  // Update the main config whenever policies change
-  useEffect(() => {
-    const policyPlugins = policies.map((policy) => ({
-      id: 'policy',
-      config: {
-        policy: policy.policy,
-      },
-    }));
-
-    // Update the plugins array, preserving other plugins
-    const otherPlugins = config.plugins.filter((p) =>
-      typeof p === 'string' ? p !== 'policy' : p.id !== 'policy',
-    );
-    updateConfig('plugins', [...otherPlugins, ...policyPlugins]);
-  }, [policies, updateConfig]);
 
   return (
     <Card variant="outlined" sx={{ mb: 3 }}>
@@ -68,76 +140,69 @@ export const CustomPoliciesSection = () => {
           </Button>
         </Box>
 
-        <Stack spacing={2}>
-          {policies.map((policy) => (
-            <Paper
-              key={policy.id}
-              elevation={2}
-              sx={{
-                p: 2,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                <TextField
-                  label="Policy Name"
-                  value={policy.name}
-                  onChange={(e) => {
-                    setPolicies((prev) =>
-                      prev.map((p) => (p.id === policy.id ? { ...p, name: e.target.value } : p)),
-                    );
-                  }}
-                  size="small"
-                  fullWidth
-                />
-                <IconButton
-                  onClick={() => {
-                    setPolicies((prev) =>
-                      prev.map((p) =>
-                        p.id === policy.id ? { ...p, isExpanded: !p.isExpanded } : p,
-                      ),
-                    );
-                  }}
-                >
-                  {policy.isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                </IconButton>
-                <IconButton
-                  onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}
-                  color="error"
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Box>
-
-              <Collapse in={policy.isExpanded}>
-                <TextField
-                  label="Policy Text"
-                  value={policy.policy}
-                  onChange={(e) => {
-                    setPolicies((prev) =>
-                      prev.map((p) => (p.id === policy.id ? { ...p, policy: e.target.value } : p)),
-                    );
-                  }}
-                  multiline
-                  rows={3}
-                  fullWidth
-                  placeholder="Enter the policy text..."
-                />
-              </Collapse>
-            </Paper>
-          ))}
-        </Stack>
-
-        {policies.length === 0 && (
+        {policies.length === 0 ? (
           <Alert severity="info" sx={{ mt: 2 }}>
             No custom policies added yet. Click the button above to create one.
           </Alert>
+        ) : (
+          <Stack spacing={2}>
+            {policies.map((policy) => (
+              <Box
+                key={policy.id}
+                sx={{
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 2,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TextField
+                    label="Policy Name"
+                    value={policy.name}
+                    onChange={(e) => {
+                      setPolicies((prev) =>
+                        prev.map((p) => (p.id === policy.id ? { ...p, name: e.target.value } : p)),
+                      );
+                    }}
+                    size="small"
+                    fullWidth
+                  />
+                  <IconButton
+                    onClick={() => {
+                      setPolicies((prev) =>
+                        prev.map((p) =>
+                          p.id === policy.id ? { ...p, isExpanded: !p.isExpanded } : p,
+                        ),
+                      );
+                    }}
+                  >
+                    {policy.isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                  </IconButton>
+                  <IconButton
+                    onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}
+                    color="error"
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+
+                <Collapse in={policy.isExpanded}>
+                  <Box sx={{ mt: 2 }}>
+                    <PolicyInput
+                      id={policy.id}
+                      value={policy.policy}
+                      onChange={handlePolicyChange}
+                    />
+                  </Box>
+                </Collapse>
+              </Box>
+            ))}
+          </Stack>
         )}
       </CardContent>
     </Card>
   );
 };
 
-export default CustomPoliciesSection;
+export default memo(CustomPoliciesSection);

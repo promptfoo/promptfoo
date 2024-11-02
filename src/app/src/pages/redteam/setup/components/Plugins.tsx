@@ -69,9 +69,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
 
   useEffect(() => {
-    const allPlugins = [...Array.from(selectedPlugins)];
+    // Preserve custom policies when updating plugins
+    const customPolicies = config.plugins.filter((p) => typeof p === 'object' && p.id === 'policy');
+
+    const allPlugins = [...Array.from(selectedPlugins), ...customPolicies];
     updateConfig('plugins', allPlugins);
-  }, [selectedPlugins, updateConfig]);
+  }, [selectedPlugins, config.plugins, updateConfig]);
 
   const handlePluginToggle = useCallback((plugin: Plugin) => {
     setSelectedPlugins((prev) => {
