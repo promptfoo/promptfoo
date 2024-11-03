@@ -2,18 +2,19 @@
 sidebar_label: GOAT
 ---
 
-# GOAT Strategy
+# GOAT Technique for Jailbreaking LLMs
 
-The [GOAT](https://arxiv.org/abs/2410.01606) (Generative Offensive Agent Tester) strategy is an advanced automated red teaming technique that uses an "attacker" LLM to dynamically generate **multi-turn** conversations aimed at bypassing a target model's safety measures.
+The GOAT (Generative Offensive Agent Tester) strategy is an advanced automated red teaming technique that uses an "attacker" LLM to dynamically generate **multi-turn** conversations aimed at bypassing a target model's safety measures.
 
-It was introduced by Meta researchers in 2024 and achieves high success rates against modern LLMs by simulating how real users interact with AI systems.
+It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 2024 and achieves high success rates against modern LLMs by simulating how real users interact with AI systems, with an Attack Success Rate (ASR@10) of 97% against Llama 3.1 and 88% against GPT-4-Turbo on the JailbreakBench dataset.
 
 Use it like so in your promptfooconfig.yaml:
 
 ```yaml
 strategies:
-  - goat:
-      remote: true # Remote-only strategy
+  - name: goat
+    options:
+      maxTurns: 5 # Maximum conversation turns (default)
 ```
 
 :::warning
@@ -22,21 +23,21 @@ This is a remote-only strategy and requires an connection to promptfoo's free gr
 
 ## How It Works
 
-The GOAT strategy works by:
+GOAT uses an attacker LLM that engages in multi-turn conversations with a target model.
 
-1. Using an "attacker" LLM initialized with red teaming context and adversarial techniques
-2. Employing chain-of-thought reasoning to dynamically generate prompts
-3. Observing target model responses and adapting the conversation strategy
-4. Combining multiple jailbreaking techniques in a single conversation
+The attacker pursues multiple adversarial techniques: output manipulation, safe response distractors, and fictional scenarios. Unlike simpler approaches, GOAT adapts its strategy based on the target model's responses, similar to how human red teamers operate.
 
-For each conversation turn, the attacker model:
+Each conversation turn follows a structured three-step reasoning process:
 
-- Makes an observation about the target's previous response
-- Reflects on progress toward the goal
-- Selects an attack strategy
-- Generates the next adversarial prompt
+1. **Observation**: Analyzes the target model's previous response and identifies triggered safety mechanisms
+2. **Strategic Planning**: Reflects on conversation progress and develops the next approach
+3. **Attack Generation**: Selects and combines appropriate techniques to generate the next prompt
 
-We loop this process until we either achieve the goal or reach a maximum number of turns.
+This process is looped until we either achieve the goal or reach a maximum number of turns.
+
+![GOAT LLM attack](/img/docs/goat.svg)
+
+GOAT's effectiveness stems from its ability to simulate realistic user behavior while maintaining technical sophistication. Rather than relying on brute-force approaches or static prompts, its dynamic conversation flow and strategic reasoning make it particularly effective at identifying vulnerabilities in AI language models.
 
 ## Related Concepts
 
