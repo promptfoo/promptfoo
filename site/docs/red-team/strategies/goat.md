@@ -23,6 +23,8 @@ This is a remote-only strategy and requires an connection to promptfoo's free gr
 
 ## How It Works
 
+![GOAT LLM attack](/img/docs/goat.svg)
+
 GOAT uses an attacker LLM that engages in multi-turn conversations with a target model.
 
 The attacker pursues multiple adversarial techniques: output manipulation, safe response distractors, and fictional scenarios. Unlike simpler approaches, GOAT adapts its strategy based on the target model's responses, similar to how human red teamers operate.
@@ -35,9 +37,9 @@ Each conversation turn follows a structured three-step reasoning process:
 
 This process is looped until we either achieve the goal or reach a maximum number of turns.
 
-![GOAT LLM attack](/img/docs/goat.svg)
+GOAT's effectiveness stems from its ability to simulate realistic user behavior while maintaining technical sophistication.
 
-GOAT's effectiveness stems from its ability to simulate realistic user behavior while maintaining technical sophistication. Rather than relying on brute-force approaches or static prompts, its dynamic conversation flow and strategic reasoning make it particularly effective at identifying vulnerabilities in AI language models.
+Instead of relying on brute-force approaches or static prompts, its dynamic conversation and reasoning make it particularly effective at identifying vulnerabilities in LLM applications.
 
 ## Related Concepts
 
