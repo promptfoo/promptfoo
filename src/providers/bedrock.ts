@@ -411,8 +411,24 @@ export const BEDROCK_MODEL = {
   },
   CLAUDE_MESSAGES: {
     params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
-      const { system, extractedMessages } = parseMessages(prompt);
-      const params: any = { messages: extractedMessages };
+      let messages;
+      let systemPrompt;
+      try {
+        const parsed = JSON.parse(prompt);
+        if (Array.isArray(parsed)) {
+          messages = parsed;
+        } else {
+          const { system, extractedMessages } = parseMessages(prompt);
+          messages = extractedMessages;
+          systemPrompt = system;
+        }
+      } catch {
+        const { system, extractedMessages } = parseMessages(prompt);
+        messages = extractedMessages;
+        systemPrompt = system;
+      }
+
+      const params: any = { messages };
       addConfigParam(
         params,
         'max_tokens',
@@ -436,7 +452,9 @@ export const BEDROCK_MODEL = {
         undefined,
       );
       addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
-      addConfigParam(params, 'system', system, undefined, undefined);
+      if (systemPrompt) {
+        addConfigParam(params, 'system', systemPrompt, undefined, undefined);
+      }
       return params;
     },
     output: (responseJson: any) => {

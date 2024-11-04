@@ -121,6 +121,20 @@ export function parseMessages(messages: string): {
   system?: Anthropic.TextBlockParam[];
   extractedMessages: Anthropic.MessageParam[];
 } {
+  try {
+    const parsed = JSON.parse(messages);
+    if (Array.isArray(parsed)) {
+      return {
+        extractedMessages: parsed.map((msg) => ({
+          role: msg.role,
+          content: Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }],
+        })),
+      };
+    }
+  } catch {
+    // Not JSON, continue with text parsing
+  }
+
   const lines = messages
     .split('\n')
     .map((line) => line.trim())
