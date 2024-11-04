@@ -191,7 +191,7 @@ describe('AwsBedrockGenericProvider', () => {
 
     it('should handle JSON message array with image content', () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1'
+        region: 'us-east-1',
       };
 
       const prompt = JSON.stringify([
@@ -204,11 +204,11 @@ describe('AwsBedrockGenericProvider', () => {
               source: {
                 type: 'base64',
                 media_type: 'image/jpeg',
-                data: 'base64EncodedImageData'
-              }
-            }
-          ]
-        }
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
       ]);
 
       const params = BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
@@ -223,17 +223,17 @@ describe('AwsBedrockGenericProvider', () => {
               source: {
                 type: 'base64',
                 media_type: 'image/jpeg',
-                data: 'base64EncodedImageData'
-              }
-            }
-          ]
-        }
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
       ]);
     });
 
     it('should handle JSON message array with system message and image content', () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1'
+        region: 'us-east-1',
       };
 
       const prompt = JSON.stringify([
@@ -247,11 +247,11 @@ describe('AwsBedrockGenericProvider', () => {
               source: {
                 type: 'base64',
                 media_type: 'image/png',
-                data: 'base64EncodedImageData'
-              }
-            }
-          ]
-        }
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
       ]);
 
       const params = BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
@@ -259,7 +259,7 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.messages).toEqual([
         {
           role: 'system',
-          content: [{ type: 'text', text: 'You are a helpful assistant.' }]
+          content: [{ type: 'text', text: 'You are a helpful assistant.' }],
         },
         {
           role: 'user',
@@ -270,11 +270,11 @@ describe('AwsBedrockGenericProvider', () => {
               source: {
                 type: 'base64',
                 media_type: 'image/png',
-                data: 'base64EncodedImageData'
-              }
-            }
-          ]
-        }
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
       ]);
     });
   });

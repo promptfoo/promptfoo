@@ -416,7 +416,12 @@ export const BEDROCK_MODEL = {
       try {
         const parsed = JSON.parse(prompt);
         if (Array.isArray(parsed)) {
-          messages = parsed;
+          messages = parsed.map((msg) => ({
+            role: msg.role,
+            content: Array.isArray(msg.content)
+              ? msg.content
+              : [{ type: 'text', text: msg.content }],
+          }));
         } else {
           const { system, extractedMessages } = parseMessages(prompt);
           messages = extractedMessages;
@@ -429,6 +434,7 @@ export const BEDROCK_MODEL = {
       }
 
       const params: any = { messages };
+
       addConfigParam(
         params,
         'max_tokens',
@@ -455,11 +461,10 @@ export const BEDROCK_MODEL = {
       if (systemPrompt) {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }
+
       return params;
     },
-    output: (responseJson: any) => {
-      return outputFromMessage(responseJson);
-    },
+    output: (responseJson: any) => outputFromMessage(responseJson),
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {

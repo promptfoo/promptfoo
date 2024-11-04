@@ -708,11 +708,11 @@ describe('Anthropic', () => {
               source: {
                 type: 'base64',
                 media_type: 'image/jpeg',
-                data: 'base64EncodedImageData'
-              }
-            }
-          ]
-        }
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
       ]);
 
       const { system, extractedMessages } = parseMessages(inputMessages);
@@ -728,11 +728,11 @@ describe('Anthropic', () => {
               source: {
                 type: 'base64',
                 media_type: 'image/jpeg',
-                data: 'base64EncodedImageData'
-              }
-            }
-          ]
-        }
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
       ]);
     });
 
@@ -748,20 +748,20 @@ describe('Anthropic', () => {
               source: {
                 type: 'base64',
                 media_type: 'image/png',
-                data: 'base64EncodedImageData'
-              }
-            }
-          ]
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
         },
-        { role: 'assistant', content: 'I see a beautiful landscape.' }
+        { role: 'assistant', content: 'I see a beautiful landscape.' },
       ]);
 
-      const { system, extractedMessages } = parseMessages(inputMessages);
+      const { extractedMessages } = parseMessages(inputMessages);
 
       expect(extractedMessages).toEqual([
         {
           role: 'system',
-          content: [{ type: 'text', text: 'You are a helpful assistant.' }]
+          content: [{ type: 'text', text: 'You are a helpful assistant.' }],
         },
         {
           role: 'user',
@@ -772,15 +772,15 @@ describe('Anthropic', () => {
               source: {
                 type: 'base64',
                 media_type: 'image/png',
-                data: 'base64EncodedImageData'
-              }
-            }
-          ]
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
         },
         {
           role: 'assistant',
-          content: [{ type: 'text', text: 'I see a beautiful landscape.' }]
-        }
+          content: [{ type: 'text', text: 'I see a beautiful landscape.' }],
+        },
       ]);
     });
   });

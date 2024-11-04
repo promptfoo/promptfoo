@@ -132,9 +132,8 @@ export function parseMessages(messages: string): {
       };
     }
   } catch {
-    // Not JSON, continue with text parsing
+    // Not JSON, parse as plain text
   }
-
   const lines = messages
     .split('\n')
     .map((line) => line.trim())
