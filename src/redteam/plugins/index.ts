@@ -15,6 +15,7 @@ import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { getHarmfulTests } from './harmful';
 import { ImitationPlugin } from './imitation';
+import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PolicyPlugin } from './policy';
@@ -118,6 +119,9 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
+  ),
+  createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config) =>
+    invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
   ),
   createPluginFactory<{ systemPrompt: string }>(
     PromptExtractionPlugin,

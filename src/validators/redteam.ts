@@ -32,7 +32,17 @@ const RedteamPluginObjectSchema = z.object({
     .positive()
     .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
-  config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
+  config: z
+    .record(
+      z.union([
+        z.unknown(),
+        z.object({
+          intent: z.union([z.string(), z.array(z.string())]).optional(),
+        }),
+      ]),
+    )
+    .optional()
+    .describe('Plugin-specific configuration'),
 });
 
 /**
