@@ -49,6 +49,7 @@ import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/vertex';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 import { WebhookProvider } from '../../src/providers/webhook';
+import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
@@ -1529,6 +1530,14 @@ describe('loadApiProvider', () => {
     });
     expect(provider).toBeInstanceOf(RedteamImageIterativeProvider);
     expect(provider.id()).toBe('promptfoo:redteam:iterative:image');
+  });
+
+  it('loadApiProvider with promptfoo:redteam:goat', async () => {
+    const provider = await loadApiProvider('promptfoo:redteam:goat', {
+      options: { config: { injectVar: 'goal' } },
+    });
+    expect(provider).toBeInstanceOf(RedteamGoatProvider);
+    expect(provider.id()).toBe('promptfoo:redteam:goat');
   });
 
   it('loadApiProvider with RawProviderConfig', async () => {

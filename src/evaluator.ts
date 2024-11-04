@@ -751,12 +751,18 @@ class Evaluator {
       }
     }
 
-    // Run serial evaluations first
-    for (const evalStep of serialRunEvalOptions) {
-      await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
+    if (serialRunEvalOptions.length > 0) {
+      // Run serial evaluations first
+      logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
+      for (const evalStep of serialRunEvalOptions) {
+        await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
+      }
     }
 
     // Then run concurrent evaluations
+    logger.info(
+      `Running ${concurrentRunEvalOptions.length} concurrent evaluations with ${concurrency} threads...`,
+    );
     await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, processEvalStep);
 
     // Do we have to run comparisons between row outputs?

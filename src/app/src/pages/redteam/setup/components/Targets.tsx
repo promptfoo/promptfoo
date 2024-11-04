@@ -349,6 +349,9 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           margin="normal"
           required
           autoFocus
+          InputLabelProps={{
+            shrink: true,
+          }}
         />
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
@@ -499,6 +502,9 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                 placeholder="Optional: A Javascript expression to parse the response. E.g. json.choices[0].message.content"
                 onChange={(e) => updateCustomTarget('responseParser', e.target.value)}
                 margin="normal"
+                InputLabelProps={{
+                  shrink: true,
+                }}
               />
             </Box>
           </Box>

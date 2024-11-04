@@ -431,7 +431,7 @@ describe('llama', () => {
         <</SYS>>
 
         What is the capital of France? [/INST]`,
-          temperature: 0.01,
+          temperature: 0,
           top_p: 1,
           max_gen_len: 1024,
         });
@@ -447,7 +447,7 @@ describe('llama', () => {
         expect(handler.params(config, prompt)).toEqual({
           prompt:
             "<s>[INST] Hello [/INST] Hi there! How can I assist you today? </s><s>[INST] What's the weather like? [/INST]",
-          temperature: 0.01,
+          temperature: 0,
           top_p: 1,
           max_gen_len: 1024,
         });
@@ -482,7 +482,7 @@ describe('llama', () => {
         You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
 
         What is the capital of France?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
-          temperature: 0.01,
+          temperature: 0,
           top_p: 1,
           max_gen_len: 1024,
         });
@@ -503,7 +503,7 @@ describe('llama', () => {
         Hi there! How can I assist you today?<|eot_id|><|start_header_id|>user<|end_header_id|>
 
         What's the weather like?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
-          temperature: 0.01,
+          temperature: 0,
           top_p: 1,
           max_gen_len: 1024,
         });

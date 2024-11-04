@@ -1,11 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
+import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
+import AppIcon from '@mui/icons-material/Apps';
 import CloseIcon from '@mui/icons-material/Close';
+import PluginIcon from '@mui/icons-material/Extension';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import TargetIcon from '@mui/icons-material/GpsFixed';
+import StrategyIcon from '@mui/icons-material/Psychology';
+import ReviewIcon from '@mui/icons-material/RateReview';
+import SaveIcon from '@mui/icons-material/Save';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import Plugins from './components/Plugins';
@@ -16,27 +35,66 @@ import Strategies from './components/Strategies';
 import Targets from './components/Targets';
 import YamlPreview from './components/YamlPreview';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
+import { useSetupState } from './hooks/useSetupState';
 import './page.css';
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
-  borderRight: `1px solid ${theme.palette.divider}`,
   '& .MuiTabs-indicator': {
     left: 0,
     right: 'auto',
   },
-  width: '240px',
-  minWidth: '240px',
+  width: '200px',
+  minWidth: '200px',
+  backgroundColor: theme.palette.background.paper,
+  '& .MuiTab-root': {
+    minHeight: '48px',
+  },
 }));
 
 const StyledTab = styled(Tab)(({ theme }) => ({
-  alignItems: 'flex-start',
+  alignItems: 'center',
   textAlign: 'left',
+  justifyContent: 'flex-start',
   '&.Mui-selected': {
     backgroundColor: theme.palette.action.selected,
   },
   maxWidth: 'none',
   width: '100%',
-  padding: theme.spacing(2),
+  minHeight: '48px',
+  padding: theme.spacing(1, 2),
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  '& .MuiSvgIcon-root': {
+    marginRight: theme.spacing(1),
+    fontSize: '18px',
+  },
+  textTransform: 'none',
+  fontSize: '0.875rem',
+}));
+
+const SidebarButtons = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: theme.spacing(0.5),
+  padding: theme.spacing(1.5),
+  borderTop: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.background.paper,
+}));
+
+const SidebarButton = styled(Button)(({ theme }) => ({
+  justifyContent: 'flex-start',
+  padding: theme.spacing(1),
+  textTransform: 'none',
+  color: theme.palette.text.secondary,
+  fontSize: '0.875rem',
+  fontWeight: 400,
+  '& .MuiSvgIcon-root': {
+    marginRight: theme.spacing(1),
+    fontSize: '18px',
+  },
+  '&:hover': {
+    backgroundColor: theme.palette.action.hover,
+    color: theme.palette.text.primary,
+  },
 }));
 
 const TabPanel = styled(Box)(({ theme }) => ({
@@ -80,6 +138,26 @@ const Root = styled(Box)(({ theme }) => ({
   position: 'relative',
 }));
 
+const OuterSidebarContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
+  borderRight: `1px solid ${theme.palette.divider}`,
+}));
+
+const InnerSidebarContainer = styled(Box)({
+  position: 'sticky',
+  top: 64, // Account for navbar
+  height: 'calc(100vh - 64px)',
+  display: 'flex',
+  flexDirection: 'column',
+});
+
+const TabsContainer = styled(Box)({
+  flexGrow: 1,
+  overflowY: 'auto',
+});
+
 const Content = styled(Box)(({ theme }) => ({
   flexGrow: 1,
   display: 'flex',
@@ -94,6 +172,7 @@ const TabContent = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   padding: '24px',
+  position: 'relative',
   transition: theme.transitions.create('margin', {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
@@ -116,21 +195,72 @@ const StyledFab = styled(Fab)(({ theme }) => ({
 }));
 */
 
-export default function GeneratePage() {
-  const [value, setValue] = useState(0);
+interface SavedConfig {
+  id: string;
+  name: string;
+  updatedAt: string;
+}
+
+export default function RedTeamSetupPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Get initial tab from URL hash or default to first page
+  const [value, setValue] = useState(() => {
+    const hash = location.hash.replace('#', '');
+    return hash ? Number.parseInt(hash, 10) : 0;
+  });
+
   const [yamlPreviewOpen, setYamlPreviewOpen] = useState(false);
-  const [setupModalOpen, setSetupModalOpen] = useState(true);
-  const { config } = useRedTeamConfig();
+  const { hasSeenSetup, markSetupAsSeen } = useSetupState();
+  const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
+  const { config, setFullConfig } = useRedTeamConfig();
+
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [loadDialogOpen, setLoadDialogOpen] = useState(false);
+  const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
+  const [configName, setConfigName] = useState('');
+  const toast = useToast();
+
+  // Handle browser back/forward
+  useEffect(() => {
+    const hash = location.hash.replace('#', '');
+    if (hash) {
+      const newValue = Number.parseInt(hash, 10);
+      if (!Number.isNaN(newValue) && newValue >= 0 && newValue <= 4) {
+        setValue(newValue);
+      } else {
+        setValue(0);
+      }
+    } else {
+      setValue(0);
+    }
+  }, [location.hash]);
+
+  const updateHash = (newValue: number) => {
+    if (location.hash !== `#${newValue}`) {
+      navigate(`#${newValue}`);
+    }
+  };
 
   const handleNext = () => {
-    setValue((prevValue) => prevValue + 1);
+    setValue((prevValue) => {
+      const newValue = prevValue + 1;
+      updateHash(newValue);
+      return newValue;
+    });
   };
 
   const handleBack = () => {
-    setValue((prevValue) => prevValue - 1);
+    setValue((prevValue) => {
+      const newValue = prevValue - 1;
+      updateHash(newValue);
+      return newValue;
+    });
   };
 
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+    updateHash(newValue);
     setValue(newValue);
   };
 
@@ -140,25 +270,154 @@ export default function GeneratePage() {
 
   const closeSetupModal = () => {
     setSetupModalOpen(false);
+    markSetupAsSeen();
+  };
+
+  const handleSaveConfig = async () => {
+    try {
+      const response = await callApi('/configs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: configName,
+          type: 'redteam',
+          config,
+        }),
+      });
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      toast.showToast('Configuration saved successfully', 'success');
+      setSaveDialogOpen(false);
+      setConfigName('');
+    } catch (error) {
+      console.error('Failed to save configuration', error);
+      toast.showToast(
+        error instanceof Error ? error.message : 'Failed to save configuration',
+        'error',
+      );
+    }
+  };
+
+  const loadConfigs = async () => {
+    try {
+      const response = await callApi('/configs?type=redteam');
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setSavedConfigs(
+        data.configs.sort(
+          (a: SavedConfig, b: SavedConfig) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        ),
+      );
+    } catch (error) {
+      console.error('Failed to load configurations', error);
+      toast.showToast(
+        error instanceof Error ? error.message : 'Failed to load configurations',
+        'error',
+      );
+      setSavedConfigs([]);
+    }
+  };
+
+  const handleLoadConfig = async (id: string) => {
+    try {
+      const response = await callApi(`/configs/redteam/${id}`);
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setFullConfig(data.config);
+      toast.showToast('Configuration loaded successfully', 'success');
+      setLoadDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to load configuration', error);
+      toast.showToast(
+        error instanceof Error ? error.message : 'Failed to load configuration',
+        'error',
+      );
+    }
   };
 
   return (
     <Root>
       <Content>
-        <StyledTabs
-          orientation="vertical"
-          variant="scrollable"
-          value={value}
-          onChange={handleChange}
-          aria-label="Red Team Config Tabs"
-          sx={{ borderRight: 1, borderColor: 'divider', width: 200 }}
-        >
-          <StyledTab label="Targets" {...a11yProps(0)} />
-          <StyledTab label="Application" {...a11yProps(1)} />
-          <StyledTab label="Plugins" {...a11yProps(2)} />
-          <StyledTab label="Strategies" {...a11yProps(3)} />
-          <StyledTab label="Review" {...a11yProps(4)} />
-        </StyledTabs>
+        <OuterSidebarContainer>
+          <InnerSidebarContainer>
+            <TabsContainer>
+              <StyledTabs
+                orientation="vertical"
+                variant="scrollable"
+                value={value}
+                onChange={handleChange}
+                sx={{ width: 200 }}
+              >
+                <StyledTab
+                  icon={<TargetIcon />}
+                  iconPosition="start"
+                  label="Targets"
+                  {...a11yProps(0)}
+                />
+                <StyledTab
+                  icon={<AppIcon />}
+                  iconPosition="start"
+                  label="Application"
+                  {...a11yProps(1)}
+                />
+                <StyledTab
+                  icon={<PluginIcon />}
+                  iconPosition="start"
+                  label="Plugins"
+                  {...a11yProps(2)}
+                />
+                <StyledTab
+                  icon={<StrategyIcon />}
+                  iconPosition="start"
+                  label="Strategies"
+                  {...a11yProps(3)}
+                />
+                <StyledTab
+                  icon={<ReviewIcon />}
+                  iconPosition="start"
+                  label="Review"
+                  {...a11yProps(4)}
+                />
+              </StyledTabs>
+            </TabsContainer>
+            <SidebarButtons>
+              <SidebarButton
+                variant="text"
+                fullWidth
+                startIcon={<SaveIcon />}
+                onClick={() => setSaveDialogOpen(true)}
+              >
+                Save Config
+              </SidebarButton>
+              <SidebarButton
+                variant="text"
+                fullWidth
+                startIcon={<FolderOpenIcon />}
+                onClick={() => {
+                  loadConfigs();
+                  setLoadDialogOpen(true);
+                }}
+              >
+                Load Config
+              </SidebarButton>
+            </SidebarButtons>
+          </InnerSidebarContainer>
+        </OuterSidebarContainer>
         <TabContent>
           <CustomTabPanel value={value} index={0}>
             <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
@@ -209,6 +468,74 @@ export default function GeneratePage() {
       */}
       <Setup open={setupModalOpen} onClose={closeSetupModal} />
       <CrispChat />
+      <Dialog
+        open={saveDialogOpen}
+        onClose={() => setSaveDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Save Configuration</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Configuration Name"
+            fullWidth
+            value={configName}
+            onChange={(e) => setConfigName(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSaveConfig} disabled={!configName}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={loadDialogOpen}
+        onClose={() => setLoadDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Load Configuration</DialogTitle>
+        <DialogContent>
+          {savedConfigs.length === 0 ? (
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <Typography color="text.secondary">No saved configurations found</Typography>
+            </Box>
+          ) : (
+            <List>
+              {savedConfigs.map((config) => (
+                <ListItemButton
+                  key={config.id}
+                  onClick={() => handleLoadConfig(config.id)}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    mb: 0.5,
+                    backgroundColor: 'background.paper',
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                      cursor: 'pointer',
+                    },
+                  }}
+                >
+                  <ListItemText
+                    primary={config.name}
+                    secondary={new Date(config.updatedAt).toLocaleString()}
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
     </Root>
   );
 }

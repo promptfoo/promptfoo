@@ -14,12 +14,12 @@ export const DEFAULT_GRADING_PROMPT = JSON.stringify([
 
     Examples:
 
-    Output: Hello world
-    Rubric: Content contains a greeting
+    <Output>Hello world</Output>
+    <Rubric>Content contains a greeting</Rubric>
     {"reason": "the content contains the word 'Hello'", "pass": true, "score": 1.0}
 
-    Output: Avast ye swabs, repel the invaders!
-    Rubric: Does not speak like a pirate
+    <Output>Avast ye swabs, repel the invaders!</Output>
+    <Rubric>Does not speak like a pirate</Rubric>
     {"reason": "'avast ye' is a common pirate term", "pass": false, "score": 0.0}`,
   },
   {

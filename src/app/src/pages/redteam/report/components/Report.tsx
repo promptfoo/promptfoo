@@ -41,6 +41,8 @@ function getStrategyIdFromMetric(metric: string): string | null {
       return 'base64';
     } else if (metricSuffix === 'Crescendo') {
       return 'crescendo';
+    } else if (metricSuffix === 'GOAT') {
+      return 'goat';
     } else if (metricSuffix === 'Injection') {
       return 'prompt-injection';
     } else if (metricSuffix === 'Iterative') {
@@ -363,7 +365,7 @@ const App: React.FC = () => {
                 </>
               }
             />
-            {selectedPrompt && (
+            {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
               <Chip
                 size="small"
                 label={
