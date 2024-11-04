@@ -4,7 +4,10 @@ import styles from './CTAButton.module.css';
 const CTAButton: React.FC = () => {
   return (
     <div className={styles.ctaContainer}>
-      <a href="https://www.promptfoo.dev/docs/red-team/strategies/goat/" className={styles.ctaButton}>
+      <a
+        href="https://www.promptfoo.dev/docs/red-team/strategies/goat/"
+        className={styles.ctaButton}
+      >
         Try Red Teaming with GOAT
         <svg
           className={styles.arrow}
