@@ -1,0 +1,35 @@
+.ctaContainer {
+  display: flex;
+  justify-content: center;
+  margin: 2rem 0;
+}
+
+.ctaButton {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #000;
+  background: transparent;
+  border: 2px solid rgb(239 68 68 / 0.5);
+  border-radius: 0.5rem;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.ctaButton:hover {
+  background: rgb(239 68 68 / 0.1);
+  text-decoration: none;
+  color: #000;
+}
+
+.arrow {
+  transition: transform 0.3s ease;
+}
+
+.ctaButton:hover .arrow {
+  transform: translateX(4px);
+}
