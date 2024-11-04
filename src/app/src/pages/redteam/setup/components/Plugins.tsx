@@ -10,6 +10,8 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
@@ -24,6 +26,7 @@ import {
   PII_PLUGINS,
   BASE_PLUGINS,
   ADDITIONAL_PLUGINS,
+  CONFIG_REQUIRED_PLUGINS,
   DEFAULT_PLUGINS,
   ALL_PLUGINS,
   NIST_AI_RMF_MAPPING,
@@ -37,7 +40,6 @@ import {
 } from '@promptfoo/redteam/constants';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
-import CustomPoliciesSection from './CustomPoliciesSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 
@@ -69,12 +71,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
 
   useEffect(() => {
-    // Preserve custom policies when updating plugins
-    const customPolicies = config.plugins.filter((p) => typeof p === 'object' && p.id === 'policy');
-
-    const allPlugins = [...Array.from(selectedPlugins), ...customPolicies];
-    updateConfig('plugins', allPlugins);
-  }, [selectedPlugins, config.plugins, updateConfig]);
+    updateConfig('plugins', Array.from(selectedPlugins));
+  }, [selectedPlugins, updateConfig]);
 
   const handlePluginToggle = useCallback((plugin: Plugin) => {
     setSelectedPlugins((prev) => {
@@ -374,7 +372,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           })}
         </Grid>
 
-        {isCustomMode && (
+        {isCustomMode ? (
           <>
             <TextField
               fullWidth
@@ -393,9 +391,25 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               {renderPluginCategory('PII Plugins', PII_PLUGINS)}
               {renderPluginCategory('Base Plugins', BASE_PLUGINS)}
               {renderPluginCategory('Additional Plugins', ADDITIONAL_PLUGINS)}
-              <CustomPoliciesSection />
+              {renderPluginCategory('Custom Plugins', CONFIG_REQUIRED_PLUGINS)}
             </Box>
           </>
+        ) : (
+          <Card variant="outlined" sx={{ mb: 3 }}>
+            <CardContent>
+              {currentlySelectedPreset && (
+                <Typography variant="h6" gutterBottom>
+                  Selected Preset: {currentlySelectedPreset.name}
+                </Typography>
+              )}
+              <Typography variant="body2">
+                Number of selected plugins: {selectedPlugins.size}
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                To customize your plugin selection, choose the "Custom" preset.
+              </Typography>
+            </CardContent>
+          </Card>
         )}
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
