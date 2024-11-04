@@ -167,7 +167,7 @@ const RedTeamDemo: React.FC = () => {
     };
 
     const runTurn = async (turnsToRun: number) => {
-        if (isLoading) return;
+        if (isLoading) {return;}
 
         setIsLoading(true);
         setState(prev => ({ ...prev, showTurnPrompt: false }));
