@@ -7,6 +7,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { ProviderOptions } from '@promptfoo/types';
+import { isJavascriptFile } from '@promptfoo/util/file';
 
 interface AddLocalProviderDialogProps {
   open: boolean;
@@ -30,8 +31,12 @@ const AddLocalProviderDialog: React.FC<AddLocalProviderDialogProps> = ({
       return;
     }
 
-    if (!trimmedPath.endsWith('.py') && !trimmedPath.endsWith('.js')) {
-      setError('Only .py and .js files are supported');
+    if (
+      !isJavascriptFile(trimmedPath) &&
+      !trimmedPath.endsWith('.py') &&
+      !trimmedPath.endsWith('.go')
+    ) {
+      setError('Only javascript, python, and go files are supported');
       return;
     }
 
