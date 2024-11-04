@@ -42,9 +42,9 @@ import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 import { CustomPoliciesSection } from './CustomPoliciesSection';
+import { IntentsSection } from './IntentsSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
-import { IntentsSection } from './IntentsSection';
 
 interface PluginsProps {
   onNext: () => void;
