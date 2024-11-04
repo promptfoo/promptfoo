@@ -29,6 +29,7 @@ import type {
   RunEvalOptions,
   TestSuite,
 } from './types';
+import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { sleep } from './util/time';
 import { transform, TransformInputType } from './util/transform';
 
@@ -110,7 +111,7 @@ class Evaluator {
     { prompt: string | object; input: string; output: string | object }[]
   >;
   registers: Record<string, string | object>;
-
+  fileWriters: JsonlFileWriter[];
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
@@ -127,6 +128,14 @@ class Evaluator {
     };
     this.conversations = {};
     this.registers = {};
+
+    const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
+      ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
+      : evalRecord.config.outputPath?.endsWith('.jsonl')
+        ? [evalRecord.config.outputPath]
+        : [];
+
+    this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
   }
 
   async runEval({
@@ -638,18 +647,10 @@ class Evaluator {
         logger.error(`Error saving result: ${error} ${JSON.stringify(row)}`);
       }
 
-      const outputPath = this.evalRecord.config.outputPath;
-      const jsonlFiles = Array.isArray(outputPath)
-        ? outputPath.filter((p) => p.endsWith('.jsonl'))
-        : outputPath?.endsWith('.jsonl')
-          ? [outputPath]
-          : [];
-      if (jsonlFiles.length) {
-        const jsonl = JSON.stringify(row);
-        for (const path of jsonlFiles) {
-          fs.appendFileSync(path, jsonl + '\n');
-        }
+      for (const writer of this.fileWriters) {
+        await writer.write(row);
       }
+
       const { promptIdx } = row;
       const metrics = prompts[promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
