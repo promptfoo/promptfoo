@@ -1,14 +1,13 @@
 import React from 'react';
-import { callApi } from '@app/utils/api';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import TextField from '@mui/material/TextField';
-import { styled } from '@mui/material/styles';
 import type { ProviderOptions } from '@promptfoo/types';
 import { useProvidersStore } from '../../../store/providersStore';
+import AddLocalProviderDialog from './AddLocalProviderDialog';
 import ProviderConfigDialog from './ProviderConfigDialog';
 
 const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: string })[])
@@ -190,18 +189,6 @@ function getGroupName(label?: string) {
   return PREFIX_TO_PROVIDER[name] || name;
 }
 
-const VisuallyHiddenInput = styled('input')({
-  clip: 'rect(0 0 0 0)',
-  clipPath: 'inset(50%)',
-  height: 1,
-  overflow: 'hidden',
-  position: 'absolute',
-  bottom: 0,
-  left: 0,
-  whiteSpace: 'nowrap',
-  width: 1,
-});
-
 interface ProviderSelectorProps {
   providers: ProviderOptions[];
   onChange: (providers: ProviderOptions[]) => void;
@@ -210,53 +197,11 @@ interface ProviderSelectorProps {
 const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
   const { customProviders, addCustomProvider } = useProvidersStore();
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
+  const [isAddLocalDialogOpen, setIsAddLocalDialogOpen] = React.useState(false);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files) {
-      return;
-    }
-
-    for (const file of Array.from(files)) {
-      if (!file.name.endsWith('.py') && !file.name.endsWith('.js')) {
-        alert('Only .py and .js files are supported');
-        continue;
-      }
-
-      try {
-        const fileContent = await file.text();
-        const response = await callApi('/eval/provider/upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fileName: file.name,
-            fileContent,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to upload provider');
-        }
-
-        const { id, label } = await response.json();
-        const fileProvider: ProviderOptions = {
-          id,
-          config: {},
-          label,
-        };
-
-        addCustomProvider(fileProvider);
-        onChange([...providers, fileProvider]);
-      } catch (error) {
-        console.error('Failed to upload provider:', error);
-        alert(`Failed to upload ${file.name}`);
-      }
-    }
-
-    // Reset file input
-    event.target.value = '';
+  const handleAddLocalProvider = (provider: ProviderOptions) => {
+    addCustomProvider(provider);
+    onChange([...providers, provider]);
   };
 
   const allProviders = React.useMemo(() => {
@@ -286,9 +231,14 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
 
   return (
     <Box mt={2}>
-      <Box display="flex" gap={2} alignItems="flex-start">
+      <Box display="flex" gap={2} alignItems="stretch">
         <Autocomplete
-          sx={{ flex: 1 }}
+          sx={{
+            flex: 1,
+            '& .MuiOutlinedInput-root': {
+              height: '56px',
+            },
+          }}
           multiple
           freeSolo
           options={allProviders}
@@ -320,11 +270,25 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
             />
           )}
         />
-        <Button component="label" variant="outlined" startIcon={<UploadFileIcon />}>
-          Upload Provider
-          <VisuallyHiddenInput type="file" accept=".py,.js" multiple onChange={handleFileUpload} />
+        <Button
+          variant="outlined"
+          onClick={() => setIsAddLocalDialogOpen(true)}
+          startIcon={<FolderOpenIcon />}
+          sx={{
+            height: '56px',
+            whiteSpace: 'nowrap',
+            px: 3,
+            minWidth: 'fit-content',
+          }}
+        >
+          Reference Local Provider
         </Button>
       </Box>
+      <AddLocalProviderDialog
+        open={isAddLocalDialogOpen}
+        onClose={() => setIsAddLocalDialogOpen(false)}
+        onAdd={handleAddLocalProvider}
+      />
       {selectedProvider && selectedProvider.id && (
         <ProviderConfigDialog
           open={!!selectedProvider}
