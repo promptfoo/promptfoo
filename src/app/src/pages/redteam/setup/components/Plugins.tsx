@@ -38,8 +38,10 @@ import {
   categoryAliases,
   type Plugin,
 } from '@promptfoo/redteam/constants';
+import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
+import { CustomPoliciesSection } from './CustomPoliciesSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 
@@ -55,28 +57,76 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
-const PLUGINS_REQUIRING_CONFIG = ['policy', 'prompt-extraction', 'indirect-prompt-injection'];
+const PLUGINS_REQUIRING_CONFIG = ['prompt-extraction', 'indirect-prompt-injection'];
 
 const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
-  const { config, updateConfig } = useRedTeamConfig();
+  const { config, updatePlugins } = useRedTeamConfig();
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
-    return new Set(config.plugins.map((plugin) => plugin as Plugin));
+    return new Set(
+      config.plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)) as Plugin[],
+    );
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>({});
+  const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>(() => {
+    const initialConfig: LocalPluginConfig = {};
+    config.plugins.forEach((plugin) => {
+      if (typeof plugin === 'object' && plugin.config) {
+        initialConfig[plugin.id] = plugin.config;
+      }
+    });
+    return initialConfig;
+  });
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
 
+  const [debouncedUpdatePlugins] = useDebounce(
+    (plugins: Array<string | { id: string; config: any }>) => {
+      updatePlugins(plugins);
+    },
+    300,
+  );
+
   useEffect(() => {
-    updateConfig('plugins', Array.from(selectedPlugins));
-  }, [selectedPlugins, updateConfig]);
+    type PluginConfig = { id: Plugin; config: any };
+
+    const updatedPlugins = Array.from(selectedPlugins)
+      .map((plugin): Plugin | PluginConfig | null => {
+        if (plugin === 'policy') {
+          return null;
+        }
+
+        const config = pluginConfig[plugin];
+        if (config && Object.keys(config).length > 0) {
+          return { id: plugin, config };
+        }
+        return plugin;
+      })
+      .filter((plugin): plugin is Plugin | PluginConfig => plugin !== null);
+
+    debouncedUpdatePlugins(updatedPlugins);
+  }, [selectedPlugins, pluginConfig, debouncedUpdatePlugins]);
 
   const handlePluginToggle = useCallback((plugin: Plugin) => {
     setSelectedPlugins((prev) => {
       const newSet = new Set(prev);
+
+      if (plugin === 'policy') {
+        if (newSet.has(plugin)) {
+          newSet.delete(plugin);
+          setPluginConfig((prevConfig) => {
+            const newConfig = { ...prevConfig };
+            delete newConfig[plugin];
+            return newConfig;
+          });
+        } else {
+          newSet.add(plugin);
+        }
+        return newSet;
+      }
+
       if (newSet.has(plugin)) {
         newSet.delete(plugin);
         setPluginConfig((prevConfig) => {
@@ -86,11 +136,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         });
       } else {
         newSet.add(plugin);
-        setPluginConfig((prevConfig) => ({
-          ...prevConfig,
-          [plugin]: {},
-        }));
-        // Automatically open config dialog for plugins that require config
         if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
           setSelectedConfigPlugin(plugin);
           setConfigDialogOpen(true);
@@ -165,17 +210,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             ...newConfig,
           },
         };
-        updateConfig(
-          'plugins',
-          Array.from(selectedPlugins).map((p) => {
-            const config = updatedConfig[p];
-            return config && Object.keys(config).length > 0 ? { id: p, config } : p;
-          }),
-        );
         return updatedConfig;
       });
     },
-    [selectedPlugins, updateConfig],
+    [],
   );
 
   const isConfigValid = useCallback(() => {
@@ -205,7 +243,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   };
 
   const isPluginConfigured = (plugin: Plugin) => {
-    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
       return true;
     }
     const config = pluginConfig[plugin];
@@ -412,23 +450,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           </Card>
         )}
 
+        {selectedPlugins.has('policy') && (
+          <Box sx={{ mb: 4 }}>
+            <CustomPoliciesSection />
+          </Box>
+        )}
+
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
           <Button variant="outlined" onClick={onBack} startIcon={<KeyboardArrowLeftIcon />}>
             Back
           </Button>
           <Button
             variant="contained"
-            onClick={() => {
-              const updatedPlugins = Array.from(selectedPlugins).map((plugin) => {
-                const config = pluginConfig[plugin];
-                if (config && Object.keys(config).length > 0) {
-                  return { id: plugin, config };
-                }
-                return plugin;
-              });
-              updateConfig('plugins', updatedPlugins);
-              onNext();
-            }}
+            onClick={onNext}
             endIcon={<KeyboardArrowRightIcon />}
             disabled={!isConfigValid()}
           >
