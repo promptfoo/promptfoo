@@ -276,7 +276,12 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
     if (typeof option === 'string') {
       return option;
     }
-    return option.label || option.id || '';  
+    return option.label || option.id || '';
+  };
+
+  const getGroupByValue = (option: string | ProviderOptions): string => {
+    const id = typeof option === 'string' ? option : option.id;
+    return getGroupName(id);
   };
 
   return (
@@ -288,7 +293,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           freeSolo
           options={allProviders}
           value={providers}
-          groupBy={(option) => getGroupName(option.id)}
+          groupBy={getGroupByValue}
           onChange={(event, newValue: (string | ProviderOptions)[]) => {
             onChange(newValue.map((value) => (typeof value === 'string' ? { id: value } : value)));
           }}
