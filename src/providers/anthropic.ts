@@ -49,6 +49,13 @@ const ANTHROPIC_MODELS = [
       output: 0.075 / 1000,
     },
   })),
+  ...['claude-3-5-haiku-20241022'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1 / 1e6,
+      output: 5 / 1e6,
+    },
+  })),
   ...['claude-3-5-sonnet-20240620', 'claude-3-5-sonnet-20241022'].map((model) => ({
     id: model,
     cost: {
