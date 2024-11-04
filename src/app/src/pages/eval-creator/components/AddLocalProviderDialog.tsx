@@ -23,20 +23,22 @@ const AddLocalProviderDialog: React.FC<AddLocalProviderDialogProps> = ({
   const [error, setError] = React.useState('');
 
   const handleSubmit = () => {
-    if (!path) {
+    const trimmedPath = path.trim();
+
+    if (!trimmedPath) {
       setError('Path is required');
       return;
     }
 
-    if (!path.endsWith('.py') && !path.endsWith('.js')) {
+    if (!trimmedPath.endsWith('.py') && !trimmedPath.endsWith('.js')) {
       setError('Only .py and .js files are supported');
       return;
     }
 
     const provider: ProviderOptions = {
-      id: `file://${path}`,
+      id: `file://${trimmedPath}`,
       config: {},
-      label: path.split('/').pop() || path,
+      label: trimmedPath.split('/').pop() || trimmedPath,
     };
 
     onAdd(provider);
@@ -45,15 +47,19 @@ const AddLocalProviderDialog: React.FC<AddLocalProviderDialogProps> = ({
     setError('');
   };
 
+  const handleClose = () => {
+    setPath('');
+    setError('');
+    onClose();
+  };
+
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: { borderRadius: 2 },
-      }}
+      PaperProps={{ sx: { borderRadius: 2 } }}
     >
       <DialogTitle sx={{ pb: 1 }}>Add Local Provider</DialogTitle>
       <DialogContent sx={{ pb: 2 }}>
@@ -80,7 +86,7 @@ const AddLocalProviderDialog: React.FC<AddLocalProviderDialogProps> = ({
         />
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} variant="text" sx={{ color: 'text.secondary' }}>
+        <Button onClick={handleClose} variant="text" sx={{ color: 'text.secondary' }}>
           Cancel
         </Button>
         <Button onClick={handleSubmit} variant="contained" sx={{ px: 3 }}>

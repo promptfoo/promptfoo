@@ -1,8 +1,5 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
@@ -26,30 +23,6 @@ export const evalRouter = Router();
 
 // Running jobs
 const evalJobs = new Map<string, Job>();
-
-evalRouter.post('/provider/upload', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { fileName, fileContent } = req.body;
-
-    // Create temp directory if it doesn't exist
-    const tempDir = path.join(os.tmpdir(), 'promptfoo-providers');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-
-    // Write file to temp directory
-    const tempFilePath = path.join(tempDir, fileName);
-    fs.writeFileSync(tempFilePath, fileContent, 'utf8');
-
-    res.json({
-      id: `file://${tempFilePath}`,
-      label: `file://${fileName}`,
-    });
-  } catch (error) {
-    console.error('Failed to save provider file:', error);
-    res.status(500).json({ error: 'Failed to save provider file' });
-  }
-});
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
