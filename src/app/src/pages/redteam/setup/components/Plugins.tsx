@@ -44,6 +44,7 @@ import type { LocalPluginConfig } from '../types';
 import { CustomPoliciesSection } from './CustomPoliciesSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
+import { IntentsSection } from './IntentsSection';
 
 interface PluginsProps {
   onNext: () => void;
@@ -453,6 +454,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         {selectedPlugins.has('policy') && (
           <Box sx={{ mb: 4 }}>
             <CustomPoliciesSection />
+          </Box>
+        )}
+
+        {selectedPlugins.has('intent') && (
+          <Box sx={{ mb: 4 }}>
+            <IntentsSection />
           </Box>
         )}
 
