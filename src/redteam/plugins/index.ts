@@ -1,4 +1,7 @@
+import dedent from 'dedent';
+import fs from 'fs';
 import invariant from 'tiny-invariant';
+import yaml from 'yaml';
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
@@ -162,3 +165,70 @@ export const Plugins: PluginFactory[] = [
   ...piiPlugins,
   ...remotePlugins,
 ];
+
+/**
+ * Resolves top-level file paths in the plugin configuration.
+ * @param config - The plugin configuration to resolve.
+ * @returns The resolved plugin configuration.
+ */
+export function resolvePluginConfig(config: Record<string, any> | undefined): Record<string, any> {
+  if (!config) {
+    return {};
+  }
+
+  for (const key in config) {
+    const value = config[key];
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const filePath = value.slice('file://'.length);
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`File not found: ${filePath}`);
+      }
+
+      if (filePath.endsWith('.yaml')) {
+        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
+      } else if (filePath.endsWith('.json')) {
+        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      } else {
+        config[key] = fs.readFileSync(filePath, 'utf8');
+      }
+    }
+  }
+  return config;
+}
+
+/**
+ * Pre-validates all plugin configurations before test generation begins
+ * @throws Error if any plugin configuration is invalid
+ */
+export function validatePlugins(
+  plugins: { id: string; numTests: number; config?: Record<string, any> }[],
+  language?: string,
+) {
+  for (const plugin of plugins) {
+    const factory = Plugins.find((p) => p.key === plugin.id);
+    if (!factory) {
+      // Skip validation for custom plugins and unregistered plugins
+      if (!plugin.id.startsWith('file://')) {
+        logger.warn(`Plugin ${plugin.id} not registered, skipping validation`);
+      }
+      continue;
+    }
+
+    try {
+      // Create plugin instance to validate config
+      const provider = { callApi: async () => ({ output: '' }), id: () => 'dummy' };
+      factory.action(provider, 'validation', 'query', 1, 0, {
+        language,
+        ...resolvePluginConfig(plugin.config),
+      });
+    } catch (error) {
+      throw new Error(
+        dedent`
+          Invalid configuration for plugin "${plugin.id}":
+          ${(error as Error).message}
+        `,
+      );
+    }
+  }
+}

@@ -2,8 +2,6 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import * as fs from 'fs';
-import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import logger, { getLogLevel } from '../logger';
 import type { TestCaseWithPlugin } from '../types';
@@ -11,7 +9,7 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import { HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import { Plugins } from './plugins';
+import { Plugins, resolvePluginConfig, validatePlugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
 import { loadRedteamProvider } from './providers/shared';
 import { Strategies, validateStrategies } from './strategies';
@@ -72,37 +70,6 @@ function generateReport(
   return `\nTest Generation Report:\n${table.toString()}`;
 }
 
-/**
- * Resolves top-level file paths in the plugin configuration.
- * @param config - The plugin configuration to resolve.
- * @returns The resolved plugin configuration.
- */
-export function resolvePluginConfig(config: Record<string, any> | undefined): Record<string, any> {
-  if (!config) {
-    return {};
-  }
-
-  for (const key in config) {
-    const value = config[key];
-    if (typeof value === 'string' && value.startsWith('file://')) {
-      const filePath = value.slice('file://'.length);
-
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`File not found: ${filePath}`);
-      }
-
-      if (filePath.endsWith('.yaml')) {
-        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
-      } else if (filePath.endsWith('.json')) {
-        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      } else {
-        config[key] = fs.readFileSync(filePath, 'utf8');
-      }
-    }
-  }
-  return config;
-}
-
 const categories = {
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
@@ -145,6 +112,7 @@ export async function synthesize({
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
   validateStrategies(strategies);
+  validatePlugins(plugins, language);
 
   const redteamProvider = await loadRedteamProvider({ provider });
 

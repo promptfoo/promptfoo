@@ -56,9 +56,15 @@ export abstract class RedteamPluginBase {
       const validationError = fromError(result.error);
       throw new Error(
         dedent`
-          Plugin Config Schema Validation Error:
-          ${validationError.toString()}
-          Please review your plugin configuration.
+          Configuration Error in ${this.constructor.name}:
+          
+          ${validationError.message
+            .split('\n')
+            .map((line) => `  • ${line}`)
+            .join('\n')}
+          
+          Received config:
+          ${JSON.stringify(config, null, 2)}
         `,
       );
     }
