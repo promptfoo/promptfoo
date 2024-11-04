@@ -246,7 +246,7 @@ export async function synthesize({
         plugin.numTests,
         delay || 0,
         {
-          language,
+          ...(language ? { language } : {}),
           ...resolvePluginConfig(plugin.config),
         },
       );

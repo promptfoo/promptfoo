@@ -6,8 +6,8 @@ import { loadApiProvider } from '../../src/providers';
 import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
-import { synthesize, resolvePluginConfig } from '../../src/redteam/index';
-import { Plugins } from '../../src/redteam/plugins';
+import { synthesize } from '../../src/redteam/index';
+import { Plugins, resolvePluginConfig } from '../../src/redteam/plugins';
 import { Strategies } from '../../src/redteam/strategies';
 import { validateStrategies } from '../../src/redteam/strategies';
 

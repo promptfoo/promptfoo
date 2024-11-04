@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import type { z } from 'zod';
@@ -56,15 +57,14 @@ export abstract class RedteamPluginBase {
       const validationError = fromError(result.error);
       throw new Error(
         dedent`
-          Configuration Error in ${this.constructor.name}:
+          ${chalk.red(`${this.constructor.name} configuration is malformed.`)}  
           
           ${validationError.message
             .split('\n')
             .map((line) => `  • ${line}`)
             .join('\n')}
           
-          Received config:
-          ${JSON.stringify(config, null, 2)}
+          ${Object.keys(config).length === 0 ? `${chalk.red('You must set `config` on this plugin')}` : `Received config: ${JSON.stringify(config, null, 2)}`}
         `,
       );
     }

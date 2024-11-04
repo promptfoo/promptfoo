@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import fs from 'fs';
+import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
-import yaml from 'yaml';
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
@@ -219,7 +219,7 @@ export function validatePlugins(
       // Create plugin instance to validate config
       const provider = { callApi: async () => ({ output: '' }), id: () => 'dummy' };
       factory.action(provider, 'validation', 'query', 1, 0, {
-        language,
+        ...(language ? { language } : {}),
         ...resolvePluginConfig(plugin.config),
       });
     } catch (error) {
