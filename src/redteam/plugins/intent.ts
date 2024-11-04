@@ -19,6 +19,9 @@ export class IntentPlugin extends RedteamPluginBase {
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
     // Handle both string and array configs
     this.intents = Array.isArray(config.intent) ? config.intent : [config.intent];
+    this.intents.forEach((intent, i) => {
+      invariant(typeof intent === 'string', `Intent: "${intent}" at index ${i} must be a string`);
+    });
   }
 
   protected async getTemplate(): Promise<string> {
@@ -30,7 +33,7 @@ export class IntentPlugin extends RedteamPluginBase {
     return [
       {
         type: PLUGIN_ID,
-        metric: 'IntentSuccess',
+        metric: 'Intent',
       },
     ];
   }
