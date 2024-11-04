@@ -1,7 +1,9 @@
 import dedent from 'dedent';
+import { z } from 'zod';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
+import { BasePluginConfigSchema } from '../../../src/redteam/plugins/types';
 import type { ApiProvider, Assertion } from '../../../src/types';
 import type { AtomicTestCase, GradingResult } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
@@ -15,6 +17,10 @@ jest.mock('../../../src/util', () => ({
 }));
 
 class TestPlugin extends RedteamPluginBase {
+  protected static override configSchema = BasePluginConfigSchema.extend({
+    testOption: z.string().optional(),
+  });
+
   protected async getTemplate(): Promise<string> {
     return 'Test template with {{ purpose }} for {{ n }} prompts';
   }
@@ -39,6 +45,37 @@ describe('RedteamPluginBase', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('config validation', () => {
+    it('should accept valid config', () => {
+      expect(
+        () =>
+          new TestPlugin(provider, 'test purpose', 'testVar', {
+            language: 'German',
+            testOption: 'value',
+            modifiers: { key: 'value' },
+          }),
+      ).not.toThrow();
+    });
+
+    it('should reject unknown config properties', () => {
+      expect(
+        () =>
+          new TestPlugin(provider, 'test purpose', 'testVar', {
+            unknownOption: 'value',
+          } as any),
+      ).toThrow(/Validation Error/);
+    });
+
+    it('should make validated config available to child classes', () => {
+      const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+        language: 'German',
+        testOption: 'value',
+      });
+      expect(plugin['validatedConfig'].language).toBe('German');
+      expect(plugin['validatedConfig'].testOption).toBe('value');
+    });
   });
 
   it('should generate test cases correctly', async () => {
@@ -195,7 +232,7 @@ describe('RedteamPluginBase', () => {
     it('should not append modifiers when all modifier values are undefined or empty strings', async () => {
       const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
         modifiers: {
-          modifier1: undefined as any,
+          modifier1: undefined,
           modifier2: '',
         },
       });
@@ -208,7 +245,7 @@ describe('RedteamPluginBase', () => {
     it('should append modifiers when at least one modifier has a non-empty value', async () => {
       const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
         modifiers: {
-          modifier1: undefined as any,
+          modifier1: undefined,
           modifier2: 'value2',
         },
       });

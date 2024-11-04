@@ -1,5 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import type { z } from 'zod';
+import { fromError } from 'zod-validation-error';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
@@ -7,7 +9,6 @@ import type {
   ApiProvider,
   Assertion,
   AssertionValue,
-  PluginConfig,
   ResultSuggestion,
   TestCase,
 } from '../../types';
@@ -18,11 +19,25 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { loadRedteamProvider } from '../providers/shared';
 import { removePrefix } from '../util';
+import { BasePluginConfigSchema } from './types';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
 export abstract class RedteamPluginBase {
+  /**
+   * The Zod schema used to validate the plugin's configuration.
+   * Child classes should override this with their specific schema.
+   */
+  protected static configSchema: z.ZodSchema = BasePluginConfigSchema;
+
+  /**
+   * The validated configuration, available to child classes after constructor runs
+   */
+  protected validatedConfig!: z.infer<
+    (typeof this.constructor & { configSchema: z.ZodSchema })['configSchema']
+  >;
+
   /**
    * Creates an instance of RedteamPluginBase.
    * @param provider - The API provider used for generating prompts.
@@ -34,8 +49,20 @@ export abstract class RedteamPluginBase {
     protected provider: ApiProvider,
     protected purpose: string,
     protected injectVar: string,
-    protected config: PluginConfig = {},
+    config: z.infer<typeof BasePluginConfigSchema> & Record<string, unknown> = {},
   ) {
+    const result = (this.constructor as typeof RedteamPluginBase).configSchema.safeParse(config);
+    if (!result.success) {
+      const validationError = fromError(result.error);
+      throw new Error(
+        dedent`
+          Plugin Config Schema Validation Error:
+          ${validationError.toString()}
+          Please review your plugin configuration.
+        `,
+      );
+    }
+    this.validatedConfig = result.data;
     logger.debug(`RedteamPluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }
 
@@ -155,18 +182,18 @@ export abstract class RedteamPluginBase {
   private appendModifiers(template: string): string {
     // Take everything under "modifiers" config key
     const modifiers: Record<string, string> =
-      (this.config.modifiers as Record<string, string>) ?? {};
+      (this.validatedConfig.modifiers as Record<string, string>) ?? {};
 
     // Right now, only pre-configured modifier is language
-    if (this.config.language) {
-      invariant(typeof this.config.language === 'string', 'language must be a string');
-      modifiers.language = this.config.language;
+    if (this.validatedConfig.language) {
+      invariant(typeof this.validatedConfig.language === 'string', 'language must be a string');
+      modifiers.language = this.validatedConfig.language;
     }
 
     // No modifiers
     if (
       Object.keys(modifiers).length === 0 ||
-      Object.values(modifiers).every((value) => typeof value === 'undefined' || value === '')
+      Object.values(modifiers).every((value) => typeof value == 'undefined' || value === '')
     ) {
       return template;
     }
