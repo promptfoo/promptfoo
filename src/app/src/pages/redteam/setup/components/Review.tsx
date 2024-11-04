@@ -39,7 +39,6 @@ export default function Review() {
     URL.revokeObjectURL(url);
   };
 
-  // Enhanced plugin handling
   const getPluginSummary = useCallback((plugin: string | RedteamPlugin) => {
     if (typeof plugin === 'string') {
       return { label: plugin, count: 1 };
@@ -52,7 +51,6 @@ export default function Review() {
     return { label: plugin.id, count: 1 };
   }, []);
 
-  // Group and count plugins
   const pluginSummary = useMemo(() => {
     const summary = new Map<string, number>();
 
@@ -64,7 +62,6 @@ export default function Review() {
     return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
   }, [config.plugins, getPluginSummary]);
 
-  // Get custom policies count and details
   const customPolicies = useMemo(() => {
     return config.plugins.filter(
       (p): p is PolicyPlugin => typeof p === 'object' && p.id === 'policy',
