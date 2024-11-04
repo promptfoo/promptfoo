@@ -29,7 +29,7 @@ export default [
     },
   },
   {
-    ignores: ['dist/**/*', 'site/.docusaurus/**/*', 'site/build/**/*'],
+    ignores: ['dist/**/*', 'site/.docusaurus/**/*', 'site/build/**/*', '**/venv/**/*'],
   },
   {
     languageOptions: {
