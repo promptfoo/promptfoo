@@ -6,6 +6,7 @@ import path from 'path';
 import { getEnvBool, getEnvString, getEnvInt } from './envars';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
+import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 
 let cacheInstance: Cache | undefined;
@@ -50,7 +51,7 @@ export type FetchWithCacheResult<T> = {
 export async function fetchWithCache<T = any>(
   url: RequestInfo,
   options: RequestInit = {},
-  timeout: number,
+  timeout: number = REQUEST_TIMEOUT_MS,
   format: 'json' | 'text' = 'json',
   bust: boolean = false,
 ): Promise<FetchWithCacheResult<T>> {

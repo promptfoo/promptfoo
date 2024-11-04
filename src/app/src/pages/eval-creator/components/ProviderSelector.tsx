@@ -1,9 +1,13 @@
 import React from 'react';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import TextField from '@mui/material/TextField';
 import type { ProviderOptions } from '@promptfoo/types';
+import { useProvidersStore } from '../../../store/providersStore';
+import AddLocalProviderDialog from './AddLocalProviderDialog';
 import ProviderConfigDialog from './ProviderConfigDialog';
 
 const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: string })[])
@@ -35,16 +39,17 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
   .concat(
     [
       'anthropic:messages:claude-3-5-sonnet-20241022',
+      'anthropic:messages:claude-3-5-sonnet-20240620',
       'anthropic:messages:claude-3-haiku-20240307',
-      'anthropic:messages:claude-3-sonnet-20240229',
       'anthropic:messages:claude-3-opus-20240229',
     ].map((id) => ({ id, config: { max_tokens: 1024, temperature: 0.5 } })),
   )
   .concat(
     [
-      'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
-      'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
+      'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+      'bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0',
       'bedrock:anthropic.claude-3-opus-20240307-v1:0',
+      'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
     ].map((id) => ({ id, config: { max_tokens_to_sample: 256, temperature: 0.5 } })),
   )
   .concat(
@@ -190,103 +195,99 @@ interface ProviderSelectorProps {
 }
 
 const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
+  const { customProviders, addCustomProvider } = useProvidersStore();
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
+  const [isAddLocalDialogOpen, setIsAddLocalDialogOpen] = React.useState(false);
 
-  const getProviderLabel = (provider: string | ProviderOptions): string => {
-    if (typeof provider === 'string') {
-      return provider;
-    }
-    return provider.id || 'Unknown provider';
+  const handleAddLocalProvider = (provider: ProviderOptions) => {
+    addCustomProvider(provider);
+    onChange([...providers, provider]);
   };
 
-  const getProviderKey = (provider: string | ProviderOptions, index: number): string | number => {
-    if (typeof provider === 'string') {
-      return provider;
-    }
-    return provider.id || index;
+  const allProviders = React.useMemo(() => {
+    return [...defaultProviders, ...customProviders];
+  }, [customProviders]);
+
+  const handleProviderClick = (provider: ProviderOptions | string) => {
+    setSelectedProvider(typeof provider === 'string' ? { id: provider } : provider);
   };
 
-  const handleProviderClick = (provider: string | ProviderOptions): void => {
-    if (typeof provider === 'string') {
-      alert('Cannot edit custom providers');
-    } else if (provider.config) {
-      setSelectedProvider(provider as ProviderOptions);
-    } else {
-      alert('There is no config for this provider');
-    }
+  const handleSave = (providerId: string, config: Record<string, any>) => {
+    onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
+    setSelectedProvider(null);
   };
 
-  const handleSave = (config: ProviderOptions['config']): void => {
-    if (selectedProvider) {
-      const updatedProviders = providers.map((provider) =>
-        provider.id === selectedProvider.id ? { ...provider, config } : provider,
-      );
-      onChange(updatedProviders);
-      setSelectedProvider(null);
+  const getOptionLabel = (option: string | ProviderOptions): string => {
+    if (typeof option === 'string') {
+      return option;
     }
+    return option.label || option.id || '';
+  };
+
+  const getGroupByValue = (option: string | ProviderOptions): string => {
+    const id = typeof option === 'string' ? option : option.id;
+    return getGroupName(id);
   };
 
   return (
     <Box mt={2}>
-      <Autocomplete
-        multiple
-        freeSolo
-        options={defaultProviders}
-        value={providers}
-        groupBy={(option) => getGroupName(option.id)}
-        onChange={(event, newValue: (string | ProviderOptions)[]) => {
-          onChange(newValue.map((value) => (typeof value === 'string' ? { id: value } : value)));
-        }}
-        getOptionLabel={(option) => {
-          if (!option) {
-            return '';
-          }
-
-          let optionString: string = '';
-          if (typeof option === 'string') {
-            optionString = option;
-          }
-          if (
-            (option as ProviderOptions).id &&
-            typeof (option as ProviderOptions).id === 'string'
-          ) {
-            optionString = (option as ProviderOptions).id!;
-          }
-          const splits = optionString.split(':');
-          if (splits.length > 1) {
-            // account for Anthropic messages ID format having the descriptive text in the third split
-            if (splits.length > 2 && splits[0] === 'anthropic') {
-              return splits[2];
-            } else {
-              return splits[1];
-            }
-          }
-          return 'Unknown provider';
-        }}
-        renderTags={(value, getTagProps) =>
-          value.map((provider, index: number) => {
-            const label = getProviderLabel(provider);
-            const key = getProviderKey(provider, index);
-
-            return (
+      <Box display="flex" gap={2} alignItems="stretch">
+        <Autocomplete
+          sx={{
+            flex: 1,
+            '& .MuiOutlinedInput-root': {
+              height: '56px',
+            },
+          }}
+          multiple
+          freeSolo
+          options={allProviders}
+          value={providers}
+          groupBy={getGroupByValue}
+          onChange={(event, newValue: (string | ProviderOptions)[]) => {
+            onChange(newValue.map((value) => (typeof value === 'string' ? { id: value } : value)));
+          }}
+          getOptionLabel={getOptionLabel}
+          renderTags={(value, getTagProps) =>
+            value.map((provider, index: number) => (
               <Chip
                 variant="outlined"
-                label={label}
+                label={getOptionLabel(provider)}
                 {...getTagProps({ index })}
-                key={key}
+                key={typeof provider === 'string' ? provider : provider.id || index}
                 onClick={() => handleProviderClick(provider)}
               />
-            );
-          })
-        }
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            variant="outlined"
-            placeholder="Select LLM providers"
-            helperText={providers.length > 0 ? 'Click a provider to configure its settings.' : null}
-          />
-        )}
+            ))
+          }
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              variant="outlined"
+              placeholder="Select LLM providers"
+              helperText={
+                providers.length > 0 ? 'Click a provider to configure its settings.' : null
+              }
+            />
+          )}
+        />
+        <Button
+          variant="outlined"
+          onClick={() => setIsAddLocalDialogOpen(true)}
+          startIcon={<FolderOpenIcon />}
+          sx={{
+            height: '56px',
+            whiteSpace: 'nowrap',
+            px: 3,
+            minWidth: 'fit-content',
+          }}
+        >
+          Reference Local Provider
+        </Button>
+      </Box>
+      <AddLocalProviderDialog
+        open={isAddLocalDialogOpen}
+        onClose={() => setIsAddLocalDialogOpen(false)}
+        onAdd={handleAddLocalProvider}
       />
       {selectedProvider && selectedProvider.id && (
         <ProviderConfigDialog

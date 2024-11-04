@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import { VERSION } from '../../constants';
 import logger from '../../logger';
 import type {
   ApiProvider,
@@ -49,6 +50,7 @@ export default class GoatProvider implements ApiProvider {
           messages,
           prompt: context?.prompt?.raw,
           task: 'goat',
+          version: VERSION,
         }),
         headers: {
           'Content-Type': 'application/json',
@@ -68,6 +70,9 @@ export default class GoatProvider implements ApiProvider {
         context,
         options,
       );
+      if (targetResponse.error) {
+        throw new Error(`Error from target provider: ${targetResponse.error}`);
+      }
       invariant(targetResponse.output, 'Expected target response to be set');
       messages.push({
         content: targetResponse.output,

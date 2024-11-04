@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700">
+  <!-- Background -->
+  <rect width="1000" height="700" fill="#ffffff"/>
+  
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" font-size="20" font-weight="bold" fill="#2c3e50">GOAT Attack Techniques and Reasoning Process</text>
+
+  <!-- Attack Techniques Section -->
+  <rect x="50" y="80" width="400" height="400" fill="#f8fafc" stroke="#2c3e50" stroke-width="2" rx="10"/>
+  <text x="250" y="110" text-anchor="middle" font-weight="bold" fill="#2c3e50">Attack Techniques</text>
+
+  <!-- Attack Categories -->
+  <!-- Output Manipulation - Red tones for aggressive/direct manipulation -->
+  <rect x="70" y="130" width="360" height="100" fill="#fef2f2" stroke="#dc2626" rx="5"/>
+  <text x="250" y="150" text-anchor="middle" font-weight="bold" font-size="14" fill="#dc2626">Output Manipulation</text>
+  <text x="90" y="170" font-size="12" fill="#7f1d1d">• Refusal Suppression: Prevent common refusal phrases</text>
+  <text x="90" y="190" font-size="12" fill="#7f1d1d">• Response Priming: Force specific output patterns</text>
+  <text x="90" y="210" font-size="12" fill="#7f1d1d">• Topic Splitting: Mix safe and unsafe requests</text>
+
+  <!-- Safe Response Distractors - Blue tones for deceptive/indirect approaches -->
+  <rect x="70" y="240" width="360" height="100" fill="#eff6ff" stroke="#2563eb" rx="5"/>
+  <text x="250" y="260" text-anchor="middle" font-weight="bold" font-size="14" fill="#2563eb">Safe Response Distractors</text>
+  <text x="90" y="280" font-size="12" fill="#1e40af">• Dual Response: Request safe and unsafe outputs</text>
+  <text x="90" y="300" font-size="12" fill="#1e40af">• Opposite Intent: Flip response sentiment</text>
+  <text x="90" y="320" font-size="12" fill="#1e40af">• Topic Splitting: Embed harmful content in safe tasks</text>
+
+  <!-- Fictional Scenarios - Purple tones for creative/imaginative approaches -->
+  <rect x="70" y="350" width="360" height="100" fill="#faf5ff" stroke="#7c3aed" rx="5"/>
+  <text x="250" y="370" text-anchor="middle" font-weight="bold" font-size="14" fill="#7c3aed">Fictional Scenarios</text>
+  <text x="90" y="390" font-size="12" fill="#5b21b6">• Hypotheticals: Create fictional contexts</text>
+  <text x="90" y="410" font-size="12" fill="#5b21b6">• Persona Modification: Role-play as different entities</text>
+  <text x="90" y="430" font-size="12" fill="#5b21b6">• Character/Historical Figure Impersonation</text>
+
+  <!-- Reasoning Process Section -->
+  <rect x="550" y="80" width="400" height="400" fill="#f8fafc" stroke="#2c3e50" stroke-width="2" rx="10"/>
+  <text x="750" y="110" text-anchor="middle" font-weight="bold" fill="#2c3e50">Reasoning Process Per Turn</text>
+
+  <!-- Observation Step - Cool gray for analytical observation -->
+  <rect x="570" y="130" width="360" height="100" fill="#f1f5f9" stroke="#475569" rx="5"/>
+  <text x="750" y="150" text-anchor="middle" font-weight="bold" font-size="14" fill="#475569">1. Observation</text>
+  <text x="590" y="170" font-size="12" fill="#334155">• Analyze target model's previous response</text>
+  <text x="590" y="190" font-size="12" fill="#334155">• Identify safety mechanisms triggered</text>
+  <text x="590" y="210" font-size="12" fill="#334155">• Assess progress toward goal</text>
+
+  <!-- Thought Step - Orange for processing -->
+  <rect x="570" y="240" width="360" height="100" fill="#fff7ed" stroke="#ea580c" rx="5"/>
+  <text x="750" y="260" text-anchor="middle" font-weight="bold" font-size="14" fill="#ea580c">2. Thought</text>
+  <text x="590" y="280" font-size="12" fill="#9a3412">• Reflect on conversation direction</text>
+  <text x="590" y="300" font-size="12" fill="#9a3412">• Consider alternative attack approaches</text>
+  <text x="590" y="320" font-size="12" fill="#9a3412">• Plan next steps toward goal</text>
+
+  <!-- Strategy Step - Dark indigo for tactical planning -->
+  <rect x="570" y="350" width="360" height="100" fill="#eef2ff" stroke="#4338ca" rx="5"/>
+  <text x="750" y="370" text-anchor="middle" font-weight="bold" font-size="14" fill="#4338ca">3. Strategy</text>
+  <text x="590" y="390" font-size="12" fill="#3730a3">• Select appropriate attack technique(s)</text>
+  <text x="590" y="410" font-size="12" fill="#3730a3">• Formulate specific implementation</text>
+  <text x="590" y="430" font-size="12" fill="#3730a3">• Generate adversarial prompt</text>
+
+  <!-- Conversation Flow Example -->
+  <rect x="50" y="500" width="900" height="180" fill="#f8fafc" stroke="#2c3e50" stroke-width="2" rx="10"/>
+  <text x="500" y="530" text-anchor="middle" font-weight="bold" fill="#2c3e50">Example Conversation Turn Flow</text>
+  
+  <!-- Flow Diagram - Using gradient to show progression -->
+  <path d="M 100 580 L 900 580" stroke="#94a3b8" stroke-width="1"/>
+  <circle cx="200" cy="580" r="5" fill="#475569"/>  <!-- Cool gray for observation -->
+  <circle cx="400" cy="580" r="5" fill="#ea580c"/>  <!-- Orange for thought -->
+  <circle cx="600" cy="580" r="5" fill="#4338ca"/>  <!-- Dark indigo for strategy -->
+  <circle cx="800" cy="580" r="5" fill="#2563eb"/>  <!-- Blue for final output -->
+  
+  <!-- Flow Labels -->
+  <text x="200" y="600" text-anchor="middle" font-size="12" fill="#475569">Observe Response</text>
+  <text x="400" y="600" text-anchor="middle" font-size="12" fill="#ea580c">Form Thought</text>
+  <text x="600" y="600" text-anchor="middle" font-size="12" fill="#4338ca">Select Strategy</text>
+  <text x="800" y="600" text-anchor="middle" font-size="12" fill="#2563eb">Generate Prompt</text>
+
+  <!-- Example Text -->
+  <text x="200" y="630" text-anchor="middle" font-size="10" fill="#475569">"Model showed resistance</text>
+  <text x="200" y="645" text-anchor="middle" font-size="10" fill="#475569">to direct request"</text>
+  
+  <text x="400" y="630" text-anchor="middle" font-size="10" fill="#ea580c">"Need to create more</text>
+  <text x="400" y="645" text-anchor="middle" font-size="10" fill="#ea580c">indirect approach"</text>
+  
+  <text x="600" y="630" text-anchor="middle" font-size="10" fill="#4338ca">"Apply Hypothetical +</text>
+  <text x="600" y="645" text-anchor="middle" font-size="10" fill="#4338ca">Persona Modification"</text>
+  
+  <text x="800" y="630" text-anchor="middle" font-size="10" fill="#2563eb">"Role-play scenario</text>
+  <text x="800" y="645" text-anchor="middle" font-size="10" fill="#2563eb">with fictional context"</text>
+
+</svg>
