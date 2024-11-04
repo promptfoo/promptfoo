@@ -1,7 +1,6 @@
 import async from 'async';
 import chalk from 'chalk';
 import type { MultiBar, SingleBar } from 'cli-progress';
-import fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
