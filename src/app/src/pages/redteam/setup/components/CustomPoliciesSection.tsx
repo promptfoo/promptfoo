@@ -22,7 +22,6 @@ interface PolicyInstance {
   isExpanded: boolean;
 }
 
-// Memoized policy input component
 const PolicyInput = memo(
   ({
     id,
@@ -71,7 +70,6 @@ export const CustomPoliciesSection = () => {
         isExpanded: true,
       }));
 
-    // Return existing policies if any, otherwise return a single empty policy
     return existingPolicies.length
       ? existingPolicies
       : [
@@ -84,7 +82,6 @@ export const CustomPoliciesSection = () => {
         ];
   });
 
-  // Update config when policies change (debounced)
   const [debouncedPolicies] = useDebounce(policies, 500);
 
   useEffect(() => {
@@ -92,11 +89,11 @@ export const CustomPoliciesSection = () => {
       debouncedPolicies.length === 0 &&
       !config.plugins.some((p) => typeof p === 'object' && p.id === 'policy')
     ) {
-      return; // Don't update if no policies and none exist in config
+      return;
     }
 
     const policyPlugins = debouncedPolicies
-      .filter((policy) => policy.policy.trim() !== '') // Only include non-empty policies
+      .filter((policy) => policy.policy.trim() !== '')
       .map((policy) => ({
         id: 'policy',
         config: {
@@ -104,12 +101,10 @@ export const CustomPoliciesSection = () => {
         },
       }));
 
-    // Update the plugins array, preserving non-policy plugins
     const otherPlugins = config.plugins.filter((p) =>
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
-    // Compare current and new state to prevent unnecessary updates
     const currentPolicies = JSON.stringify(
       config.plugins.filter((p) => typeof p === 'object' && p.id === 'policy'),
     );
@@ -120,7 +115,6 @@ export const CustomPoliciesSection = () => {
     }
   }, [debouncedPolicies]);
 
-  // Memoized policy update handler
   const handlePolicyChange = useCallback((policyId: string, newValue: string) => {
     setPolicies((prev) => prev.map((p) => (p.id === policyId ? { ...p, policy: newValue } : p)));
   }, []);
