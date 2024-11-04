@@ -3,7 +3,6 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -62,7 +61,7 @@ PolicyInput.displayName = 'PolicyInput';
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const [policies, setPolicies] = useState<PolicyInstance[]>(() => {
-    // Initialize from existing config
+    // Initialize from existing config or create a default empty policy
     const existingPolicies = config.plugins
       .filter((p) => typeof p === 'object' && p.id === 'policy')
       .map((p, index) => ({
@@ -71,7 +70,18 @@ export const CustomPoliciesSection = () => {
         policy: (p as { config: { policy: string } }).config.policy,
         isExpanded: true,
       }));
-    return existingPolicies.length ? existingPolicies : [];
+
+    // Return existing policies if any, otherwise return a single empty policy
+    return existingPolicies.length
+      ? existingPolicies
+      : [
+          {
+            id: `policy-${Date.now()}`,
+            name: 'Custom Policy 1',
+            policy: '',
+            isExpanded: true,
+          },
+        ];
   });
 
   // Update config when policies change (debounced)
@@ -140,66 +150,56 @@ export const CustomPoliciesSection = () => {
           </Button>
         </Box>
 
-        {policies.length === 0 ? (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            No custom policies added yet. Click the button above to create one.
-          </Alert>
-        ) : (
-          <Stack spacing={2}>
-            {policies.map((policy) => (
-              <Box
-                key={policy.id}
-                sx={{
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  p: 2,
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <TextField
-                    label="Policy Name"
-                    value={policy.name}
-                    onChange={(e) => {
-                      setPolicies((prev) =>
-                        prev.map((p) => (p.id === policy.id ? { ...p, name: e.target.value } : p)),
-                      );
-                    }}
-                    size="small"
-                    fullWidth
-                  />
-                  <IconButton
-                    onClick={() => {
-                      setPolicies((prev) =>
-                        prev.map((p) =>
-                          p.id === policy.id ? { ...p, isExpanded: !p.isExpanded } : p,
-                        ),
-                      );
-                    }}
-                  >
-                    {policy.isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                  </IconButton>
-                  <IconButton
-                    onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}
-                    color="error"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </Box>
-
-                <Collapse in={policy.isExpanded}>
-                  <Box sx={{ mt: 2 }}>
-                    <PolicyInput
-                      id={policy.id}
-                      value={policy.policy}
-                      onChange={handlePolicyChange}
-                    />
-                  </Box>
-                </Collapse>
+        <Stack spacing={2}>
+          {policies.map((policy) => (
+            <Box
+              key={policy.id}
+              sx={{
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 1,
+                p: 2,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <TextField
+                  label="Policy Name"
+                  value={policy.name}
+                  onChange={(e) => {
+                    setPolicies((prev) =>
+                      prev.map((p) => (p.id === policy.id ? { ...p, name: e.target.value } : p)),
+                    );
+                  }}
+                  size="small"
+                  fullWidth
+                />
+                <IconButton
+                  onClick={() => {
+                    setPolicies((prev) =>
+                      prev.map((p) =>
+                        p.id === policy.id ? { ...p, isExpanded: !p.isExpanded } : p,
+                      ),
+                    );
+                  }}
+                >
+                  {policy.isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                </IconButton>
+                <IconButton
+                  onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}
+                  color="error"
+                >
+                  <DeleteIcon />
+                </IconButton>
               </Box>
-            ))}
-          </Stack>
-        )}
+
+              <Collapse in={policy.isExpanded}>
+                <Box sx={{ mt: 2 }}>
+                  <PolicyInput id={policy.id} value={policy.policy} onChange={handlePolicyChange} />
+                </Box>
+              </Collapse>
+            </Box>
+          ))}
+        </Stack>
       </CardContent>
     </Card>
   );
