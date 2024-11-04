@@ -13,6 +13,21 @@ describe('eval routes', () => {
     await runDbMigrations();
   });
 
+  function createManualRatingPayload(originalResult: any, pass: boolean) {
+    const payload = { ...originalResult.gradingResult };
+    const score = pass ? 1 : 0;
+    payload.componentResults?.push({
+      pass,
+      score,
+      reason: 'Manual result (overrides all other grading results)',
+      assertion: { type: 'human' },
+    });
+    payload.reason = 'Manual result (overrides all other grading results)';
+    payload.pass = pass;
+    payload.score = score;
+    return payload;
+  }
+
   describe('post("/:evalId/results/:id/rating")', () => {
     it('Passing test and the user marked it as passing (no change)', async () => {
       const eval_ = await EvalFactory.create();
@@ -26,14 +41,7 @@ describe('eval routes', () => {
 
       expect(result.gradingResult?.pass).toBe(true);
       expect(result.gradingResult?.score).toBe(1);
-      const ratingPayload = { ...result.gradingResult };
-      ratingPayload.componentResults?.push({
-        pass: true,
-        score: 1,
-        reason: 'Manual result (overrides all other grading results)',
-        assertion: { type: 'human' },
-      });
-      ratingPayload.reason = 'Manual result (overrides all other grading results)';
+      const ratingPayload = createManualRatingPayload(result, true);
 
       const res = await request(app)
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
@@ -70,16 +78,7 @@ describe('eval routes', () => {
 
       expect(result.gradingResult?.pass).toBe(true);
       expect(result.gradingResult?.score).toBe(1);
-      const ratingPayload = { ...result.gradingResult };
-      ratingPayload.componentResults?.push({
-        pass: false,
-        score: 0,
-        reason: 'Manual result (overrides all other grading results)',
-        assertion: { type: 'human' },
-      });
-      ratingPayload.reason = 'Manual result (overrides all other grading results)';
-      ratingPayload.pass = false;
-      ratingPayload.score = 0;
+      const ratingPayload = createManualRatingPayload(result, false);
       const res = await request(app)
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(ratingPayload);
@@ -115,16 +114,7 @@ describe('eval routes', () => {
       expect(result.gradingResult?.pass).toBe(false);
       expect(result.gradingResult?.score).toBe(0);
 
-      const ratingPayload = { ...result.gradingResult };
-      ratingPayload.componentResults?.push({
-        pass: true,
-        score: 1,
-        reason: 'Manual result (overrides all other grading results)',
-        assertion: { type: 'human' },
-      });
-      ratingPayload.reason = 'Manual result (overrides all other grading results)';
-      ratingPayload.pass = true;
-      ratingPayload.score = 1;
+      const ratingPayload = createManualRatingPayload(result, true);
 
       const res = await request(app)
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
@@ -163,16 +153,7 @@ describe('eval routes', () => {
 
       expect(result.gradingResult?.pass).toBe(false);
       expect(result.gradingResult?.score).toBe(0);
-      const ratingPayload = { ...result.gradingResult };
-      ratingPayload.componentResults?.push({
-        pass: false,
-        score: 0,
-        reason: 'Manual result (overrides all other grading results)',
-        assertion: { type: 'human' },
-      });
-      ratingPayload.reason = 'Manual result (overrides all other grading results)';
-      ratingPayload.pass = false;
-      ratingPayload.score = 0;
+      const ratingPayload = createManualRatingPayload(result, false);
       const res = await request(app)
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(ratingPayload);
