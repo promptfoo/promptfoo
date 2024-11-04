@@ -42,9 +42,10 @@ The `anthropic` provider supports the following models via the messages API:
 
 - `anthropic:messages:claude-3-5-sonnet-20241022`
 - `anthropic:messages:claude-3-5-sonnet-20240620`
-- `anthropic:messages:claude-3-haiku-20240307`
-- `anthropic:messages:claude-3-sonnet-20240229`
+- `anthropic:messages:claude-3-5-haiku-20241022`
 - `anthropic:messages:claude-3-opus-20240229`
+- `anthropic:messages:claude-3-sonnet-20240229`
+- `anthropic:messages:claude-3-haiku-20240307`
 - `anthropic:messages:claude-2.0`
 - `anthropic:messages:claude-2.1`
 - `anthropic:messages:claude-instant-1.2`
