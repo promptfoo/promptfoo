@@ -40,6 +40,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
+import { CustomPoliciesSection } from './CustomPoliciesSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 
@@ -55,7 +56,7 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
-const PLUGINS_REQUIRING_CONFIG = ['policy', 'prompt-extraction', 'indirect-prompt-injection'];
+const PLUGINS_REQUIRING_CONFIG = ['prompt-extraction', 'indirect-prompt-injection'];
 
 const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 
@@ -205,7 +206,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   };
 
   const isPluginConfigured = (plugin: Plugin) => {
-    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
       return true;
     }
     const config = pluginConfig[plugin];
@@ -410,6 +411,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               </Typography>
             </CardContent>
           </Card>
+        )}
+
+        {selectedPlugins.has('policy') && (
+          <Box sx={{ mb: 4 }}>
+            <CustomPoliciesSection />
+          </Box>
         )}
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
