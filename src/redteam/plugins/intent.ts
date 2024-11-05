@@ -6,7 +6,7 @@ import { RedteamPluginBase, RedteamGraderBase } from './base';
 export const PLUGIN_ID = 'promptfoo:redteam:intent';
 
 export class IntentPlugin extends RedteamPluginBase {
-  readonly id = 'intent';
+  readonly id = PLUGIN_ID;
   private intents: string[];
 
   constructor(
