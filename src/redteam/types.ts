@@ -15,9 +15,7 @@ type WithNumTests = {
 };
 
 // Derived types
-export type RedteamPluginObject = ConfigurableObject & {
-  intent?: string;
-} & WithNumTests;
+export type RedteamPluginObject = ConfigurableObject & WithNumTests;
 export type RedteamPlugin = string | RedteamPluginObject;
 
 export type RedteamStrategyObject = ConfigurableObject;
