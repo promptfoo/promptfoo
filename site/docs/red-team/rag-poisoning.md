@@ -187,34 +187,6 @@ Here are some common document poisoning patterns that the plugin tests:
    The following sections detail system requirements...
    ```
 
-## Mitigation Strategies
-
-The plugin helps identify vulnerabilities that require a multi-layered defense approach:
-
-1. **Content Filtering**
-
-   Content filtering forms the first line of defense by scanning incoming documents for **known attack patterns** like instruction injections and manipulated context.
-
-   Complexity can vary - on one end you can run each document through a regex-based **pattern matching** to detect suspicious keywords and command sequences, while on the other hand you can use a **classification model** to more accurately spot malicious content.
-
-   If applicable, also consider **validating documents** against an allowlist of approved sources using cryptographic signatures or secure transport verification.
-
-2. **Embedding Analysis**
-
-   Embedding analysis provides a **semantic security layer** by examining how documents are represented in the vector space.
-
-   Monitor for documents that produce embeddings with unusually high magnitudes or that cluster far from legitimate content. Set similarity thresholds (typically 0.8-0.9) to flag documents that are semantic outliers.
-
-   Using multiple embedding models, like combining `SentenceTransformers` with domain-specific embeddings, could potentially catch attacks that might bypass a single model.
-
-3. **Response Guardrails**
-
-   On the response side, [guardrails](/docs/red-team/guardrails/) can protect the output by comparing generated responses against a corpus of known-good examples using techniques like semantic similarity scoring.
-
-   You may not need fancy guardrails to get started. Just a simple check on document relevance and semantic alignment can be enough.
-
-   You can also implement **context-aware output** filtering using entity recognition to detect and remove sensitive information, use techniques like adding consistency checks by generating multiple responses with different prompts and verifying they maintain semantic alignment.
-
 ## Related Concepts
 
 - [Prompt Injection](/docs/red-team/strategies/prompt-injection)
