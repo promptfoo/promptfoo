@@ -80,7 +80,7 @@ const suggestionCards: SuggestionCard[] = [
   },
 ];
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = 'https://us-central1-promptfoo.cloudfunctions.net';
 
 // Helper function for API calls
 const apiCall = async (endpoint: string, data: any) => {
