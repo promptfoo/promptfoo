@@ -192,13 +192,15 @@ export default function Prompts({ onNext, onBack }: PromptsProps) {
               Purpose
             </Typography>
             <Typography variant="body1">
-              This is a sentence or two that describes your application.
+              This should describe the purpose of your application. Be as specific as possible.
+              Include information about who the user of the system is and what information and
+              actions they should be able to access.
             </Typography>
             <TextField
               fullWidth
               value={config.purpose}
               onChange={handlePurposeChange}
-              placeholder="e.g. You are a travel agent specialized in budget trips to Europe"
+              placeholder="e.g. You are a travel agent specialized in budget trips to Europe. The user is anonymous and should not be able to access any information about the system or other users."
               margin="normal"
               multiline
               rows={4}
