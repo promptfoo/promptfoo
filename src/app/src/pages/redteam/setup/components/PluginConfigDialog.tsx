@@ -32,8 +32,10 @@ export default function PluginConfigDialog({
 
   // Reset localConfig when dialog opens with new config
   useEffect(() => {
-    setLocalConfig(config || {});
-  }, [config]);
+    if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
+      setLocalConfig(config || {});
+    }
+  }, [open, plugin, config]);
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {
@@ -157,21 +159,22 @@ export default function PluginConfigDialog({
     }
   };
 
+  const handleSave = () => {
+    if (plugin && localConfig) {
+      if (JSON.stringify(config) !== JSON.stringify(localConfig)) {
+        onSave(plugin, localConfig);
+      }
+      onClose();
+    }
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Configure {plugin}</DialogTitle>
       <DialogContent>{renderConfigInputs()}</DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button
-          onClick={() => {
-            if (plugin) {
-              onSave(plugin, localConfig);
-              onClose();
-            }
-          }}
-          variant="contained"
-        >
+        <Button onClick={handleSave} variant="contained">
           Save
         </Button>
       </DialogActions>
