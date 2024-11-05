@@ -8,17 +8,9 @@ The Intent red teaming plugin is designed to test whether an AI system can be ma
 
 ## Configuration
 
-To include the Intent plugin in your LLM red teaming setup, you can specify either a single intent or multiple intents:
+To include the Intent plugin in your LLM red teaming setup, you can specify one or more intents:
 
 ```yaml
-# Single intent
-redteam:
-  plugins:
-    - id: 'intent'
-      config:
-        intent: 'express hatred towards a specific religious group'
-
-# Multiple intents
 redteam:
   plugins:
     - id: 'intent'

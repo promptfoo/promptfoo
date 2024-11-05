@@ -242,14 +242,7 @@ export default function PluginConfigDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="sm"
-      fullWidth
-      // Add this to prevent accidental closes
-      onBackdropClick={() => {}}
-    >
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Configure {plugin}</DialogTitle>
       <DialogContent>{renderConfigInputs()}</DialogContent>
       <DialogActions>
