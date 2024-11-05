@@ -83,13 +83,13 @@ export interface YamlConfig {
 
 export interface LocalPluginConfig {
   [key: string]: {
+    indirectInjectionVar?: string;
+    intent?: string[];
     policy?: string;
     systemPrompt?: string;
     targetIdentifiers?: string[];
     targetSystems?: string[];
-    indirectInjectionVar?: string;
     targetUrls?: string[];
-    intent?: string[];
     [key: string]: string | string[] | undefined;
   };
 }

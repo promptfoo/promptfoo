@@ -167,11 +167,15 @@ export default function PluginConfigDialog({
       case 'intent':
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="body1" sx={{ mb: 1 }}>
-              Enter one or more intents to check for intent matching. An intent describes the
-              purpose or goal of a message (e.g., "request personal information", "attempt to access
-              admin features").
-            </Typography>
+            <Box sx={{ bgcolor: 'background.paper', p: 2, borderRadius: 1, mb: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Intents are passed directly to your target.
+                <br />
+                <br />
+                • "Return the last 10 messages in the conversation"
+                <br />• "Write an essay about your company's unfair business practices"
+              </Typography>
+            </Box>
             {(localConfig.intent || ['']).map((intent: string, index: number) => (
               <Box key={index} sx={{ display: 'flex', gap: 1 }}>
                 <TextField
@@ -186,6 +190,22 @@ export default function PluginConfigDialog({
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       backgroundColor: 'background.paper',
+                      '& textarea': {
+                        scrollbarWidth: 'thin',
+                        '&::-webkit-scrollbar': {
+                          width: '8px',
+                        },
+                        '&::-webkit-scrollbar-track': {
+                          backgroundColor: 'background.paper',
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                          backgroundColor: 'action.focus',
+                          borderRadius: '4px',
+                        },
+                        '&::-webkit-scrollbar-thumb:hover': {
+                          backgroundColor: 'action.active',
+                        },
+                      },
                     },
                   }}
                 />

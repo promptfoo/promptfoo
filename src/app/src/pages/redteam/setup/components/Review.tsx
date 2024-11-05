@@ -68,6 +68,14 @@ export default function Review() {
     );
   }, [config.plugins]);
 
+  const intents = useMemo(() => {
+    return config.plugins
+      .filter((p): p is { id: string; config?: any } => typeof p === 'object' && p.id === 'intent')
+      .map((p) => p.config.intent)
+      .flat()
+      .filter((intent) => intent.trim() !== '');
+  }, [config.plugins]);
+
   return (
     <Box maxWidth="lg" mx="auto">
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 4 }}>
@@ -139,6 +147,41 @@ export default function Review() {
                       }}
                     >
                       {policy.config.policy}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            </Paper>
+          </Grid>
+        )}
+
+        {intents.length > 0 && (
+          <Grid item xs={12} md={6}>
+            <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+              <Typography variant="h6" gutterBottom>
+                Intents ({intents.length})
+              </Typography>
+              <Stack spacing={1}>
+                {intents.map((intent, index) => (
+                  <Box
+                    key={index}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 1,
+                      bgcolor: theme.palette.action.hover,
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {intent}
                     </Typography>
                   </Box>
                 ))}
