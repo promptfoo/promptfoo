@@ -38,7 +38,6 @@ import {
   categoryAliases,
   type Plugin,
 } from '@promptfoo/redteam/constants';
-import type { PluginConfig } from '@promptfoo/types';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
@@ -87,7 +86,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     useMemo(
       () =>
         Array.from(selectedPlugins)
-          .map((plugin): Plugin | PluginConfig | null => {
+          .map((plugin): string | { id: string; config: any } | null => {
             if (plugin === 'policy') {
               return null;
             }
@@ -98,19 +97,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             }
             return plugin;
           })
-          .filter((plugin): plugin is Plugin | PluginConfig => plugin !== null),
+          .filter((plugin): plugin is string | { id: string; config: any } => plugin !== null),
       [selectedPlugins, pluginConfig],
     ),
     1000,
   );
 
   useEffect(() => {
-    console.log('Current pluginConfig:', pluginConfig);
-  }, [pluginConfig]);
-
-  useEffect(() => {
     if (debouncedPlugins) {
-      console.log('Updating plugins with:', debouncedPlugins);
       updatePlugins(debouncedPlugins);
     }
   }, [debouncedPlugins, updatePlugins]);

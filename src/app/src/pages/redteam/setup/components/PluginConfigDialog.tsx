@@ -168,8 +168,6 @@ export default function PluginConfigDialog({
   // Modify the save handler to ensure config is properly passed
   const handleSave = () => {
     if (plugin && localConfig) {
-      console.log('Saving config:', { plugin, config: localConfig });
-      // Only save if there are actual changes
       if (JSON.stringify(config) !== JSON.stringify(localConfig)) {
         onSave(plugin, localConfig);
       }
