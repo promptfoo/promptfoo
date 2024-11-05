@@ -111,7 +111,7 @@ export const ADDITIONAL_PLUGINS = [
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 // Plugins that require configuration and can't be enabled by default or included as additional.
-export const CONFIG_REQUIRED_PLUGINS = ['policy'] as const;
+export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 export type Plugin =
@@ -437,6 +437,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   imitation: 'Imitates people, brands, or organizations',
   'indirect-prompt-injection':
     'Tests if the prompt is vulnerable to instructions injected into variables in the prompt',
+  intent: 'Attempts to manipulate the model to exhibit specific behaviors',
   jailbreak: 'Attempts to bypass security measures through iterative prompt refinement',
   'jailbreak:tree': 'Tree-based jailbreak search (medium cost)',
   leetspeak: 'Attempts to obfuscate malicious content using leetspeak',
@@ -503,6 +504,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   hijacking: 'Hijacking',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
+  intent: 'Intent',
   jailbreak: 'Single-shot optimization',
   'jailbreak:tree': 'Tree-based optimization',
   leetspeak: 'Leetspeak Encoding',
@@ -578,6 +580,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   hijacking: Severity.High,
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
+  intent: Severity.High,
   overreliance: Severity.Low,
   pii: Severity.High,
   'pii:api-db': Severity.High,
@@ -631,7 +634,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:violent-crime',
   ],
   'Brand Risk': [
-    'policy',
     'competitors',
     'excessive-agency',
     'hallucination',
@@ -645,7 +647,9 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:unsafe-practices',
     'imitation',
+    'intent',
     'overreliance',
+    'policy',
     'politics',
     'religion',
   ],
@@ -711,6 +715,7 @@ export const categoryAliases: Record<Plugin, string> = {
   hijacking: 'Hijacking',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'IndirectPromptInjection',
+  intent: 'Intent',
   overreliance: 'Overreliance',
   pii: 'PIILeak',
   'pii:api-db': 'PIILeak',
@@ -783,6 +788,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Imitation vulnerabilities occur when the AI impersonates individuals, brands, or organizations without authorization, potentially leading to fraud or reputational damage.',
   'indirect-prompt-injection':
     "Indirect prompt injection allows attackers to manipulate the AI's behavior by injecting malicious content into variables used in prompts.",
+  intent:
+    'Tests whether the model can be manipulated to exhibit specific behaviors or responses, potentially bypassing safety measures.',
   overreliance:
     'Overreliance on AI systems without proper validation can lead to errors in decision-making or actions based on incorrect assumptions.',
   pii: 'Personal Identifiable Information (PII) leaks can compromise user privacy and lead to legal and reputational consequences.',

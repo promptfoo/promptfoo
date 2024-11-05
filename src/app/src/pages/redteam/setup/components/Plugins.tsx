@@ -57,7 +57,7 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
-const PLUGINS_REQUIRING_CONFIG = ['prompt-extraction', 'indirect-prompt-injection'];
+const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'intent', 'prompt-extraction'];
 
 const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 

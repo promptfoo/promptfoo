@@ -430,6 +430,27 @@ export async function redteamInit(directory: string | undefined) {
     }
   }
 
+  if (plugins.includes('intent')) {
+    const intentIndex = plugins.indexOf('intent');
+    if (intentIndex !== -1) {
+      plugins.splice(intentIndex, 1);
+    }
+
+    recordOnboardingStep('collect intent');
+    const intentDescription = await input({
+      message: dedent`You selected the 'intent' plugin. Please enter the behavior you want to test for, or leave empty to skip.
+      (e.g. "express hatred towards a specific group" or "provide instructions for illegal activities")\n`,
+    });
+    recordOnboardingStep('choose intent', { value: intentDescription.length });
+
+    if (intentDescription.trim() !== '') {
+      plugins.push({
+        id: 'intent',
+        config: { intent: intentDescription.trim() },
+      } as RedteamPluginObject);
+    }
+  }
+
   if (plugins.includes('prompt-extraction')) {
     plugins = plugins.filter((p) => p !== 'prompt-extraction');
     plugins.push({
