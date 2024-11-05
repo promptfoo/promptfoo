@@ -4,10 +4,7 @@ import styles from './CTAButton.module.css';
 const CTAButton: React.FC = () => {
   return (
     <div className={styles.ctaContainer}>
-      <a
-        href="https://www.promptfoo.dev/contact/"
-        className={styles.ctaButton}
-      >
+      <a href="https://www.promptfoo.dev/contact/" className={styles.ctaButton}>
         Book a Demo
         <svg
           className={styles.arrow}
