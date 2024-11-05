@@ -411,8 +411,36 @@ export const BEDROCK_MODEL = {
   },
   CLAUDE_MESSAGES: {
     params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
-      const { system, extractedMessages } = parseMessages(prompt);
-      const params: any = { messages: extractedMessages };
+      let messages;
+      let systemPrompt;
+      try {
+        const parsed = JSON.parse(prompt);
+        if (Array.isArray(parsed)) {
+          messages = parsed.map((msg) => ({
+            role: msg.role,
+            content: Array.isArray(msg.content)
+              ? msg.content
+              : [{ type: 'text', text: msg.content }],
+          }));
+        } else {
+          const { system, extractedMessages } = parseMessages(prompt);
+          messages = extractedMessages;
+          systemPrompt = system;
+        }
+      } catch {
+        const { system, extractedMessages } = parseMessages(prompt);
+        messages = extractedMessages;
+        systemPrompt = system;
+      }
+
+      const params: any = { messages };
+      addConfigParam(
+        params,
+        'anthropic_version',
+        config?.anthropic_version,
+        undefined,
+        'bedrock-2023-05-31',
+      );
       addConfigParam(
         params,
         'max_tokens',
@@ -436,12 +464,13 @@ export const BEDROCK_MODEL = {
         undefined,
       );
       addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
-      addConfigParam(params, 'system', system, undefined, undefined);
+      if (systemPrompt) {
+        addConfigParam(params, 'system', systemPrompt, undefined, undefined);
+      }
+
       return params;
     },
-    output: (responseJson: any) => {
-      return outputFromMessage(responseJson);
-    },
+    output: (responseJson: any) => outputFromMessage(responseJson),
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
