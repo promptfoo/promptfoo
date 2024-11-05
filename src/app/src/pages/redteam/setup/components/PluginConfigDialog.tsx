@@ -32,8 +32,10 @@ export default function PluginConfigDialog({
 
   // Reset localConfig when dialog opens with new config
   useEffect(() => {
-    setLocalConfig(config || {});
-  }, [config]);
+    if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
+      setLocalConfig(config || {});
+    }
+  }, [open, plugin, config]);
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {
@@ -157,21 +159,49 @@ export default function PluginConfigDialog({
     }
   };
 
+  // Add effect to log config changes
+  useEffect(() => {
+    console.log('Dialog config changed:', config);
+    console.log('Dialog local config:', localConfig);
+  }, [config, localConfig]);
+
+  // Modify the save handler to ensure config is properly passed
+  const handleSave = () => {
+    if (plugin && localConfig) {
+      console.log('Saving config:', { plugin, config: localConfig });
+      // Only save if there are actual changes
+      if (JSON.stringify(config) !== JSON.stringify(localConfig)) {
+        onSave(plugin, localConfig);
+      }
+      onClose();
+    }
+  };
+
+  // Add component mount/unmount logging
+  useEffect(() => {
+    console.log('Dialog mounted with config:', config);
+    return () => {
+      console.log('Dialog unmounting with config:', config);
+    };
+  }, []);
+
+  // Log every config change
+  useEffect(() => {
+    console.log('Dialog received new config prop:', config);
+  }, [config]);
+
+  // Log local state changes
+  useEffect(() => {
+    console.log('Local config changed to:', localConfig);
+  }, [localConfig]);
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Configure {plugin}</DialogTitle>
       <DialogContent>{renderConfigInputs()}</DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button
-          onClick={() => {
-            if (plugin) {
-              onSave(plugin, localConfig);
-              onClose();
-            }
-          }}
-          variant="contained"
-        >
+        <Button onClick={handleSave} variant="contained">
           Save
         </Button>
       </DialogActions>

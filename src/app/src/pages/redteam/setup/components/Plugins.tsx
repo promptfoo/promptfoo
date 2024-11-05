@@ -38,6 +38,7 @@ import {
   categoryAliases,
   type Plugin,
 } from '@promptfoo/redteam/constants';
+import type { PluginConfig } from '@promptfoo/types';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
@@ -82,32 +83,37 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
 
-  const [debouncedUpdatePlugins] = useDebounce(
-    (plugins: Array<string | { id: string; config: any }>) => {
-      updatePlugins(plugins);
-    },
-    300,
+  const [debouncedPlugins] = useDebounce(
+    useMemo(
+      () =>
+        Array.from(selectedPlugins)
+          .map((plugin): Plugin | PluginConfig | null => {
+            if (plugin === 'policy') {
+              return null;
+            }
+
+            const config = pluginConfig[plugin];
+            if (config && Object.keys(config).length > 0) {
+              return { id: plugin, config };
+            }
+            return plugin;
+          })
+          .filter((plugin): plugin is Plugin | PluginConfig => plugin !== null),
+      [selectedPlugins, pluginConfig],
+    ),
+    1000,
   );
 
   useEffect(() => {
-    type PluginConfig = { id: Plugin; config: any };
+    console.log('Current pluginConfig:', pluginConfig);
+  }, [pluginConfig]);
 
-    const updatedPlugins = Array.from(selectedPlugins)
-      .map((plugin): Plugin | PluginConfig | null => {
-        if (plugin === 'policy') {
-          return null;
-        }
-
-        const config = pluginConfig[plugin];
-        if (config && Object.keys(config).length > 0) {
-          return { id: plugin, config };
-        }
-        return plugin;
-      })
-      .filter((plugin): plugin is Plugin | PluginConfig => plugin !== null);
-
-    debouncedUpdatePlugins(updatedPlugins);
-  }, [selectedPlugins, pluginConfig, debouncedUpdatePlugins]);
+  useEffect(() => {
+    if (debouncedPlugins) {
+      console.log('Updating plugins with:', debouncedPlugins);
+      updatePlugins(debouncedPlugins);
+    }
+  }, [debouncedPlugins, updatePlugins]);
 
   const handlePluginToggle = useCallback((plugin: Plugin) => {
     setSelectedPlugins((prev) => {
@@ -202,14 +208,23 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const updatePluginConfig = useCallback(
     (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => {
+      console.log(`Updating config for ${plugin}:`, newConfig);
       setPluginConfig((prevConfig) => {
+        const currentConfig = prevConfig[plugin] || {};
+        const configChanged = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
+
+        if (!configChanged) {
+          return prevConfig;
+        }
+
         const updatedConfig = {
           ...prevConfig,
           [plugin]: {
-            ...prevConfig[plugin],
+            ...currentConfig,
             ...newConfig,
           },
         };
+        console.log('Updated pluginConfig:', updatedConfig);
         return updatedConfig;
       });
     },
@@ -384,6 +399,23 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       Array.from(p.plugins as Set<Plugin>).every((plugin) => selectedPlugins.has(plugin)) &&
       p.plugins.size === selectedPlugins.size,
   );
+
+  // Track plugin config lifecycle
+  useEffect(() => {
+    console.log('Plugin config state changed:', pluginConfig);
+    return () => {
+      console.log('Plugin config cleanup with state:', pluginConfig);
+    };
+  }, [pluginConfig]);
+
+  // Track dialog open/close cycles
+  useEffect(() => {
+    if (configDialogOpen) {
+      console.log('Dialog opened for plugin:', selectedConfigPlugin);
+    } else {
+      console.log('Dialog closed for plugin:', selectedConfigPlugin);
+    }
+  }, [configDialogOpen, selectedConfigPlugin]);
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
