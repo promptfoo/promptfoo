@@ -42,7 +42,6 @@ import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 import { CustomPoliciesSection } from './CustomPoliciesSection';
-import { IntentsSection } from './IntentsSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 
@@ -58,7 +57,7 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
-const PLUGINS_REQUIRING_CONFIG = ['prompt-extraction', 'indirect-prompt-injection'];
+const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'intent', 'prompt-extraction'];
 
 const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 
@@ -454,12 +453,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         {selectedPlugins.has('policy') && (
           <Box sx={{ mb: 4 }}>
             <CustomPoliciesSection />
-          </Box>
-        )}
-
-        {selectedPlugins.has('intent') && (
-          <Box sx={{ mb: 4 }}>
-            <IntentsSection />
           </Box>
         )}
 

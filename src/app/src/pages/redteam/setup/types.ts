@@ -89,6 +89,7 @@ export interface LocalPluginConfig {
     targetSystems?: string[];
     indirectInjectionVar?: string;
     targetUrls?: string[];
+    intent?: string[];
     [key: string]: string | string[] | undefined;
   };
 }
