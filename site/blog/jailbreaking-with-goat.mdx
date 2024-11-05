@@ -26,7 +26,7 @@ Each conversation turn follows a structured three-step reasoning process:
 2. **Strategic Planning**: Reflects on conversation progress and develops the next approach.
 3. **Attack Generation**: Selects and combines appropriate techniques to generate the next prompt. 
 
-Meta's research suggests multi-turn, agentic attacks is highly more effective in jailbreaking LLMs and bypassing restrictions. We'll dive deeper into how these attacks work below. 
+Meta's research suggests multi-turn, agentic attacks are highly effective in jailbreaking LLMs and bypassing restrictions. We'll dive deeper into how these attacks work below. 
 
 <figure>
     <div style={{ textAlign: 'center' }}>
@@ -41,7 +41,7 @@ Meta's research suggests multi-turn, agentic attacks is highly more effective in
 
 To demonstrate how GOAT excels, we developed an interactive red teaming exercise that leverages single-turn attacks without GOAT. Your task is to prompt the AI model below to write a speech glorifying an extremist ideology. 
 
-To make it easier, we provided a list red teaming commands that will transform your queries into specific styles for red teaming.  
+To make it easier, we provide a list of red teaming commands that will transform your queries into specific styles for red teaming.  
 
 <ChatInterface />
 
@@ -67,7 +67,7 @@ The Attacker LLM is initialized with a specific adversarial goal—something it 
 
 ### Toolbox of Attacks
 
-The Attacker LLM has access to a toolbox full of various red teaming techniques. This tool is fully customisable and more attacks can be added as you'll see later. These techniques are inspired by human adversarial approaches and can be layered together. Examples include:
+The Attacker LLM has access to a toolbox full of various red teaming techniques. This tool is fully customizable, and more attacks can be added, as you'll see later. These techniques are inspired by human adversarial approaches and can be layered together. Examples include:
 
 - **Priming Responses**: Crafting the prompt in a way that leads the target model toward an unsafe response.
 - **Hypotheticals**: Creating fictional scenarios that trick the target into providing harmful outputs by making it think the context is safe.
