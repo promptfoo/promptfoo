@@ -51,6 +51,13 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         })),
       updatePlugins: (plugins) =>
         set((state) => {
+          const stringifiedCurrentPlugins = JSON.stringify(state.config.plugins);
+          const stringifiedNewPlugins = JSON.stringify(plugins);
+
+          if (stringifiedCurrentPlugins === stringifiedNewPlugins) {
+            return state;
+          }
+
           const newPlugins = plugins.map((plugin) => {
             if (typeof plugin === 'string' || !plugin.config) {
               return plugin;

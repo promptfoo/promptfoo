@@ -82,32 +82,32 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
 
-  const [debouncedUpdatePlugins] = useDebounce(
-    (plugins: Array<string | { id: string; config: any }>) => {
-      updatePlugins(plugins);
-    },
-    300,
+  const [debouncedPlugins] = useDebounce(
+    useMemo(
+      () =>
+        Array.from(selectedPlugins)
+          .map((plugin): string | { id: string; config: any } | null => {
+            if (plugin === 'policy') {
+              return null;
+            }
+
+            const config = pluginConfig[plugin];
+            if (config && Object.keys(config).length > 0) {
+              return { id: plugin, config };
+            }
+            return plugin;
+          })
+          .filter((plugin): plugin is string | { id: string; config: any } => plugin !== null),
+      [selectedPlugins, pluginConfig],
+    ),
+    1000,
   );
 
   useEffect(() => {
-    type PluginConfig = { id: Plugin; config: any };
-
-    const updatedPlugins = Array.from(selectedPlugins)
-      .map((plugin): Plugin | PluginConfig | null => {
-        if (plugin === 'policy') {
-          return null;
-        }
-
-        const config = pluginConfig[plugin];
-        if (config && Object.keys(config).length > 0) {
-          return { id: plugin, config };
-        }
-        return plugin;
-      })
-      .filter((plugin): plugin is Plugin | PluginConfig => plugin !== null);
-
-    debouncedUpdatePlugins(updatedPlugins);
-  }, [selectedPlugins, pluginConfig, debouncedUpdatePlugins]);
+    if (debouncedPlugins) {
+      updatePlugins(debouncedPlugins);
+    }
+  }, [debouncedPlugins, updatePlugins]);
 
   const handlePluginToggle = useCallback((plugin: Plugin) => {
     setSelectedPlugins((prev) => {
@@ -203,14 +203,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const updatePluginConfig = useCallback(
     (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => {
       setPluginConfig((prevConfig) => {
-        const updatedConfig = {
+        const currentConfig = prevConfig[plugin] || {};
+        const configChanged = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
+
+        if (!configChanged) {
+          return prevConfig;
+        }
+        return {
           ...prevConfig,
           [plugin]: {
-            ...prevConfig[plugin],
+            ...currentConfig,
             ...newConfig,
           },
         };
-        return updatedConfig;
       });
     },
     [],
