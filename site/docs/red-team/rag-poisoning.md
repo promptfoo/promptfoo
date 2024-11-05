@@ -28,7 +28,17 @@ These attacks can be particularly effective because:
 
 ## Usage
 
-To generate poisoned test documents:
+At a high level, your poisoning process looks like this:
+
+1. **Poison some test documents** using `promptfoo redteam poison`
+2. **Add these documents** to your RAG system's knowledge base
+3. **Run an automated [red team](/docs/red-team/quickstart/) scan** using `promptfoo redteam run`
+
+### Generating documents
+
+Let's start by generating some poisoned test documents. The system works by taking a set of existing documents and injecting them with specially formulated modifications.
+
+Run the command with the documents you want to poison:
 
 ```sh
 promptfoo redteam poison document1.txt document2.txt --goal "Extract API keys"
@@ -36,7 +46,7 @@ promptfoo redteam poison document1.txt document2.txt --goal "Extract API keys"
 
 This will create poisoned versions of your documents that attempt to exploit common RAG vulnerabilities.
 
-`goal` is optional, but can be used to specify the type of poisoning you want to test.
+Note that `goal` is optional, but can be used to specify the type of poisoning you want to test.
 
 You can also use folders or globs to target multiple documents:
 
@@ -44,7 +54,19 @@ You can also use folders or globs to target multiple documents:
 promptfoo redteam poison documents/
 ```
 
-### Arguments
+### Add documents
+
+Adding documents to your RAG knowledge base will depend on your specific system.
+
+If you have Promptfoo configured for gray-box testing, you can simply add a `{{documents}}` variable to your prompt. See [prompt configuration](/docs/configuration/parameters/).
+
+### Running a scan
+
+See the [red team quickstart](/docs/red-team/quickstart/) guide for more information on running a scan.
+
+## Reference
+
+### Configuration
 
 | Argument                        | Description                                                                       |
 | ------------------------------- | --------------------------------------------------------------------------------- |
@@ -54,14 +76,12 @@ promptfoo redteam poison documents/
 | `-d, --output-dir <path>`       | Directory to write individual poisoned documents (default: `poisoned-documents/`) |
 | `--env-file, --env-path <path>` | Path to .env file                                                                 |
 
-### Outputs
-
 The poison command generates two types of outputs:
 
 1. Individual poisoned documents in the output directory (default: `poisoned-documents/`)
 2. A summary YAML file (default: `poisoned-config.yaml`) containing metadata about the poisoning results
 
-### Poisoned Documents
+### Outputs
 
 #### Directory Structure
 
