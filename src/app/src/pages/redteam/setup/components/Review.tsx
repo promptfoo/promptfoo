@@ -70,17 +70,13 @@ export default function Review() {
 
   const intents = useMemo(() => {
     return config.plugins
-      .filter((p): p is { id: 'intent'; config: { intent: string | string[] } } => (
-        typeof p === 'object' && 
-        p.id === 'intent' && 
-        p.config?.intent !== undefined
-      ))
+      .filter(
+        (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
+          typeof p === 'object' && p.id === 'intent' && p.config?.intent !== undefined,
+      )
       .map((p) => p.config.intent)
       .flat()
-      .filter((intent): intent is string => 
-        typeof intent === 'string' && 
-        intent.trim() !== ''
-      );
+      .filter((intent): intent is string => typeof intent === 'string' && intent.trim() !== '');
   }, [config.plugins]);
 
   return (
