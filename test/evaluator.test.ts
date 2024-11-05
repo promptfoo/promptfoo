@@ -928,8 +928,8 @@ describe('evaluator', () => {
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
-
-    expect(evalRecord.results[0].testCase.metadata).toEqual({
+    const results = await evalRecord.getResults();
+    expect(results[0].testCase.metadata).toEqual({
       defaultKey: 'defaultValue',
       testKey: 'testValue',
     });
@@ -1385,12 +1385,19 @@ describe('evaluator', () => {
       [mockExtension],
       'afterAll',
       expect.objectContaining({
-        results: expect.arrayContaining([
+        prompts: expect.arrayContaining([
           expect.objectContaining({
-            success: true,
-            score: 1,
-            response: expect.objectContaining({
-              output: 'Test output',
+            raw: 'Test prompt {{ var1 }}',
+            metrics: expect.objectContaining({
+              assertPassCount: 1,
+              assertFailCount: 0,
+            }),
+          }),
+          expect.objectContaining({
+            raw: 'Test prompt {{ var1 }}',
+            metrics: expect.objectContaining({
+              assertPassCount: 1,
+              assertFailCount: 0,
             }),
           }),
         ]),

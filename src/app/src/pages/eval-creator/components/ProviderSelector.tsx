@@ -40,7 +40,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
     [
       'anthropic:messages:claude-3-5-sonnet-20241022',
       'anthropic:messages:claude-3-5-sonnet-20240620',
-      'anthropic:messages:claude-3-haiku-20240307',
+      'anthropic:messages:claude-3-5-haiku-20241022',
       'anthropic:messages:claude-3-opus-20240229',
     ].map((id) => ({ id, config: { max_tokens: 1024, temperature: 0.5 } })),
   )

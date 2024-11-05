@@ -411,8 +411,36 @@ export const BEDROCK_MODEL = {
   },
   CLAUDE_MESSAGES: {
     params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
-      const { system, extractedMessages } = parseMessages(prompt);
-      const params: any = { messages: extractedMessages };
+      let messages;
+      let systemPrompt;
+      try {
+        const parsed = JSON.parse(prompt);
+        if (Array.isArray(parsed)) {
+          messages = parsed.map((msg) => ({
+            role: msg.role,
+            content: Array.isArray(msg.content)
+              ? msg.content
+              : [{ type: 'text', text: msg.content }],
+          }));
+        } else {
+          const { system, extractedMessages } = parseMessages(prompt);
+          messages = extractedMessages;
+          systemPrompt = system;
+        }
+      } catch {
+        const { system, extractedMessages } = parseMessages(prompt);
+        messages = extractedMessages;
+        systemPrompt = system;
+      }
+
+      const params: any = { messages };
+      addConfigParam(
+        params,
+        'anthropic_version',
+        config?.anthropic_version,
+        undefined,
+        'bedrock-2023-05-31',
+      );
       addConfigParam(
         params,
         'max_tokens',
@@ -436,12 +464,13 @@ export const BEDROCK_MODEL = {
         undefined,
       );
       addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
-      addConfigParam(params, 'system', system, undefined, undefined);
+      if (systemPrompt) {
+        addConfigParam(params, 'system', systemPrompt, undefined, undefined);
+      }
+
       return params;
     },
-    output: (responseJson: any) => {
-      return outputFromMessage(responseJson);
-    },
+    output: (responseJson: any) => outputFromMessage(responseJson),
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
@@ -578,6 +607,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
