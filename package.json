@@ -145,7 +145,7 @@
     "@adaline/anthropic": "0.19.0",
     "@adaline/groq": "0.8.1",
     "@adaline/together-ai": "0.8.0",
-    "@anthropic-ai/sdk": "^0.31.0",
+    "@anthropic-ai/sdk": "^0.32.0",
     "@apidevtools/json-schema-ref-parser": "^11.7.2",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
