@@ -202,7 +202,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const updatePluginConfig = useCallback(
     (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => {
-      console.log(`Updating config for ${plugin}:`, newConfig);
       setPluginConfig((prevConfig) => {
         const currentConfig = prevConfig[plugin] || {};
         const configChanged = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
@@ -210,16 +209,13 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         if (!configChanged) {
           return prevConfig;
         }
-
-        const updatedConfig = {
+        return {
           ...prevConfig,
           [plugin]: {
             ...currentConfig,
             ...newConfig,
           },
         };
-        console.log('Updated pluginConfig:', updatedConfig);
-        return updatedConfig;
       });
     },
     [],
