@@ -394,23 +394,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       p.plugins.size === selectedPlugins.size,
   );
 
-  // Track plugin config lifecycle
-  useEffect(() => {
-    console.log('Plugin config state changed:', pluginConfig);
-    return () => {
-      console.log('Plugin config cleanup with state:', pluginConfig);
-    };
-  }, [pluginConfig]);
-
-  // Track dialog open/close cycles
-  useEffect(() => {
-    if (configDialogOpen) {
-      console.log('Dialog opened for plugin:', selectedConfigPlugin);
-    } else {
-      console.log('Dialog closed for plugin:', selectedConfigPlugin);
-    }
-  }, [configDialogOpen, selectedConfigPlugin]);
-
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <Box sx={{ p: 3 }}>
