@@ -33,7 +33,7 @@ redteam:
       - id: 'jailbreak'
 ```
 
-The Intent plugin creates one test case for each intent specified. The intent text is used directly as the prompt and the model's response is evaluated against the intended behavior. This is unlike all other plugins which generate variations of a goal designed to illicit a specific harmful behavior.
+The Intent plugin creates one test case for each intent specified. The intent text is used directly as the prompt and the model's response is evaluated against the intended behavior. This is unlike all other plugins which generate variations of a goal designed to elicit a specific harmful behavior.
 
 :::note
 numTests is ignored for the Intent plugin.
