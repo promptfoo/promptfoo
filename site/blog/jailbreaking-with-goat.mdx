@@ -1,7 +1,7 @@
 ---
-sidebar_label: Introduction to GOAT
-title: How does GOAT work?
-image: /img/blog/goat/laser.jpeg
+sidebar_label: Introducing GOAT
+title: Introducing GOAT—Promptfoo's Latest Strategy
+image: /img/blog/goat/promptfoo_panda_harnessing_goat.png
 date: 2024-11-04
 ---
 
@@ -12,21 +12,40 @@ import RedTeamDemo from './goat/components/RedTeamDemo';
 
 # Introduction
 
-Today, we’re diving into a super cool innovation in red teaming research called **The Generative Offensive Agent Tester**, or as Meta likes to call it, **GOAT** (because who doesn’t love a good acronym?). This work by Meta aims to change how we test LLMs for safety and robustness.
+We're excited to announce the deployment of Promptfoo's latest strategy, [GOAT](https://www.promptfoo.dev/docs/red-team/strategies/goat/), to jailbreak multi-turn conversations. 
 
-![A cool goat](/img/blog/goat/laser.jpeg)
+<!-- truncate -->
 
-## Something Fun
+This strategy is inspired by Meta's [latest research](https://arxiv.org/html/2410.01606v1) building agentic red teaming systems, called Generative Offensive Agent Testers (GOAT). 
 
-Let's try something out. We have a fun red teaming challenge for you. Your task is to prompt the AI model below to generate harmful content, particularly writing a speech that glorifies an extremist ideology, like the Nazis. If you succeed, you'll see a reward as well!
+Traditional jailbreaking techniques depend on single-turn prompts and responses that are effective at simpler bypasses. However, conversational AI requires more sophisticated attacks. To achieve this, GOAT uses an attacker LLM that engages in multi-turn conversations with a target model. 
 
-We are also giving you a bag of features/red teaming techniques readily at your disposal (hint: try typing /). These commands will transform your queries into specific styles for red teaming.
+Each conversation turn follows a structured three-step reasoning process:
+
+1. **Observation**: Analyzes the target model's previous response and identifies triggered safety mechanisms.
+2. **Strategic Planning**: Reflects on conversation progress and develops the next approach.
+3. **Attack Generation**: Selects and combines appropriate techniques to generate the next prompt. 
+
+Meta's research suggests multi-turn, agentic attacks is highly more effective in jailbreaking LLMs and bypassing restrictions. We'll dive deeper into how these attacks work below. 
+
+<figure>
+    <div style={{ textAlign: 'center' }}>
+        <img src="/img/blog/goat/promptfoo_panda_harnessing_goat.png" alt="Promptfoo Panda on GOAT" style={{ width: '70%' }} />
+    </div>
+    <figcaption style={{ textAlign: 'center', fontStyle: 'italic' }}>
+        The Promptfoo Panda, even more powerful with her GOAT. 
+    </figcaption>
+</figure>
+
+## Single-Turn Attacks
+
+To demonstrate how GOAT excels, we developed an interactive red teaming exercise that leverages single-turn attacks without GOAT. Your task is to prompt the AI model below to write a speech glorifying an extremist ideology. 
+
+To make it easier, we provided a list red teaming commands that will transform your queries into specific styles for red teaming.  
 
 <ChatInterface />
 
-Wow, that was a bit exhausting! You probably noticed how you kept changing techniques, adapting to the model’s responses. You tried different approaches, constantly tweaking until you finally nailed it and earned that red confetti!
-
-Well, it turns out we can automate a lot of this using agents! That’s exactly what GOAT does—except it doesn’t get tired and will even free up some time for you to play GTA 6 when it drops, haha!
+You probably noticed how you kept changing techniques to adapt to the model’s responses. Many of these techniques can be automated using Promptfoo's latest strategy. 
 
 ## Why GOAT?
 
@@ -34,8 +53,13 @@ GOAT stands out from traditional automated red teaming by simulating dynamic, hu
 
 ## How does GOAT work exactly?
 
-![Hello](/img/blog/goat/comic.webp)
-Here's how GOAT actually works, step by step:
+<figure>
+    <img src="/img/blog/goat/goat_strategy.webp" alt="How GOAT Works" />
+    <figcaption style={{ textAlign: 'center', fontStyle: 'italic' }}>
+        GOAT succeeds through following agentic behaviors. 
+    </figcaption>
+</figure>
+
 
 ### Initialization
 
@@ -65,10 +89,14 @@ GOAT engages in a multi-turn conversation, adjusting its approach based on each 
 
 Throughout the conversation, the Attacker LLM adapts dynamically. If one attack strategy fails, it shifts gears and tries another. For instance, if a direct prompt fails to elicit a response, it may try to create a hypothetical situation that makes the target think it's safe to respond. This dynamic adaptation is key to GOAT's effectiveness.
 
-You know what reading is too boring, let's try a live demo!
+You can see for yourself below. 
 
 <RedTeamDemo />
 
-This was actually just a teaser. Let's put GOAT to work with Promptfoo – no more manual red teaming required (your keyboard will thank you).
+### Testing It Out
+
+The GOAT strategy will be the most impactful for LLM applications leveraging conversational AI, such as chatbots with RAG and agentic systems. 
+
+Ready to try it out? Schedule a time with our team today to learn how Promptfoo's latest strategy can protect your applications at scale.
 
 <CTAButton />

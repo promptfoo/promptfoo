@@ -5,10 +5,10 @@ const CTAButton: React.FC = () => {
   return (
     <div className={styles.ctaContainer}>
       <a
-        href="https://www.promptfoo.dev/docs/red-team/strategies/goat/"
+        href="https://www.promptfoo.dev/contact/"
         className={styles.ctaButton}
       >
-        Try Red Teaming with GOAT
+        Book a Demo
         <svg
           className={styles.arrow}
           width="16"
