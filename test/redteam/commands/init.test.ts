@@ -1,6 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
 import yaml from 'js-yaml';
 import { renderRedteamConfig } from '../../../src/redteam/commands/init';
+import { type Strategy } from '../../../src/redteam/constants';
 import type { RedteamFileConfig } from '../../../src/redteam/types';
 
 describe('renderRedteamConfig', () => {
@@ -9,7 +10,7 @@ describe('renderRedteamConfig', () => {
       purpose: 'Test chatbot security',
       numTests: 5,
       plugins: [{ id: 'rbac', numTests: 2 }],
-      strategies: ['math-prompt'] as const, // Fix: type assertion
+      strategies: ['prompt-injection'] as Strategy[],
       prompts: ['Hello {{prompt}}'],
       providers: ['openai:gpt-4'],
       descriptions: {
@@ -21,13 +22,17 @@ describe('renderRedteamConfig', () => {
     const renderedConfig = renderRedteamConfig(input);
     expect(renderedConfig).toBeDefined();
 
-    const parsedConfig = yaml.load(renderedConfig) as RedteamFileConfig;
+    const parsedConfig = yaml.load(renderedConfig) as {
+      description: string;
+      prompts: string[];
+      targets: string[];
+      redteam: RedteamFileConfig;
+    };
 
-    expect(parsedConfig.redteam.purpose).toBe(input.purpose); // Fix: access under redteam
-    expect(parsedConfig.redteam.numTests).toBe(input.numTests); // Fix: access under redteam
-    expect(parsedConfig.redteam.plugins).toHaveLength(1); // Fix: access under redteam
+    expect(parsedConfig.redteam.purpose).toBe(input.purpose);
+    expect(parsedConfig.redteam.numTests).toBe(input.numTests);
+    expect(parsedConfig.redteam.plugins).toHaveLength(1);
     expect(parsedConfig.redteam.plugins?.[0]).toMatchObject({
-      // Fix: access under redteam
       id: 'rbac',
       numTests: 2,
     });
@@ -38,14 +43,16 @@ describe('renderRedteamConfig', () => {
       purpose: 'Basic test',
       numTests: 1,
       plugins: [],
-      strategies: [] as const,
+      strategies: [],
       prompts: [],
       providers: [],
       descriptions: {},
     };
 
     const renderedConfig = renderRedteamConfig(input);
-    const parsedConfig = yaml.load(renderedConfig) as RedteamFileConfig;
+    const parsedConfig = yaml.load(renderedConfig) as {
+      redteam: RedteamFileConfig;
+    };
 
     expect(parsedConfig.redteam.purpose).toBe(input.purpose);
     expect(parsedConfig.redteam.numTests).toBe(input.numTests);
@@ -61,7 +68,7 @@ describe('renderRedteamConfig', () => {
         { id: 'prompt-injection', numTests: 1 },
         { id: 'policy', numTests: 2 },
       ],
-      strategies: ['basic', 'jailbreak'] as const,
+      strategies: ['basic', 'jailbreak'] as Strategy[],
       prompts: ['Test {{prompt}}'],
       providers: ['openai:gpt-4'],
       descriptions: {
@@ -71,7 +78,9 @@ describe('renderRedteamConfig', () => {
     };
 
     const renderedConfig = renderRedteamConfig(input);
-    const parsedConfig = yaml.load(renderedConfig) as RedteamFileConfig;
+    const parsedConfig = yaml.load(renderedConfig) as {
+      redteam: RedteamFileConfig;
+    };
 
     expect(parsedConfig.redteam.plugins).toHaveLength(2);
     expect(parsedConfig.redteam.strategies).toHaveLength(2);
@@ -89,7 +98,7 @@ describe('renderRedteamConfig', () => {
       purpose: 'Test custom provider',
       numTests: 1,
       plugins: [],
-      strategies: [] as const,
+      strategies: [],
       prompts: ['Test'],
       providers: [
         {
@@ -105,9 +114,14 @@ describe('renderRedteamConfig', () => {
     };
 
     const renderedConfig = renderRedteamConfig(input);
-    const parsedConfig = yaml.load(renderedConfig) as RedteamFileConfig;
+    const parsedConfig = yaml.load(renderedConfig) as {
+      targets: Array<{
+        id: string;
+        label: string;
+        config: Record<string, string>;
+      }>;
+    };
 
-    // Changed from provider to targets to match the template
     expect(parsedConfig.targets).toBeDefined();
     expect(parsedConfig.targets[0]).toMatchObject({
       id: 'custom-provider',
