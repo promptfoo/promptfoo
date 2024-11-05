@@ -183,7 +183,7 @@ describe('readTest', () => {
     const input: any = 123;
 
     await expect(readTest(input)).rejects.toThrow(
-      'Test case must have either assert, vars, options, or metadata property. Instead got {}',
+      'Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold.\n\nInstead got:\n{}',
     );
   });
 

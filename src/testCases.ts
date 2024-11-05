@@ -140,10 +140,19 @@ export async function readTest(
     }
   }
 
-  // Validate the shape of the test case
-  if (!testCase.assert && !testCase.vars && !testCase.options && !testCase.metadata) {
+  if (
+    !testCase.assert &&
+    !testCase.vars &&
+    !testCase.options &&
+    !testCase.metadata &&
+    !testCase.provider &&
+    !testCase.providerOutput &&
+    typeof testCase.threshold !== 'number'
+  ) {
+    // Validate the shape of the test case
+    // We skip validation when loading the default test case, since it may not have all the properties
     throw new Error(
-      `Test case must have either assert, vars, options, or metadata property. Instead got ${JSON.stringify(
+      `Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold.\n\nInstead got:\n${JSON.stringify(
         testCase,
         null,
         2,

@@ -14,7 +14,7 @@ interface ProviderConfigDialogProps {
   providerId: string;
   config: ProviderOptions['config'];
   onClose: () => void;
-  onSave: (config: ProviderOptions['config']) => void;
+  onSave: (providerId: string, config: ProviderOptions['config']) => void;
 }
 
 const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
@@ -31,7 +31,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   }, [config]);
 
   const handleSave = () => {
-    onSave(localConfig);
+    onSave(providerId, localConfig);
   };
 
   return (

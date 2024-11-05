@@ -120,6 +120,7 @@ export type EnvOverrides = {
   BAM_API_KEY?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_KEY?: string;
+  PROMPTFOO_REMOTE_GENERATION_URL?: string;
   COHERE_API_KEY?: string;
   FAL_KEY?: string;
   GOOGLE_API_HOST?: string;

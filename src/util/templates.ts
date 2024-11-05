@@ -26,8 +26,12 @@ export function getNunjucksEngine(
     throwOnUndefined,
   });
 
-  // Add environment variables as global under 'env'
-  env.addGlobal('env', process.env);
+  // Configure environment variables as template globals unless disabled. Defaults to disabled in self-hosted mode
+  if (
+    !getEnvBool('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', getEnvBool('PROMPTFOO_SELF_HOSTED', false))
+  ) {
+    env.addGlobal('env', process.env);
+  }
 
   if (filters) {
     for (const [name, filter] of Object.entries(filters)) {

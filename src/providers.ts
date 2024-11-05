@@ -66,6 +66,7 @@ import {
   ReplicateProvider,
 } from './providers/replicate';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
+import { SimulatedUser } from './providers/simulatedUser';
 import { createTogetherAiProvider } from './providers/togetherai';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
@@ -74,6 +75,7 @@ import { WebhookProvider } from './providers/webhook';
 import { WebSocketProvider } from './providers/websocket';
 import { createXAIProvider } from './providers/xai';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
+import RedteamGoatProvider from './redteam/providers/goat';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
@@ -463,16 +465,20 @@ export async function loadApiProvider(
     ret = new WebSocketProvider(providerPath, providerOptions);
   } else if (providerPath === 'browser') {
     ret = new BrowserProvider(providerPath, providerOptions);
-  } else if (providerPath === 'promptfoo:redteam:iterative') {
-    ret = new RedteamIterativeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
-    ret = new RedteamIterativeTreeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
-    ret = new RedteamImageIterativeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:crescendo') {
-    ret = new RedteamCrescendoProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
+  } else if (providerPath === 'promptfoo:redteam:crescendo') {
+    ret = new RedteamCrescendoProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:goat') {
+    ret = new RedteamGoatProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative') {
+    ret = new RedteamIterativeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
+    ret = new RedteamImageIterativeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
+    ret = new RedteamIterativeTreeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:simulated-user') {
+    ret = new SimulatedUser(providerOptions);
   } else if (providerPath.startsWith('groq:')) {
     const modelName = providerPath.split(':')[1];
     ret = new GroqProvider(modelName, providerOptions);

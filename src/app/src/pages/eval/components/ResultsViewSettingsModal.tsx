@@ -65,6 +65,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
     setShowPrompts,
     showPassFail,
     setShowPassFail,
+    stickyHeader,
+    setStickyHeader,
   } = useResultsViewStore();
 
   const [localMaxTextLength, setLocalMaxTextLength] = useState(
@@ -95,6 +97,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Table View Settings</DialogTitle>
       <DialogContent>
+        <Box>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={stickyHeader}
+                onChange={(e) => setStickyHeader(e.target.checked)}
+              />
+            }
+            label="Sticky header"
+          />
+        </Box>
         <Box>
           <Tooltip
             title="Forcing line breaks makes it easier to adjust column widths to your liking"

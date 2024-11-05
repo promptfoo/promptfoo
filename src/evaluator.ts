@@ -28,6 +28,7 @@ import type {
   RunEvalOptions,
   TestSuite,
 } from './types';
+import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { sleep } from './util/time';
 import { transform, TransformInputType } from './util/transform';
 
@@ -109,7 +110,7 @@ class Evaluator {
     { prompt: string | object; input: string; output: string | object }[]
   >;
   registers: Record<string, string | object>;
-
+  fileWriters: JsonlFileWriter[];
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
@@ -126,6 +127,14 @@ class Evaluator {
     };
     this.conversations = {};
     this.registers = {};
+
+    const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
+      ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
+      : evalRecord.config.outputPath?.endsWith('.jsonl')
+        ? [evalRecord.config.outputPath]
+        : [];
+
+    this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
   }
 
   async runEval({
@@ -341,6 +350,7 @@ class Evaluator {
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
+    const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
     await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
@@ -536,6 +546,7 @@ class Evaluator {
       testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
       testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
+      testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
 
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
@@ -613,6 +624,11 @@ class Evaluator {
       if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
         rowsWithSelectBestAssertion.add(row.testIdx);
       }
+      for (const assert of evalStep.test.assert || []) {
+        if (assert.type) {
+          assertionTypes.add(assert.type);
+        }
+      }
 
       numComplete++;
       if (options.progressCallback) {
@@ -629,6 +645,11 @@ class Evaluator {
       } catch (error) {
         logger.error(`Error saving result: ${error} ${JSON.stringify(row)}`);
       }
+
+      for (const writer of this.fileWriters) {
+        await writer.write(row);
+      }
+
       const { promptIdx } = row;
       const metrics = prompts[promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
@@ -750,12 +771,18 @@ class Evaluator {
       }
     }
 
-    // Run serial evaluations first
-    for (const evalStep of serialRunEvalOptions) {
-      await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
+    if (serialRunEvalOptions.length > 0) {
+      // Run serial evaluations first
+      logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
+      for (const evalStep of serialRunEvalOptions) {
+        await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
+      }
     }
 
     // Then run concurrent evaluations
+    logger.info(
+      `Running ${concurrentRunEvalOptions.length} concurrent evaluations with ${concurrency} threads...`,
+    );
     await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, processEvalStep);
 
     // Do we have to run comparisons between row outputs?
@@ -773,7 +800,9 @@ class Evaluator {
     for (const testIdx of rowsWithSelectBestAssertion) {
       compareCount++;
 
-      const resultsToCompare = this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+      const resultsToCompare = this.evalRecord.persisted
+        ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
+        : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
       if (resultsToCompare.length === 0) {
         logger.warn(`Expected results to be found for test index ${testIdx}`);
         continue;
@@ -850,13 +879,16 @@ class Evaluator {
     }
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
-      results: this.evalRecord.results.map((r) => r.toEvaluateResult()),
+      prompts: this.evalRecord.prompts,
       suite: testSuite,
     });
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
-      numTests: tests.length,
+      numTests: prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testPassCount || 0) + (p.metrics?.testFailCount || 0),
+        0,
+      ),
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
@@ -868,12 +900,12 @@ class Evaluator {
           }),
         ),
       ).sort(),
-      assertionTypes: Array.from(
-        new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
-      ).sort(),
+      assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
-      hasAnyPass: this.evalRecord.results.some((r) => r.success),
+      hasAnyPass: this.evalRecord.prompts.some(
+        (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
+      ),
       isRedteam: Boolean(testSuite.redteam),
     });
     return this.evalRecord;

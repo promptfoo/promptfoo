@@ -425,6 +425,10 @@ export interface AssertionValueFunctionContext {
   prompt: string | undefined;
   vars: Record<string, string | object>;
   test: AtomicTestCase<Record<string, string | object>>;
+  logProbs: number[] | undefined;
+  config?: Record<string, any>;
+  provider: ApiProvider | undefined;
+  providerResponse: ProviderResponse | undefined;
 }
 
 export type AssertionValueFunction = (
@@ -785,6 +789,7 @@ export interface ResultLightweight {
   createdAt: number;
   description: string | null;
   numTests: number;
+  isRedteam?: boolean;
 }
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
@@ -806,5 +811,5 @@ export interface Job {
 }
 
 // used for writing eval results
-export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'txt', 'yaml', 'yml']);
+export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'jsonl', 'txt', 'yaml', 'yml']);
 export type OutputFileExtension = z.infer<typeof OutputFileExtension>;

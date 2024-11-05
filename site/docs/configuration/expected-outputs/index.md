@@ -215,8 +215,17 @@ If the file ends in `.js`, the Javascript is executed:
 The type definition is:
 
 ```ts
+type AssertionValueFunctionContext = {
+  prompt: string | undefined;
+  vars: Record<string, string | object>;
+  test: AtomicTestCase<Record<string, string | object>>;
+  logProbs: number[] | undefined;
+  config?: Record<string, any>;
+  provider: ApiProvider | undefined;
+  providerResponse: ProviderResponse | undefined;
+};
 type AssertionResponse = string | boolean | number | GradingResult;
-type AssertFunction = (output: string, context: { vars: Record<string, string> }) => AssertResponse;
+type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertResponse;
 ```
 
 See [GradingResult definition](/docs/configuration/reference#gradingresult).

@@ -29,6 +29,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
+import type EvalResult from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -53,6 +54,7 @@ import {
 } from '../types';
 import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
+import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
 import { isJavascriptFile } from './file';
 import { getNunjucksEngine } from './templates';
 
@@ -84,10 +86,9 @@ export async function writeOutput(
   evalRecord: Eval,
   shareableUrl: string | null,
 ) {
-  const table = await evalRecord.getTable();
-
-  invariant(table, 'Table is required');
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
+    const table = await evalRecord.getTable();
+    invariant(table, 'Table is required');
     const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
       table.head.vars.forEach((varName, index) => {
@@ -118,14 +119,33 @@ export async function writeOutput(
   }
 
   if (outputExtension === 'csv') {
-    const csvOutput = stringify([
-      [
-        ...table.head.vars,
-        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-      ],
-      ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+    // Write headers first
+    const headers = getHeaderForTable(evalRecord);
+
+    const headerCsv = stringify([
+      [...headers.vars, ...headers.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`)],
     ]);
-    fs.writeFileSync(outputPath, csvOutput);
+    fs.writeFileSync(outputPath, headerCsv);
+
+    // Write body rows in batches
+    for await (const batchResults of evalRecord.fetchResultsBatched()) {
+      // we need split the batch into rows by testIdx
+      const tableRows: Record<number, EvalResult[]> = {};
+      for (const result of batchResults) {
+        if (!(result.testIdx in tableRows)) {
+          tableRows[result.testIdx] = [];
+        }
+        tableRows[result.testIdx].push(result);
+      }
+      const batchCsv = stringify(
+        Object.values(tableRows).map((results) => {
+          const row = convertTestResultsToTableRow(results, headers.vars);
+          return [...row.vars, ...row.outputs.map(outputToSimpleString)];
+        }),
+      );
+      console.log({ batchCsv });
+      fs.appendFileSync(outputPath, batchCsv);
+    }
   } else if (outputExtension === 'json') {
     const summary = await evalRecord.toEvaluateSummary();
     fs.writeFileSync(
@@ -153,6 +173,8 @@ export async function writeOutput(
       } as OutputFile),
     );
   } else if (outputExtension === 'html') {
+    const table = await evalRecord.getTable();
+    invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
     const htmlTable = [
@@ -168,6 +190,11 @@ export async function writeOutput(
       results: summary,
     });
     fs.writeFileSync(outputPath, htmlOutput);
+  } else if (outputExtension === 'jsonl') {
+    for await (const batchResults of evalRecord.fetchResultsBatched()) {
+      const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
+      fs.appendFileSync(outputPath, text);
+    }
   }
 }
 
@@ -351,6 +378,7 @@ export async function listPreviousResults(
       description: evalsTable.description,
       numTests: sql<number>`json_array_length(${evalsTable.results}->'table'->'body')`,
       datasetId: evalsToDatasetsTable.datasetId,
+      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
@@ -369,6 +397,7 @@ export async function listPreviousResults(
     description: result.description,
     numTests: result.numTests,
     datasetId: result.datasetId,
+    isRedteam: result.isRedteam,
   }));
 
   const endTime = performance.now();

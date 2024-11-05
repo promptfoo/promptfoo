@@ -13,8 +13,7 @@ import telemetry, { type EventProperties } from './telemetry';
 import type { EnvOverrides } from './types';
 import { getNunjucksEngine } from './util/templates';
 
-export const CONFIG_TEMPLATE = `
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+export const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
 # Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 
@@ -389,7 +388,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
           'anthropic:messages:claude-3-5-sonnet-20241022',
-          'anthropic:messages:claude-3-opus-20240307',
+          'anthropic:messages:claude-3-5-haiku-20241022',
         ],
       },
       {

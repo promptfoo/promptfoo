@@ -5,7 +5,7 @@ import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
-import logger from '../logger';
+import logger, { getLogLevel } from '../logger';
 import type { TestCaseWithPlugin } from '../types';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
@@ -203,7 +203,7 @@ export async function synthesize({
   }
 
   let progressBar: cliProgress.SingleBar | null = null;
-  if (process.env.LOG_LEVEL !== 'debug') {
+  if (process.env.LOG_LEVEL !== 'debug' && getLogLevel() !== 'debug') {
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
@@ -375,6 +375,10 @@ export async function synthesize({
 
   progressBar?.update({ task: 'Done.' });
   progressBar?.stop();
+  if (progressBar) {
+    // Newline after progress bar to avoid overlap
+    logger.info('');
+  }
 
   logger.info(generateReport(pluginResults, strategyResults));
 

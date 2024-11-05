@@ -119,22 +119,31 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;
+    const currentLabel = selectedTarget.label;
 
     if (value === 'javascript' || value === 'python') {
       const filePath =
         value === 'javascript'
           ? 'file://path/to/custom_provider.js'
           : 'file://path/to/custom_provider.py';
-      setSelectedTarget({ id: filePath, config: {} });
+      setSelectedTarget({
+        id: filePath,
+        config: {},
+        label: currentLabel,
+      });
       updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'http') {
-      setSelectedTarget(DEFAULT_HTTP_TARGET);
+      setSelectedTarget({
+        ...DEFAULT_HTTP_TARGET,
+        label: currentLabel,
+      });
       updateConfig('prompts', ['{{prompt}}']);
       updateConfig('purpose', '');
     } else if (value === 'websocket') {
       setSelectedTarget({
         id: 'websocket',
+        label: currentLabel,
         config: {
           type: 'websocket',
           url: 'wss://example.com/ws',
@@ -148,6 +157,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     } else if (value === 'browser') {
       setSelectedTarget({
         id: 'browser',
+        label: currentLabel,
         config: {
           steps: [
             {
@@ -160,7 +170,11 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
       updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     } else {
-      setSelectedTarget({ id: value, config: {} });
+      setSelectedTarget({
+        id: value,
+        config: {},
+        label: currentLabel,
+      });
       updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     }
@@ -349,6 +363,9 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           margin="normal"
           required
           autoFocus
+          InputLabelProps={{
+            shrink: true,
+          }}
         />
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
@@ -499,6 +516,9 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                 placeholder="Optional: A Javascript expression to parse the response. E.g. json.choices[0].message.content"
                 onChange={(e) => updateCustomTarget('responseParser', e.target.value)}
                 margin="normal"
+                InputLabelProps={{
+                  shrink: true,
+                }}
               />
             </Box>
           </Box>
