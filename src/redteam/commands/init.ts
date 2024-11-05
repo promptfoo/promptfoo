@@ -16,6 +16,7 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/g
 import logger from '../../logger';
 import telemetry, { type EventProperties } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
+import { setupEnv } from '../../util';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
   type Plugin,
@@ -650,7 +651,9 @@ export function initCommand(program: Command) {
   program
     .command('init [directory]')
     .description('Initialize red teaming project')
-    .action(async (directory: string | undefined) => {
+    .option('--env-file, --env-path <path>', 'Path to .env file')
+    .action(async (directory: string | undefined, opts: { envPath: string | undefined }) => {
+      setupEnv(opts.envPath);
       try {
         await redteamInit(directory);
       } catch (err) {

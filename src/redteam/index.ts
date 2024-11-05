@@ -303,7 +303,10 @@ export async function synthesize({
       );
       progressBar?.increment(plugin.numTests);
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
-      pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
+      pluginResults[plugin.id] = {
+        requested: plugin.id === 'intent' ? pluginTests.length : plugin.numTests,
+        generated: pluginTests.length,
+      };
     } else if (plugin.id.startsWith('file://')) {
       try {
         const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
