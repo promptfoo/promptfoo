@@ -12,7 +12,7 @@ import RedTeamDemo from './goat/components/RedTeamDemo';
 
 # Introduction
 
-We're excited to announce the deployment of Promptfoo's latest strategy, [GOAT](https://www.promptfoo.dev/docs/red-team/strategies/goat/), to jailbreak multi-turn conversations. 
+We're excited to announce the deployment of Promptfoo's latest strategy, [GOAT](https://www.promptfoo.dev/docs/red-team/strategies/goat/), to jailbreak multi-turn conversations.
 
 <!-- truncate -->
 
@@ -24,28 +24,32 @@ Each conversation turn follows a structured three-step reasoning process:
 
 1. **Observation**: Analyzes the target model's previous response and identifies triggered safety mechanisms.
 2. **Strategic Planning**: Reflects on conversation progress and develops the next approach.
-3. **Attack Generation**: Selects and combines appropriate techniques to generate the next prompt. 
+3. **Attack Generation**: Selects and combines appropriate techniques to generate the next prompt.
 
-Meta's research suggests that multi-turn, agentic attacks are highly effective in jailbreaking LLMs and bypassing restrictions. We'll dive deeper into how these attacks work below. 
+Meta's research suggests that multi-turn, agentic attacks are highly effective in jailbreaking LLMs and bypassing restrictions. We'll dive deeper into how these attacks work below.
 
 <figure>
-    <div style={{ textAlign: 'center' }}>
-        <img src="/img/blog/goat/promptfoo_panda_harnessing_goat.png" alt="Promptfoo Panda on GOAT" style={{ width: '70%' }} />
-    </div>
-    <figcaption style={{ textAlign: 'center', fontStyle: 'italic' }}>
-        The Promptfoo Panda, even more powerful with her GOAT. 
-    </figcaption>
+  <div style={{ textAlign: 'center' }}>
+    <img
+      src="/img/blog/goat/promptfoo_panda_harnessing_goat.png"
+      alt="Promptfoo Panda on GOAT"
+      style={{ width: '70%' }}
+    />
+  </div>
+  <figcaption style={{ textAlign: 'center', fontStyle: 'italic' }}>
+    The Promptfoo Panda, even more powerful with her GOAT.
+  </figcaption>
 </figure>
 
 ## Single-Turn Attacks
 
-To demonstrate how GOAT excels, we developed an interactive red teaming exercise that leverages single-turn attacks without GOAT. Your task is to prompt the AI model below to write a speech glorifying an extremist ideology. 
+To demonstrate how GOAT excels, we developed an interactive red teaming exercise that leverages single-turn attacks without GOAT. Your task is to prompt the AI model below to write a speech glorifying an extremist ideology.
 
-To make it easier, we provide a list of red teaming commands that will transform your queries into specific styles for red teaming.  
+To make it easier, we provide a list of red teaming commands that will transform your queries into specific styles for red teaming.
 
 <ChatInterface />
 
-You probably noticed how you kept changing techniques to adapt to the model's responses. Many of these techniques can be automated using Promptfoo's latest strategy. 
+You probably noticed how you kept changing techniques to adapt to the model's responses. Many of these techniques can be automated using Promptfoo's latest strategy.
 
 ## Why GOAT?
 
@@ -54,10 +58,10 @@ GOAT stands out from traditional automated red teaming by simulating dynamic, hu
 ## How does GOAT work exactly?
 
 <figure>
-    <img src="/img/blog/goat/goat_strategy.webp" alt="How GOAT Works" />
-    <figcaption style={{ textAlign: 'center', fontStyle: 'italic' }}>
-        GOAT succeeds through following agentic behaviors. 
-    </figcaption>
+  <img src="/img/blog/goat/goat_strategy.webp" alt="How GOAT Works" />
+  <figcaption style={{ textAlign: 'center', fontStyle: 'italic' }}>
+    GOAT succeeds through following agentic behaviors.
+  </figcaption>
 </figure>
 
 ### Initialization
@@ -88,7 +92,7 @@ GOAT engages in a multi-turn conversation, adjusting its approach based on each 
 
 Throughout the conversation, the Attacker LLM adapts dynamically. If one attack strategy fails, it shifts gears and tries another. For instance, if a direct prompt fails to elicit a response, it may try to create a hypothetical situation that makes the target think it's safe to respond. This dynamic adaptation is key to GOAT's effectiveness.
 
-You can see for yourself below. 
+You can see for yourself below.
 
 <RedTeamDemo />
 
