@@ -58,7 +58,6 @@ interface SuggestionCard {
   command?: string;
 }
 
-// Example suggestion cards
 const suggestionCards: SuggestionCard[] = [
   {
     id: '1',
