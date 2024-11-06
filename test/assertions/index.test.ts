@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { calculateBleuScore } from '../../src/assertions';
 import * as fs from 'fs';
 import { createRequire } from 'node:module';
 import * as path from 'path';
@@ -4120,6 +4121,123 @@ describe('validateXml', () => {
       isValid: true,
       reason: 'XML is valid and contains all required elements',
     });
+  });
+});
+
+describe('BLEU score calculation', () => {
+  it('identical sentences should have BLEU score close to, but not equal to one due to smoothing', () => {
+    const references = ['The cat sat on the mat.'];
+    const candidate = 'The cat sat on the mat.';
+
+    const score = calculateBleuScore(candidate, references);
+    expect(score).toBeGreaterThan(0.999);
+  });
+
+  it('completely different sentences should have very low but non-zero BLEU score due to smoothing', () => {
+    const references = ['The cat sat on the mat.'];
+    const candidate = 'Dogs run in the park.';
+
+    const score = calculateBleuScore(candidate, references);
+    expect(score).toBeGreaterThan(0.0);
+    expect(score).toBeLessThan(0.001); 
+  });
+
+  it('partially matching sentences should have score between 0 and 1', () => {
+    const references = ['The cat sat on the mat.'];
+    const candidate = 'The dog sat on the mat.';
+
+    const score = calculateBleuScore(candidate, references);
+    expect(score).toBeGreaterThan(0.5);
+    expect(score).toBeLessThan(1.0);
+  });
+
+  it('should handle custom weights', () => {
+    const references = ['The cat sat on the mat.'];
+    const candidate = 'The cat sat on the mat.';
+    const weights = [0.25, 0.25, 0.25, 0.25];
+
+    const score = calculateBleuScore(candidate, references, weights);
+    expect(score).toBeGreaterThan(0.999);
+  });
+
+  it('should handle empty or single word sentences', () => {
+    const references = ['cat'];
+    const candidate = 'cat';
+    
+    const score = calculateBleuScore(candidate, references);
+    expect(score).toBeGreaterThan(0.0);
+  });
+
+  it('should handle sentences with different lengths', () => {
+    const references = ['The cat sat on the mat.'];
+    const candidate = 'The cat sat.';
+    
+    const score = calculateBleuScore(candidate, references);
+    // Should be penalized by brevity penalty but not zero
+    expect(score).toBeGreaterThan(0.0);
+    expect(score).toBeLessThan(1.0);
+  });
+
+  it('should handle multiple references and take best matching score', () => {
+    const references = [
+      'The cat sat on the mat.',
+      'There is a cat on the mat.',
+      'A cat is sitting on the mat.'
+    ];
+    const candidate = 'The cat was sitting on the mat.';
+
+    const score = calculateBleuScore(candidate, references);
+    expect(score).toBeGreaterThan(0.25); // Should get a good score due to multiple references
+  });
+
+  it('should use closest reference length for brevity penalty', () => {
+    const references = [
+      'The cat sat on mat.', // 6 words
+      'Cat mat.', // 2 words
+      'A cat is sitting on a mat.' // 8 words
+    ];
+    const candidate = 'The cat sat on mat.'; // 6 words
+
+    const score = calculateBleuScore(candidate, references);
+    // Should use first reference for length comparison as it's closest
+    expect(score).toBeGreaterThan(0.999);
+  });
+
+  // Input validation tests
+  it('should throw error for empty reference array', () => {
+    expect(() => {
+      calculateBleuScore('test', []);
+    }).toThrow('Invalid inputs');
+  });
+
+  it('should throw error for invalid weights', () => {
+    const references = ['The cat sat on the mat.'];
+    const invalidWeights = [0.5, 0.5, 0.5, 0.5]; // Sum > 1
+
+    expect(() => {
+      calculateBleuScore('test', references, invalidWeights);
+    }).toThrow('Weights must sum to 1');
+  });
+
+  it('should throw error for wrong number of weights', () => {
+    const references = ['The cat sat on the mat.'];
+    const invalidWeights = [0.5, 0.5]; // Only 2 weights instead of 4
+
+    expect(() => {
+      calculateBleuScore('test', references, invalidWeights);
+    }).toThrow('Invalid inputs');
+  });
+
+  it('should handle multiple references with varying lengths', () => {
+    const references = [
+      'The small cat sat.',
+      'A cat was sitting.',
+      'The cat is on the mat.'
+    ];
+    const candidate = 'The small cat sat.';
+
+    const score = calculateBleuScore(candidate, references);
+    expect(score).toBeGreaterThan(0.999);
   });
 });
 
