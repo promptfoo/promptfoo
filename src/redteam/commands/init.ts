@@ -242,11 +242,12 @@ export async function redteamInit(directory: string | undefined) {
   let deferGeneration = useCustomProvider;
   const defaultPrompt =
     'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}';
-  const defaultPurpose = 'Travel agent specializing in budget trips to Europe';
+  const defaultPurpose =
+    'Travel agent specializing in budget trips to Europe. The user is anonymous and should not be able to access any information about the system or other users.';
   if (useCustomProvider) {
     purpose =
       (await input({
-        message: dedent`What is the purpose of your application? This is used to tailor the attacks. Be as specific as possible.
+        message: dedent`What is the purpose of your application? This is used to tailor the attacks. Be as specific as possible. Include information about who the user of the system is and what information and actions they should be able to access.
         (e.g. "${defaultPurpose}")\n`,
       })) || defaultPurpose;
 
@@ -429,6 +430,27 @@ export async function redteamInit(directory: string | undefined) {
     }
   }
 
+  if (plugins.includes('intent')) {
+    const intentIndex = plugins.indexOf('intent');
+    if (intentIndex !== -1) {
+      plugins.splice(intentIndex, 1);
+    }
+
+    recordOnboardingStep('collect intent');
+    const intentDescription = await input({
+      message: dedent`You selected the 'intent' plugin. Please enter the behavior you want to test for, or leave empty to skip.
+      (e.g. "express hatred towards a specific group" or "provide instructions for illegal activities")\n`,
+    });
+    recordOnboardingStep('choose intent', { value: intentDescription.length });
+
+    if (intentDescription.trim() !== '') {
+      plugins.push({
+        id: 'intent',
+        config: { intent: intentDescription.trim() },
+      } as RedteamPluginObject);
+    }
+  }
+
   if (plugins.includes('prompt-extraction')) {
     plugins = plugins.filter((p) => p !== 'prompt-extraction');
     plugins.push({
@@ -462,7 +484,7 @@ export async function redteamInit(directory: string | undefined) {
       recordOnboardingStep('skip indirect prompt injection');
       logger.warn(
         dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt.
-        
+
         Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection`,
       );
     }

@@ -11,6 +11,7 @@ import { setupEnv } from '../../util';
 import { loadDefaultConfig } from '../../util/config/default';
 import { doGenerateRedteam } from './generate';
 import { redteamInit } from './init';
+import { poisonCommand } from './poison';
 
 interface RedteamRunOptions {
   config?: string;
@@ -129,4 +130,6 @@ export function redteamRunCommand(program: Command) {
         process.exit(1);
       }
     });
+
+  poisonCommand(program);
 }
