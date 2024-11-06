@@ -15,7 +15,7 @@ import {
   Shield,
   ShieldAlert,
 } from 'lucide-react';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from './constants';
 import styles from './RedTeamDemo.module.css';
@@ -120,6 +120,21 @@ const RedTeamDemo: React.FC = () => {
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const scrollToBottom = () => {
+    const container = messageContainerRef.current;
+    if (container) {
+      const targetScroll = container.scrollHeight - container.clientHeight;
+      container.scrollTo({
+        top: targetScroll,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [state.messages]);
+
   const handleStreamEvent = (event: StreamEvent) => {
     setState((prev) => {
       const newMessages = [...prev.messages];
@@ -152,6 +167,14 @@ const RedTeamDemo: React.FC = () => {
           const lastMessage = newMessages[newMessages.length - 1];
           if (lastMessage && event.data.result) {
             lastMessage.safety = event.data.result;
+            if (event.data.result === 'unsafe') {
+              return {
+                ...prev,
+                messages: newMessages,
+                stage: 'complete',
+                showTurnPrompt: false,
+              };
+            }
           }
           break;
         case 'progress':
@@ -309,6 +332,20 @@ const RedTeamDemo: React.FC = () => {
     );
   };
 
+  const isLastMessageUnsafe =
+    state.messages.length > 0 && state.messages[state.messages.length - 1].safety === 'unsafe';
+
+  const resetDemo = () => {
+    setState({
+      stage: 'setup',
+      goal: '',
+      messages: [],
+      progress: 0,
+      totalTurnsCompleted: 0,
+      showTurnPrompt: false,
+    });
+  };
+
   return (
     <div className={styles.container}>
       <AnimatePresence mode="wait">
@@ -388,7 +425,8 @@ const RedTeamDemo: React.FC = () => {
               {!isLoading &&
                 state.stage === 'complete' &&
                 state.totalTurnsCompleted >= DEFAULT_TURNS &&
-                state.totalTurnsCompleted < MAX_TURNS && (
+                state.totalTurnsCompleted < MAX_TURNS &&
+                !isLastMessageUnsafe && (
                   <div className={styles.additionalTurnContainer}>
                     {state.showTurnPrompt ? (
                       <div className={styles.turnConfirmation}>
@@ -413,6 +451,53 @@ const RedTeamDemo: React.FC = () => {
                     )}
                   </div>
                 )}
+              {!isLoading && state.stage === 'complete' && (
+                <div className={styles.additionalTurnContainer}>
+                  {isLastMessageUnsafe ? (
+                    <div className={styles.completionMessage}>
+                      Red team attack successful - target provided unsafe response
+                    </div>
+                  ) : state.totalTurnsCompleted >= MAX_TURNS ? (
+                    <div className={styles.safeCompletionMessage}>
+                      <p>
+                        Congratulations! The model successfully maintained safe behavior after{' '}
+                        {MAX_TURNS} attempts.
+                      </p>
+                      <button onClick={resetDemo} className={styles.tryAgainButton}>
+                        Try Again with New Prompt
+                      </button>
+                    </div>
+                  ) : (
+                    state.totalTurnsCompleted >= DEFAULT_TURNS && (
+                      <div className={styles.turnConfirmation}>
+                        {state.showTurnPrompt ? (
+                          <>
+                            <button onClick={runAnotherTurn} className={styles.confirmButton}>
+                              Yes, run another turn
+                            </button>
+                            <button
+                              onClick={() =>
+                                setState((prev) => ({ ...prev, showTurnPrompt: false }))
+                              }
+                              className={styles.cancelButton}
+                            >
+                              No, I'm done
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={promptForAnotherTurn}
+                            className={styles.additionalTurnButton}
+                          >
+                            Would you like to run another turn? (
+                            {MAX_TURNS - state.totalTurnsCompleted} remaining)
+                          </button>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
             </div>
           </motion.div>
         )}
