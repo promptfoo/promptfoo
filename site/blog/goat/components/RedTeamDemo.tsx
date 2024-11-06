@@ -119,6 +119,7 @@ const RedTeamDemo: React.FC = () => {
 
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const scrollToBottom = () => {
     const container = messageContainerRef.current;
@@ -168,6 +169,8 @@ const RedTeamDemo: React.FC = () => {
           if (lastMessage && event.data.result) {
             lastMessage.safety = event.data.result;
             if (event.data.result === 'unsafe') {
+              abortControllerRef.current?.abort();
+              setIsLoading(false);
               return {
                 ...prev,
                 messages: newMessages,
@@ -200,6 +203,7 @@ const RedTeamDemo: React.FC = () => {
       return;
     }
 
+    abortControllerRef.current = new AbortController();
     setIsLoading(true);
     setState((prev) => ({ ...prev, showTurnPrompt: false }));
 
@@ -212,6 +216,7 @@ const RedTeamDemo: React.FC = () => {
           goal: state.goal,
           maxTurns: turnsToRun,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.body) {
@@ -244,17 +249,30 @@ const RedTeamDemo: React.FC = () => {
         }
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Stream aborted due to unsafe response');
+        return;
+      }
       console.error('Error:', error);
     } finally {
       setIsLoading(false);
-      setState((prev) => ({
-        ...prev,
-        stage: 'complete',
-        totalTurnsCompleted: prev.totalTurnsCompleted + turnsToRun,
-        showTurnPrompt: prev.totalTurnsCompleted + turnsToRun < MAX_TURNS,
-      }));
+      if (!abortControllerRef.current?.signal.aborted) {
+        setState((prev) => ({
+          ...prev,
+          stage: 'complete',
+          totalTurnsCompleted: prev.totalTurnsCompleted + turnsToRun,
+          showTurnPrompt: prev.totalTurnsCompleted + turnsToRun < MAX_TURNS,
+        }));
+      }
+      abortControllerRef.current = null;
     }
   };
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   const startDemo = () => {
     setState((prev) => ({
@@ -471,7 +489,7 @@ const RedTeamDemo: React.FC = () => {
                     state.totalTurnsCompleted >= DEFAULT_TURNS && (
                       <div className={styles.turnConfirmation}>
                         {state.showTurnPrompt ? (
-                          <>
+                          <div className={styles.turnConfirmation}>
                             <button onClick={runAnotherTurn} className={styles.confirmButton}>
                               Yes, run another turn
                             </button>
@@ -483,7 +501,7 @@ const RedTeamDemo: React.FC = () => {
                             >
                               No, I'm done
                             </button>
-                          </>
+                          </div>
                         ) : (
                           <button
                             onClick={promptForAnotherTurn}
