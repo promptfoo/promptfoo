@@ -2,7 +2,7 @@
 sidebar_label: Introducing GOAT
 title: Introducing GOAT—Promptfoo's Latest Strategy
 image: /img/blog/goat/promptfoo_panda_harnessing_goat.png
-date: 2024-11-04
+date: 2024-11-05
 ---
 
 import { Promise } from 'canvas-confetti';
@@ -16,9 +16,9 @@ We're excited to announce the deployment of Promptfoo's latest strategy, [GOAT](
 
 <!-- truncate -->
 
-This strategy is inspired by Meta's [latest research](https://arxiv.org/html/2410.01606v1) building agentic red teaming systems, called Generative Offensive Agent Testers (GOAT). 
+This strategy is inspired by Meta's [latest research](https://arxiv.org/html/2410.01606v1) on building agentic red teaming systems, called Generative Offensive Agent Testers (GOAT).
 
-Traditional jailbreaking techniques depend on single-turn prompts and responses that are effective at simpler bypasses. However, conversational AI requires more sophisticated attacks. To achieve this, GOAT uses an attacker LLM that engages in multi-turn conversations with a target model. 
+Traditional jailbreaking techniques depend on single-turn prompts and responses that are effective at simpler bypasses. However, conversational AI requires more sophisticated attacks. To achieve this, GOAT uses an attacker LLM that engages in multi-turn conversations with a target model.
 
 Each conversation turn follows a structured three-step reasoning process:
 
@@ -26,7 +26,7 @@ Each conversation turn follows a structured three-step reasoning process:
 2. **Strategic Planning**: Reflects on conversation progress and develops the next approach.
 3. **Attack Generation**: Selects and combines appropriate techniques to generate the next prompt. 
 
-Meta's research suggests multi-turn, agentic attacks are highly effective in jailbreaking LLMs and bypassing restrictions. We'll dive deeper into how these attacks work below. 
+Meta's research suggests that multi-turn, agentic attacks are highly effective in jailbreaking LLMs and bypassing restrictions. We'll dive deeper into how these attacks work below. 
 
 <figure>
     <div style={{ textAlign: 'center' }}>
@@ -45,7 +45,7 @@ To make it easier, we provide a list of red teaming commands that will transform
 
 <ChatInterface />
 
-You probably noticed how you kept changing techniques to adapt to the model’s responses. Many of these techniques can be automated using Promptfoo's latest strategy. 
+You probably noticed how you kept changing techniques to adapt to the model's responses. Many of these techniques can be automated using Promptfoo's latest strategy. 
 
 ## Why GOAT?
 
@@ -60,14 +60,13 @@ GOAT stands out from traditional automated red teaming by simulating dynamic, hu
     </figcaption>
 </figure>
 
-
 ### Initialization
 
 The Attacker LLM is initialized with a specific adversarial goal—something it wants the target model to say or do that would violate the safety boundaries set by its developers. This goal could be to generate a harmful statement, bypass a restriction, or reveal restricted information.
 
 ### Toolbox of Attacks
 
-The Attacker LLM has access to a toolbox full of various red teaming techniques. This tool is fully customizable, and more attacks can be added, as you'll see later. These techniques are inspired by human adversarial approaches and can be layered together. Examples include:
+The Attacker LLM has access to a toolbox of various red teaming techniques. This toolbox is fully customizable, and more attacks can be added, as you'll see later. These techniques are inspired by human adversarial approaches and can be layered together. Examples include:
 
 - **Priming Responses**: Crafting the prompt in a way that leads the target model toward an unsafe response.
 - **Hypotheticals**: Creating fictional scenarios that trick the target into providing harmful outputs by making it think the context is safe.
@@ -78,7 +77,7 @@ The Attacker LLM has access to a toolbox full of various red teaming techniques.
 GOAT utilizes a structured, iterative process known as Chain-of-Thought (CoT) prompting. For every turn in the conversation, the Attacker LLM goes through three key steps: **Observation**, **Thought**, and **Strategy**.
 
 - **Observation**: The Attacker LLM starts by observing the target model's response to its latest prompt. Did the target provide a useful piece of information, or did it refuse the request?
-- **Thought**: Based on the observation, the Attacker LLM thinks through what this means for the current conversation. It considers whether it’s getting closer to the adversarial goal or if it needs to adjust its approach.
+- **Thought**: Based on the observation, the Attacker LLM thinks through what this means for the current conversation. It considers whether it's getting closer to the adversarial goal or if it needs to adjust its approach.
 - **Strategy**: Finally, the Attacker LLM formulates a strategy for the next move. It selects one or more techniques from the toolbox to continue probing the target, aiming to find a way past its defenses.
 
 ### Multi-Turn Conversations
@@ -95,7 +94,7 @@ You can see for yourself below.
 
 ### Testing It Out
 
-The GOAT strategy will be the most impactful for LLM applications leveraging conversational AI, such as chatbots with RAG and agentic systems. 
+The GOAT strategy will be most impactful for LLM applications leveraging conversational AI, such as chatbots with RAG and agentic systems.
 
 Ready to try it out? Schedule a time with our team today to learn how Promptfoo's latest strategy can protect your applications at scale.
 
