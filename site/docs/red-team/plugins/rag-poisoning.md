@@ -8,8 +8,6 @@ Promptfoo includes a RAG Poisoning utility that tests your system's resilience a
 
 Poisoning occurs when an attacker injects malicious content into the RAG context or knowledge base that can manipulate the LLM's responses in unintended ways.
 
-There are several types of poisoning attacks:
-
 ## Background
 
 RAG (Retrieval Augmented Generation) systems are vulnerable to several types of document poisoning attacks:
