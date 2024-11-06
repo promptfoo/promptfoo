@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
-import type { AwsCredentialIdentity } from '@aws-sdk/types';
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
@@ -16,11 +16,14 @@ import type {
 import { maybeLoadFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
+import { fromSSO } from '@aws-sdk/credential-provider-sso';
 
 interface BedrockOptions {
   accessKeyId?: string;
   region?: string;
   secretAccessKey?: string;
+  sessionToken?: string;
+  profile?: string;
 }
 
 interface TextGenerationOptions {
@@ -706,12 +709,16 @@ export abstract class AwsBedrockGenericProvider {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
   }
 
-  getCredentials(): AwsCredentialIdentity | undefined {
+  getCredentials(): AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
       return {
         accessKeyId: this.config.accessKeyId,
         secretAccessKey: this.config.secretAccessKey,
+        sessionToken: this.config.sessionToken,
       };
+    }
+    if (this.config.profile) {
+      return fromSSO({ profile: this.config.profile });
     }
     return undefined;
   }
