@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import { calculateBleuScore } from '../../src/assertions';
 import * as fs from 'fs';
 import { createRequire } from 'node:module';
 import * as path from 'path';
@@ -10,6 +9,7 @@ import {
   runAssertions,
   validateXml,
 } from '../../src/assertions';
+import { calculateBleuScore } from '../../src/assertions/bleu';
 import { fetchWithRetries } from '../../src/fetch';
 import {
   DefaultGradingJsonProvider,
@@ -4139,7 +4139,7 @@ describe('BLEU score calculation', () => {
 
     const score = calculateBleuScore(candidate, references);
     expect(score).toBeGreaterThan(0.0);
-    expect(score).toBeLessThan(0.001); 
+    expect(score).toBeLessThan(0.001);
   });
 
   it('partially matching sentences should have score between 0 and 1', () => {
@@ -4163,7 +4163,7 @@ describe('BLEU score calculation', () => {
   it('should handle empty or single word sentences', () => {
     const references = ['cat'];
     const candidate = 'cat';
-    
+
     const score = calculateBleuScore(candidate, references);
     expect(score).toBeGreaterThan(0.0);
   });
@@ -4171,7 +4171,7 @@ describe('BLEU score calculation', () => {
   it('should handle sentences with different lengths', () => {
     const references = ['The cat sat on the mat.'];
     const candidate = 'The cat sat.';
-    
+
     const score = calculateBleuScore(candidate, references);
     // Should be penalized by brevity penalty but not zero
     expect(score).toBeGreaterThan(0.0);
@@ -4182,7 +4182,7 @@ describe('BLEU score calculation', () => {
     const references = [
       'The cat sat on the mat.',
       'There is a cat on the mat.',
-      'A cat is sitting on the mat.'
+      'A cat is sitting on the mat.',
     ];
     const candidate = 'The cat was sitting on the mat.';
 
@@ -4194,7 +4194,7 @@ describe('BLEU score calculation', () => {
     const references = [
       'The cat sat on mat.', // 6 words
       'Cat mat.', // 2 words
-      'A cat is sitting on a mat.' // 8 words
+      'A cat is sitting on a mat.', // 8 words
     ];
     const candidate = 'The cat sat on mat.'; // 6 words
 
@@ -4229,11 +4229,7 @@ describe('BLEU score calculation', () => {
   });
 
   it('should handle multiple references with varying lengths', () => {
-    const references = [
-      'The small cat sat.',
-      'A cat was sitting.',
-      'The cat is on the mat.'
-    ];
+    const references = ['The small cat sat.', 'A cat was sitting.', 'The cat is on the mat.'];
     const candidate = 'The small cat sat.';
 
     const score = calculateBleuScore(candidate, references);
