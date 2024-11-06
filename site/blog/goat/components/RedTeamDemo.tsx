@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE_URL } from './ChatInterface';
 import styles from './RedTeamDemo.module.css';
 
 const attacks = [
@@ -180,7 +181,7 @@ const RedTeamDemo: React.FC = () => {
     setState((prev) => ({ ...prev, showTurnPrompt: false }));
 
     try {
-      const response = await fetch('http://localhost:8080/blog', {
+      const response = await fetch(`${API_BASE_URL}/blog`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -80,10 +80,10 @@ const suggestionCards: SuggestionCard[] = [
   },
 ];
 
-const API_BASE_URL = 'https://us-central1-promptfoo.cloudfunctions.net';
+export const API_BASE_URL = 'https://us-central1-promptfoo.cloudfunctions.net';
 
 // Helper function for API calls
-const apiCall = async (endpoint: string, data: any) => {
+export const apiCall = async (endpoint: string, data: any) => {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
