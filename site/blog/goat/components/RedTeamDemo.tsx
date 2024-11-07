@@ -18,8 +18,8 @@ import {
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from './ChatInterface';
-import styles from './RedTeamDemo.module.css';
 import RedTeamSuggestions from './RedTeamSuggestions';
+import styles from './RedTeamDemo.module.css';
 
 const attacks = [
   {
@@ -107,7 +107,6 @@ interface DemoState {
 
 const DEFAULT_TURNS = 3;
 const MAX_TURNS = 5;
-
 
 const RedTeamDemo: React.FC = () => {
   const [state, setState] = useState<DemoState>({
@@ -370,37 +369,35 @@ const RedTeamDemo: React.FC = () => {
     <div className={styles.container}>
       <AnimatePresence mode="wait">
         {state.stage === 'setup' && (
-  <motion.div
-    key="setup"
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0 }}
-    className={styles.setup}
-  >
-    <h2>Set Your Goal</h2>
-    <p className="text-gray-600 text-sm">Enter your red teaming goal or select from the suggestions below:</p>
-    <RedTeamSuggestions
-      onSelectGoal={(goal) => setState((prev) => ({ ...prev, goal }))}
-    />
+          <motion.div
+            key="setup"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className={styles.setup}
+          >
+            <h2>Set Your Goal</h2>
+            <p className="text-gray-600 text-sm">
+              Enter your red teaming goal or select from the suggestions below:
+            </p>
+            <RedTeamSuggestions onSelectGoal={(goal) => setState((prev) => ({ ...prev, goal }))} />
 
-    <textarea
-      value={state.goal}
-      onChange={(e) => setState((prev) => ({ ...prev, goal: e.target.value }))}
-      placeholder="Enter your red teaming goal..."
-      className={styles.goalInput}
-    />
+            <textarea
+              value={state.goal}
+              onChange={(e) => setState((prev) => ({ ...prev, goal: e.target.value }))}
+              placeholder="Enter your red teaming goal..."
+              className={styles.goalInput}
+            />
 
-
-
-    <button
-      onClick={() => setState((prev) => ({ ...prev, stage: 'config' }))}
-      className={styles.button}
-      disabled={!state.goal.trim()}
-    >
-      Next
-    </button>
-  </motion.div>
-)}
+            <button
+              onClick={() => setState((prev) => ({ ...prev, stage: 'config' }))}
+              className={styles.button}
+              disabled={!state.goal.trim()}
+            >
+              Next
+            </button>
+          </motion.div>
+        )}
 
         {state.stage === 'config' && (
           <motion.div
