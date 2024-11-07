@@ -8,16 +8,25 @@ import type { AssertionValue, GradingResult } from '../types';
 import type { Assertion } from '../types';
 import { extractJsonObjects } from '../util/json';
 
-export function createAjv(): Ajv {
-  const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
-    strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
-  };
-  const ajv = new Ajv(ajvOptions);
-  addFormats(ajv);
-  return ajv;
+let ajvInstance: Ajv | null = null;
+
+export function resetAjv(): void {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('resetAjv can only be called in test environment');
+  }
+  ajvInstance = null;
 }
 
-const ajv = createAjv();
+export function getAjv(): Ajv {
+  if (!ajvInstance) {
+    const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
+      strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
+    };
+    ajvInstance = new Ajv(ajvOptions);
+    addFormats(ajvInstance);
+  }
+  return ajvInstance;
+}
 
 export function handleIsJson(
   assertion: Assertion,
@@ -42,14 +51,13 @@ export function handleIsJson(
         // Reference the JSON schema from external file
         const schema = valueFromScript;
         invariant(schema, 'is-json references a file that does not export a JSON schema');
-        validate = ajv.compile(schema as object);
+        validate = getAjv().compile(schema as object);
       } else {
         const scheme = yaml.load(renderedValue) as object;
-        validate = ajv.compile(scheme);
+        validate = getAjv().compile(scheme);
       }
     } else if (typeof renderedValue === 'object') {
-      // Value is JSON schema
-      validate = ajv.compile(renderedValue);
+      validate = getAjv().compile(renderedValue);
     } else {
       throw new Error('is-json assertion must have a string or object value');
     }
@@ -58,7 +66,7 @@ export function handleIsJson(
       return {
         pass,
         score: 0,
-        reason: `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(
+        reason: `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(
           validate.errors,
         )}`,
         assertion,
@@ -92,14 +100,13 @@ export function handleContainsJson(
           // Reference the JSON schema from external file
           const schema = valueFromScript;
           invariant(schema, 'contains-json references a file that does not export a JSON schema');
-          validate = ajv.compile(schema as object);
+          validate = getAjv().compile(schema as object);
         } else {
           const scheme = yaml.load(renderedValue) as object;
-          validate = ajv.compile(scheme);
+          validate = getAjv().compile(scheme);
         }
       } else if (typeof renderedValue === 'object') {
-        // Value is JSON schema
-        validate = ajv.compile(renderedValue);
+        validate = getAjv().compile(renderedValue);
       } else {
         throw new Error('contains-json assertion must have a string or object value');
       }
@@ -107,7 +114,7 @@ export function handleContainsJson(
       if (pass) {
         break;
       } else {
-        errorMessage = `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(
+        errorMessage = `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(
           validate.errors,
         )}`;
       }
