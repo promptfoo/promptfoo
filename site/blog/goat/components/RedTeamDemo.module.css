@@ -7,6 +7,7 @@
 }
 
 .tryAgainButtonUnsafe {
+  margin-top: 10px;
   padding: 0.75rem 1.5rem;
   background: #ffffff;
   color: #000000;
