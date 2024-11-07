@@ -1,0 +1,64 @@
+.suggestionsGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin: 0.1rem 0;
+}
+
+.suggestionCard {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 1rem;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.suggestionCard:hover {
+  border-color: #2563eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.cardContent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.textContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+  transition: color 0.2s ease;
+}
+
+.suggestionCard:hover .title {
+  color: #2563eb;
+}
+
+.description {
+  font-size: 0.875rem;
+  color: #666666;
+  margin: 0.25rem 0 0 0;
+  line-height: 1.4;
+}
+
+@media (min-width: 768px) {
+  .suggestionsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

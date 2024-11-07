@@ -1,7 +1,6 @@
 import { Send, Loader } from 'lucide-react';
 import React, { useState, useRef, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { API_BASE_URL } from './constants';
 import styles from './ChatInterface.module.css';
 
 // Type declarations
@@ -80,8 +79,10 @@ const suggestionCards: SuggestionCard[] = [
   },
 ];
 
+export const API_BASE_URL = 'https://us-central1-promptfoo.cloudfunctions.net';
+
 // Helper function for API calls
-const apiCall = async (endpoint: string, data: any) => {
+export const apiCall = async (endpoint: string, data: any) => {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
