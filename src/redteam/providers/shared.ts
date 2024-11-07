@@ -5,6 +5,8 @@ import {
   isApiProvider,
   type RedteamFileConfig,
   type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
 } from '../../types';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
