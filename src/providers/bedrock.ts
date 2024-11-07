@@ -25,7 +25,7 @@ interface BedrockOptions {
   sessionToken?: string;
 }
 
-interface TextGenerationOptions {
+export interface TextGenerationOptions {
   maxTokenCount?: number;
   stopSequences?: Array<string>;
   temperature?: number;
