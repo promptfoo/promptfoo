@@ -836,9 +836,6 @@ export function setupEnv(envPath: string | undefined) {
   } else {
     dotenv.config();
   }
-  logger.info(
-    `Environment variables loaded: ${JSON.stringify(process.env.PROMPTFOO_REMOTE_GENERATION_URL)}`,
-  );
 }
 
 export type StandaloneEval = CompletedPrompt & {
