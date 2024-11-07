@@ -7,7 +7,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
-import { REMOTE_GENERATION_URL } from '../constants';
+import { getRemoteGenerationUrl } from '../constants';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
@@ -46,7 +46,7 @@ export async function fetchRemoteGeneration(
     };
 
     const response = await fetchWithCache(
-      REMOTE_GENERATION_URL,
+      getRemoteGenerationUrl(),
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

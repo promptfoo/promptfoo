@@ -6,7 +6,7 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
-import { REMOTE_GENERATION_URL } from '../constants';
+import { getRemoteGenerationUrl } from '../constants';
 import { loadRedteamProvider } from '../providers/shared';
 import { shouldGenerateRemote } from '../util';
 
@@ -56,7 +56,7 @@ export async function generateMathPrompt(
       };
 
       const { data } = await fetchWithCache(
-        REMOTE_GENERATION_URL,
+        getRemoteGenerationUrl(),
         {
           method: 'POST',
           headers: {

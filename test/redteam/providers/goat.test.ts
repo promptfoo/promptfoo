@@ -1,5 +1,5 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { REMOTE_GENERATION_URL } from '../../../src/redteam/constants';
+import { getRemoteGenerationUrl } from '../../../src/redteam/constants';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import type {
   ApiProvider,
@@ -71,7 +71,7 @@ describe('RedteamGoatProvider', () => {
     await provider.callApi('test prompt', context);
 
     expect(mockFetch).toHaveBeenCalledWith(
-      REMOTE_GENERATION_URL,
+      getRemoteGenerationUrl(),
       expect.objectContaining({
         method: 'POST',
         headers: {

@@ -10,7 +10,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import { REMOTE_GENERATION_URL } from '../constants';
+import { getRemoteGenerationUrl } from '../constants';
 import { neverGenerateRemote } from '../util';
 
 export default class GoatProvider implements ApiProvider {
@@ -43,7 +43,7 @@ export default class GoatProvider implements ApiProvider {
     const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] = [];
 
     for (let turn = 0; turn < this.maxTurns; turn++) {
-      response = await fetch(REMOTE_GENERATION_URL, {
+      response = await fetch(getRemoteGenerationUrl(), {
         body: JSON.stringify({
           goal: context?.vars[this.injectVar],
           i: turn,
