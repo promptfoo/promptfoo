@@ -440,11 +440,11 @@ const RedTeamDemo: React.FC = () => {
               {state.messages.map((message, index) => (
                 <MessageComponent key={index} message={message} />
               ))}
+
               {!isLoading &&
                 state.stage === 'complete' &&
-                state.totalTurnsCompleted >= DEFAULT_TURNS &&
-                state.totalTurnsCompleted < MAX_TURNS &&
-                !isLastMessageUnsafe && (
+                !isLastMessageUnsafe &&
+                state.totalTurnsCompleted < MAX_TURNS && (
                   <div className={styles.additionalTurnContainer}>
                     {state.showTurnPrompt ? (
                       <div className={styles.turnConfirmation}>
@@ -464,16 +464,21 @@ const RedTeamDemo: React.FC = () => {
                         className={styles.additionalTurnButton}
                       >
                         Would you like to run another turn? ({MAX_TURNS - state.totalTurnsCompleted}{' '}
-                        turns remaining)
+                        remaining)
                       </button>
                     )}
                   </div>
                 )}
+
               {!isLoading && state.stage === 'complete' && (
                 <div className={styles.additionalTurnContainer}>
                   {isLastMessageUnsafe ? (
                     <div className={styles.completionMessage}>
                       Red team attack successful - target provided unsafe response
+                      <div className={styles.margint}></div>
+                      <button onClick={resetDemo} className={styles.tryAgainButtonUnsafe}>
+                        Restart Demo
+                      </button>
                     </div>
                   ) : state.totalTurnsCompleted >= MAX_TURNS ? (
                     <div className={styles.safeCompletionMessage}>
@@ -485,35 +490,7 @@ const RedTeamDemo: React.FC = () => {
                         Try Again with New Prompt
                       </button>
                     </div>
-                  ) : (
-                    state.totalTurnsCompleted >= DEFAULT_TURNS && (
-                      <div className={styles.turnConfirmation}>
-                        {state.showTurnPrompt ? (
-                          <div className={styles.turnConfirmation}>
-                            <button onClick={runAnotherTurn} className={styles.confirmButton}>
-                              Yes, run another turn
-                            </button>
-                            <button
-                              onClick={() =>
-                                setState((prev) => ({ ...prev, showTurnPrompt: false }))
-                              }
-                              className={styles.cancelButton}
-                            >
-                              No, I'm done
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={promptForAnotherTurn}
-                            className={styles.additionalTurnButton}
-                          >
-                            Would you like to run another turn? (
-                            {MAX_TURNS - state.totalTurnsCompleted} remaining)
-                          </button>
-                        )}
-                      </div>
-                    )
-                  )}
+                  ) : null}
                 </div>
               )}
             </div>
