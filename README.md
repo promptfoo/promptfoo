@@ -5,6 +5,7 @@
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)](https://github.com/promptfoo/promptfoo/actions/workflows/main.yml)
 ![MIT license](https://img.shields.io/github/license/promptfoo/promptfoo)
 [![Discord](https://github.com/user-attachments/assets/2092591a-ccc5-42a7-aeb6-24a2808950fd)](https://discord.gg/gHPS9jjfbs)
+[![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20promptfoo%20Guru-006BFF)](https://gurubase.io/g/promptfoo)
 
 `promptfoo` is a tool for testing, evaluating, and red-teaming LLM apps.
 
