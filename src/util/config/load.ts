@@ -152,7 +152,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
     ret = await dereferenceConfig(rawConfig || {});
   } else if (isJavascriptFile(configPath)) {
-    ret = (await importModule(configPath)) as UnifiedConfig;
+    ret = { ...(await importModule(configPath)) } as UnifiedConfig;
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
   }

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import invariant from 'tiny-invariant';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import { readTests } from '../../../src/testCases';
@@ -56,6 +57,10 @@ jest.mock('../../../src/testCases', () => {
 });
 
 jest.mock('../../../src/logger');
+
+jest.mock('../../../src/assertions', () => ({
+  readAssertions: jest.fn(),
+}));
 
 describe('combineConfigs', () => {
   beforeEach(() => {
@@ -726,6 +731,73 @@ describe('dereferenceConfig', () => {
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     expect(dereferencedConfig).toEqual(rawConfig);
   });
+
+  it('should skip dereferencing when PROMPTFOO_DISABLE_REF_PARSER is true', async () => {
+    process.env.PROMPTFOO_DISABLE_REF_PARSER = 'true';
+
+    const rawConfig = {
+      prompts: ['hello world'],
+      providers: ['provider1'],
+      definitions: {
+        prompt: 'hello world',
+      },
+    } as UnifiedConfig;
+
+    const result = await dereferenceConfig(rawConfig);
+    expect(result).toEqual(rawConfig);
+
+    delete process.env.PROMPTFOO_DISABLE_REF_PARSER;
+  });
+
+  it('should handle multiple levels of function and tool parameters', async () => {
+    const rawConfig = {
+      providers: [
+        {
+          id: 'test-provider',
+          config: {
+            functions: [
+              {
+                name: 'func1',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    nested: {
+                      type: 'object',
+                      properties: {
+                        deep: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+            tools: [
+              {
+                function: {
+                  name: 'tool1',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      nested: {
+                        type: 'object',
+                        properties: {
+                          deep: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ],
+      prompts: ['test'],
+    };
+
+    const result = await dereferenceConfig(rawConfig as UnifiedConfig);
+    expect(result).toEqual(rawConfig);
+  });
 });
 
 describe('resolveConfigs', () => {
@@ -935,5 +1007,115 @@ describe('readConfig', () => {
       ...mockConfig,
       prompts: ['{{prompt}}'],
     });
+  });
+
+  it('should handle empty config file', async () => {
+    jest.spyOn(fs, 'readFileSync').mockReturnValue('');
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+
+    const result = await readConfig('config.json');
+
+    expect(result).toEqual({
+      prompts: ['{{prompt}}'],
+    });
+  });
+
+  it('should preserve function parameters when dereferencing', async () => {
+    const mockConfig: UnifiedConfig = {
+      providers: [
+        {
+          id: 'openai:gpt-4',
+          config: {
+            functions: [
+              {
+                name: 'test_function',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    test: { type: 'string' },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ],
+      prompts: ['test prompt'],
+    };
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+
+    const result = (await readConfig('config.json')) as UnifiedConfig;
+
+    const provider = Array.isArray(result.providers) ? result.providers[0] : undefined;
+    const mockProvider = Array.isArray(mockConfig.providers) ? mockConfig.providers[0] : undefined;
+
+    invariant(typeof provider === 'object' && provider?.config, 'provider.config is required');
+    invariant(
+      typeof mockProvider === 'object' && mockProvider?.config,
+      'mockProvider.config is required',
+    );
+    expect(provider?.config?.functions?.[0]?.parameters).toEqual(
+      mockProvider?.config?.functions?.[0]?.parameters,
+    );
+  });
+
+  it('should preserve tool parameters when dereferencing', async () => {
+    const mockConfig: UnifiedConfig = {
+      providers: [
+        {
+          id: 'openai:gpt-4',
+          config: {
+            tools: [
+              {
+                function: {
+                  name: 'test_tool',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      test: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ],
+      prompts: ['test prompt'],
+    };
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+
+    const result = (await readConfig('config.json')) as UnifiedConfig;
+
+    const provider = Array.isArray(result.providers) ? result.providers[0] : undefined;
+    const mockProvider = Array.isArray(mockConfig.providers) ? mockConfig.providers[0] : undefined;
+
+    invariant(typeof provider === 'object' && provider?.config, 'provider.config is required');
+    invariant(
+      typeof mockProvider === 'object' && mockProvider?.config,
+      'mockProvider.config is required',
+    );
+
+    expect(provider.config?.tools?.[0]?.function?.parameters).toEqual(
+      mockProvider.config?.tools?.[0]?.function?.parameters,
+    );
+  });
+
+  it('should handle provider as a function', async () => {
+    const providerFunction = () => ({ type: 'custom' });
+    const mockConfig = {
+      providers: providerFunction,
+      prompts: ['test prompt'],
+    };
+
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.js' } as any);
+    jest.mocked(importModule).mockResolvedValue(mockConfig);
+
+    const result = await readConfig('config.js');
+    expect(result.providers).toBe(providerFunction);
   });
 });
