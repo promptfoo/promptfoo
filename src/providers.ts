@@ -531,11 +531,13 @@ export async function loadApiProviders(
     env?: EnvOverrides;
   } = {},
 ): Promise<ApiProvider[]> {
+  logger.warn(`providerPaths: ${JSON.stringify(providerPaths)}`);
   const { basePath } = options;
   const env = options.env || cliState.config?.env;
   if (typeof providerPaths === 'string') {
     return [await loadApiProvider(providerPaths, { basePath, env })];
   } else if (typeof providerPaths === 'function') {
+    logger.warn(`providerPaths is a function`);
     return [
       {
         id: () => 'custom-function',
@@ -548,6 +550,7 @@ export async function loadApiProviders(
         if (typeof provider === 'string') {
           return loadApiProvider(provider, { basePath, env });
         } else if (typeof provider === 'function') {
+          logger.warn(`provider is a function in array`);
           return {
             id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
             callApi: provider,

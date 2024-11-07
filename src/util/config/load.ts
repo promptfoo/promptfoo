@@ -152,7 +152,12 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
     ret = await dereferenceConfig(rawConfig || {});
   } else if (isJavascriptFile(configPath)) {
-    ret = { ...(await importModule(configPath)) } as UnifiedConfig;
+    const imported = await importModule(configPath);
+    logger.warn(`imported: ${JSON.stringify(imported)}`);
+    ret = Object.defineProperties(
+      {},
+      Object.getOwnPropertyDescriptors(imported)
+    ) as UnifiedConfig;
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
   }
@@ -462,6 +467,9 @@ export async function resolveConfigs(
   cliState.basePath = basePath;
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
+  logger.error(`fileConfig.providers: ${JSON.stringify(fileConfig.providers)}`);
+  logger.error(`defaultConfig.providers: ${JSON.stringify(defaultConfig.providers)}`);
+  logger.error(`cmdObj.providers: ${JSON.stringify(cmdObj.providers)}`);
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,

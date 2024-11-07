@@ -36,8 +36,18 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     await runDbMigrations();
   }
 
+  logger.warn(`testSuite: ${JSON.stringify(testSuite, (key, value) => {
+    if (typeof value === 'function') {
+      return value.toString();
+    }
+    return value;
+  }, 2)}`);
+
   const constructedTestSuite: TestSuite = {
     ...testSuite,
+    ...Object.entries(Object.getOwnPropertyDescriptors(testSuite))
+      .filter(([_, descriptor]) => typeof descriptor.value === 'function')
+      .reduce((acc, [key, descriptor]) => ({ ...acc, [key]: descriptor.value }), {}),
     scenarios: testSuite.scenarios as Scenario[],
     providers: await loadApiProviders(testSuite.providers, {
       env: testSuite.env,
@@ -45,7 +55,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     tests: await readTests(testSuite.tests),
 
     nunjucksFilters: await readFilters(testSuite.nunjucksFilters || {}),
-
     // Full prompts expected (not filepaths)
     prompts: (
       await Promise.all(
@@ -57,6 +66,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
               function: promptInput as PromptFunction,
             };
           } else if (typeof promptInput === 'string') {
+            logger.warn(`promptInput is a string: ${promptInput}`);
             return readPrompts(promptInput);
           }
           try {
@@ -74,6 +84,13 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       )
     ).flat(),
   };
+
+  logger.warn(`constructedTestSuite: ${JSON.stringify(constructedTestSuite, (key, value) => {
+    if (typeof value === 'function') {
+      return value.toString();
+    }
+    return value;
+  }, 2)}`);
 
   // Resolve nested providers
   for (const test of constructedTestSuite.tests || []) {

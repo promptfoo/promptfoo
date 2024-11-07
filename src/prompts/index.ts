@@ -99,9 +99,13 @@ export async function processPrompt(
     return [prompt as Prompt];
   }
 
+  logger.warn(`Processing prompt: ${JSON.stringify(prompt)}`);
+
   if (!maybeFilePath(prompt.raw)) {
+    logger.warn(`Prompt is not a file path: ${prompt.raw}`);
     return processString(prompt);
   }
+  logger.warn(`Prompt is a file path: ${prompt.raw}`);
 
   const {
     extension,
@@ -157,6 +161,7 @@ export async function processPrompt(
     return processPythonFile(filePath, prompt, functionName);
   }
   if (extension === '.txt') {
+    logger.warn(`Processing txt file: ${filePath}`);
     return processTxtFile(filePath, prompt);
   }
   if (extension && ['.yml', '.yaml'].includes(extension)) {
@@ -175,11 +180,13 @@ export async function readPrompts(
   promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
   basePath: string = '',
 ): Promise<Prompt[]> {
-  logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
+  logger.warn(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
   const promptPartials: Partial<Prompt>[] = normalizeInput(promptPathOrGlobs);
   const prompts: Prompt[] = [];
   for (const prompt of promptPartials) {
+    logger.warn(`Processing prompt: ${JSON.stringify(prompt)}`);
     const promptBatch = await processPrompt(prompt, basePath);
+    logger.warn(`Prompt batch: ${JSON.stringify(promptBatch)}`);
     if (promptBatch.length === 0) {
       throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
     }
