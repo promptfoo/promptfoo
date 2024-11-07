@@ -2,12 +2,10 @@ import type { ValidateFunction } from 'ajv';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import async from 'async';
-import { XMLParser } from 'fast-xml-parser';
 import { distance as levenshtein } from 'fastest-levenshtein';
 import fs from 'fs';
 import * as rouge from 'js-rouge';
 import yaml from 'js-yaml';
-import { type Option as sqlParserOption } from 'node-sql-parser';
 import util from 'node:util';
 import path from 'path';
 import invariant from 'tiny-invariant';
@@ -37,7 +35,7 @@ import { runPython } from '../python/pythonUtils';
 import { runPythonCode } from '../python/wrapper';
 import { getGraderById } from '../redteam/graders';
 import telemetry from '../telemetry';
-import type { AssertionValue, AssertionValueFunctionContext, ProviderResponse } from '../types';
+import type { AssertionValueFunctionContext, ProviderResponse } from '../types';
 import {
   type ApiProvider,
   type Assertion,
@@ -52,7 +50,10 @@ import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
 import { AssertionsResult } from './AssertionsResult';
 import { handleBleuScore } from './bleu';
+import { handlePerplexity, handlePerplexityScore } from './perplexity';
+import { isSql } from './sql';
 import { getFinalTest, processFileReference } from './utils';
+import { validateXml, containsXml } from './xml';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -109,151 +110,6 @@ function handleRougeScore(
       : `${baseType.toUpperCase()} score ${score.toFixed(2)} is less than threshold ${
           assertion.threshold || 0.75
         }`,
-    assertion,
-  };
-}
-
-export function validateXml(
-  xmlString: string,
-  requiredElements?: string[],
-): { isValid: boolean; reason: string } {
-  if (!xmlString.startsWith('<')) {
-    return { isValid: false, reason: 'XML is missing opening tag' };
-  }
-  const parser = new XMLParser({
-    allowBooleanAttributes: true,
-    ignoreAttributes: false,
-    parseAttributeValue: true,
-    parseTagValue: true,
-  });
-
-  try {
-    const parsedXml = parser.parse(xmlString);
-    if (requiredElements && requiredElements.length > 0) {
-      const missingElements = requiredElements.filter((element) => {
-        const path = element.split('.');
-        let current: any = parsedXml;
-        for (const key of path) {
-          if (current[key] === undefined) {
-            return true;
-          }
-          current = current[key];
-        }
-        return false;
-      });
-
-      if (missingElements.length > 0) {
-        return {
-          isValid: false,
-          reason: `XML is missing required elements: ${missingElements.join(', ')}`,
-        };
-      }
-    }
-
-    return { isValid: true, reason: 'XML is valid and contains all required elements' };
-  } catch (err) {
-    return { isValid: false, reason: `XML parsing failed: ${(err as Error).message}` };
-  }
-}
-
-export function containsXml(
-  outputString: string,
-  requiredElements?: string[],
-): { isValid: boolean; reason: string } {
-  const xmlRegex = /<\?xml.*?>[\s\S]*<\/[^>]+>|\S*<[^>]+>[\s\S]*<\/[^>]+>/;
-  const xmlMatches = outputString.match(xmlRegex);
-
-  if (!xmlMatches) {
-    return { isValid: false, reason: 'No XML content found in the output' };
-  }
-
-  for (const xmlMatch of xmlMatches) {
-    const { isValid, reason } = validateXml(xmlMatch, requiredElements);
-    if (isValid) {
-      return { isValid: true, reason };
-    }
-  }
-
-  return { isValid: false, reason: 'No valid XML content found matching the requirements' };
-}
-
-export async function isSql(
-  outputString: string,
-  renderedValue: AssertionValue | undefined,
-  inverse: boolean,
-  assertion: Assertion,
-): Promise<GradingResult> {
-  let pass = false;
-  let databaseType: string = 'MySQL';
-  let whiteTableList: string[] | undefined;
-  let whiteColumnList: string[] | undefined;
-
-  if (renderedValue && typeof renderedValue === 'object') {
-    const value = renderedValue as {
-      databaseType?: string;
-      allowedTables?: string[];
-      allowedColumns?: string[];
-    };
-
-    databaseType = value.databaseType || 'MySQL';
-    whiteTableList = value.allowedTables;
-    whiteColumnList = value.allowedColumns;
-  }
-
-  if (renderedValue && typeof renderedValue !== 'object') {
-    throw new Error('is-sql assertion must have a object value.');
-  }
-
-  const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
-    throw new Error('node-sql-parser is not installed. Please install it first');
-  });
-
-  const sqlParser = new SqlParser();
-
-  const opt: sqlParserOption = { database: databaseType };
-
-  const failureReasons: string[] = [];
-
-  try {
-    sqlParser.astify(outputString, opt);
-    pass = !inverse;
-  } catch {
-    pass = inverse;
-    failureReasons.push(
-      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-    );
-  }
-
-  if (whiteTableList) {
-    opt.type = 'table';
-    try {
-      sqlParser.whiteListCheck(outputString, whiteTableList, opt);
-    } catch (err) {
-      pass = inverse;
-      const error = err as Error;
-      failureReasons.push(`SQL validation failed: ${error.message}.`);
-    }
-  }
-
-  if (whiteColumnList) {
-    opt.type = 'column';
-    try {
-      sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
-    } catch (err) {
-      pass = inverse;
-      const error = err as Error;
-      failureReasons.push(`SQL validation failed: ${error.message}.`);
-    }
-  }
-
-  if (inverse && pass === false && failureReasons.length === 0) {
-    failureReasons.push('The output SQL statement is valid');
-  }
-
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: pass ? 'Assertion passed' : failureReasons.join(' '),
     assertion,
   };
 }
@@ -1314,48 +1170,11 @@ ${
   }
 
   if (baseType === 'perplexity') {
-    if (!logProbs || logProbs.length === 0) {
-      throw new Error(
-        'Perplexity assertion does not support providers that do not return logProbs',
-      );
-    }
-    const sumLogProbs = logProbs.reduce((acc, logProb) => acc + logProb, 0);
-    const avgLogProb = sumLogProbs / logProbs.length;
-    const perplexity = Math.exp(-avgLogProb);
-
-    pass = assertion.threshold ? perplexity <= assertion.threshold : true;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Perplexity ${perplexity.toFixed(2)} is greater than threshold ${assertion.threshold}`,
-      assertion,
-    };
+    return handlePerplexity(logProbs, assertion);
   }
 
   if (baseType === 'perplexity-score') {
-    if (!logProbs || logProbs.length === 0) {
-      throw new Error(
-        'perplexity-score assertion does not support providers that do not return logProbs',
-      );
-    }
-    const sumLogProbs = logProbs.reduce((acc, logProb) => acc + logProb, 0);
-    const avgLogProb = sumLogProbs / logProbs.length;
-    const perplexity = Math.exp(-avgLogProb);
-    const perplexityNorm = 1 / (1 + perplexity);
-
-    pass = assertion.threshold ? perplexityNorm >= assertion.threshold : true;
-    return {
-      pass,
-      score: perplexityNorm,
-      reason: pass
-        ? 'Assertion passed'
-        : `Perplexity score ${perplexityNorm.toFixed(2)} is less than threshold ${
-            assertion.threshold
-          }`,
-      assertion,
-    };
+    return handlePerplexityScore(logProbs, assertion);
   }
 
   if (baseType === 'cost') {
