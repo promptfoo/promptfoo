@@ -472,7 +472,12 @@ describe('RedteamIterativeProvider', () => {
       mockTargetProvider.callApi.mockResolvedValue({ output: nonStringOutput });
 
       const targetPrompt = 'Test prompt';
-      const result = await getTargetResponse(mockTargetProvider, targetPrompt);
+      const result = await getTargetResponse(
+        mockTargetProvider,
+        targetPrompt,
+        {} as CallApiContextParams,
+        {} as CallApiOptionsParams,
+      );
 
       expect(result).toBe(JSON.stringify(nonStringOutput));
     });
