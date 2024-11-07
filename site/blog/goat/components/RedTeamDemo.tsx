@@ -17,8 +17,8 @@ import {
 } from 'lucide-react';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { API_BASE_URL } from './ChatInterface';
 import RedTeamSuggestions from './RedTeamSuggestions';
+import { API_BASE_URL } from './constants';
 import styles from './RedTeamDemo.module.css';
 
 const attacks = [
