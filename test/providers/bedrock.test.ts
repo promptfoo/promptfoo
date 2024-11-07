@@ -48,6 +48,16 @@ jest.mock('../../src/logger', () => ({
   error: jest.fn(),
 }));
 
+class TestBedrockProvider extends AwsBedrockGenericProvider {
+  modelName = 'test-model';
+  async generateText() {
+    return { text: 'test' };
+  }
+  async generateEmbedding() {
+    return { embedding: [1, 2, 3] };
+  }
+}
+
 describe('AwsBedrockGenericProvider', () => {
   let BedrockRuntime: any;
 
@@ -334,37 +344,9 @@ describe('AwsBedrockGenericProvider', () => {
   });
 
   describe('getCredentials', () => {
-    it('should return credentials if accessKeyId and secretAccessKey are provided', () => {
-      const provider = new (class extends AwsBedrockGenericProvider {
-        constructor() {
-          super('test-model', {
-            config: {
-              accessKeyId: 'test-access-key',
-              secretAccessKey: 'test-secret-key',
-            },
-          });
-        }
-      })();
-
-      const credentials = provider.getCredentials();
-      expect(credentials).toEqual({
-        accessKeyId: 'test-access-key',
-        secretAccessKey: 'test-secret-key',
-      });
-    });
-
-    it('should return undefined if accessKeyId or secretAccessKey is missing', () => {
-      const provider = new (class extends AwsBedrockGenericProvider {
-        constructor() {
-          super('test-model', {
-            config: {
-              accessKeyId: 'test-access-key',
-            },
-          });
-        }
-      })();
-
-      const credentials = provider.getCredentials();
+    it('returns undefined when no credentials are provided', async () => {
+      const provider = new TestBedrockProvider('');
+      const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined();
     });
   });

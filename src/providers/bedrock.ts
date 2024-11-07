@@ -16,7 +16,6 @@ import type {
 import { maybeLoadFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
-import { fromSSO } from '@aws-sdk/credential-provider-sso';
 
 interface BedrockOptions {
   accessKeyId?: string;
@@ -709,7 +708,9 @@ export abstract class AwsBedrockGenericProvider {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
   }
 
-  getCredentials(): AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined {
+  async getCredentials(): Promise<
+    AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
+  > {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
       return {
         accessKeyId: this.config.accessKeyId,
@@ -718,6 +719,7 @@ export abstract class AwsBedrockGenericProvider {
       };
     }
     if (this.config.profile) {
+      const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
       return fromSSO({ profile: this.config.profile });
     }
     return undefined;
@@ -742,7 +744,7 @@ export abstract class AwsBedrockGenericProvider {
       }
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
-        const credentials = this.getCredentials();
+        const credentials = await this.getCredentials();
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
           ...(credentials ? { credentials } : {}),
