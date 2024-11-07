@@ -65,18 +65,13 @@ async function runRedteamConversation({
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
-    const redteamResp = await redteamProvider.callApi(
-      redteamBody,
-      {
-        ...context,
-        prompt: {
-          raw: redteamBody,
-          label: 'history',
-        },
-        vars: context?.vars || {},
+    const redteamResp = await redteamProvider.callApi(redteamBody, {
+      prompt: {
+        raw: redteamBody,
+        label: 'history',
       },
-      options,
-    );
+      vars: {},
+    });
     if (redteamResp.error) {
       throw new Error(`Error from redteam provider: ${redteamResp.error}`);
     }
@@ -112,18 +107,13 @@ async function runRedteamConversation({
         content: targetPrompt,
       },
     ]);
-    const isOnTopicResp = await redteamProvider.callApi(
-      isOnTopicBody,
-      {
-        ...context,
-        prompt: {
-          raw: isOnTopicBody,
-          label: 'on-topic',
-        },
-        vars: context?.vars || {},
+    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody, {
+      prompt: {
+        raw: isOnTopicBody,
+        label: 'on-topic',
       },
-      options,
-    );
+      vars: {},
+    });
     if (isOnTopicResp.error) {
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
     }
