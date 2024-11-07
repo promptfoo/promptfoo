@@ -1,3 +1,23 @@
+/**
+ * BLEU (Bilingual Evaluation Understudy) Score Implementation
+ *
+ * Implementation based on:
+ * Papineni, K., Roukos, S., Ward, T., & Zhu, W. J. (2002).
+ * "BLEU: a method for automatic evaluation of machine translation."
+ * In Proceedings of the 40th Annual Meeting of the ACL, pp. 311-318.
+ *
+ * {@link https://doi.org/10.3115/1073083.1073135}
+ */
+import type { Assertion, GradingResult } from '../types';
+
+/**
+ * Generates n-grams from an array of words
+ *
+ * @param words - Array of words to generate n-grams from
+ * @param n - Length of each n-gram
+ * @returns Array of n-grams as strings
+ * @internal
+ */
 function getNGrams(words: string[], n: number): string[] {
   const ngrams: string[] = [];
   for (let i = 0; i <= words.length - n; i++) {
@@ -6,6 +26,15 @@ function getNGrams(words: string[], n: number): string[] {
   return ngrams;
 }
 
+/**
+ * Calculates the brevity penalty for BLEU score.
+ * Penalizes translations that are shorter than the reference.
+ *
+ * @param candidateLength - Length of candidate translation
+ * @param referenceLength - Length of reference translation
+ * @returns Brevity penalty score between 0 and 1
+ * @internal
+ */
 function calculateBrevityPenalty(candidateLength: number, referenceLength: number): number {
   if (candidateLength > referenceLength) {
     return 1;
@@ -13,6 +42,15 @@ function calculateBrevityPenalty(candidateLength: number, referenceLength: numbe
   return Math.exp(1 - candidateLength / referenceLength);
 }
 
+/**
+ * Calculates BLEU score for a candidate string against reference strings.
+ *
+ * @param candidate - The string to evaluate
+ * @param references - Array of reference strings to compare against
+ * @param weights - Weights for each n-gram precision (1-gram to 4-gram)
+ * @returns BLEU score between 0 and 1
+ * @throws When inputs are invalid or weights don't sum to 1
+ */
 export function calculateBleuScore(
   candidate: string,
   references: string[],
@@ -81,4 +119,35 @@ export function calculateBleuScore(
   }, 0);
 
   return bp * Math.exp(weightedScore);
+}
+
+/**
+ * Handles BLEU score assertion for promptfoo.
+ * Compares output against reference(s) using BLEU metric.
+ *
+ * @param assertion - The assertion configuration
+ * @param renderedValue - Expected output(s)
+ * @param outputString - Actual output to evaluate
+ * @param inverse - Whether to invert the comparison
+ * @returns Result of the BLEU score comparison
+ */
+export function handleBleuScore(
+  assertion: Assertion,
+  renderedValue: string | string[],
+  outputString: string,
+  inverse: boolean,
+): GradingResult {
+  const threshold = assertion.threshold ?? 0.5;
+  const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
+  const score = calculateBleuScore(outputString, references);
+  const pass = score >= threshold !== inverse;
+
+  return {
+    pass,
+    score: inverse ? 1 - score : score,
+    reason: pass
+      ? 'Assertion passed'
+      : `BLEU score ${score.toFixed(2)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
+    assertion,
+  };
 }

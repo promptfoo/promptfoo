@@ -323,6 +323,7 @@ export function isGradingResult(result: any): result is GradingResult {
 
 export const BaseAssertionTypesSchema = z.enum([
   'answer-relevance',
+  'bleu',
   'classifier',
   'contains-all',
   'contains-any',

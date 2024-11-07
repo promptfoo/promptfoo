@@ -51,7 +51,7 @@ import { extractJsonObjects } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
 import { AssertionsResult } from './AssertionsResult';
-import { calculateBleuScore } from './bleu';
+import { handleBleuScore } from './bleu';
 import { getFinalTest, processFileReference } from './utils';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
@@ -1240,6 +1240,15 @@ ${
     return handleRougeScore(baseType, assertion, renderedValue, outputString, inverse);
   }
 
+  if (baseType === 'bleu') {
+    invariant(
+      typeof renderedValue === 'string' ||
+        (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
+      '"bleu" assertion type must have a string or array of strings value',
+    );
+    return handleBleuScore(assertion, renderedValue, outputString, inverse);
+  }
+
   if (baseType === 'levenshtein') {
     invariant(
       typeof renderedValue === 'string',
@@ -1321,26 +1330,6 @@ ${
       reason: pass
         ? 'Assertion passed'
         : `Perplexity ${perplexity.toFixed(2)} is greater than threshold ${assertion.threshold}`,
-      assertion,
-    };
-  }
-
-  if (baseType === 'bleu') {
-    invariant(
-      typeof renderedValue === 'string' || Array.isArray(renderedValue),
-      '"bleu" assertion type must have a string or array of strings value',
-    );
-
-    const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
-    const score = calculateBleuScore(outputString, references);
-    pass = score >= (assertion.threshold || 0.5);
-
-    return {
-      pass,
-      score,
-      reason: pass
-        ? 'Assertion passed'
-        : `BLEU score ${score.toFixed(2)} is less than threshold ${assertion.threshold || 0.5}`,
       assertion,
     };
   }
