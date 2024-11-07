@@ -1,25 +1,25 @@
 ---
-title: 'RAG Poisoning: Key Concepts Explained'
+title: 'RAG Data Poisoning: Key Concepts Explained'
 description: How attackers can manipulate AI responses by corrupting the knowledge base.
 image: /img/docs/rag-poisoning.svg
 date: 2024-11-04
 ---
 
-AI systems are under attack - and this time, it's their knowledge base that's being targeted. A new security threat called RAG poisoning lets attackers manipulate AI responses by corrupting the very documents these systems rely on for accurate information.
+AI systems are under attack - and this time, it's their knowledge base that's being targeted. A new security threat called data poisoning lets attackers manipulate AI responses by corrupting the very documents these systems rely on for accurate information.
 
 Retrieval-Augmented Generation (RAG) was designed to make AI smarter by connecting language models to external knowledge sources. Instead of relying solely on training data, RAG systems can pull in fresh information to provide current, accurate responses. With over 30% of enterprise AI applications now using RAG, it's become a key component of modern AI architecture.
 
-But this powerful capability has opened a new vulnerability. Through RAG poisoning, attackers can inject malicious content into knowledge databases, forcing AI systems to generate harmful or incorrect outputs.
+But this powerful capability has opened a new vulnerability. Through data poisoning, attackers can inject malicious content into knowledge databases, forcing AI systems to generate harmful or incorrect outputs.
 
-![RAG Poisoning](/img/docs/rag-poisoning.svg)
+![Data Poisoning](/img/docs/rag-poisoning.svg)
 
 These attacks are remarkably efficient - research shows that just five carefully crafted documents in a database of millions can successfully manipulate AI responses 90% of the time.
 
 <!-- truncate -->
 
-## What is RAG Poisoning?
+## What is Data Poisoning?
 
-RAG poisoning works by exploiting how AI systems trust their context. When context is built from external documents, this forms an attack vector.
+Data poisoning works by exploiting how AI systems, especially RAGs, trust their context. When context is built from external documents, this forms an attack vector.
 
 Attackers first ensure their malicious content will be retrieved for specific queries, then craft that content to compel the LLM to produce certain responses.
 
@@ -27,7 +27,7 @@ The impact goes beyond simple misinformation. Poisoned systems can expose sensit
 
 As organizations increasingly use AI for decision-making, successful attacks could have severe real-world consequences.
 
-## How RAG Poisoning Works
+## How Data Poisoning Works
 
 The technical execution of RAG poisoning requires an understanding of LLM prompting and RAG retrieval, coupled with a poisoned document.
 
@@ -47,7 +47,7 @@ When a user asks about account verification, the poisoned document is retrieved 
 
 Next, the false knowledge contained in the poison document causes the AI to believe that it should direct users to send their credentials to an attacker's email address.
 
-## Types of RAG Poisoning Attacks
+## Types of Data Poisoning Attacks
 
 RAG systems are vulnerable to five main types of attacks through poisoned documents:
 
@@ -123,7 +123,7 @@ RAG systems are vulnerable to five main types of attacks through poisoned docume
 
 These attacks are particularly effective because they exploit the AI's tendency to treat retrieved content as authoritative. Traditional content filtering often fails to catch these sophisticated attacks since they maintain perfect syntactic validity while carrying malicious semantic payload.
 
-## Security Risks of RAG Poisoning
+## Security Risks of Data Poisoning
 
 The proliferation of private data through RAG architectures creates systemic vulnerabilities. New infrastructure and data types - specifically vector databases storing embeddings - introduce attack surfaces that traditional security measures cannot adequately protect. These databases often lack mature security controls; some providers don't even prevent internal employees from accessing customer data.
 
@@ -224,7 +224,7 @@ Depending on your system, there are multiple touchpoints where you can implement
 
    You can also implement **context-aware output** filtering using entity recognition to detect and remove sensitive information, use techniques like adding consistency checks by generating multiple responses with different prompts and verifying they maintain semantic alignment.
 
-## Detecting RAG poisoning
+## Detecting RAG & Data Poisoning
 
 Promptfoo can help you determine whether your system is vulnerable to RAG poisoning attacks by using the [RAG poisoning utility](/docs/red-team/plugins/rag-poisoning/).
 
