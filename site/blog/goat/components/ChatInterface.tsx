@@ -80,7 +80,6 @@ const suggestionCards: SuggestionCard[] = [
   },
 ];
 
-// Helper function for API calls
 const apiCall = async (endpoint: string, data: any) => {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
