@@ -1,5 +1,5 @@
 import type { ProviderOptions } from '../types';
-import { OpenAiChatCompletionProvider } from './openai';
+import { OpenAiChatCompletionProvider, type OpenAiCompletionOptions } from './openai';
 
 interface PortkeyProviderOptions extends ProviderOptions {
   config?: {
