@@ -29,6 +29,8 @@ async function runRedteamConversation({
   redteamProvider,
   targetProvider,
   injectVar,
+  context,
+  options,
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
@@ -36,6 +38,8 @@ async function runRedteamConversation({
   redteamProvider: ApiProvider;
   targetProvider: ApiProvider;
   injectVar: string;
+  context: CallApiContextParams;
+  options: CallApiOptionsParams;
 }) {
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
@@ -61,13 +65,17 @@ async function runRedteamConversation({
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
-    const redteamResp = await redteamProvider.callApi(redteamBody, {
-      prompt: {
-        raw: redteamBody,
-        label: 'history',
+    const redteamResp = await redteamProvider.callApi(
+      redteamBody,
+      {
+        ...context,
+        prompt: {
+          raw: redteamBody,
+          label: 'history',
+        },
       },
-      vars: {},
-    });
+      options,
+    );
     if (redteamResp.error) {
       throw new Error(`Error from redteam provider: ${redteamResp.error}`);
     }
@@ -103,13 +111,17 @@ async function runRedteamConversation({
         content: targetPrompt,
       },
     ]);
-    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody, {
-      prompt: {
-        raw: isOnTopicBody,
-        label: 'on-topic',
+    const isOnTopicResp = await redteamProvider.callApi(
+      isOnTopicBody,
+      {
+        ...context,
+        prompt: {
+          raw: isOnTopicBody,
+          label: 'on-topic',
+        },
       },
-      vars: {},
-    });
+      options,
+    );
     if (isOnTopicResp.error) {
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
     }
@@ -118,7 +130,7 @@ async function runRedteamConversation({
       .onTopic;
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
-    const targetResponse = await getTargetResponse(targetProvider, targetPrompt);
+    const targetResponse = await getTargetResponse(targetProvider, targetPrompt, context, options);
     const penalizedPhrases = ['in the face of impending doom'];
     const containsPenalizedPhrase = penalizedPhrases.some((phrase) =>
       targetResponse.toLowerCase().includes(phrase),
@@ -224,6 +236,8 @@ class RedteamIterativeProvider implements ApiProvider {
       }),
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
+      context,
+      options: options || {},
     });
   }
 }

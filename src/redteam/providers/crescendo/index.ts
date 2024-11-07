@@ -134,6 +134,8 @@ class CrescendoProvider implements ApiProvider {
       filters: context.filters,
       vars: context.vars,
       provider: context.originalProvider,
+      context,
+      options: options || {},
     });
   }
 
@@ -142,11 +144,15 @@ class CrescendoProvider implements ApiProvider {
     filters,
     vars,
     provider,
+    context,
+    options,
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
     vars: Record<string, string | object>;
     provider: ApiProvider;
+    context: CallApiContextParams;
+    options: CallApiOptionsParams;
   }) {
     logger.debug(
       `Starting Crescendo attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
@@ -176,7 +182,16 @@ class CrescendoProvider implements ApiProvider {
       const attackPrompt = await this.getAttackPrompt(roundNum, evalFlag, lastResponse);
       logger.debug(`Generated attack prompt: ${attackPrompt}`);
 
-      lastResponse = await this.sendPrompt(attackPrompt, prompt, vars, filters, provider, roundNum);
+      lastResponse = await this.sendPrompt(
+        attackPrompt,
+        prompt,
+        vars,
+        filters,
+        provider,
+        roundNum,
+        context,
+        options,
+      );
       logger.debug(`Received response from target: ${lastResponse.substring(0, 100)}...`);
 
       const [isRefusal, refusalRationale] = await this.getRefusalScore(attackPrompt, lastResponse);
@@ -339,6 +354,8 @@ class CrescendoProvider implements ApiProvider {
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
     roundNum: number,
+    context: CallApiContextParams,
+    options: CallApiOptionsParams,
   ): Promise<string> {
     const renderedPrompt = await renderPrompt(
       originalPrompt,
@@ -370,7 +387,12 @@ class CrescendoProvider implements ApiProvider {
       });
     }
 
-    const targetResponse = await getTargetResponse(provider, renderedPrompt);
+    const targetResponse = await getTargetResponse(
+      provider,
+      renderedPrompt,
+      context,
+      options,
+    );
     invariant(targetResponse, 'Expected output to be defined');
     logger.debug(`Received response from target: ${targetResponse}`);
 

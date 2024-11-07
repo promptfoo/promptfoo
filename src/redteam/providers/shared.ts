@@ -1,5 +1,6 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
+import type { CallApiOptionsParams, CallApiContextParams } from '../../types';
 import {
   isProviderOptions,
   isApiProvider,
@@ -53,10 +54,12 @@ export async function loadRedteamProvider({
 export async function getTargetResponse(
   targetProvider: ApiProvider,
   targetPrompt: string,
+  context: CallApiContextParams,
+  options: CallApiOptionsParams,
 ): Promise<string> {
   let targetRespRaw;
   try {
-    targetRespRaw = await targetProvider.callApi(targetPrompt);
+    targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
     return (error as Error).message;
   }
