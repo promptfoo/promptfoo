@@ -377,9 +377,10 @@ const RedTeamDemo: React.FC = () => {
             className={styles.setup}
           >
             <h2>Set Your Goal</h2>
-            <p className="text-gray-600 text-sm">
+            <p className="text-gray-500 dark:text-gray-400 text-sm">
               Enter your red teaming goal or select from the suggestions below:
             </p>
+
             <RedTeamSuggestions onSelectGoal={(goal) => setState((prev) => ({ ...prev, goal }))} />
 
             <textarea

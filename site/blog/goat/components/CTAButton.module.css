@@ -33,3 +33,14 @@
 .ctaButton:hover .arrow {
   transform: translateX(4px);
 }
+
+/* Dark mode styles */
+html[data-theme='dark'] .ctaButton {
+  color: #ffffff;
+  border-color: rgb(239 68 68 / 0.5);
+}
+
+html[data-theme='dark'] .ctaButton:hover {
+  background: rgb(239 68 68 / 0.2);
+  color: #ffffff;
+}

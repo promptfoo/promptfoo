@@ -8,15 +8,27 @@
   border-radius: 16px;
 }
 
+html[data-theme='dark'] .container {
+  background-color: #18181b;
+}
+
 .header {
   padding: 24px;
   border-bottom: 1px solid #f0f0f0;
+}
+
+html[data-theme='dark'] .header {
+  border-bottom-color: #27272a;
 }
 
 .header h3 {
   margin: 0;
   font-size: 24px;
   font-weight: bold;
+}
+
+html[data-theme='dark'] .header h3 {
+  color: #ffffff;
 }
 
 .messages {
@@ -55,9 +67,18 @@
   color: black;
 }
 
+html[data-theme='dark'] .aiMessage {
+  background-color: #27272a;
+  color: white;
+}
+
 .userMessage {
   background-color: #18181b;
   color: white;
+}
+
+html[data-theme='dark'] .userMessage {
+  background-color: #3f3f46;
 }
 
 .avatar {
@@ -72,11 +93,20 @@
   color: #18181b;
 }
 
+html[data-theme='dark'] .avatar {
+  background-color: #27272a;
+  color: #ffffff;
+}
+
 .inputContainer {
   padding: 24px;
   border-top: 1px solid #f0f0f0;
   display: flex;
   gap: 12px;
+}
+
+html[data-theme='dark'] .inputContainer {
+  border-top-color: #27272a;
 }
 
 .inputWrapper {
@@ -94,8 +124,18 @@
   background-color: #ffffff;
 }
 
+html[data-theme='dark'] .input {
+  background-color: #27272a;
+  border-color: #3f3f46;
+  color: #ffffff;
+}
+
 .input::placeholder {
   color: #a1a1aa;
+}
+
+html[data-theme='dark'] .input::placeholder {
+  color: #71717a;
 }
 
 .commandPalette {
@@ -111,6 +151,12 @@
   z-index: 10;
 }
 
+html[data-theme='dark'] .commandPalette {
+  background-color: #27272a;
+  border-color: #3f3f46;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
 .commandItem {
   padding: 12px 16px;
   display: flex;
@@ -124,8 +170,16 @@
   background-color: #f9f9f9;
 }
 
+html[data-theme='dark'] .commandItem:hover {
+  background-color: #3f3f46;
+}
+
 .selectedCommand {
   background-color: #f9f9f9;
+}
+
+html[data-theme='dark'] .selectedCommand {
+  background-color: #3f3f46;
 }
 
 .commandLabel {
@@ -133,9 +187,17 @@
   color: #18181b;
 }
 
+html[data-theme='dark'] .commandLabel {
+  color: #ffffff;
+}
+
 .commandDescription {
   font-size: 14px;
   color: #71717a;
+}
+
+html[data-theme='dark'] .commandDescription {
+  color: #a1a1aa;
 }
 
 .sendButton {
@@ -152,8 +214,16 @@
   transition: background-color 0.2s;
 }
 
+html[data-theme='dark'] .sendButton {
+  background-color: #3f3f46;
+}
+
 .sendButton:hover {
   background-color: #27272a;
+}
+
+html[data-theme='dark'] .sendButton:hover {
+  background-color: #52525b;
 }
 
 .spinner {
@@ -168,8 +238,6 @@
     transform: rotate(360deg);
   }
 }
-
-/* Add these to your existing ChatInterface.module.css file */
 
 .suggestionCards {
   display: grid;
@@ -189,10 +257,21 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
+html[data-theme='dark'] .suggestionCard {
+  background-color: #27272a;
+  border-color: #3f3f46;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
 .suggestionCard:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   border-color: #d4d4d8;
+}
+
+html[data-theme='dark'] .suggestionCard:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  border-color: #52525b;
 }
 
 .suggestionCard h4 {
@@ -202,11 +281,19 @@
   color: #18181b;
 }
 
+html[data-theme='dark'] .suggestionCard h4 {
+  color: #ffffff;
+}
+
 .suggestionCard p {
   margin: 0 0 12px 0;
   font-size: 14px;
   color: #52525b;
   line-height: 1.4;
+}
+
+html[data-theme='dark'] .suggestionCard p {
+  color: #a1a1aa;
 }
 
 .commandTag {
@@ -219,12 +306,27 @@
   color: #71717a;
 }
 
+html[data-theme='dark'] .commandTag {
+  background-color: #3f3f46;
+  color: #d4d4d8;
+}
+
 .unsafeMessage {
   background-color: #fee2e2;
   border: 1px solid #fecaca;
 }
 
+html[data-theme='dark'] .unsafeMessage {
+  background-color: #7f1d1d;
+  border-color: #991b1b;
+}
+
 .unsafeResponse {
   background-color: #fee2e2;
   color: #ef4444;
+}
+
+html[data-theme='dark'] .unsafeResponse {
+  background-color: #7f1d1d;
+  color: #fca5a5;
 }
