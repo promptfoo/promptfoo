@@ -19,10 +19,10 @@ import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
   accessKeyId?: string;
+  profile?: string;
   region?: string;
   secretAccessKey?: string;
   sessionToken?: string;
-  profile?: string;
 }
 
 interface TextGenerationOptions {
