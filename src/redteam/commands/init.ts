@@ -284,7 +284,7 @@ export async function redteamInit(directory: string | undefined) {
       providers = [
         {
           id: 'https://example.com/generate',
-          label: String(label),
+          label,
           config: {
             method: 'POST',
             headers: {
