@@ -135,7 +135,7 @@ class CrescendoProvider implements ApiProvider {
       vars: context.vars,
       provider: context.originalProvider,
       context,
-      options: options || {},
+      options,
     });
   }
 
@@ -151,8 +151,8 @@ class CrescendoProvider implements ApiProvider {
     filters: NunjucksFilterMap | undefined;
     vars: Record<string, string | object>;
     provider: ApiProvider;
-    context: CallApiContextParams;
-    options: CallApiOptionsParams;
+    context?: CallApiContextParams;
+    options?: CallApiOptionsParams;
   }) {
     logger.debug(
       `Starting Crescendo attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
@@ -354,8 +354,8 @@ class CrescendoProvider implements ApiProvider {
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
     roundNum: number,
-    context: CallApiContextParams,
-    options: CallApiOptionsParams,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<string> {
     const renderedPrompt = await renderPrompt(
       originalPrompt,
@@ -387,12 +387,7 @@ class CrescendoProvider implements ApiProvider {
       });
     }
 
-    const targetResponse = await getTargetResponse(
-      provider,
-      renderedPrompt,
-      context,
-      options,
-    );
+    const targetResponse = await getTargetResponse(provider, renderedPrompt, context, options);
     invariant(targetResponse, 'Expected output to be defined');
     logger.debug(`Received response from target: ${targetResponse}`);
 

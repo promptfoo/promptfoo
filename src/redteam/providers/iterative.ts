@@ -38,8 +38,8 @@ async function runRedteamConversation({
   redteamProvider: ApiProvider;
   targetProvider: ApiProvider;
   injectVar: string;
-  context: CallApiContextParams;
-  options: CallApiOptionsParams;
+  context?: CallApiContextParams;
+  options?: CallApiOptionsParams;
 }) {
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
@@ -73,6 +73,7 @@ async function runRedteamConversation({
           raw: redteamBody,
           label: 'history',
         },
+        vars: context?.vars || {},
       },
       options,
     );
@@ -119,6 +120,7 @@ async function runRedteamConversation({
           raw: isOnTopicBody,
           label: 'on-topic',
         },
+        vars: context?.vars || {},
       },
       options,
     );
@@ -237,7 +239,7 @@ class RedteamIterativeProvider implements ApiProvider {
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
       context,
-      options: options || {},
+      options,
     });
   }
 }

@@ -1,5 +1,5 @@
 import type { ProviderOptions } from '../types';
-import { OpenAiChatCompletionProvider } from './openai';
+import { OpenAiChatCompletionProvider, type OpenAiCompletionOptions } from './openai';
 
 interface PortkeyProviderOptions extends ProviderOptions {
   config?: {
@@ -27,30 +27,37 @@ interface PortkeyProviderOptions extends ProviderOptions {
   };
 }
 
-export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
-  constructor(modelName: string, providerOptions: PortkeyProviderOptions) {
-    const headers = Object.entries(providerOptions.config || {}).reduce(
-      (acc: Record<string, string>, [key, value]) => {
-        if (value) {
-          const headerKey = key.startsWith('portkey')
-            ? `x-${key.replace(/^portkey/, 'portkey-').toLowerCase()}`
-            : key;
-          acc[headerKey] = typeof value === 'object' ? JSON.stringify(value) : value;
-        }
-        return acc;
-      },
-      {},
-    );
+function toKebabCase(str: string): string {
+  return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+}
 
+export function getPortkeyHeaders(config: Record<string, any> = {}): Record<string, string> {
+  return Object.entries(config).reduce((acc: Record<string, string>, [key, value]) => {
+    if (value != null) {
+      const headerKey = key.startsWith('portkey')
+        ? `x-portkey-${toKebabCase(key.substring(7))}`
+        : key;
+      acc[headerKey] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    }
+    return acc;
+  }, {});
+}
+
+export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
+  constructor(
+    modelName: string,
+    providerOptions: PortkeyProviderOptions & OpenAiCompletionOptions,
+  ) {
     super(modelName, {
       ...providerOptions,
       config: {
         ...providerOptions.config,
+        apiKeyEnvar: 'PORTKEY_API_KEY',
         apiBaseUrl:
           process.env.PORTKEY_API_BASE_URL ||
           providerOptions.config?.portkeyApiBaseUrl ||
           'https://api.portkey.ai/v1',
-        headers,
+        headers: getPortkeyHeaders(providerOptions.config),
       },
     });
   }
