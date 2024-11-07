@@ -2919,7 +2919,7 @@ describe('runAssertion', () => {
         prompt: 'Some prompt',
         provider,
         assertion: {
-          type: 'perplexity',
+          type: 'perplexity-score',
           threshold: 2,
         },
         test: {} as AtomicTestCase,
