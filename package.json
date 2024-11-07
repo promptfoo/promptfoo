@@ -65,6 +65,7 @@
   },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
+    "@aws-sdk/credential-provider-sso": "^3.686.0",
     "@azure/identity": "^4.0.0",
     "@azure/openai-assistants": "^1.0.0-beta.5",
     "@fal-ai/serverless-client": "^0.14.3",
@@ -81,7 +82,8 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.682.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.686.0",
+    "@aws-sdk/credential-provider-sso": "^3.686.0",
     "@azure/identity": "^4.5.0",
     "@eslint/js": "^9.14.0",
     "@libsql/client": "^0.14.0",
@@ -134,17 +136,17 @@
     "zod-to-json-schema": "^3.23.5"
   },
   "dependencies": {
-    "@adaline/types": "0.15.0",
-    "@adaline/provider": "0.17.0",
-    "@adaline/gateway": "0.23.0",
-    "@adaline/openai": "0.21.0",
-    "@adaline/open-router": "0.8.0",
-    "@adaline/google": "0.8.0",
-    "@adaline/vertex": "0.8.1",
-    "@adaline/azure": "0.9.1",
     "@adaline/anthropic": "0.19.0",
+    "@adaline/azure": "0.9.1",
+    "@adaline/gateway": "0.23.0",
+    "@adaline/google": "0.8.0",
     "@adaline/groq": "0.8.1",
+    "@adaline/open-router": "0.8.0",
+    "@adaline/openai": "0.21.0",
+    "@adaline/provider": "0.17.0",
     "@adaline/together-ai": "0.8.0",
+    "@adaline/types": "0.15.0",
+    "@adaline/vertex": "0.8.1",
     "@anthropic-ai/sdk": "^0.32.0",
     "@apidevtools/json-schema-ref-parser": "^11.7.2",
     "@emotion/react": "^11.13.3",

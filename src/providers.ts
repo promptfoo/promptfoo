@@ -520,7 +520,7 @@ export async function loadApiProvider(
   }
   ret.transform = options.transform;
   ret.delay = options.delay;
-  ret.label ||= getNunjucksEngine().renderString(options.label || '', {});
+  ret.label ||= getNunjucksEngine().renderString(String(options.label || ''), {});
   return ret;
 }
 

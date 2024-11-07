@@ -6,7 +6,7 @@ import * as path from 'path';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
-import { REMOTE_GENERATION_URL } from '../constants';
+import { getRemoteGenerationUrl } from '../constants';
 
 interface PoisonOptions {
   documents: string[];
@@ -39,7 +39,7 @@ function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
 }
 
 async function generatePoisonedDocument(document: string, goal?: string): Promise<PoisonResponse> {
-  const response = await fetch(REMOTE_GENERATION_URL, {
+  const response = await fetch(getRemoteGenerationUrl(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -17,7 +17,7 @@ import {
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
 // Mock dependencies
@@ -455,11 +455,16 @@ describe('RedteamIterativeProvider', () => {
       mockTargetProvider.callApi.mockResolvedValue({ output: mockResponse });
 
       const targetPrompt = 'Test prompt';
-      const result = await getTargetResponse(mockTargetProvider, targetPrompt);
+      const context: CallApiContextParams = {
+        prompt: { label: 'test', raw: targetPrompt },
+        vars: {},
+      };
+      const options: CallApiOptionsParams = {};
+      const result = await getTargetResponse(mockTargetProvider, targetPrompt, context, options);
 
       expect(result).toBe(mockResponse);
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-      expect(mockTargetProvider.callApi).toHaveBeenCalledWith(targetPrompt);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledWith(targetPrompt, context, options);
     });
 
     it('should stringify non-string outputs', async () => {
@@ -467,7 +472,12 @@ describe('RedteamIterativeProvider', () => {
       mockTargetProvider.callApi.mockResolvedValue({ output: nonStringOutput });
 
       const targetPrompt = 'Test prompt';
-      const result = await getTargetResponse(mockTargetProvider, targetPrompt);
+      const result = await getTargetResponse(
+        mockTargetProvider,
+        targetPrompt,
+        {} as CallApiContextParams,
+        {} as CallApiOptionsParams,
+      );
 
       expect(result).toBe(JSON.stringify(nonStringOutput));
     });

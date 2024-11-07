@@ -1,5 +1,5 @@
 /* eslint-disable jest/no-commented-out-tests */
-import { isSql } from '../../src/assertions';
+import { isSql } from '../../src/assertions/sql';
 import type { Assertion, GradingResult } from '../../src/types';
 
 const assertion: Assertion = {

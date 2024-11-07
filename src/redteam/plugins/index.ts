@@ -5,7 +5,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginConfig, TestCase } from '../../types';
-import { HARM_PLUGINS, PII_PLUGINS, REMOTE_GENERATION_URL } from '../constants';
+import { HARM_PLUGINS, PII_PLUGINS, getRemoteGenerationUrl } from '../constants';
 import { neverGenerateRemote, shouldGenerateRemote } from '../util';
 import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
@@ -65,10 +65,12 @@ async function fetchRemoteTestCases(
     config,
     version: VERSION,
   });
-  logger.debug(`Using remote redteam generation for ${key}:\n${body}`);
+  logger.warn(
+    `Using remote redteam generation for ${key}:\n${body} url: ${getRemoteGenerationUrl()}`,
+  );
   try {
     const { data } = await fetchWithCache(
-      REMOTE_GENERATION_URL,
+      getRemoteGenerationUrl(),
       {
         method: 'POST',
         headers: {
