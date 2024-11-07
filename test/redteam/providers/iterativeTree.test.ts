@@ -455,11 +455,11 @@ describe('RedteamIterativeProvider', () => {
       mockTargetProvider.callApi.mockResolvedValue({ output: mockResponse });
 
       const targetPrompt = 'Test prompt';
-      const result = await getTargetResponse(mockTargetProvider, targetPrompt);
+      const result = await getTargetResponse(mockTargetProvider, targetPrompt, {}, {});
 
       expect(result).toBe(mockResponse);
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-      expect(mockTargetProvider.callApi).toHaveBeenCalledWith(targetPrompt);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledWith(targetPrompt, {}, {});
     });
 
     it('should stringify non-string outputs', async () => {

@@ -53,10 +53,12 @@ export async function loadRedteamProvider({
 export async function getTargetResponse(
   targetProvider: ApiProvider,
   targetPrompt: string,
+  context?: CallApiContextParams,
+  options?: CallApiOptionsParams,
 ): Promise<string> {
   let targetRespRaw;
   try {
-    targetRespRaw = await targetProvider.callApi(targetPrompt);
+    targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
     return (error as Error).message;
   }

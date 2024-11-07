@@ -86,6 +86,8 @@ async function runRedteamConversation({
   redteamProvider,
   targetProvider,
   injectVar,
+  context,
+  options,
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
@@ -93,6 +95,8 @@ async function runRedteamConversation({
   redteamProvider: ApiProvider;
   targetProvider: ApiProvider;
   injectVar: string;
+  context?: CallApiContextParams;
+  options?: CallApiOptionsParams;
 }) {
   // Assume redteam provider is also a vision model
   const visionProvider = redteamProvider;
@@ -166,7 +170,7 @@ async function runRedteamConversation({
 
     let targetResponse;
     try {
-      const targetResp = await targetProvider.callApi(targetPrompt);
+      const targetResp = await targetProvider.callApi(targetPrompt, context, options);
       targetResponse = targetResp.output || targetResp.error;
     } catch (error) {
       targetResponse = (error as Error).message;
@@ -277,6 +281,8 @@ class RedteamIterativeProvider implements ApiProvider {
       }),
       targetProvider: context.originalProvider,
       injectVar,
+      context,
+      options,
     });
   }
 }
