@@ -51,6 +51,7 @@ import { extractJsonObjects } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
 import { AssertionsResult } from './AssertionsResult';
+import { handleBleuScore } from './bleu';
 import { getFinalTest, processFileReference } from './utils';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
@@ -1237,6 +1238,15 @@ ${
   if (baseType === 'rouge-n') {
     invariant(typeof renderedValue === 'string', '"rouge" assertion type must be a string value');
     return handleRougeScore(baseType, assertion, renderedValue, outputString, inverse);
+  }
+
+  if (baseType === 'bleu') {
+    invariant(
+      typeof renderedValue === 'string' ||
+        (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
+      '"bleu" assertion type must have a string or array of strings value',
+    );
+    return handleBleuScore(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'levenshtein') {
