@@ -505,7 +505,13 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
       ...(config.dataSources ? { dataSources: config.dataSources } : {}),
-      ...(config.response_format ? { response_format: config.response_format } : {}),
+      ...(config.response_format
+        ? {
+            response_format: maybeLoadFromExternalFile(
+              renderVarsInObject(config.response_format, context?.vars),
+            ),
+          }
+        : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
       ...(config.passthrough || {}),
