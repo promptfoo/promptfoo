@@ -182,6 +182,64 @@ function HomepageWalkthrough() {
   );
 }
 
+function AsSeenOnSection() {
+  return (
+    <section className={styles.asSeenOnSection}>
+      <div className="container">
+        <h2>Featured In</h2>
+        <div className={styles.asSeenOnGrid}>
+          <a
+            href="https://vimeo.com/1023317525/be082a1029"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.asSeenOnCard}
+          >
+            <div className={styles.asSeenOnContent}>
+              <h3>
+                <img
+                  src="/img/brands/openai-logo.svg"
+                  alt="OpenAI"
+                  className={styles.asSeenOnLogoInline}
+                />
+                Build Hours
+              </h3>
+              <p>
+                "Promptfoo is really powerful because you can iterate on prompts, configure tests in
+                YAML, and view everything locally... it's faster and more straightforward"
+              </p>
+              <span className={styles.watchNow}>Watch the Video →</span>
+            </div>
+          </a>
+
+          <a
+            href="https://github.com/anthropics/courses/tree/master/prompt_evaluations"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.asSeenOnCard}
+          >
+            <div className={styles.asSeenOnContent}>
+              <h3>
+                <img
+                  src="/img/brands/anthropic-logo.svg"
+                  alt="Anthropic"
+                  className={styles.asSeenOnLogoInline}
+                  style={{ maxWidth: 175 }}
+                />
+                Courses
+              </h3>
+              <p>
+                "Promptfoo offers a streamlined, out-of-the-box solution that can significantly
+                reduce the time and effort required for comprehensive prompt testing."
+              </p>
+              <span className={styles.watchNow}>See the Course →</span>
+            </div>
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Home(): JSX.Element {
   const [getStartedUrl, setGetStartedUrl] = React.useState('/docs/intro/');
 
@@ -211,21 +269,7 @@ export default function Home(): JSX.Element {
         </section>
         <HomepageFeatures />
         <HomepageInfo />
-        <section className={styles.actionOrientedSection}>
-          <div className="container">
-            <h2>Detect & fix critical failures</h2>
-            <div>
-              <Link to="/llm-vulnerability-scanner/">
-                <img
-                  loading="lazy"
-                  src="/img/riskreport-2.png"
-                  srcSet="/img/riskreport-2.png 1x, /img/riskreport-2@2x.png 2x"
-                  alt="Sample vulnerability report"
-                />
-              </Link>
-            </div>
-          </div>
-        </section>
+        <AsSeenOnSection />
 
         <div className={styles.ctaSection}>
           <h2>Make your LLM app reliable & secure</h2>
