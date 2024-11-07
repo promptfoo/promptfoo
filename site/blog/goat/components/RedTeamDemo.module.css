@@ -6,6 +6,22 @@
   padding: 1rem 0;
 }
 
+.tryAgainButtonUnsafe {
+  padding: 0.75rem 1.5rem;
+  background: #ffffff;
+  color: #000000;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tryAgainButtonUnsafe:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
 .confirmButton {
   padding: 0.75rem 1.5rem;
   background: #2563eb;
