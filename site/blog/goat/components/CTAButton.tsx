@@ -4,7 +4,7 @@ import styles from './CTAButton.module.css';
 const CTAButton: React.FC = () => {
   return (
     <div className={styles.ctaContainer}>
-      <a href="https://www.promptfoo.dev/contact/" className={styles.ctaButton}>
+      <a href="/contact/" className={styles.ctaButton} role="button" aria-label="Book a Demo">
         Book a Demo
         <svg
           className={styles.arrow}
@@ -13,9 +13,10 @@ const CTAButton: React.FC = () => {
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2"
+          strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
+          aria-hidden="true"
         >
           <path d="M5 12h14" />
           <path d="m12 5 7 7-7 7" />

@@ -15,8 +15,9 @@ import {
   Shield,
   ShieldAlert,
 } from 'lucide-react';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import RedTeamSuggestions from './RedTeamSuggestions';
 import { API_BASE_URL } from './constants';
 import styles from './RedTeamDemo.module.css';
 
@@ -119,6 +120,22 @@ const RedTeamDemo: React.FC = () => {
 
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const scrollToBottom = () => {
+    const container = messageContainerRef.current;
+    if (container) {
+      const targetScroll = container.scrollHeight - container.clientHeight;
+      container.scrollTo({
+        top: targetScroll,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [state.messages]);
 
   const handleStreamEvent = (event: StreamEvent) => {
     setState((prev) => {
@@ -152,6 +169,16 @@ const RedTeamDemo: React.FC = () => {
           const lastMessage = newMessages[newMessages.length - 1];
           if (lastMessage && event.data.result) {
             lastMessage.safety = event.data.result;
+            if (event.data.result === 'unsafe') {
+              abortControllerRef.current?.abort();
+              setIsLoading(false);
+              return {
+                ...prev,
+                messages: newMessages,
+                stage: 'complete',
+                showTurnPrompt: false,
+              };
+            }
           }
           break;
         case 'progress':
@@ -177,6 +204,7 @@ const RedTeamDemo: React.FC = () => {
       return;
     }
 
+    abortControllerRef.current = new AbortController();
     setIsLoading(true);
     setState((prev) => ({ ...prev, showTurnPrompt: false }));
 
@@ -189,6 +217,7 @@ const RedTeamDemo: React.FC = () => {
           goal: state.goal,
           maxTurns: turnsToRun,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.body) {
@@ -221,17 +250,30 @@ const RedTeamDemo: React.FC = () => {
         }
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Stream aborted due to unsafe response');
+        return;
+      }
       console.error('Error:', error);
     } finally {
       setIsLoading(false);
-      setState((prev) => ({
-        ...prev,
-        stage: 'complete',
-        totalTurnsCompleted: prev.totalTurnsCompleted + turnsToRun,
-        showTurnPrompt: prev.totalTurnsCompleted + turnsToRun < MAX_TURNS,
-      }));
+      if (!abortControllerRef.current?.signal.aborted) {
+        setState((prev) => ({
+          ...prev,
+          stage: 'complete',
+          totalTurnsCompleted: prev.totalTurnsCompleted + turnsToRun,
+          showTurnPrompt: prev.totalTurnsCompleted + turnsToRun < MAX_TURNS,
+        }));
+      }
+      abortControllerRef.current = null;
     }
   };
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   const startDemo = () => {
     setState((prev) => ({
@@ -309,6 +351,20 @@ const RedTeamDemo: React.FC = () => {
     );
   };
 
+  const isLastMessageUnsafe =
+    state.messages.length > 0 && state.messages[state.messages.length - 1].safety === 'unsafe';
+
+  const resetDemo = () => {
+    setState({
+      stage: 'setup',
+      goal: '',
+      messages: [],
+      progress: 0,
+      totalTurnsCompleted: 0,
+      showTurnPrompt: false,
+    });
+  };
+
   return (
     <div className={styles.container}>
       <AnimatePresence mode="wait">
@@ -321,15 +377,23 @@ const RedTeamDemo: React.FC = () => {
             className={styles.setup}
           >
             <h2>Set Your Goal</h2>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">
+              Enter your red teaming goal or select from the suggestions below:
+            </p>
+
+            <RedTeamSuggestions onSelectGoal={(goal) => setState((prev) => ({ ...prev, goal }))} />
+
             <textarea
               value={state.goal}
               onChange={(e) => setState((prev) => ({ ...prev, goal: e.target.value }))}
               placeholder="Enter your red teaming goal..."
               className={styles.goalInput}
             />
+
             <button
               onClick={() => setState((prev) => ({ ...prev, stage: 'config' }))}
               className={styles.button}
+              disabled={!state.goal.trim()}
             >
               Next
             </button>
@@ -385,9 +449,10 @@ const RedTeamDemo: React.FC = () => {
               {state.messages.map((message, index) => (
                 <MessageComponent key={index} message={message} />
               ))}
+
               {!isLoading &&
                 state.stage === 'complete' &&
-                state.totalTurnsCompleted >= DEFAULT_TURNS &&
+                !isLastMessageUnsafe &&
                 state.totalTurnsCompleted < MAX_TURNS && (
                   <div className={styles.additionalTurnContainer}>
                     {state.showTurnPrompt ? (
@@ -395,10 +460,7 @@ const RedTeamDemo: React.FC = () => {
                         <button onClick={runAnotherTurn} className={styles.confirmButton}>
                           Yes, run another turn
                         </button>
-                        <button
-                          onClick={() => setState((prev) => ({ ...prev, showTurnPrompt: false }))}
-                          className={styles.cancelButton}
-                        >
+                        <button onClick={resetDemo} className={styles.cancelButton}>
                           No, I'm done
                         </button>
                       </div>
@@ -408,11 +470,35 @@ const RedTeamDemo: React.FC = () => {
                         className={styles.additionalTurnButton}
                       >
                         Would you like to run another turn? ({MAX_TURNS - state.totalTurnsCompleted}{' '}
-                        turns remaining)
+                        remaining)
                       </button>
                     )}
                   </div>
                 )}
+
+              {!isLoading && state.stage === 'complete' && (
+                <div className={styles.additionalTurnContainer}>
+                  {isLastMessageUnsafe ? (
+                    <div className={styles.completionMessage}>
+                      Red team attack successful - target provided unsafe response
+                      <div className={styles.margint}></div>
+                      <button onClick={resetDemo} className={styles.tryAgainButtonUnsafe}>
+                        Restart Demo
+                      </button>
+                    </div>
+                  ) : state.totalTurnsCompleted >= MAX_TURNS ? (
+                    <div className={styles.safeCompletionMessage}>
+                      <p>
+                        Congratulations! The model successfully maintained safe behavior after{' '}
+                        {MAX_TURNS} attempts.
+                      </p>
+                      <button onClick={resetDemo} className={styles.tryAgainButton}>
+                        Try Again with New Prompt
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           </motion.div>
         )}
