@@ -66,7 +66,7 @@ export default class GoatProvider implements ApiProvider {
         `,
       );
       const targetResponse = await targetProvider.callApi(
-        JSON.stringify(messages),
+        JSON.stringify(messages[messages.length - 1]),
         context,
         options,
       );
