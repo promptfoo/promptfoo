@@ -1,6 +1,3 @@
-import type { ValidateFunction } from 'ajv';
-import Ajv from 'ajv';
-import addFormats from 'ajv-formats';
 import async from 'async';
 import { distance as levenshtein } from 'fastest-levenshtein';
 import fs from 'fs';
@@ -10,7 +7,7 @@ import util from 'node:util';
 import path from 'path';
 import invariant from 'tiny-invariant';
 import cliState from '../cliState';
-import { getEnvBool, getEnvInt } from '../envars';
+import { getEnvInt } from '../envars';
 import { importModule } from '../esm';
 import { fetchWithRetries } from '../fetch';
 import logger from '../logger';
@@ -45,11 +42,11 @@ import {
   isGradingResult,
 } from '../types';
 import { isJavascriptFile } from '../util/file';
-import { extractJsonObjects } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
 import { AssertionsResult } from './AssertionsResult';
 import { handleBleuScore } from './bleu';
+import { handleContainsJson, handleIsJson } from './json';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { isSql } from './sql';
 import { getFinalTest, processFileReference } from './utils';
@@ -67,17 +64,6 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'factuality',
   'model-graded-factuality',
 ]);
-
-export function createAjv(): Ajv {
-  const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
-    strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
-  };
-  const ajv = new Ajv(ajvOptions);
-  addFormats(ajv);
-  return ajv;
-}
-
-const ajv = createAjv();
 
 const nunjucks = getNunjucksEngine();
 
@@ -245,53 +231,8 @@ export async function runAssertion({
       assertion,
     };
   }
-
   if (baseType === 'is-json') {
-    let parsedJson;
-    try {
-      parsedJson = JSON.parse(outputString);
-      pass = !inverse;
-    } catch {
-      pass = inverse;
-    }
-
-    if (pass && renderedValue) {
-      let validate: ValidateFunction;
-      if (typeof renderedValue === 'string') {
-        if (renderedValue.startsWith('file://')) {
-          // Reference the JSON schema from external file
-          const schema = valueFromScript;
-          invariant(schema, 'is-json references a file that does not export a JSON schema');
-          validate = ajv.compile(schema as object);
-        } else {
-          const scheme = yaml.load(renderedValue) as object;
-          validate = ajv.compile(scheme);
-        }
-      } else if (typeof renderedValue === 'object') {
-        // Value is JSON schema
-        validate = ajv.compile(renderedValue);
-      } else {
-        throw new Error('is-json assertion must have a string or object value');
-      }
-      pass = validate(parsedJson);
-      if (!pass) {
-        return {
-          pass,
-          score: 0,
-          reason: `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(
-            validate.errors,
-          )}`,
-          assertion,
-        };
-      }
-    }
-
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON',
-      assertion,
-    };
+    return handleIsJson(assertion, renderedValue, valueFromScript, outputString, inverse);
   }
 
   if (baseType === 'is-xml' || baseType === 'contains-xml') {
@@ -487,45 +428,9 @@ export async function runAssertion({
       assertion,
     };
   }
+
   if (baseType === 'contains-json') {
-    let errorMessage = 'Expected output to contain valid JSON';
-    const jsonObjects = extractJsonObjects(outputString);
-    pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
-    for (const jsonObject of jsonObjects) {
-      if (renderedValue) {
-        let validate: ValidateFunction;
-        if (typeof renderedValue === 'string') {
-          if (renderedValue.startsWith('file://')) {
-            // Reference the JSON schema from external file
-            const schema = valueFromScript;
-            invariant(schema, 'contains-json references a file that does not export a JSON schema');
-            validate = ajv.compile(schema as object);
-          } else {
-            const scheme = yaml.load(renderedValue) as object;
-            validate = ajv.compile(scheme);
-          }
-        } else if (typeof renderedValue === 'object') {
-          // Value is JSON schema
-          validate = ajv.compile(renderedValue);
-        } else {
-          throw new Error('contains-json assertion must have a string or object value');
-        }
-        pass = validate(jsonObject);
-        if (pass) {
-          break;
-        } else {
-          errorMessage = `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(
-            validate.errors,
-          )}`;
-        }
-      }
-    }
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : errorMessage,
-      assertion,
-    };
+    return handleContainsJson(assertion, renderedValue, valueFromScript, outputString, inverse);
   }
 
   if (baseType === 'is-valid-openai-tools-call') {
