@@ -459,10 +459,7 @@ const RedTeamDemo: React.FC = () => {
                         <button onClick={runAnotherTurn} className={styles.confirmButton}>
                           Yes, run another turn
                         </button>
-                        <button
-                          onClick={resetDemo}
-                          className={styles.cancelButton}
-                        >
+                        <button onClick={resetDemo} className={styles.cancelButton}>
                           No, I'm done
                         </button>
                       </div>
