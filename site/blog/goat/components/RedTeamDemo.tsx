@@ -460,7 +460,7 @@ const RedTeamDemo: React.FC = () => {
                           Yes, run another turn
                         </button>
                         <button
-                          onClick={() => setState((prev) => ({ ...prev, showTurnPrompt: false }))}
+                          onClick={resetDemo}
                           className={styles.cancelButton}
                         >
                           No, I'm done
