@@ -235,6 +235,10 @@ export async function runAssertion({
     return handleIsJson(assertion, renderedValue, valueFromScript, outputString, inverse);
   }
 
+  if (baseType === 'contains-json') {
+    return handleContainsJson(assertion, renderedValue, valueFromScript, outputString, inverse);
+  }
+
   if (baseType === 'is-xml' || baseType === 'contains-xml') {
     let requiredElements: string[] | undefined;
     if (typeof renderedValue === 'string') {
@@ -427,10 +431,6 @@ export async function runAssertion({
         : `Expected output to ${inverse ? 'not ' : ''}start with "${renderedValue}"`,
       assertion,
     };
-  }
-
-  if (baseType === 'contains-json') {
-    return handleContainsJson(assertion, renderedValue, valueFromScript, outputString, inverse);
   }
 
   if (baseType === 'is-valid-openai-tools-call') {
