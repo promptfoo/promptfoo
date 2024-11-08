@@ -116,6 +116,8 @@ export type EnvOverrides = {
   AZURE_OPENAI_API_HOST?: string;
   AZURE_OPENAI_API_KEY?: string;
   AZURE_OPENAI_BASE_URL?: string;
+  AZURE_OPENAI_DEPLOYMENT_NAME?: string;
+  AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME?: string;
   AZURE_CLIENT_SECRET?: string;
   AZURE_CLIENT_ID?: string;
   AZURE_TENANT_ID?: string;

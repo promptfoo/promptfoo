@@ -8,14 +8,11 @@ The `azureopenai` provider is an interface to OpenAI through Azure. It behaves t
 
 ## Setup
 
-First, set the `AZURE_OPENAI_API_KEY` environment variable.
+There are two ways to authenticate with Azure OpenAI:
 
-Next, edit the promptfoo configuration file to point to the Azure provider.
+### Option 1: API Key Authentication
 
-- `azureopenai:chat:<deployment name>` - uses the given deployment (for chat endpoints such as gpt-35-turbo, gpt-4)
-- `azureopenai:completion:<deployment name>` - uses the given deployment (for completion endpoints such as gpt-35-instruct)
-
-Also set the `apiHost` value to point to your endpoint:
+Set the `AZURE_OPENAI_API_KEY` environment variable and configure your deployment:
 
 ```yaml
 providers:
@@ -24,18 +21,90 @@ providers:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
 
+### Option 2: Client Credentials Authentication
+
+Set the following environment variables or config properties:
+
+- `AZURE_CLIENT_ID` / `azureClientId`
+- `AZURE_CLIENT_SECRET` / `azureClientSecret`
+- `AZURE_TENANT_ID` / `azureTenantId`
+
+Optionally, you can also set:
+
+- `AZURE_AUTHORITY_HOST` / `azureAuthorityHost` (defaults to 'https://login.microsoftonline.com')
+- `AZURE_TOKEN_SCOPE` / `azureTokenScope` (defaults to 'https://cognitiveservices.azure.com/.default')
+
+Then configure your deployment:
+
+```yaml
+providers:
+  - id: azureopenai:chat:deploymentNameHere
+    config:
+      apiHost: 'xxxxxxxx.openai.azure.com'
+```
+
+## Provider Types
+
+- `azureopenai:chat:<deployment name>` - uses the given deployment (for chat endpoints such as gpt-35-turbo, gpt-4)
+- `azureopenai:completion:<deployment name>` - uses the given deployment (for completion endpoints such as gpt-35-instruct)
+
 ## Environment Variables
 
-The Azure OpenAI provider uses the following environment variables:
+The Azure OpenAI provider supports the following environment variables:
 
-| Variable                    | Description               | Required |
-| --------------------------- | ------------------------- | -------- |
-| `AZURE_OPENAI_API_KEY`      | Your Azure OpenAI API key | Yes      |
-| `AZURE_OPENAI_API_HOST`     | API host                  | No       |
-| `AZURE_OPENAI_API_BASE_URL` | API base URL              | No       |
-| `AZURE_OPENAI_BASE_URL`     | Alternative API base URL  | No       |
+| Environment Variable           | Config Key           | Description                        | Required |
+| ------------------------------ | -------------------- | ---------------------------------- | -------- |
+| `AZURE_OPENAI_API_KEY`         | `apiKey`             | Your Azure OpenAI API key          | No\*     |
+| `AZURE_OPENAI_API_HOST`        | `apiHost`            | API host                           | No       |
+| `AZURE_OPENAI_API_BASE_URL`    | `apiBaseUrl`         | API base URL                       | No       |
+| `AZURE_OPENAI_BASE_URL`        | `apiBaseUrl`         | Alternative API base URL           | No       |
+| `AZURE_OPENAI_DEPLOYMENT_NAME` | -                    | Default deployment name            | Yes      |
+| `AZURE_CLIENT_ID`              | `azureClientId`      | Azure AD application client ID     | No\*     |
+| `AZURE_CLIENT_SECRET`          | `azureClientSecret`  | Azure AD application client secret | No\*     |
+| `AZURE_TENANT_ID`              | `azureTenantId`      | Azure AD tenant ID                 | No\*     |
+| `AZURE_AUTHORITY_HOST`         | `azureAuthorityHost` | Azure AD authority host            | No       |
+| `AZURE_TOKEN_SCOPE`            | `azureTokenScope`    | Azure AD token scope               | No       |
 
-Note: You only need to set one of `AZURE_OPENAI_API_HOST`, `AZURE_OPENAI_API_BASE_URL`, or `AZURE_OPENAI_BASE_URL`. If multiple are set, the provider will use them in that order of preference.
+\* Either `AZURE_OPENAI_API_KEY` OR the combination of `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID` must be provided.
+
+Note: For API URLs, you only need to set one of `AZURE_OPENAI_API_HOST`, `AZURE_OPENAI_API_BASE_URL`, or `AZURE_OPENAI_BASE_URL`. If multiple are set, the provider will use them in that order of preference.
+
+### Default Deployment
+
+If `AZURE_OPENAI_DEPLOYMENT_NAME` is set, it will be automatically used as the default deployment when no other provider is configured. This makes Azure OpenAI the default provider when:
+
+1. No OpenAI API key is present (`OPENAI_API_KEY` is not set)
+2. Azure authentication is configured (either via API key or client credentials)
+3. `AZURE_OPENAI_DEPLOYMENT_NAME` is set
+
+For example, if you have these environment variables set:
+
+```bash
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
+AZURE_OPENAI_API_KEY=your-api-key
+AZURE_OPENAI_API_HOST=your-host.openai.azure.com
+```
+
+Or these client credential environment variables:
+
+```bash
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
+AZURE_CLIENT_ID=your-client-id
+AZURE_CLIENT_SECRET=your-client-secret
+AZURE_TENANT_ID=your-tenant-id
+AZURE_OPENAI_API_HOST=your-host.openai.azure.com
+```
+
+Then Azure OpenAI will be used as the default provider for all operations including:
+
+- Dataset generation
+- Grading
+- Suggestions
+- Synthesis
+
+Because embedding models are distinct from text generation, to set an embedding provider you must specify `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`.
+
+Note that any moderation tasks will still use the OpenAI API.
 
 ## Configuration
 
@@ -46,10 +115,19 @@ providers:
   - id: azureopenai:chat:deploymentNameHere
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
-      // highlight-start
+      # Authentication (Option 1: API Key)
+      apiKey: 'your-api-key'
+
+      # Authentication (Option 2: Client Credentials)
+      azureClientId: 'your-azure-client-id'
+      azureClientSecret: 'your-azure-client-secret'
+      azureTenantId: 'your-azure-tenant-id'
+      azureAuthorityHost: 'https://login.microsoftonline.com' # Optional
+      azureTokenScope: 'https://cognitiveservices.azure.com/.default' # Optional
+
+      # OpenAI parameters
       temperature: 0.5
       max_tokens: 1024
-      // highlight-end
 ```
 
 :::tip
