@@ -395,10 +395,12 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 const value = info.getValue();
+                const truncatedValue =
+                  value.length > maxTextLength ? `${value.slice(0, maxTextLength)}...` : value;
                 return (
                   <div className="cell">
                     {renderMarkdown ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
                     ) : (
                       <TruncatedText text={value} maxLength={maxTextLength} />
                     )}
