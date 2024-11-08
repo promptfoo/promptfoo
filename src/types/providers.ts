@@ -116,6 +116,11 @@ export type EnvOverrides = {
   AZURE_OPENAI_API_HOST?: string;
   AZURE_OPENAI_API_KEY?: string;
   AZURE_OPENAI_BASE_URL?: string;
+  AZURE_CLIENT_SECRET?: string;
+  AZURE_CLIENT_ID?: string;
+  AZURE_TENANT_ID?: string;
+  AZURE_AUTHORITY_HOST?: string;
+  AZURE_TOKEN_SCOPE?: string;
   BAM_API_HOST?: string;
   BAM_API_KEY?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
