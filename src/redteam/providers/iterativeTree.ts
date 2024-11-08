@@ -319,6 +319,8 @@ export async function runRedteamConversation({
   redteamProvider,
   targetProvider,
   injectVar,
+  context,
+  options,
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
@@ -326,6 +328,8 @@ export async function runRedteamConversation({
   redteamProvider: ApiProvider;
   targetProvider: ApiProvider;
   injectVar: string;
+  context: CallApiContextParams;
+  options: CallApiOptionsParams;
 }): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;
@@ -391,7 +395,12 @@ export async function runRedteamConversation({
         );
 
         const isOnTopic = await checkIfOnTopic(redteamProvider, onTopicSystemPrompt, targetPrompt);
-        const targetResponse = await getTargetResponse(targetProvider, targetPrompt);
+        const targetResponse = await getTargetResponse(
+          targetProvider,
+          targetPrompt,
+          context,
+          options,
+        );
         const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
           targetResponse.toLowerCase().includes(phrase),
         );
@@ -486,7 +495,12 @@ export async function runRedteamConversation({
     targetProvider,
   );
 
-  const finalTargetResponse = await getTargetResponse(targetProvider, finalTargetPrompt);
+  const finalTargetResponse = await getTargetResponse(
+    targetProvider,
+    finalTargetPrompt,
+    context,
+    options,
+  );
 
   logger.debug(
     `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,
@@ -562,6 +576,8 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       redteamProvider,
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
+      context,
+      options: options || {},
     });
   }
 }

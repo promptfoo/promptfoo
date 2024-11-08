@@ -197,6 +197,19 @@ describe('util', () => {
       consoleLogSpy.mockRestore();
     });
     it('writeOutput with CSV output', async () => {
+      // @ts-ignore
+      jest.mocked(getDb).mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({ all: jest.fn().mockResolvedValue([]) }),
+          }),
+        }),
+        insert: jest.fn().mockReturnValue({
+          values: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
       const outputPath = 'output.csv';
       const results: EvaluateResult[] = [
         {

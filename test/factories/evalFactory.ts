@@ -21,6 +21,31 @@ export default class EvalFactory {
       ],
       { id: randomUUID() },
     );
+    await eval_.addPrompts([
+      {
+        raw: 'What is the capital of california?',
+        label: 'What is the capital of {{state}}?',
+        provider: 'test-provider',
+        metrics: {
+          score: 1,
+          testPassCount: 1,
+          testFailCount: 1,
+          assertPassCount: 1,
+          assertFailCount: 1,
+          totalLatencyMs: 200,
+          tokenUsage: { total: 20, prompt: 10, completion: 10, cached: 0 },
+          namedScores: {},
+          namedScoresCount: {},
+          redteam: {
+            pluginPassCount: {},
+            pluginFailCount: {},
+            strategyPassCount: {},
+            strategyFailCount: {},
+          },
+          cost: 0.007,
+        },
+      },
+    ]);
     await eval_.addResult(
       {
         description: 'test-description',
@@ -90,7 +115,7 @@ export default class EvalFactory {
           tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
         },
         error: null,
-        success: true,
+        success: false,
         score: 0,
         latencyMs: 100,
         gradingResult: {

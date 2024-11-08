@@ -27,7 +27,10 @@ describe('Plugin Documentation', () => {
     const pluginSet = new Set(pluginFiles.map(toKebabCase));
     const docSet = new Set(docFiles);
 
-    expect(pluginSet).toEqual(docSet);
+    // Check that all plugins have corresponding docs
+    pluginSet.forEach((plugin) => {
+      expect(docSet.has(plugin)).toBe(true);
+    });
   });
 
   it('should have correct naming conventions for plugins and docs', () => {

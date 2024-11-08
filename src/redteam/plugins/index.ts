@@ -5,7 +5,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginConfig, TestCase } from '../../types';
-import { HARM_PLUGINS, PII_PLUGINS, REMOTE_GENERATION_URL } from '../constants';
+import { HARM_PLUGINS, PII_PLUGINS, getRemoteGenerationUrl } from '../constants';
 import { neverGenerateRemote, shouldGenerateRemote } from '../util';
 import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
@@ -15,6 +15,7 @@ import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { getHarmfulTests } from './harmful';
 import { ImitationPlugin } from './imitation';
+import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PolicyPlugin } from './policy';
@@ -64,10 +65,12 @@ async function fetchRemoteTestCases(
     config,
     version: VERSION,
   });
-  logger.debug(`Using remote redteam generation for ${key}:\n${body}`);
+  logger.warn(
+    `Using remote redteam generation for ${key}:\n${body} url: ${getRemoteGenerationUrl()}`,
+  );
   try {
     const { data } = await fetchWithCache(
-      REMOTE_GENERATION_URL,
+      getRemoteGenerationUrl(),
       {
         method: 'POST',
         headers: {
@@ -118,6 +121,9 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
+  ),
+  createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config) =>
+    invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
   ),
   createPluginFactory<{ systemPrompt: string }>(
     PromptExtractionPlugin,

@@ -1,9 +1,8 @@
 import { getEnvString } from '../envars';
 
-export const REMOTE_GENERATION_URL = getEnvString(
-  'PROMPTFOO_REMOTE_GENERATION_URL',
-  'https://api.promptfoo.dev/v1/generate',
-);
+export function getRemoteGenerationUrl(): string {
+  return getEnvString('PROMPTFOO_REMOTE_GENERATION_URL', 'https://api.promptfoo.dev/v1/generate');
+}
 
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
@@ -111,7 +110,7 @@ export const ADDITIONAL_PLUGINS = [
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 // Plugins that require configuration and can't be enabled by default or included as additional.
-export const CONFIG_REQUIRED_PLUGINS = ['policy'] as const;
+export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 export type Plugin =
@@ -377,6 +376,7 @@ export const ADDITIONAL_STRATEGIES = [
   'ascii-smuggling',
   'base64',
   'crescendo',
+  'goat',
   'jailbreak:tree',
   'leetspeak',
   'math-prompt',
@@ -406,6 +406,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'cross-session-leak': 'Checks for information sharing between unrelated sessions',
   'debug-access': 'Attempts to access or use debugging commands',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities',
+  goat: 'Dynamically combines multiple adversarial prompting techniques in multi-turn conversations',
   hallucination: 'Model generating false or misleading information',
   harmful: 'All harmful categories',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
@@ -435,6 +436,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   imitation: 'Imitates people, brands, or organizations',
   'indirect-prompt-injection':
     'Tests if the prompt is vulnerable to instructions injected into variables in the prompt',
+  intent: 'Attempts to manipulate the model to exhibit specific behaviors',
   jailbreak: 'Attempts to bypass security measures through iterative prompt refinement',
   'jailbreak:tree': 'Tree-based jailbreak search (medium cost)',
   leetspeak: 'Attempts to obfuscate malicious content using leetspeak',
@@ -472,6 +474,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'debug-access': 'Debug Access',
   default: 'Default',
   'excessive-agency': 'Excessive Agency',
+  goat: 'Generative Offensive Agent Tester',
   hallucination: 'Hallucination',
   harmful: 'Harmful Content',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
@@ -500,6 +503,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   hijacking: 'Hijacking',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
+  intent: 'Intent',
   jailbreak: 'Single-shot optimization',
   'jailbreak:tree': 'Tree-based optimization',
   leetspeak: 'Leetspeak Encoding',
@@ -575,6 +579,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   hijacking: Severity.High,
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
+  intent: Severity.High,
   overreliance: Severity.Low,
   pii: Severity.High,
   'pii:api-db': Severity.High,
@@ -598,6 +603,10 @@ export const riskCategories: Record<string, Plugin[]> = {
     'debug-access',
     'hijacking',
     'pii',
+    'pii:api-db',
+    'pii:direct',
+    'pii:session',
+    'pii:social',
     'prompt-extraction',
     'rbac',
     'shell-injection',
@@ -608,6 +617,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   ],
   'Legal Risk': [
     'contracts',
+    'harmful:chemical-biological-weapons',
     'harmful:child-exploitation',
     'harmful:copyright-violations',
     'harmful:cybercrime',
@@ -623,7 +633,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:violent-crime',
   ],
   'Brand Risk': [
-    'policy',
     'competitors',
     'excessive-agency',
     'hallucination',
@@ -637,7 +646,9 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:unsafe-practices',
     'imitation',
+    'intent',
     'overreliance',
+    'policy',
     'politics',
     'religion',
   ],
@@ -703,6 +714,7 @@ export const categoryAliases: Record<Plugin, string> = {
   hijacking: 'Hijacking',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'IndirectPromptInjection',
+  intent: 'Intent',
   overreliance: 'Overreliance',
   pii: 'PIILeak',
   'pii:api-db': 'PIILeak',
@@ -775,6 +787,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Imitation vulnerabilities occur when the AI impersonates individuals, brands, or organizations without authorization, potentially leading to fraud or reputational damage.',
   'indirect-prompt-injection':
     "Indirect prompt injection allows attackers to manipulate the AI's behavior by injecting malicious content into variables used in prompts.",
+  intent:
+    'Tests whether the model can be manipulated to exhibit specific behaviors or responses, potentially bypassing safety measures.',
   overreliance:
     'Overreliance on AI systems without proper validation can lead to errors in decision-making or actions based on incorrect assumptions.',
   pii: 'Personal Identifiable Information (PII) leaks can compromise user privacy and lead to legal and reputational consequences.',
@@ -805,6 +819,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   crescendo:
     'A multi-turn attack that gradually escalates the conversation to probe for vulnerabilities',
   default: 'Single-shot',
+  goat: 'Dynamically combines multiple adversarial prompting techniques in multi-turn conversations',
   jailbreak:
     'An optimized single shot attack generated by iteratively refining the prompt to bypass security measures',
   'jailbreak:tree': 'Uses a tree-based search approach for more sophisticated jailbreaking',
@@ -817,15 +832,16 @@ export const strategyDescriptions: Record<Strategy, string> = {
 
 export const strategyDisplayNames: Record<Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
-  'jailbreak:tree': 'Tree-based Optimization',
-  'math-prompt': 'Mathematical Encoding',
-  'prompt-injection': 'Prompt Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
+  goat: 'GOAT',
+  'jailbreak:tree': 'Tree-based Optimization',
   jailbreak: 'Single-shot Optimization',
   leetspeak: 'Leetspeak',
+  'math-prompt': 'Mathematical Encoding',
   multilingual: 'Multilingual',
+  'prompt-injection': 'Prompt Injection',
   rot13: 'ROT13 Encoding',
 };

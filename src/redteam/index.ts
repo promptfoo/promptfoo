@@ -5,7 +5,7 @@ import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
-import logger from '../logger';
+import logger, { getLogLevel } from '../logger';
 import type { TestCaseWithPlugin } from '../types';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
@@ -203,7 +203,7 @@ export async function synthesize({
   }
 
   let progressBar: cliProgress.SingleBar | null = null;
-  if (process.env.LOG_LEVEL !== 'debug') {
+  if (process.env.LOG_LEVEL !== 'debug' && getLogLevel() !== 'debug') {
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
@@ -303,7 +303,10 @@ export async function synthesize({
       );
       progressBar?.increment(plugin.numTests);
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
-      pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
+      pluginResults[plugin.id] = {
+        requested: plugin.id === 'intent' ? pluginTests.length : plugin.numTests,
+        generated: pluginTests.length,
+      };
     } else if (plugin.id.startsWith('file://')) {
       try {
         const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
@@ -375,6 +378,10 @@ export async function synthesize({
 
   progressBar?.update({ task: 'Done.' });
   progressBar?.stop();
+  if (progressBar) {
+    // Newline after progress bar to avoid overlap
+    logger.info('');
+  }
 
   logger.info(generateReport(pluginResults, strategyResults));
 

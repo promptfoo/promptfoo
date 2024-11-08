@@ -4,13 +4,14 @@ import { getEnvString } from '../envars';
 import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
-import { REMOTE_GENERATION_URL } from '../redteam/constants';
+import { getRemoteGenerationUrl } from '../redteam/constants';
 import type {
   ApiProvider,
   ProviderResponse,
   CallApiContextParams,
   CallApiOptionsParams,
   EnvOverrides,
+  TokenUsage,
 } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
@@ -88,7 +89,7 @@ interface PromptfooChatCompletionOptions {
   id?: string;
   jsonOnly: boolean;
   preferSmallModel: boolean;
-  task: 'crescendo' | 'iterative' | 'iterative:image' | 'iterative:tree';
+  task: 'crescendo' | 'goat' | 'iterative' | 'iterative:image' | 'iterative:tree';
 }
 
 export class PromptfooChatCompletionProvider implements ApiProvider {
@@ -122,7 +123,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
 
     try {
       const { data } = await fetchWithCache(
-        REMOTE_GENERATION_URL,
+        getRemoteGenerationUrl(),
         {
           method: 'POST',
           headers: {
@@ -142,6 +143,76 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       return {
         output: result,
         tokenUsage,
+      };
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+  }
+}
+
+interface PromptfooAgentOptions {
+  env?: EnvOverrides;
+  id?: string;
+  instructions?: string;
+}
+
+export class PromptfooSimulatedUserProvider implements ApiProvider {
+  private options: PromptfooAgentOptions;
+
+  constructor(options: PromptfooAgentOptions = {}) {
+    this.options = options;
+  }
+
+  id(): string {
+    return this.options.id || 'promptfoo:agent';
+  }
+
+  toString(): string {
+    return '[Promptfoo Agent Provider]';
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const messages = JSON.parse(prompt);
+    const body = {
+      task: 'tau',
+      instructions: this.options.instructions,
+      history: messages,
+      email: getUserEmail(),
+      version: VERSION,
+    };
+
+    logger.debug(`Calling promptfoo agent API with body: ${JSON.stringify(body)}`);
+    try {
+      const response = await fetchWithRetries(
+        getRemoteGenerationUrl(),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+
+      if (!response.ok) {
+        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
+      }
+
+      const data = (await response.json()) as {
+        result: string;
+        task: string;
+        tokenUsage: TokenUsage;
+      };
+      return {
+        output: data.result,
+        tokenUsage: data.tokenUsage,
       };
     } catch (err) {
       return {

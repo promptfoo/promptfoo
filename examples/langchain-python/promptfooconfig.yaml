@@ -3,12 +3,10 @@ prompts:
   - prompt.txt
 providers:
   - openai:chat:gpt-4o
-  - exec:python langchain_example.py
+  - file://langchain_example.py
 tests:
   - vars:
       question: What is the cube root of 389017?
-  - vars:
-      question: If you have 101101 in binary, what number does it represent in base 10?
   - vars:
       question: What is the natural logarithm (ln) of 89234?
   - vars:

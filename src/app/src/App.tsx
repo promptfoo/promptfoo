@@ -9,6 +9,7 @@ import {
   Outlet,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
+import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
@@ -43,6 +44,7 @@ const router = createBrowserRouter(
         <Route path="/eval/:evalId" element={<EvalPage />} />
         <Route path="/progress" element={<ProgressPage />} />
         <Route path="/prompts" element={<PromptsPage />} />
+        <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
         <Route path="/redteam/setup" element={<RedteamSetupPage />} />
         <Route path="/report" element={<ReportPage />} />
         <Route path="/setup" element={<EvalCreatorPage />} />
@@ -57,7 +59,11 @@ const router = createBrowserRouter(
 );
 
 function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>
+  );
 }
 
 export default App;

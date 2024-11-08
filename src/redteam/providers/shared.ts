@@ -5,6 +5,8 @@ import {
   isApiProvider,
   type RedteamFileConfig,
   type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
 } from '../../types';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
@@ -53,10 +55,12 @@ export async function loadRedteamProvider({
 export async function getTargetResponse(
   targetProvider: ApiProvider,
   targetPrompt: string,
+  context?: CallApiContextParams,
+  options?: CallApiOptionsParams,
 ): Promise<string> {
   let targetRespRaw;
   try {
-    targetRespRaw = await targetProvider.callApi(targetPrompt);
+    targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
     return (error as Error).message;
   }

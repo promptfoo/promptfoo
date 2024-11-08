@@ -1,16 +1,24 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
+import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
+
+interface PolicyPlugin {
+  id: 'policy';
+  config: {
+    policy: string;
+  };
+}
 
 export default function Review() {
   const { config, updateConfig } = useRedTeamConfig();
@@ -31,13 +39,45 @@ export default function Review() {
     URL.revokeObjectURL(url);
   };
 
-  const getPluginLabel = (plugin: string | RedteamPlugin) => {
-    return typeof plugin === 'string' ? plugin : plugin.id;
-  };
+  const getPluginSummary = useCallback((plugin: string | RedteamPlugin) => {
+    if (typeof plugin === 'string') {
+      return { label: plugin, count: 1 };
+    }
 
-  const getStrategyLabel = (strategy: string | RedteamStrategy) => {
-    return typeof strategy === 'string' ? strategy : strategy.id;
-  };
+    if (plugin.id === 'policy') {
+      return { label: 'Custom Policy', count: 1 };
+    }
+
+    return { label: plugin.id, count: 1 };
+  }, []);
+
+  const pluginSummary = useMemo(() => {
+    const summary = new Map<string, number>();
+
+    config.plugins.forEach((plugin) => {
+      const { label, count } = getPluginSummary(plugin);
+      summary.set(label, (summary.get(label) || 0) + count);
+    });
+
+    return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
+  }, [config.plugins, getPluginSummary]);
+
+  const customPolicies = useMemo(() => {
+    return config.plugins.filter(
+      (p): p is PolicyPlugin => typeof p === 'object' && p.id === 'policy',
+    );
+  }, [config.plugins]);
+
+  const intents = useMemo(() => {
+    return config.plugins
+      .filter(
+        (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
+          typeof p === 'object' && p.id === 'intent' && p.config?.intent !== undefined,
+      )
+      .map((p) => p.config.intent)
+      .flat()
+      .filter((intent): intent is string => typeof intent === 'string' && intent.trim() !== '');
+  }, [config.plugins]);
 
   return (
     <Box maxWidth="lg" mx="auto">
@@ -63,27 +103,96 @@ export default function Review() {
         <Grid item xs={12} md={6}>
           <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" gutterBottom>
-              Plugins ({config.plugins?.length || 0})
+              Plugins ({pluginSummary.length})
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {config.plugins?.map((plugin, index) => (
-                <Chip key={index} label={getPluginLabel(plugin)} size="small" />
+              {pluginSummary.map(([label, count]) => (
+                <Chip
+                  key={label}
+                  label={count > 1 ? `${label} (${count})` : label}
+                  size="small"
+                  sx={{
+                    backgroundColor:
+                      label === 'Custom Policy' ? theme.palette.primary.main : undefined,
+                    color:
+                      label === 'Custom Policy' ? theme.palette.primary.contrastText : undefined,
+                  }}
+                />
               ))}
             </Box>
           </Paper>
         </Grid>
-        <Grid item xs={12} md={6}>
-          <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
-            <Typography variant="h6" gutterBottom>
-              Strategies ({config.strategies?.length || 0})
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {config.strategies?.map((strategy, index) => (
-                <Chip key={index} label={getStrategyLabel(strategy)} size="small" />
-              ))}
-            </Box>
-          </Paper>
-        </Grid>
+
+        {customPolicies.length > 0 && (
+          <Grid item xs={12} md={6}>
+            <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+              <Typography variant="h6" gutterBottom>
+                Custom Policies ({customPolicies.length})
+              </Typography>
+              <Stack spacing={1}>
+                {customPolicies.map((policy, index) => (
+                  <Box
+                    key={index}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 1,
+                      bgcolor: theme.palette.action.hover,
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {policy.config.policy}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            </Paper>
+          </Grid>
+        )}
+
+        {intents.length > 0 && (
+          <Grid item xs={12} md={6}>
+            <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+              <Typography variant="h6" gutterBottom>
+                Intents ({intents.length})
+              </Typography>
+              <Stack spacing={1}>
+                {intents.map((intent, index) => (
+                  <Box
+                    key={index}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 1,
+                      bgcolor: theme.palette.action.hover,
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {intent}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            </Paper>
+          </Grid>
+        )}
+
         <Grid item xs={12}>
           <Paper elevation={2} sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>

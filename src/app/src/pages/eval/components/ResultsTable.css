@@ -393,3 +393,94 @@ table.results-table,
     opacity: 1;
   }
 }
+
+.results-table thead.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  transition: transform 0.2s ease-out;
+}
+
+[data-theme='dark'] .results-table thead.sticky {
+  background: #1a1a1a;
+}
+
+.header-dismiss {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  cursor: pointer;
+  z-index: 101;
+  padding: 4px;
+  border-radius: 4px;
+  background: #eee;
+  display: none;
+}
+
+[data-theme='dark'] .header-dismiss {
+  background: #333;
+}
+
+.header-dismiss:hover {
+  background: #ddd;
+}
+
+[data-theme='dark'] .header-dismiss:hover {
+  background: #444;
+}
+
+thead.collapsed .header-dismiss {
+  display: block;
+}
+
+.results-table thead.collapsed .prompt-detail,
+.results-table thead.collapsed .custom-metric-container {
+  display: none;
+}
+
+.results-table thead.collapsed .MuiFormControlLabel-root {
+  margin-top: -8px;
+}
+
+/* Ensure the header cells have a solid background */
+.results-table th {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Add these additional styles */
+.results-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.results-table thead.collapsed th {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* Ensure content below header doesn't jump when header collapses */
+.results-table thead th {
+  transition: padding 0.2s ease-out;
+}
+
+/* Add a subtle transition for the collapse animation */
+.results-table thead .output-header {
+  transition: max-height 0.2s ease-out;
+}
+
+/* Update these styles */
+.results-table thead.collapsed {
+  border-bottom: 2px solid var(--border-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure the header cells have a solid background */
+.results-table th {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .results-table th {
+  background: #1a1a1a;
+}

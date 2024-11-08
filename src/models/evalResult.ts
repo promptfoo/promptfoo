@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq, gte, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { hashPrompt } from '../prompts/utils';
@@ -82,13 +82,52 @@ export default class EvalResult {
     return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
   }
 
-  static async findManyByEvalId(evalId: string) {
+  static async findManyByEvalId(evalId: string, opts?: { testIdx?: number }) {
     const db = getDb();
     const results = await db
       .select()
       .from(evalResultsTable)
-      .where(eq(evalResultsTable.evalId, evalId));
+      .where(
+        and(
+          eq(evalResultsTable.evalId, evalId),
+          opts?.testIdx == null ? undefined : eq(evalResultsTable.testIdx, opts.testIdx),
+        ),
+      );
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
+  }
+
+  // This is a generator that yields batches of results from the database
+  // These are batched by test Id, not just results to ensure we get all results for a given test
+  static async *findManyByEvalIdBatched(
+    evalId: string,
+    opts?: {
+      batchSize?: number;
+    },
+  ): AsyncGenerator<EvalResult[]> {
+    const db = getDb();
+    const batchSize = opts?.batchSize || 100;
+    let offset = 0;
+
+    while (true) {
+      const results = await db
+        .select()
+        .from(evalResultsTable)
+        .where(
+          and(
+            eq(evalResultsTable.evalId, evalId),
+            gte(evalResultsTable.testIdx, offset),
+            lt(evalResultsTable.testIdx, offset + batchSize),
+          ),
+        )
+        .all();
+
+      if (results.length === 0) {
+        break;
+      }
+
+      yield results.map((result) => new EvalResult({ ...result, persisted: true }));
+      offset += batchSize;
+    }
   }
 
   id: string;
