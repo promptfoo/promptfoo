@@ -328,6 +328,31 @@ providers:
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
 
+## Maintaining session IDs with an HTTP provider and Multi-turn redteam attacks like GOAT and Crescendo
+
+When using an HTTP provider with multi-turn redteam attacks like GOAT and Crescendo, you may need to maintain session IDs between rounds. The HTTP provider will automatically extract the session ID from the response headers and store it in the `vars` object.
+
+Create a session parser that extracts the session ID from the response headers and returns it. All of the same formats of response parsers are supported.
+
+The input to the session parser is an object with a `headers` field, which contains the response headers.
+
+`{ headers: Record<string, string> }`
+
+Simple header parser:
+
+```yaml
+sessionParser: 'headers["set-cookie"]'
+```
+
+Then you need to set the session ID in the `vars` object for the next round:
+
+```yaml
+providers:
+  - id: 'https://example.com/api'
+    headers:
+      'Cookie': '{{sessionId}}'
+```
+
 ## Reference
 
 Supported config options:

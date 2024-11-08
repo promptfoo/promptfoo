@@ -362,7 +362,6 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
     try {
-      console.log({ headers: response.headers });
       const parsedOutput = (await this.responseParser)(parsedData, rawText);
       ret.output = parsedOutput.output || parsedOutput;
       ret.sessionId =
