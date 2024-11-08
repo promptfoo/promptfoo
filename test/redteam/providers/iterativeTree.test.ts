@@ -450,7 +450,7 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should get target response correctly', async () => {
-      const mockResponse = 'Target response';
+      const mockResponse = { output: 'Target response' };
       mockTargetProvider.callApi.mockResolvedValue({ output: mockResponse });
 
       const targetPrompt = 'Test prompt';
@@ -461,7 +461,7 @@ describe('RedteamIterativeProvider', () => {
       const options: CallApiOptionsParams = {};
       const result = await getTargetResponse(mockTargetProvider, targetPrompt, context, options);
 
-      expect(result).toMatchObject({ extractedResponse: mockResponse });
+      expect(result).toEqual({ output: JSON.stringify(mockResponse), sessionId: undefined });
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
       expect(mockTargetProvider.callApi).toHaveBeenCalledWith(targetPrompt, context, options);
     });
@@ -478,7 +478,7 @@ describe('RedteamIterativeProvider', () => {
         {} as CallApiOptionsParams,
       );
 
-      expect(result).toMatchObject({ extractedResponse: JSON.stringify(nonStringOutput) });
+      expect(result).toEqual({ output: JSON.stringify(nonStringOutput), sessionId: undefined });
     });
   });
 });

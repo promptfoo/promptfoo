@@ -44,7 +44,7 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
 
 export async function createSessionParser(
   parser: string | Function | undefined,
-): Promise<(({ headers }: { headers: Headers }) => string) | null> {
+): Promise<(({ headers }: { headers: Record<string, string> }) => string) | null> {
   if (!parser) {
     return () => '';
   }
@@ -206,7 +206,9 @@ export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
   private responseParser: Promise<(data: any, text: string) => ProviderResponse>;
-  private sessionParser: Promise<(({ headers }: { headers: Headers }) => string) | null>;
+  private sessionParser: Promise<
+    (({ headers }: { headers: Record<string, string> }) => string) | null
+  >;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config;
@@ -360,6 +362,7 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
     try {
+      console.log({ headers: response.headers });
       const parsedOutput = (await this.responseParser)(parsedData, rawText);
       ret.output = parsedOutput.output || parsedOutput;
       ret.sessionId =

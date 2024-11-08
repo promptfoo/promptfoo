@@ -46,7 +46,7 @@ export type FetchWithCacheResult<T> = {
   cached: boolean;
   status: number;
   statusText: string;
-  headers?: Headers;
+  headers?: Record<string, string>;
 };
 
 export async function fetchWithCache<T = any>(
@@ -66,7 +66,7 @@ export async function fetchWithCache<T = any>(
         data: format === 'json' ? JSON.parse(respText) : respText,
         status: resp.status,
         statusText: resp.statusText,
-        headers: resp.headers,
+        headers: Object.fromEntries(resp.headers.entries()),
       };
     } catch {
       throw new Error(`Error parsing response as JSON: ${respText}`);
@@ -88,12 +88,14 @@ export async function fetchWithCache<T = any>(
     cached = false;
     const response = await fetchWithRetries(url, options, timeout);
     const responseText = await response.text();
+    const headers = Object.fromEntries(response.headers.entries());
+
     try {
       const data = JSON.stringify({
         data: format === 'json' ? JSON.parse(responseText) : responseText,
         status: response.status,
         statusText: response.statusText,
-        headers: response.headers,
+        headers,
       });
       if (!response.ok) {
         if (responseText == '') {
@@ -101,7 +103,7 @@ export async function fetchWithCache<T = any>(
             data: `Empty Response: ${response.status}: ${response.statusText}`,
             status: response.status,
             statusText: response.statusText,
-            headers: response.headers,
+            headers,
           });
         } else {
           errorResponse = data;

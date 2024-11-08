@@ -56,6 +56,7 @@ export interface ApiProvider {
   transform?: string;
   delay?: number;
   config?: any;
+  getSessionId?: () => string;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
