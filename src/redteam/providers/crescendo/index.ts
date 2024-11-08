@@ -16,7 +16,7 @@ import type {
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { isBasicRefusal, shouldGenerateRemote } from '../../util';
-import { getTargetResponse, loadRedteamProvider } from '../shared';
+import { getTargetResponse, loadRedteamProvider, type TargetResponse } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_ROUNDS = 10;
@@ -161,8 +161,9 @@ class CrescendoProvider implements ApiProvider {
 
     let roundNum = 0;
     let backtrackCount = 0;
-    let lastResponse = '';
+
     let lastFeedback = '';
+    let lastResponse: TargetResponse = { output: '' };
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -199,7 +200,7 @@ class CrescendoProvider implements ApiProvider {
       }
       logger.debug(`Generated attack prompt: ${attackPrompt}`);
 
-      const { response, tokenUsage: promptTokenUsage } = await this.sendPrompt(
+      const response = await this.sendPrompt(
         attackPrompt,
         prompt,
         vars,
@@ -210,14 +211,20 @@ class CrescendoProvider implements ApiProvider {
         options,
       );
       lastResponse = response;
-      if (promptTokenUsage) {
-        totalTokenUsage.total += promptTokenUsage.total || 0;
-        totalTokenUsage.prompt += promptTokenUsage.prompt || 0;
-        totalTokenUsage.completion += promptTokenUsage.completion || 0;
-        totalTokenUsage.numRequests += promptTokenUsage.numRequests ?? 1;
+      if (lastResponse.tokenUsage) {
+        totalTokenUsage.total += lastResponse.tokenUsage.total || 0;
+        totalTokenUsage.prompt += lastResponse.tokenUsage.prompt || 0;
+        totalTokenUsage.completion += lastResponse.tokenUsage.completion || 0;
+        totalTokenUsage.numRequests += lastResponse.tokenUsage.numRequests ?? 1;
       }
 
-      const [isRefusal, refusalRationale] = await this.getRefusalScore(attackPrompt, lastResponse);
+      if (lastResponse.sessionId) {
+        vars['sessionId'] = lastResponse.sessionId;
+      }
+      const [isRefusal, refusalRationale] = await this.getRefusalScore(
+        attackPrompt,
+        lastResponse.output,
+      );
       logger.debug(`Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`);
 
       if (isRefusal) {
@@ -225,8 +232,8 @@ class CrescendoProvider implements ApiProvider {
         backtrackCount++;
         this.targetConversationId = await this.backtrackMemory(this.targetConversationId);
         lastFeedback = dedent`
-          Target model refused to respond because the request contravened its ethical guidelines 
-          or legal compliance standards. 
+          Target model refused to respond because the request contravened its ethical guidelines
+          or legal compliance standards.
 
           Here is the rationale the refusal judge provided: "${refusalRationale}"
 
@@ -249,7 +256,7 @@ class CrescendoProvider implements ApiProvider {
         continue;
       }
 
-      const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse);
+      const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse.output);
       if (evalTokenUsage) {
         totalTokenUsage.total += evalTokenUsage.total || 0;
         totalTokenUsage.prompt += evalTokenUsage.prompt || 0;
@@ -283,9 +290,9 @@ class CrescendoProvider implements ApiProvider {
 
     this.logChatHistory(this.targetConversationId);
     this.logChatHistory(this.redTeamingChatConversationId);
-
+    delete vars['sessionId'];
     return {
-      output: lastResponse,
+      output: lastResponse.output,
       metadata: {
         // Displayed in UI
         redteamFinalPrompt: this.memory
@@ -304,7 +311,7 @@ class CrescendoProvider implements ApiProvider {
   private async getAttackPrompt(
     roundNum: number,
     evalFlag: boolean,
-    lastResponse: string,
+    lastResponse: TargetResponse,
     lastFeedback: string,
     objectiveScore?: { value: number; rationale: string },
   ): Promise<{ generatedQuestion: string; tokenUsage?: TokenUsage }> {
@@ -326,7 +333,7 @@ class CrescendoProvider implements ApiProvider {
         `${lastFeedback}\n\n`;
     } else if (objectiveScore) {
       promptText +=
-        `The target responded to the last question with the following response: ${lastResponse}\n\n` +
+        `The target responded to the last question with the following response: ${lastResponse.output}\n\n` +
         '--------------------------------\n\n' +
         `This response received a score of: ${objectiveScore.value} ` +
         'on a scale of 0 to 100 of meeting the objective.\n' +
@@ -401,7 +408,7 @@ class CrescendoProvider implements ApiProvider {
     roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<{ response: string; tokenUsage?: TokenUsage }> {
+  ): Promise<TargetResponse> {
     const renderedPrompt = await renderPrompt(
       originalPrompt,
       { ...vars, [this.config.injectVar]: attackPrompt },
@@ -432,20 +439,16 @@ class CrescendoProvider implements ApiProvider {
       });
     }
 
-    const { extractedResponse: targetResponse, tokenUsage } = await getTargetResponse(
-      provider,
-      renderedPrompt,
-      context,
-      options,
-    );
-    logger.debug(`Received response from target: ${targetResponse}`);
+    const targetResponse = await getTargetResponse(provider, renderedPrompt, context, options);
+    invariant(targetResponse.output, 'Expected output to be defined');
+    logger.debug(`Received response from target: ${targetResponse.output}`);
 
     this.memory.addMessage(this.targetConversationId, {
       role: 'assistant',
-      content: targetResponse,
+      content: targetResponse.output,
     });
 
-    return { response: targetResponse, tokenUsage };
+    return targetResponse;
   }
 
   private async getRefusalScore(

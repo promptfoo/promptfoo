@@ -47,49 +47,57 @@ export async function loadRedteamProvider({
   return ret;
 }
 
+export type TargetResponse = {
+  output: string;
+  error?: string;
+  sessionId?: string;
+  tokenUsage?: TokenUsage;
+};
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
  * @param targetPrompt - The prompt to send to the target provider.
- * @returns A promise that resolves to the target provider's response as a string.
+ * @returns A promise that resolves to the target provider's response as an object.
  */
 export async function getTargetResponse(
   targetProvider: ApiProvider,
   targetPrompt: string,
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
-): Promise<{ extractedResponse: string; tokenUsage?: TokenUsage }> {
+): Promise<TargetResponse> {
   let targetRespRaw;
   try {
-    targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
+    targetRespRaw = await targetProvider.callApi(
+      targetPrompt,
+      context?.vars
+        ? {
+            vars: context.vars,
+            prompt: { raw: targetPrompt, label: 'target' },
+          }
+        : undefined,
+    );
   } catch (error) {
-    return {
-      extractedResponse: (error as Error).message,
-      tokenUsage: {
-        numRequests: 1,
-      },
-    };
+    return { output: '', error: (error as Error).message, tokenUsage: { numRequests: 1 } };
   }
 
   if (targetRespRaw?.output) {
     return {
-      extractedResponse:
+      output:
         typeof targetRespRaw.output === 'string'
           ? targetRespRaw.output
           : JSON.stringify(targetRespRaw.output),
-      tokenUsage: {
-        ...(targetRespRaw.tokenUsage || {}),
-        numRequests: 1,
-      },
+      sessionId: targetRespRaw.sessionId,
+      tokenUsage: targetRespRaw.tokenUsage || { numRequests: 1 },
     };
   }
 
   if (targetRespRaw?.error) {
     return {
-      extractedResponse: targetRespRaw.error,
-      tokenUsage: {
-        numRequests: 1,
-      },
+      output: '',
+      error: targetRespRaw.error,
+      sessionId: targetRespRaw.sessionId,
+      tokenUsage: { numRequests: 1 },
     };
   }
 

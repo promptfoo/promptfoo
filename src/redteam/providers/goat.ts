@@ -99,6 +99,10 @@ export default class GoatProvider implements ApiProvider {
       const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
       logger.debug(`GOAT turn ${turn} target response: ${JSON.stringify(targetResponse)}`);
 
+      if (targetResponse.sessionId) {
+        context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
+        context.vars.sessionId = targetResponse.sessionId;
+      }
       if (targetResponse.error) {
         throw new Error(`Error from target provider: ${targetResponse.error}`);
       }
@@ -120,6 +124,8 @@ export default class GoatProvider implements ApiProvider {
         totalTokenUsage.numRequests += 1;
       }
     }
+    delete context?.vars?.sessionId;
+
     return {
       output: messages[messages.length - 1]?.content,
       metadata: {

@@ -87,6 +87,7 @@ export interface ProviderResponse {
   output?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
+  sessionId?: string;
 }
 
 export interface ProviderEmbeddingResponse {

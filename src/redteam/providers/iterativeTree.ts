@@ -433,23 +433,27 @@ export async function runRedteamConversation({
           totalTokenUsage.completion += isOnTopicTokenUsage.completion || 0;
         }
 
-        const { extractedResponse: targetResponse, tokenUsage: targetTokenUsage } =
-          await getTargetResponse(targetProvider, targetPrompt, context, options);
-        if (targetTokenUsage) {
-          totalTokenUsage.total += targetTokenUsage.total || 0;
-          totalTokenUsage.prompt += targetTokenUsage.prompt || 0;
-          totalTokenUsage.completion += targetTokenUsage.completion || 0;
-          totalTokenUsage.numRequests += targetTokenUsage.numRequests ?? 1;
+        const targetResponse = await getTargetResponse(
+          targetProvider,
+          targetPrompt,
+          context,
+          options,
+        );
+        if (targetResponse.tokenUsage) {
+          totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
+          totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
+          totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
+          totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
         }
 
         const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
-          targetResponse.toLowerCase().includes(phrase),
+          targetResponse.output.toLowerCase().includes(phrase),
         );
 
         const score = await evaluateResponse(
           redteamProvider,
           judgeSystemPrompt,
-          targetResponse,
+          targetResponse.output,
           containsPenalizedPhrase,
         );
 
@@ -483,7 +487,7 @@ export async function runRedteamConversation({
             `[Depth ${depth}, Attempt ${attempts}] Reached target score (${TARGET_SCORE}). Max score: ${maxScore}. Stopping.`,
           );
           return {
-            output: targetResponse,
+            output: targetResponse.output,
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
@@ -496,7 +500,7 @@ export async function runRedteamConversation({
             `[Depth ${depth}, Attempt ${attempts}] No improvement for ${MAX_NO_IMPROVEMENT} consecutive iterations. Max score: ${maxScore}. Stopping.`,
           );
           return {
-            output: targetResponse,
+            output: targetResponse.output,
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
@@ -509,7 +513,7 @@ export async function runRedteamConversation({
             `[Depth ${depth}, Attempt ${attempts}] Reached maximum attempts (${MAX_ATTEMPTS}). Max score: ${maxScore}. Stopping.`,
           );
           return {
-            output: targetResponse,
+            output: targetResponse.output,
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
@@ -518,7 +522,13 @@ export async function runRedteamConversation({
         }
 
         redteamHistory.push(
-          updateRedteamHistory(targetResponse, goal, score, isOnTopic, containsPenalizedPhrase),
+          updateRedteamHistory(
+            targetResponse.output,
+            goal,
+            score,
+            isOnTopic,
+            containsPenalizedPhrase,
+          ),
         );
       }
     }
@@ -539,13 +549,17 @@ export async function runRedteamConversation({
     targetProvider,
   );
 
-  const { extractedResponse: finalTargetResponse, tokenUsage: finalTargetTokenUsage } =
-    await getTargetResponse(targetProvider, finalTargetPrompt, context, options);
-  if (finalTargetTokenUsage) {
-    totalTokenUsage.total += finalTargetTokenUsage.total || 0;
-    totalTokenUsage.prompt += finalTargetTokenUsage.prompt || 0;
-    totalTokenUsage.completion += finalTargetTokenUsage.completion || 0;
-    totalTokenUsage.numRequests += finalTargetTokenUsage.numRequests ?? 1;
+  const finalTargetResponse = await getTargetResponse(
+    targetProvider,
+    finalTargetPrompt,
+    context,
+    options,
+  );
+  if (finalTargetResponse.tokenUsage) {
+    totalTokenUsage.total += finalTargetResponse.tokenUsage.total || 0;
+    totalTokenUsage.prompt += finalTargetResponse.tokenUsage.prompt || 0;
+    totalTokenUsage.completion += finalTargetResponse.tokenUsage.completion || 0;
+    totalTokenUsage.numRequests += finalTargetResponse.tokenUsage.numRequests ?? 1;
   }
 
   logger.debug(
@@ -553,7 +567,7 @@ export async function runRedteamConversation({
   );
 
   return {
-    output: finalTargetResponse,
+    output: finalTargetResponse.output,
     metadata: {
       redteamFinalPrompt: finalTargetPrompt,
     },

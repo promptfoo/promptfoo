@@ -12,7 +12,7 @@ import type {
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
-import { getTargetResponse, loadRedteamProvider } from './shared';
+import { getTargetResponse, loadRedteamProvider, type TargetResponse } from './shared';
 
 const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
   ? Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)
@@ -115,7 +115,7 @@ async function runRedteamConversation({
   ];
 
   let highestScore = 0;
-  let bestResponse = '';
+  let bestResponse: TargetResponse | null = null;
   const totalTokenUsage = {
     total: 0,
     prompt: 0,
@@ -184,12 +184,11 @@ async function runRedteamConversation({
     const { isOnTopic } = extractFirstJsonObject<{ isOnTopic: boolean }>(isOnTopicResp.output);
     logger.debug(`Iteration ${i + 1}: On-topic response: ${isOnTopicResp.output}`);
 
-    const { extractedResponse: targetResponse, tokenUsage: targetTokenUsage } =
-      await getTargetResponse(targetProvider, targetPrompt, context, options);
+    const targetResponse = await getTargetResponse(targetProvider, targetPrompt, context, options);
 
     // Parse URL from targetResponse
     const urlRegex = /(https?:\/\/[^\s)]+)/g;
-    const url = targetResponse.match(urlRegex);
+    const url = targetResponse.output.match(urlRegex);
     logger.debug(`Iteration ${i + 1}: URL: ${url}`);
     let imageDescription;
     if (url) {
@@ -259,11 +258,11 @@ async function runRedteamConversation({
       }`,
     });
 
-    if (targetTokenUsage) {
-      totalTokenUsage.total += targetTokenUsage.total || 0;
-      totalTokenUsage.prompt += targetTokenUsage.prompt || 0;
-      totalTokenUsage.completion += targetTokenUsage.completion || 0;
-      totalTokenUsage.numRequests += targetTokenUsage.numRequests ?? 1;
+    if (targetResponse.tokenUsage) {
+      totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
+      totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
+      totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
     }
   }
 
