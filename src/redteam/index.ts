@@ -281,7 +281,7 @@ export async function synthesize({
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
-      const pluginTests = await action(
+      let pluginTests = await action(
         redteamProvider,
         purpose,
         injectVar,
@@ -292,6 +292,10 @@ export async function synthesize({
           ...resolvePluginConfig(plugin.config),
         },
       );
+      if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
+        logger.warn(`Failed to generate tests for ${plugin.id}`);
+        pluginTests = [];
+      }
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,
