@@ -132,6 +132,13 @@ export type EnvVars = {
   BUDDY?: boolean;
   BUILDKITE?: boolean;
   TEAMCITY_VERSION?: boolean;
+
+  // Azure OpenAI auth params
+  AZURE_CLIENT_SECRET?: string;
+  AZURE_CLIENT_ID?: string;
+  AZURE_TENANT_ID?: string;
+  AZURE_AUTHORITY_HOST?: string;
+  AZURE_TOKEN_SCOPE?: string;
 } & EnvOverrides;
 
 type EnvVarKey = keyof EnvVars;

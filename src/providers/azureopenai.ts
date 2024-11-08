@@ -226,24 +226,30 @@ export class AzureOpenAiGenericProvider implements ApiProvider {
   _cachedApiKey?: string;
   async getApiKey(): Promise<string> {
     if (!this._cachedApiKey) {
-      if (
-        this.config?.azureClientSecret &&
-        this.config?.azureClientId &&
-        this.config?.azureTenantId
-      ) {
+      const clientSecret =
+        this.config?.azureClientSecret ||
+        this.env?.AZURE_CLIENT_SECRET ||
+        getEnvString('AZURE_CLIENT_SECRET');
+      const clientId =
+        this.config?.azureClientId || this.env?.AZURE_CLIENT_ID || getEnvString('AZURE_CLIENT_ID');
+      const tenantId =
+        this.config?.azureTenantId || this.env?.AZURE_TENANT_ID || getEnvString('AZURE_TENANT_ID');
+      const authorityHost =
+        this.config?.azureAuthorityHost ||
+        this.env?.AZURE_AUTHORITY_HOST ||
+        getEnvString('AZURE_AUTHORITY_HOST');
+      const tokenScope =
+        this.config?.azureTokenScope ||
+        this.env?.AZURE_TOKEN_SCOPE ||
+        getEnvString('AZURE_TOKEN_SCOPE');
+
+      if (clientSecret && clientId && tenantId) {
         const { ClientSecretCredential } = await import('@azure/identity');
-        const credential = new ClientSecretCredential(
-          this.config.azureTenantId,
-          this.config.azureClientId,
-          this.config.azureClientSecret,
-          {
-            authorityHost: this.config.azureAuthorityHost || 'https://login.microsoftonline.com',
-          },
-        );
+        const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
+          authorityHost: authorityHost || 'https://login.microsoftonline.com',
+        });
         this._cachedApiKey = (
-          await credential.getToken(
-            this.config.azureTokenScope || 'https://cognitiveservices.azure.com/.default',
-          )
+          await credential.getToken(tokenScope || 'https://cognitiveservices.azure.com/.default')
         ).token;
       } else {
         this._cachedApiKey =
