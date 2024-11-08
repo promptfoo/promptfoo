@@ -226,6 +226,20 @@ export class AzureOpenAiGenericProvider implements ApiProvider {
   _cachedApiKey?: string;
   async getApiKey(): Promise<string> {
     if (!this._cachedApiKey) {
+      const apiKey =
+        this.config?.apiKey ||
+        (this.config?.apiKeyEnvar
+          ? process.env[this.config.apiKeyEnvar] ||
+            this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+          : undefined) ||
+        this.env?.AZURE_OPENAI_API_KEY ||
+        getEnvString('AZURE_OPENAI_API_KEY');
+
+      if (apiKey) {
+        this._cachedApiKey = apiKey;
+        return this._cachedApiKey;
+      }
+
       const clientSecret =
         this.config?.azureClientSecret ||
         this.env?.AZURE_CLIENT_SECRET ||
@@ -251,19 +265,12 @@ export class AzureOpenAiGenericProvider implements ApiProvider {
         this._cachedApiKey = (
           await credential.getToken(tokenScope || 'https://cognitiveservices.azure.com/.default')
         ).token;
-      } else {
-        this._cachedApiKey =
-          this.config?.apiKey ||
-          (this.config?.apiKeyEnvar
-            ? process.env[this.config.apiKeyEnvar] ||
-              this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-            : undefined) ||
-          this.env?.AZURE_OPENAI_API_KEY ||
-          getEnvString('AZURE_OPENAI_API_KEY');
-        if (!this._cachedApiKey) {
-          throw new Error('Azure OpenAI API key must be set');
-        }
+        return this._cachedApiKey;
       }
+
+      throw new Error(
+        'Azure OpenAI authentication failed. Please provide either an API key via AZURE_OPENAI_API_KEY or client credentials via AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and AZURE_TENANT_ID',
+      );
     }
     return this._cachedApiKey;
   }

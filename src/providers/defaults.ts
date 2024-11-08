@@ -7,6 +7,7 @@ import {
   DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
   DefaultLlmRubricProvider as AnthropicLlmRubricProvider,
 } from './anthropic';
+import { AzureOpenAiChatCompletionProvider, AzureOpenAiEmbeddingProvider } from './azureopenai';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
@@ -36,6 +37,47 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !getEnvString('OPENAI_API_KEY') &&
     !env?.OPENAI_API_KEY &&
     (getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY);
+
+  const hasAzureApiKey = getEnvString('AZURE_OPENAI_API_KEY') || env?.AZURE_OPENAI_API_KEY;
+  const hasAzureClientCreds =
+    (getEnvString('AZURE_CLIENT_ID') || env?.AZURE_CLIENT_ID) &&
+    (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&
+    (getEnvString('AZURE_TENANT_ID') || env?.AZURE_TENANT_ID);
+
+  const preferAzure =
+    !getEnvString('OPENAI_API_KEY') &&
+    !env?.OPENAI_API_KEY &&
+    (hasAzureApiKey || hasAzureClientCreds) &&
+    (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME);
+
+  if (preferAzure) {
+    logger.debug('Using Azure OpenAI default providers');
+    const deploymentName =
+      getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
+    if (!deploymentName) {
+      throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
+    }
+
+    const embeddingDeploymentName =
+      getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
+      env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
+      deploymentName;
+
+    const azureProvider = new AzureOpenAiChatCompletionProvider(deploymentName, { env });
+    const azureEmbeddingProvider = new AzureOpenAiEmbeddingProvider(embeddingDeploymentName, {
+      env,
+    });
+
+    return {
+      datasetGenerationProvider: azureProvider,
+      embeddingProvider: azureEmbeddingProvider,
+      gradingJsonProvider: azureProvider,
+      gradingProvider: azureProvider,
+      moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: azureProvider,
+      synthesizeProvider: azureProvider,
+    };
+  }
 
   if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
