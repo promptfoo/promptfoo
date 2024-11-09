@@ -9,10 +9,7 @@ import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers';
 import { AnthropicCompletionProvider } from '../../src/providers/anthropic';
-import {
-  AzureOpenAiChatCompletionProvider,
-  AzureOpenAiCompletionProvider,
-} from '../../src/providers/azureopenai';
+import { AzureChatCompletionProvider, AzureCompletionProvider } from '../../src/providers/azure';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import {
   CloudflareAiChatCompletionProvider,
@@ -385,7 +382,7 @@ describe('call provider apis', () => {
     };
     mockFetch.mockResolvedValue(mockResponse);
 
-    const provider = new AzureOpenAiCompletionProvider('text-davinci-003');
+    const provider = new AzureCompletionProvider('text-davinci-003');
     const result = await provider.callApi('Test prompt');
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -405,7 +402,7 @@ describe('call provider apis', () => {
     };
     mockFetch.mockResolvedValue(mockResponse);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini');
+    const provider = new AzureChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -440,7 +437,7 @@ describe('call provider apis', () => {
     };
     mockFetch.mockResolvedValue(mockResponse);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini', {
+    const provider = new AzureChatCompletionProvider('gpt-4o-mini', {
       config: { dataSources },
     });
     const result = await provider.callApi(
@@ -469,7 +466,7 @@ describe('call provider apis', () => {
     };
     mockFetch.mockResolvedValue(mockResponse);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-4o-mini');
+    const provider = new AzureChatCompletionProvider('gpt-4o-mini');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -1292,12 +1289,12 @@ describe('loadApiProvider', () => {
 
   it('loadApiProvider with azureopenai:completion:modelName', async () => {
     const provider = await loadApiProvider('azureopenai:completion:text-davinci-003');
-    expect(provider).toBeInstanceOf(AzureOpenAiCompletionProvider);
+    expect(provider).toBeInstanceOf(AzureCompletionProvider);
   });
 
   it('loadApiProvider with azureopenai:chat:modelName', async () => {
     const provider = await loadApiProvider('azureopenai:chat:gpt-3.5-turbo');
-    expect(provider).toBeInstanceOf(AzureOpenAiChatCompletionProvider);
+    expect(provider).toBeInstanceOf(AzureChatCompletionProvider);
   });
 
   it('loadApiProvider with anthropic:completion', async () => {

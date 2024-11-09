@@ -14,11 +14,11 @@ import {
 import { AI21ChatCompletionProvider } from './providers/ai21';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
-  AzureOpenAiAssistantProvider,
-  AzureOpenAiChatCompletionProvider,
-  AzureOpenAiCompletionProvider,
-  AzureOpenAiEmbeddingProvider,
-} from './providers/azureopenai';
+  AzureAssistantProvider,
+  AzureChatCompletionProvider,
+  AzureCompletionProvider,
+  AzureEmbeddingProvider,
+} from './providers/azure';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import { BrowserProvider } from './providers/browser';
@@ -176,23 +176,20 @@ export async function loadApiProvider(
       );
       ret = new OpenAiChatCompletionProvider(modelType, providerOptions);
     }
-  } else if (providerPath.startsWith('azureopenai:')) {
+  } else if (providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:')) {
     // Load Azure OpenAI module
     const splits = providerPath.split(':');
     const modelType = splits[1];
     const deploymentName = splits[2];
 
     if (modelType === 'chat') {
-      ret = new AzureOpenAiChatCompletionProvider(deploymentName, providerOptions);
+      ret = new AzureChatCompletionProvider(deploymentName, providerOptions);
     } else if (modelType === 'assistant') {
-      ret = new AzureOpenAiAssistantProvider(deploymentName, providerOptions);
+      ret = new AzureAssistantProvider(deploymentName, providerOptions);
     } else if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new AzureOpenAiEmbeddingProvider(
-        deploymentName || 'text-embedding-ada-002',
-        providerOptions,
-      );
+      ret = new AzureEmbeddingProvider(deploymentName || 'text-embedding-ada-002', providerOptions);
     } else if (modelType === 'completion') {
-      ret = new AzureOpenAiCompletionProvider(deploymentName, providerOptions);
+      ret = new AzureCompletionProvider(deploymentName, providerOptions);
     } else {
       throw new Error(
         `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: azureopenai:chat:<model name>, azureopenai:assistant:<assistant id>, azureopenai:completion:<model name>`,
@@ -593,10 +590,17 @@ export default {
   MistralChatCompletionProvider,
   MistralEmbeddingProvider,
   AI21ChatCompletionProvider,
-  AzureOpenAiAssistantProvider,
-  AzureOpenAiChatCompletionProvider,
-  AzureOpenAiCompletionProvider,
-  AzureOpenAiEmbeddingProvider,
+  AzureAssistantProvider,
+  AzureChatCompletionProvider,
+  AzureCompletionProvider,
+  AzureEmbeddingProvider,
+
+  // Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
+  AzureOpenAiAssistantProvider: AzureAssistantProvider,
+  AzureOpenAiChatCompletionProvider: AzureChatCompletionProvider,
+  AzureOpenAiCompletionProvider: AzureCompletionProvider,
+  AzureOpenAiEmbeddingProvider: AzureEmbeddingProvider,
+
   AwsBedrockCompletionProvider,
   AwsBedrockEmbeddingProvider,
   BrowserProvider,

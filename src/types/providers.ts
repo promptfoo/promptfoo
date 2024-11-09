@@ -107,6 +107,7 @@ export interface ProviderClassificationResponse {
   classification?: Record<string, number>;
 }
 
+// Note: sync with validators/providers.ts
 export type EnvOverrides = {
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
@@ -115,6 +116,11 @@ export type EnvOverrides = {
   AZURE_OPENAI_API_BASE_URL?: string;
   AZURE_OPENAI_API_HOST?: string;
   AZURE_OPENAI_API_KEY?: string;
+  AZURE_API_BASE_URL?: string;
+  AZURE_API_HOST?: string;
+  AZURE_API_KEY?: string;
+  AZURE_DEPLOYMENT_NAME?: string;
+  AZURE_EMBEDDING_DEPLOYMENT_NAME?: string;
   AZURE_OPENAI_BASE_URL?: string;
   AZURE_OPENAI_DEPLOYMENT_NAME?: string;
   AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME?: string;
