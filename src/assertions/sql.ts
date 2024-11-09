@@ -3,10 +3,10 @@ import type { Assertion, GradingResult } from '../types';
 import type { AssertionValue } from '../types';
 
 export const handleIsSql = async (
+  assertion: Assertion,
   outputString: string,
   renderedValue: AssertionValue | undefined,
   inverse: boolean,
-  assertion: Assertion,
 ): Promise<GradingResult> => {
   let pass = false;
   let databaseType: string = 'MySQL';
@@ -81,4 +81,18 @@ export const handleIsSql = async (
     reason: pass ? 'Assertion passed' : failureReasons.join(' '),
     assertion,
   };
+};
+
+export const handleContainsSql = async (
+  outputString: string,
+  renderedValue: AssertionValue | undefined,
+  inverse: boolean,
+  assertion: Assertion,
+): Promise<GradingResult> => {
+  const match = outputString.match(/```(?:sql)?([^`]+)```/);
+  if (match) {
+    const sqlCode = match[1].trim();
+    return handleIsSql(assertion, sqlCode, renderedValue, inverse);
+  }
+  return handleIsSql(assertion, outputString, renderedValue, inverse);
 };

@@ -59,9 +59,9 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
 import { handleRegex } from './regex';
 import { handleSimilar } from './similar';
-import { handleIsSql } from './sql';
+import { handleContainsSql, handleIsSql } from './sql';
 import { getFinalTest, processFileReference } from './utils';
-import { validateXml, containsXml } from './xml';
+import { handleIsXml } from './xml';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -251,44 +251,15 @@ export async function runAssertion({
   }
 
   if (baseType === 'is-xml' || baseType === 'contains-xml') {
-    let requiredElements: string[] | undefined;
-    if (typeof renderedValue === 'string') {
-      requiredElements = renderedValue.split(',').map((el) => el.trim());
-    } else if (Array.isArray(renderedValue) && renderedValue.length > 0) {
-      requiredElements = renderedValue.map((el) => el.toString());
-    } else if (typeof renderedValue === 'object' && Object.keys(renderedValue).length > 0) {
-      if ('requiredElements' in renderedValue && Array.isArray(renderedValue.requiredElements)) {
-        requiredElements = renderedValue.requiredElements.map((el) => el.toString());
-      } else {
-        throw new Error('xml assertion must contain a string, array value, or no value');
-      }
-    }
-
-    const result = (baseType === 'is-xml' ? validateXml : containsXml)(
-      outputString,
-      requiredElements,
-    );
-    pass = result.isValid !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : result.reason,
-      assertion,
-    };
+    return handleIsXml(assertion, baseType, outputString, renderedValue, inverse);
   }
 
   if (baseType === 'is-sql') {
-    return handleIsSql(outputString, renderedValue, inverse, assertion);
+    return handleIsSql(assertion, outputString, renderedValue, inverse);
   }
 
   if (baseType === 'contains-sql') {
-    const match = outputString.match(/```(?:sql)?([^`]+)```/);
-    if (match) {
-      const sqlCode = match[1].trim();
-      return handleIsSql(sqlCode, renderedValue, inverse, assertion);
-    } else {
-      return handleIsSql(outputString, renderedValue, inverse, assertion);
-    }
+    return handleContainsSql(outputString, renderedValue, inverse, assertion);
   }
 
   if (baseType === 'contains') {
