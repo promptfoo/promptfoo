@@ -2,12 +2,12 @@ import { type Option as sqlParserOption } from 'node-sql-parser';
 import type { Assertion, GradingResult } from '../types';
 import type { AssertionValue } from '../types';
 
-export async function isSql(
+export const handleIsSql = async (
   outputString: string,
   renderedValue: AssertionValue | undefined,
   inverse: boolean,
   assertion: Assertion,
-): Promise<GradingResult> {
+): Promise<GradingResult> => {
   let pass = false;
   let databaseType: string = 'MySQL';
   let whiteTableList: string[] | undefined;
@@ -81,4 +81,4 @@ export async function isSql(
     reason: pass ? 'Assertion passed' : failureReasons.join(' '),
     assertion,
   };
-}
+};

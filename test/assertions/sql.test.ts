@@ -1,5 +1,5 @@
 /* eslint-disable jest/no-commented-out-tests */
-import { isSql } from '../../src/assertions/sql';
+import { handleIsSql } from '../../src/assertions/sql';
 import type { Assertion, GradingResult } from '../../src/types';
 
 const assertion: Assertion = {
@@ -11,7 +11,7 @@ describe('Basic tests', () => {
   it('should pass when the output string is a valid SQL statement', async () => {
     const renderedValue = undefined;
     const outputString = 'SELECT id, name FROM users';
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(true);
     expect(result.reason).toBe('Assertion passed');
   });
@@ -19,7 +19,7 @@ describe('Basic tests', () => {
   it('should fail when the SQL statement contains a syntax error in the ORDER BY clause', async () => {
     const renderedValue = undefined;
     const outputString = 'SELECT * FROM orders ORDERY BY order_date';
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(false);
     expect(result.reason).toBe(
       'SQL statement does not conform to the provided MySQL database syntax.',
@@ -29,7 +29,7 @@ describe('Basic tests', () => {
   it('should fail when the SQL statement uses a reserved keyword as a table name', async () => {
     const renderedValue = undefined;
     const outputString = 'SELECT * FROM select WHERE id = 1';
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(false);
     expect(result.reason).toBe(
       'SQL statement does not conform to the provided MySQL database syntax.',
@@ -39,7 +39,7 @@ describe('Basic tests', () => {
   it('should fail when the SQL statement has an incorrect DELETE syntax', async () => {
     const renderedValue = undefined;
     const outputString = 'DELETE employees WHERE id = 1';
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(false);
     expect(result.reason).toBe(
       'SQL statement does not conform to the provided MySQL database syntax.',
@@ -78,7 +78,7 @@ describe('Database Specific Syntax Tests', () => {
       databaseType: 'PostgreSQL',
     };
     const outputString = `SELECT * FROM employees WHERE id = 1 LOCK IN SHARE MODE`;
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(false);
     expect(result.reason).toBe(
       'SQL statement does not conform to the provided PostgreSQL database syntax.',
@@ -90,7 +90,7 @@ describe('Database Specific Syntax Tests', () => {
       databaseType: 'MySQL',
     };
     const outputString = `SELECT first_name, last_name FROM employees WHERE first_name ILIKE 'john%'`;
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(false);
     expect(result.reason).toBe(
       'SQL statement does not conform to the provided MySQL database syntax.',
@@ -102,7 +102,7 @@ describe('Database Specific Syntax Tests', () => {
       databaseType: 'PostgreSQL',
     };
     const outputString = `SELECT first_name, last_name FROM employees WHERE first_name ILIKE 'john%'`;
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(true);
     expect(result.reason).toBe('Assertion passed');
   });
@@ -130,7 +130,7 @@ describe('White Table/Column List Tests', () => {
       allowedTables: ['(select|update|insert|delete)::null::departments'],
     };
     const outputString = `SELECT * FROM employees`;
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(false);
     expect(result.reason).toBe(
       `SQL validation failed: authority = 'select::null::employees' is required in table whiteList to execute SQL = 'SELECT * FROM employees'.`,
@@ -143,7 +143,7 @@ describe('White Table/Column List Tests', () => {
       allowedTables: ['(select|update|insert|delete)::null::departments'],
     };
     const outputString = `SELECT * FROM departments`;
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(true);
     expect(result.reason).toBe('Assertion passed');
   });
@@ -154,7 +154,7 @@ describe('White Table/Column List Tests', () => {
       allowedColumns: ['select::null::name', 'update::null::id'],
     };
     const outputString = `SELECT id FROM t`;
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(false);
     expect(result.reason).toBe(
       `SQL validation failed: authority = 'select::null::id' is required in column whiteList to execute SQL = 'SELECT id FROM t'.`,
@@ -167,7 +167,7 @@ describe('White Table/Column List Tests', () => {
       allowedColumns: ['insert::department::dept_name', 'insert::department::location'],
     };
     const outputString = `INSERT INTO department (dept_name, location) VALUES ('Sales', 'New York')`;
-    const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
+    const result: GradingResult = await handleIsSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(true);
     expect(result.reason).toBe('Assertion passed');
   });

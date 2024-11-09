@@ -59,7 +59,7 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
 import { handleRegex } from './regex';
 import { handleSimilar } from './similar';
-import { isSql } from './sql';
+import { handleIsSql } from './sql';
 import { getFinalTest, processFileReference } from './utils';
 import { validateXml, containsXml } from './xml';
 
@@ -278,16 +278,16 @@ export async function runAssertion({
   }
 
   if (baseType === 'is-sql') {
-    return isSql(outputString, renderedValue, inverse, assertion);
+    return handleIsSql(outputString, renderedValue, inverse, assertion);
   }
 
   if (baseType === 'contains-sql') {
     const match = outputString.match(/```(?:sql)?([^`]+)```/);
     if (match) {
       const sqlCode = match[1].trim();
-      return isSql(sqlCode, renderedValue, inverse, assertion);
+      return handleIsSql(sqlCode, renderedValue, inverse, assertion);
     } else {
-      return isSql(outputString, renderedValue, inverse, assertion);
+      return handleIsSql(outputString, renderedValue, inverse, assertion);
     }
   }
 
