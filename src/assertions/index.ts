@@ -28,7 +28,7 @@ import { parseChatPrompt } from '../providers/shared';
 import { runPython } from '../python/pythonUtils';
 import { getGraderById } from '../redteam/graders';
 import telemetry from '../telemetry';
-import type { AssertionValueFunctionContext, ProviderResponse } from '../types';
+import type { AssertionValue, AssertionValueFunctionContext, ProviderResponse } from '../types';
 import {
   type ApiProvider,
   type Assertion,
@@ -42,6 +42,7 @@ import { transform } from '../util/transform';
 import { AssertionsResult } from './AssertionsResult';
 import { handleAnswerRelevance } from './answerRelevance';
 import { handleBleuScore } from './bleu';
+import { handleClassifier } from './classifier';
 import {
   handleContains,
   handleIContains,
@@ -50,11 +51,13 @@ import {
   handleContainsAll,
   handleIContainsAll,
 } from './contains';
+import { handleContextFaithfulness } from './contextFaithfulness';
 import { handleContextRecall } from './contextRecall';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
+import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
@@ -92,10 +95,11 @@ function coerceString(value: string | object): string {
 function handleRougeScore(
   baseType: 'rouge-n',
   assertion: Assertion,
-  expected: string,
+  expected: AssertionValue | undefined,
   output: string,
   inverted: boolean,
 ): GradingResult {
+  invariant(typeof expected === 'string', '"rouge" assertion type must be a string value');
   const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
   const rougeMethod = rouge[fnName];
   const score = rougeMethod(output, expected, {});
@@ -230,7 +234,7 @@ export async function runAssertion({
   test = getFinalTest(test, assertion);
 
   if (baseType === 'equals') {
-    return handleEquals(assertion, outputString, renderedValue, inverse);
+    return handleEquals(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'is-json') {
@@ -364,30 +368,7 @@ export async function runAssertion({
   }
 
   if (baseType === 'context-faithfulness') {
-    invariant(test.vars, 'context-faithfulness assertion type must have a vars object');
-    invariant(
-      typeof test.vars.query === 'string',
-      'context-faithfulness assertion type must have a query var',
-    );
-    invariant(
-      typeof test.vars.context === 'string',
-      'context-faithfulness assertion type must have a context var',
-    );
-    invariant(
-      typeof output === 'string',
-      'context-faithfulness assertion type must have a string output',
-    );
-
-    return {
-      assertion,
-      ...(await matchesContextFaithfulness(
-        test.vars.query,
-        output,
-        test.vars.context,
-        assertion.threshold || 0,
-        test.options,
-      )),
-    };
+    return handleContextFaithfulness(assertion, test, output);
   }
 
   if (baseType === 'moderation') {
@@ -491,61 +472,19 @@ export async function runAssertion({
   }
 
   if (baseType === 'rouge-n') {
-    invariant(typeof renderedValue === 'string', '"rouge" assertion type must be a string value');
     return handleRougeScore(baseType, assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'bleu') {
-    invariant(
-      typeof renderedValue === 'string' ||
-        (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
-      '"bleu" assertion type must have a string or array of strings value',
-    );
     return handleBleuScore(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'levenshtein') {
-    invariant(
-      typeof renderedValue === 'string',
-      '"levenshtein" assertion type must have a string value',
-    );
-    const levDistance = levenshtein(outputString, renderedValue);
-    pass = levDistance <= (assertion.threshold || 5);
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Levenshtein distance ${levDistance} is greater than threshold ${
-            assertion.threshold || 5
-          }`,
-      assertion,
-    };
+    return handleLevenshtein(assertion, renderedValue, outputString);
   }
 
   if (baseType === 'classifier') {
-    invariant(
-      typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
-      '"classifier" assertion type must have a string value or be undefined',
-    );
-
-    // Assertion provider overrides test provider
-    const classificationResult = await matchesClassification(
-      renderedValue,
-      outputString,
-      assertion.threshold ?? 1,
-      test.options,
-    );
-
-    if (inverse) {
-      classificationResult.pass = !classificationResult.pass;
-      classificationResult.score = 1 - classificationResult.score;
-    }
-
-    return {
-      assertion,
-      ...classificationResult,
-    };
+    return handleClassifier(assertion, renderedValue, outputString, test, inverse);
   }
 
   if (baseType === 'latency') {

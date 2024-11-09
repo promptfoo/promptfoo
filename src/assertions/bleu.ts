@@ -8,7 +8,8 @@
  *
  * {@link https://doi.org/10.3115/1073083.1073135}
  */
-import type { Assertion, GradingResult } from '../types';
+import invariant from 'tiny-invariant';
+import type { Assertion, AssertionValue, GradingResult } from '../types';
 
 /**
  * Generates n-grams from an array of words
@@ -133,10 +134,16 @@ export function calculateBleuScore(
  */
 export function handleBleuScore(
   assertion: Assertion,
-  renderedValue: string | string[],
+  renderedValue: AssertionValue | undefined,
   outputString: string,
   inverse: boolean,
 ): GradingResult {
+  invariant(
+    typeof renderedValue === 'string' ||
+      (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
+    '"bleu" assertion type must have a string or array of strings value',
+  );
+
   const threshold = assertion.threshold ?? 0.5;
   const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
   const score = calculateBleuScore(outputString, references);

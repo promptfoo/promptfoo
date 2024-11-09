@@ -5,8 +5,8 @@ import type { GradingResult } from '../types';
 
 export const handleEquals = async (
   assertion: Assertion,
-  outputString: string,
   renderedValue: AssertionValue | undefined,
+  outputString: string,
   inverse: boolean,
 ): Promise<GradingResult> => {
   let pass: boolean;
