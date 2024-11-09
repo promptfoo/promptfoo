@@ -1,6 +1,6 @@
 import input from '@inquirer/input';
 import type { GlobalConfig } from '../configTypes';
-import { getEnvString } from '../envars';
+import { getEnvString, isCI } from '../envars';
 import telemetry from '../telemetry';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
@@ -19,7 +19,7 @@ export function getAuthor(): string | null {
 }
 
 export async function promptForEmailUnverified() {
-  let email = getUserEmail();
+  let email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
   if (!email) {
     email = await input({
       message: 'Redteam evals require email verification. Please enter your work email:',
