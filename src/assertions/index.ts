@@ -3,7 +3,6 @@ import { distance as levenshtein } from 'fastest-levenshtein';
 import fs from 'fs';
 import * as rouge from 'js-rouge';
 import yaml from 'js-yaml';
-import util from 'node:util';
 import path from 'path';
 import invariant from 'tiny-invariant';
 import cliState from '../cliState';
@@ -52,6 +51,7 @@ import {
   handleContainsAll,
   handleIContainsAll,
 } from './contains';
+import { handleEquals } from './equals';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLlmRubric } from './llmRubric';
@@ -226,22 +226,9 @@ export async function runAssertion({
   test = getFinalTest(test, assertion);
 
   if (baseType === 'equals') {
-    if (typeof renderedValue === 'object') {
-      pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
-      renderedValue = JSON.stringify(renderedValue);
-    } else {
-      pass = (renderedValue == outputString) !== inverse;
-    }
-
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output "${outputString}" to ${inverse ? 'not ' : ''}equal "${renderedValue}"`,
-      assertion,
-    };
+    return handleEquals(assertion, outputString, renderedValue, inverse);
   }
+
   if (baseType === 'is-json') {
     return handleIsJson(assertion, renderedValue, valueFromScript, outputString, inverse);
   }
