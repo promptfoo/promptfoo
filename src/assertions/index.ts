@@ -23,8 +23,6 @@ import {
   matchesSelectBest,
   matchesModeration,
 } from '../matchers';
-import type { OpenAiChatCompletionProvider } from '../providers/openai';
-import { validateFunctionCall } from '../providers/openaiUtil';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { parseChatPrompt } from '../providers/shared';
 import { runPython } from '../python/pythonUtils';
@@ -52,14 +50,17 @@ import {
   handleIContainsAll,
 } from './contains';
 import { handleEquals } from './equals';
+import { handleFactuality } from './factuality';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLlmRubric } from './llmRubric';
+import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
 import { handleRegex } from './regex';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
+import { handleStartsWith } from './startsWith';
 import { getFinalTest, processFileReference } from './utils';
 import { handleIsXml } from './xml';
 
@@ -278,103 +279,15 @@ export async function runAssertion({
   }
 
   if (baseType === 'starts-with') {
-    invariant(renderedValue, '"starts-with" assertion type must have a string value');
-    invariant(
-      typeof renderedValue === 'string',
-      '"starts-with" assertion type must have a string value',
-    );
-    pass = outputString.startsWith(String(renderedValue)) !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}start with "${renderedValue}"`,
-      assertion,
-    };
+    return handleStartsWith(outputString, renderedValue, inverse, assertion);
   }
 
   if (baseType === 'is-valid-openai-tools-call') {
-    const toolsOutput = output as {
-      type: 'function';
-      function: { arguments: string; name: string };
-    }[];
-    if (
-      !Array.isArray(toolsOutput) ||
-      toolsOutput.length === 0 ||
-      typeof toolsOutput[0].function.name !== 'string' ||
-      typeof toolsOutput[0].function.arguments !== 'string'
-    ) {
-      return {
-        pass: false,
-        score: 0,
-        reason: `OpenAI did not return a valid-looking tools response: ${JSON.stringify(
-          toolsOutput,
-        )}`,
-        assertion,
-      };
-    }
-
-    try {
-      toolsOutput.forEach((toolOutput) =>
-        validateFunctionCall(
-          toolOutput.function,
-          (provider as OpenAiChatCompletionProvider).config.tools?.map((tool) => tool.function),
-          test.vars,
-        ),
-      );
-      return {
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion,
-      };
-    } catch (err) {
-      return {
-        pass: false,
-        score: 0,
-        reason: (err as Error).message,
-        assertion,
-      };
-    }
+    return handleIsValidOpenAiToolsCall(assertion, output, provider, test);
   }
 
   if (baseType === 'is-valid-openai-function-call') {
-    const functionOutput = output as { arguments: string; name: string };
-    if (
-      typeof functionOutput !== 'object' ||
-      typeof functionOutput.name !== 'string' ||
-      typeof functionOutput.arguments !== 'string'
-    ) {
-      return {
-        pass: false,
-        score: 0,
-        reason: `OpenAI did not return a valid-looking function call: ${JSON.stringify(
-          functionOutput,
-        )}`,
-        assertion,
-      };
-    }
-    try {
-      validateFunctionCall(
-        functionOutput,
-        (provider as OpenAiChatCompletionProvider).config.functions,
-        test.vars,
-      );
-      return {
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion,
-      };
-    } catch (err) {
-      return {
-        pass: false,
-        score: 0,
-        reason: (err as Error).message,
-        assertion,
-      };
-    }
+    return handleIsValidOpenAiFunctionCall(assertion, output, provider, test);
   }
 
   if (baseType === 'javascript') {
@@ -410,22 +323,7 @@ export async function runAssertion({
   }
 
   if (baseType === 'model-graded-factuality' || baseType === 'factuality') {
-    invariant(
-      typeof renderedValue === 'string',
-      'factuality assertion type must have a string value',
-    );
-    invariant(prompt, 'factuality assertion type must have a prompt');
-
-    if (test.options?.rubricPrompt) {
-      // Substitute vars in prompt
-      invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');
-      test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
-    }
-
-    return {
-      assertion,
-      ...(await matchesFactuality(prompt, renderedValue, outputString, test.options, test.vars)),
-    };
+    return handleFactuality(assertion, renderedValue, outputString, test, prompt);
   }
 
   if (baseType === 'model-graded-closedqa') {
