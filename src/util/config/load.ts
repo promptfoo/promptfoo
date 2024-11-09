@@ -155,7 +155,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
 
     const validationResult = UnifiedConfigSchema.safeParse(rawConfig);
     if (!validationResult.success) {
-      logger.error(
+      logger.warn(
         `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
       );
     }
@@ -164,7 +164,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     const imported = await importModule(configPath);
     const validationResult = UnifiedConfigSchema.safeParse(imported);
     if (!validationResult.success) {
-      logger.error(
+      logger.warn(
         `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
       );
     }
