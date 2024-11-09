@@ -4,8 +4,8 @@ import type { AssertionValue } from '../types';
 
 export const handleIsSql = async (
   assertion: Assertion,
-  outputString: string,
   renderedValue: AssertionValue | undefined,
+  outputString: string,
   inverse: boolean,
 ): Promise<GradingResult> => {
   let pass = false;
@@ -84,15 +84,15 @@ export const handleIsSql = async (
 };
 
 export const handleContainsSql = async (
-  outputString: string,
-  renderedValue: AssertionValue | undefined,
-  inverse: boolean,
   assertion: Assertion,
+  renderedValue: AssertionValue | undefined,
+  outputString: string,
+  inverse: boolean,
 ): Promise<GradingResult> => {
   const match = outputString.match(/```(?:sql)?([^`]+)```/);
   if (match) {
     const sqlCode = match[1].trim();
-    return handleIsSql(assertion, sqlCode, renderedValue, inverse);
+    return handleIsSql(assertion, renderedValue, sqlCode, inverse);
   }
-  return handleIsSql(assertion, outputString, renderedValue, inverse);
+  return handleIsSql(assertion, renderedValue, outputString, inverse);
 };

@@ -40,6 +40,7 @@ import { isJavascriptFile } from '../util/file';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
 import { AssertionsResult } from './AssertionsResult';
+import { handleAnswerRelevance } from './answerRelevance';
 import { handleBleuScore } from './bleu';
 import {
   handleContains,
@@ -49,11 +50,13 @@ import {
   handleContainsAll,
   handleIContainsAll,
 } from './contains';
+import { handleContextRecall } from './contextRecall';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLlmRubric } from './llmRubric';
+import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
@@ -243,11 +246,11 @@ export async function runAssertion({
   }
 
   if (baseType === 'is-sql') {
-    return handleIsSql(assertion, outputString, renderedValue, inverse);
+    return handleIsSql(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'contains-sql') {
-    return handleContainsSql(outputString, renderedValue, inverse, assertion);
+    return handleContainsSql(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'contains') {
@@ -279,7 +282,7 @@ export async function runAssertion({
   }
 
   if (baseType === 'starts-with') {
-    return handleStartsWith(outputString, renderedValue, inverse, assertion);
+    return handleStartsWith(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'is-valid-openai-tools-call') {
@@ -327,55 +330,15 @@ export async function runAssertion({
   }
 
   if (baseType === 'model-graded-closedqa') {
-    invariant(
-      typeof renderedValue === 'string',
-      'model-graded-closedqa assertion type must have a string value',
-    );
-    invariant(prompt, 'model-graded-closedqa assertion type must have a prompt');
-
-    if (test.options?.rubricPrompt) {
-      // Substitute vars in prompt
-      invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');
-      test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
-    }
-
-    return {
-      assertion,
-      ...(await matchesClosedQa(prompt, renderedValue, outputString, test.options, test.vars)),
-    };
+    return handleModelGradedClosedQa(assertion, renderedValue, outputString, test, prompt);
   }
 
   if (baseType === 'answer-relevance') {
-    invariant(
-      typeof output === 'string',
-      'answer-relevance assertion type must evaluate a string output',
-    );
-    invariant(prompt, 'answer-relevance assertion type must have a prompt');
-
-    const input = typeof test.vars?.query === 'string' ? test.vars.query : prompt;
-    return {
-      assertion,
-      ...(await matchesAnswerRelevance(input, output, assertion.threshold || 0, test.options)),
-    };
+    return handleAnswerRelevance(assertion, outputString, prompt, test.options);
   }
 
   if (baseType === 'context-recall') {
-    invariant(
-      typeof renderedValue === 'string',
-      'context-recall assertion type must have a string value',
-    );
-    invariant(prompt, 'context-recall assertion type must have a prompt');
-
-    return {
-      assertion,
-      ...(await matchesContextRecall(
-        typeof test.vars?.context === 'string' ? test.vars.context : prompt,
-        renderedValue,
-        assertion.threshold || 0,
-        test.options,
-        test.vars,
-      )),
-    };
+    return handleContextRecall(assertion, renderedValue, prompt, test);
   }
 
   if (baseType === 'context-relevance') {
