@@ -4,6 +4,7 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
+import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
@@ -15,16 +16,17 @@ import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import { readTest, readTests } from '../../testCases';
-import type {
-  CommandLineOptions,
-  Prompt,
-  ProviderOptions,
-  RedteamPluginObject,
-  RedteamStrategyObject,
-  Scenario,
-  TestCase,
-  TestSuite,
-  UnifiedConfig,
+import {
+  UnifiedConfigSchema,
+  type CommandLineOptions,
+  type Prompt,
+  type ProviderOptions,
+  type RedteamPluginObject,
+  type RedteamStrategyObject,
+  type Scenario,
+  type TestCase,
+  type TestSuite,
+  type UnifiedConfig,
 } from '../../types';
 import { maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
@@ -149,10 +151,24 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
-    ret = await dereferenceConfig(rawConfig || {});
+    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8'));
+
+    const validationResult = UnifiedConfigSchema.safeParse(rawConfig);
+    if (!validationResult.success) {
+      logger.error(
+        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
+      );
+    }
+    ret = await dereferenceConfig(rawConfig as UnifiedConfig);
   } else if (isJavascriptFile(configPath)) {
-    ret = (await importModule(configPath)) as UnifiedConfig;
+    const imported = await importModule(configPath);
+    const validationResult = UnifiedConfigSchema.safeParse(imported);
+    if (!validationResult.success) {
+      logger.error(
+        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
+      );
+    }
+    ret = imported as UnifiedConfig;
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
   }
