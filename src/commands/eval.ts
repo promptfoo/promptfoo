@@ -135,6 +135,7 @@ export async function doEval(
       firstN: cmdObj.filterFirstN,
       pattern: cmdObj.filterPattern,
       failing: cmdObj.filterFailing,
+      sample: cmdObj.filterSample,
     });
 
     if (
@@ -496,6 +497,7 @@ export function evalCommand(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
     )
+    .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option('--filter-failing <path>', 'Path to json output file')
 
     // Output configuration
