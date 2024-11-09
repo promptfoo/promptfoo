@@ -883,6 +883,10 @@
               "type": "integer",
               "exclusiveMinimum": 0
             },
+            "filterSample": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
             "filterPattern": {
               "type": "string"
             },

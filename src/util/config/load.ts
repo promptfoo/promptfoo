@@ -546,6 +546,7 @@ export async function resolveConfigs(
           firstN: cmdObj.filterFirstN,
           pattern: cmdObj.filterPattern,
           failing: cmdObj.filterFailing,
+          sample: cmdObj.filterSample,
         },
       );
       invariant(filteredTests, 'filteredTests are undefined');

@@ -49,6 +49,7 @@ export const CommandLineOptionsSchema = z.object({
   watch: z.boolean().optional(),
   filterFailing: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
+  filterSample: z.coerce.number().int().positive().optional(),
   filterPattern: z.string().optional(),
   filterProviders: z.string().optional(),
   filterTargets: z.string().optional(),
