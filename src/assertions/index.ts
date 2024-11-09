@@ -54,8 +54,11 @@ import {
 } from './contains';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
+import { handleLlmRubric } from './llmRubric';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
+import { handleRegex } from './regex';
+import { handleSimilar } from './similar';
 import { isSql } from './sql';
 import { getFinalTest, processFileReference } from './utils';
 import { validateXml, containsXml } from './xml';
@@ -313,18 +316,7 @@ export async function runAssertion({
   }
 
   if (baseType === 'regex') {
-    invariant(renderedValue, '"regex" assertion type must have a string value');
-    invariant(typeof renderedValue === 'string', '"regex" assertion type must have a string value');
-    const regex = new RegExp(renderedValue);
-    pass = regex.test(outputString) !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}match regex "${renderedValue}"`,
-      assertion,
-    };
+    return handleRegex(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'starts-with') {
@@ -452,67 +444,11 @@ export async function runAssertion({
   }
 
   if (baseType === 'similar') {
-    invariant(
-      typeof renderedValue === 'string' || Array.isArray(renderedValue),
-      'Similarity assertion type must have a string or array of strings value',
-    );
-
-    if (Array.isArray(renderedValue)) {
-      let minScore = Infinity;
-      for (const value of renderedValue) {
-        const result = await matchesSimilarity(
-          value,
-          outputString,
-          assertion.threshold || 0.75,
-          inverse,
-          test.options,
-        );
-        if (result.pass) {
-          return {
-            assertion,
-            ...result,
-          };
-        }
-        if (result.score < minScore) {
-          minScore = result.score;
-        }
-      }
-      return {
-        assertion,
-        pass: false,
-        score: minScore,
-        reason: `None of the provided values met the similarity threshold`,
-      };
-    } else {
-      return {
-        assertion,
-        ...(await matchesSimilarity(
-          renderedValue,
-          outputString,
-          assertion.threshold || 0.75,
-          inverse,
-          test.options,
-        )),
-      };
-    }
+    return handleSimilar(assertion, renderedValue, outputString, inverse, test);
   }
 
   if (baseType === 'llm-rubric') {
-    invariant(
-      typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
-      '"llm-rubric" assertion type must have a string value',
-    );
-
-    if (test.options?.rubricPrompt && typeof test.options.rubricPrompt === 'object') {
-      test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
-    }
-
-    // Update the assertion value. This allows the web view to display the prompt.
-    assertion.value = assertion.value || test.options?.rubricPrompt;
-    return {
-      assertion,
-      ...(await matchesLlmRubric(renderedValue || '', outputString, test.options, test.vars)),
-    };
+    return handleLlmRubric(assertion, renderedValue, outputString, test);
   }
 
   if (baseType === 'model-graded-factuality' || baseType === 'factuality') {
