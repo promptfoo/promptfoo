@@ -46,6 +46,14 @@ import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
 import { AssertionsResult } from './AssertionsResult';
 import { handleBleuScore } from './bleu';
+import {
+  handleContains,
+  handleIContains,
+  handleContainsAny,
+  handleIContainsAny,
+  handleContainsAll,
+  handleIContainsAll,
+} from './contains';
 import { handleContainsJson, handleIsJson } from './json';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { isSql } from './sql';
@@ -281,107 +289,27 @@ export async function runAssertion({
   }
 
   if (baseType === 'contains') {
-    invariant(renderedValue, '"contains" assertion type must have a string or number value');
-    invariant(
-      typeof renderedValue === 'string' || typeof renderedValue === 'number',
-      '"contains" assertion type must have a string or number value',
-    );
-    pass = outputString.includes(String(renderedValue)) !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain "${renderedValue}"`,
-      assertion,
-    };
+    return handleContains(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'contains-any') {
-    invariant(renderedValue, '"contains-any" assertion type must have a value');
-    if (typeof renderedValue === 'string') {
-      renderedValue = renderedValue.split(',').map((v) => v.trim());
-    }
-    invariant(
-      Array.isArray(renderedValue),
-      '"contains-any" assertion type must have an array value',
-    );
-    pass = renderedValue.some((value) => outputString.includes(String(value))) !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain one of "${renderedValue.join(', ')}"`,
-      assertion,
-    };
+    return handleContainsAny(assertion, renderedValue, outputString, inverse);
+  }
+
+  if (baseType === 'icontains') {
+    return handleIContains(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'icontains-any') {
-    invariant(renderedValue, '"icontains-any" assertion type must have a value');
-    if (typeof renderedValue === 'string') {
-      renderedValue = renderedValue.split(',').map((v) => v.trim());
-    }
-    invariant(
-      Array.isArray(renderedValue),
-      '"icontains-any" assertion type must have an array value',
-    );
-    pass =
-      renderedValue.some((value) =>
-        outputString.toLowerCase().includes(String(value).toLowerCase()),
-      ) !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain one of "${renderedValue.join(', ')}"`,
-      assertion,
-    };
+    return handleIContainsAny(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'contains-all') {
-    invariant(renderedValue, '"contains-all" assertion type must have a value');
-    if (typeof renderedValue === 'string') {
-      renderedValue = renderedValue.split(',').map((v) => v.trim());
-    }
-    invariant(
-      Array.isArray(renderedValue),
-      '"contains-all" assertion type must have an array value',
-    );
-    const missingStrings = renderedValue.filter((value) => !outputString.includes(String(value)));
-    pass = (missingStrings.length === 0) !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain all of [${renderedValue.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
-      assertion,
-    };
+    return handleContainsAll(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'icontains-all') {
-    invariant(renderedValue, '"icontains-all" assertion type must have a value');
-    if (typeof renderedValue === 'string') {
-      renderedValue = renderedValue.split(',').map((v) => v.trim());
-    }
-    invariant(
-      Array.isArray(renderedValue),
-      '"icontains-all" assertion type must have an array value',
-    );
-    const missingStrings = renderedValue.filter(
-      (value) => !outputString.toLowerCase().includes(String(value).toLowerCase()),
-    );
-    pass = (missingStrings.length === 0) !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain all of [${renderedValue.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
-      assertion,
-    };
+    return handleIContainsAll(assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'regex') {
@@ -395,23 +323,6 @@ export async function runAssertion({
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}match regex "${renderedValue}"`,
-      assertion,
-    };
-  }
-
-  if (baseType === 'icontains') {
-    invariant(renderedValue, '"icontains" assertion type must have a string or number value');
-    invariant(
-      typeof renderedValue === 'string' || typeof renderedValue === 'number',
-      '"icontains" assertion type must have a string or number value',
-    );
-    pass = outputString.toLowerCase().includes(String(renderedValue).toLowerCase()) !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain "${renderedValue}"`,
       assertion,
     };
   }
