@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions';
 import logger from '../logger';
 import type { TestCase, TestSuite } from '../types';
-import { AzureOpenAiChatCompletionProvider, AzureOpenAiCompletionProvider } from './azureopenai';
+import { AzureChatCompletionProvider, AzureCompletionProvider } from './azure';
 import {
   OpenAiAssistantProvider,
   OpenAiChatCompletionProvider,
@@ -11,8 +11,7 @@ import {
 
 export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCase[]) {
   const hasAzure = testSuite.providers.some(
-    (p) =>
-      p instanceof AzureOpenAiChatCompletionProvider || p instanceof AzureOpenAiCompletionProvider,
+    (p) => p instanceof AzureChatCompletionProvider || p instanceof AzureCompletionProvider,
   );
   const hasOpenAi = testSuite.providers.some(
     (p) =>

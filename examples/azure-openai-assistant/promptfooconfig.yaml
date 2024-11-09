@@ -5,7 +5,7 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: azureopenai:assistant:asst_E4GyOBYKlnAzMi19SZF2Sn8I
+  - id: azure:assistant:asst_E4GyOBYKlnAzMi19SZF2Sn8I
     config:
       apiHost: aliothopenai-assistants.openai.azure.com
 

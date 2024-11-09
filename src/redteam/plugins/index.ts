@@ -65,9 +65,6 @@ async function fetchRemoteTestCases(
     config,
     version: VERSION,
   });
-  logger.warn(
-    `Using remote redteam generation for ${key}:\n${body} url: ${getRemoteGenerationUrl()}`,
-  );
   try {
     const { data } = await fetchWithCache(
       getRemoteGenerationUrl(),
