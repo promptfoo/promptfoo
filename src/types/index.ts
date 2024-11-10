@@ -442,6 +442,19 @@ export type AssertionValue = string | string[] | object | AssertionValueFunction
 
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
+export interface AssertionParams {
+  assertion: Assertion;
+  baseType: AssertionType;
+  inverse: boolean;
+  output: string | object;
+  prompt?: string;
+  provider?: ApiProvider;
+  providerResponse: ProviderResponse;
+  renderedValue?: AssertionValue;
+  test: AtomicTestCase;
+  valueFromScript?: string | boolean | number | GradingResult | object;
+}
+
 // Used when building prompts index from files.
 export const TestCasesWithMetadataPromptSchema = z.object({
   prompt: CompletedPromptSchema,

@@ -1,7 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
-import type { GradingResult } from '../types';
-import type { Assertion } from '../types';
-import type { AssertionValue } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { coerceString } from './utils';
 
 export function validateXml(
@@ -68,13 +66,13 @@ export function containsXml(
   return { isValid: false, reason: 'No valid XML content found matching the requirements' };
 }
 
-export const handleIsXml = (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-  baseType: string,
-): GradingResult => {
+export const handleIsXml = ({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+  baseType,
+}: AssertionParams): GradingResult => {
   const outputString = coerceString(output);
   let requiredElements: string[] | undefined;
   if (typeof renderedValue === 'string') {

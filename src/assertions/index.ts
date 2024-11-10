@@ -23,7 +23,7 @@ import {
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
-import type { AssertionValueFunctionContext, ProviderResponse } from '../types';
+import type { AssertionParams, AssertionValueFunctionContext, ProviderResponse } from '../types';
 import {
   type ApiProvider,
   type Assertion,
@@ -108,7 +108,9 @@ export async function runAssertion({
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
   const inverse = assertion.type.startsWith('not-');
-  const baseType = inverse ? assertion.type.slice(4) : assertion.type;
+  const baseType = inverse
+    ? (assertion.type.slice(4) as AssertionType)
+    : (assertion.type as AssertionType);
 
   telemetry.record('assertion_used', {
     type: baseType,
@@ -196,55 +198,68 @@ export async function runAssertion({
     });
   }
 
+  const assertionParams: AssertionParams = {
+    assertion,
+    baseType,
+    inverse,
+    output,
+    prompt,
+    provider,
+    providerResponse,
+    renderedValue,
+    test,
+    valueFromScript,
+  };
+
   // Transform test
   test = getFinalTest(test, assertion);
 
   if (baseType === 'equals') {
-    return handleEquals(assertion, renderedValue, output, inverse);
+    return handleEquals(assertionParams);
   }
 
   if (baseType === 'is-json') {
-    return handleIsJson(assertion, renderedValue, output, inverse, valueFromScript);
+    return handleIsJson(assertionParams);
   }
 
   if (baseType === 'contains-json') {
-    return handleContainsJson(assertion, renderedValue, output, inverse, valueFromScript);
+    return handleContainsJson(assertionParams);
   }
 
   if (baseType === 'is-xml' || baseType === 'contains-xml') {
-    return handleIsXml(assertion, renderedValue, output, inverse, baseType);
+    return handleIsXml(assertionParams);
   }
 
   if (baseType === 'is-sql') {
-    return handleIsSql(assertion, renderedValue, output, inverse);
+    return handleIsSql(assertionParams);
   }
 
   if (baseType === 'contains-sql') {
-    return handleContainsSql(assertion, renderedValue, output, inverse);
+    return handleContainsSql(assertionParams);
   }
 
   if (baseType === 'contains') {
-    return handleContains(assertion, renderedValue, output, inverse);
+    return handleContains(assertionParams);
   }
 
   if (baseType === 'contains-any') {
-    return handleContainsAny(assertion, renderedValue, output, inverse);
+    return handleContainsAny(assertionParams);
   }
 
   if (baseType === 'icontains') {
-    return handleIContains(assertion, renderedValue, output, inverse);
+    return handleIContains(assertionParams);
   }
 
   if (baseType === 'icontains-any') {
-    return handleIContainsAny(assertion, renderedValue, output, inverse);
+    return handleIContainsAny(assertionParams);
   }
 
   if (baseType === 'contains-all') {
-    return handleContainsAll(assertion, renderedValue, output, inverse);
+    return handleContainsAll(assertionParams);
   }
 
   if (baseType === 'icontains-all') {
-    return handleIContainsAll(assertion, renderedValue, output, inverse);
+    return handleIContainsAll(assertionParams);
   }
 
   if (baseType === 'regex') {

@@ -1,15 +1,14 @@
 import util from 'util';
-import type { Assertion } from '../types';
-import type { AssertionValue } from '../types';
+import type { AssertionParams } from '../types';
 import type { GradingResult } from '../types';
 import { coerceString } from './utils';
 
-export const handleEquals = async (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-): Promise<GradingResult> => {
+export const handleEquals = async ({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+}: AssertionParams): Promise<GradingResult> => {
   let pass: boolean;
   const outputString = coerceString(output);
   if (typeof renderedValue === 'object') {

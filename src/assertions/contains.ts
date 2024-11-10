@@ -1,13 +1,13 @@
 import invariant from 'tiny-invariant';
-import type { Assertion, AssertionValue, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { coerceString } from './utils';
 
-export const handleContains = (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-): GradingResult => {
+export const handleContains = ({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+}: AssertionParams): GradingResult => {
   invariant(renderedValue, '"contains" assertion type must have a string or number value');
   invariant(
     typeof renderedValue === 'string' || typeof renderedValue === 'number',
@@ -25,12 +25,12 @@ export const handleContains = (
   };
 };
 
-export const handleIContains = (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-): GradingResult => {
+export const handleIContains = ({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+}: AssertionParams): GradingResult => {
   invariant(renderedValue, '"icontains" assertion type must have a string or number value');
   invariant(
     typeof renderedValue === 'string' || typeof renderedValue === 'number',
@@ -48,12 +48,12 @@ export const handleIContains = (
   };
 };
 
-export const handleContainsAny = (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-): GradingResult => {
+export const handleContainsAny = ({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+}: AssertionParams): GradingResult => {
   invariant(renderedValue, '"contains-any" assertion type must have a value');
   if (typeof renderedValue === 'string') {
     renderedValue = renderedValue.split(',').map((v) => v.trim());
@@ -71,12 +71,12 @@ export const handleContainsAny = (
   };
 };
 
-export const handleIContainsAny = (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-): GradingResult => {
+export const handleIContainsAny = ({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+}: AssertionParams): GradingResult => {
   invariant(renderedValue, '"icontains-any" assertion type must have a value');
   if (typeof renderedValue === 'string') {
     renderedValue = renderedValue.split(',').map((v) => v.trim());
@@ -100,12 +100,12 @@ export const handleIContainsAny = (
   };
 };
 
-export const handleContainsAll = (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-): GradingResult => {
+export const handleContainsAll = ({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+}: AssertionParams): GradingResult => {
   invariant(renderedValue, '"contains-all" assertion type must have a value');
   if (typeof renderedValue === 'string') {
     renderedValue = renderedValue.split(',').map((v) => v.trim());
@@ -124,12 +124,12 @@ export const handleContainsAll = (
   };
 };
 
-export const handleIContainsAll = (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-): GradingResult => {
+export const handleIContainsAll = ({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+}: AssertionParams): GradingResult => {
   invariant(renderedValue, '"icontains-all" assertion type must have a value');
   if (typeof renderedValue === 'string') {
     renderedValue = renderedValue.split(',').map((v) => v.trim());

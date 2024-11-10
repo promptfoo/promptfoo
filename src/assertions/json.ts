@@ -4,8 +4,7 @@ import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import { getEnvBool } from '../envars';
-import type { AssertionValue, GradingResult } from '../types';
-import type { Assertion } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { extractJsonObjects } from '../util/json';
 import { coerceString } from './utils';
 
@@ -29,13 +28,13 @@ export function getAjv(): Ajv {
   return ajvInstance;
 }
 
-export function handleIsJson(
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-  valueFromScript: string | boolean | number | GradingResult | object | undefined,
-): GradingResult {
+export function handleIsJson({
+  output,
+  renderedValue,
+  inverse,
+  valueFromScript,
+  assertion,
+}: AssertionParams): GradingResult {
   let parsedJson;
   let pass;
   const outputString = coerceString(output);
@@ -84,13 +83,13 @@ export function handleIsJson(
   };
 }
 
-export function handleContainsJson(
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-  valueFromScript: string | boolean | number | GradingResult | object | undefined,
-): GradingResult {
+export function handleContainsJson({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+  valueFromScript,
+}: AssertionParams): GradingResult {
   let errorMessage = 'Expected output to contain valid JSON';
   const outputString = coerceString(output);
   const jsonObjects = extractJsonObjects(outputString);

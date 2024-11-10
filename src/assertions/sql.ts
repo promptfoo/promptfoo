@@ -1,14 +1,13 @@
 import { type Option as sqlParserOption } from 'node-sql-parser';
-import type { Assertion, GradingResult } from '../types';
-import type { AssertionValue } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { coerceString } from './utils';
 
-export const handleIsSql = async (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-): Promise<GradingResult> => {
+export const handleIsSql = async ({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+}: AssertionParams): Promise<GradingResult> => {
   let pass = false;
   let databaseType: string = 'MySQL';
   let whiteTableList: string[] | undefined;
@@ -85,16 +84,12 @@ export const handleIsSql = async (
 };
 
 export const handleContainsSql = async (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
+  assertionParams: AssertionParams,
 ): Promise<GradingResult> => {
-  const outputString = coerceString(output);
-  const match = outputString.match(/```(?:sql)?([^`]+)```/);
+  const match = coerceString(assertionParams.output).match(/```(?:sql)?([^`]+)```/);
   if (match) {
     const sqlCode = match[1].trim();
-    return handleIsSql(assertion, renderedValue, sqlCode, inverse);
+    return handleIsSql({ ...assertionParams, output: sqlCode });
   }
-  return handleIsSql(assertion, renderedValue, outputString, inverse);
+  return handleIsSql(assertionParams);
 };
