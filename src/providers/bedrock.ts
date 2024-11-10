@@ -765,7 +765,7 @@ export abstract class AwsBedrockGenericProvider {
       this.config?.region ||
       this.env?.AWS_BEDROCK_REGION ||
       getEnvString('AWS_BEDROCK_REGION') ||
-      'us-west-2'
+      'us-east-1'
     );
   }
 }
