@@ -55,6 +55,7 @@ import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
+import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
@@ -137,7 +138,6 @@ export async function runAssertion({
 }): Promise<GradingResult> {
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
-  let pass: boolean = false;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
@@ -378,23 +378,7 @@ export async function runAssertion({
   }
 
   if (baseType === 'latency') {
-    if (!assertion.threshold) {
-      throw new Error('Latency assertion must have a threshold in milliseconds');
-    }
-    if (latencyMs === undefined) {
-      throw new Error(
-        'Latency assertion does not support cached results. Rerun the eval with --no-cache',
-      );
-    }
-    pass = latencyMs <= assertion.threshold;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Latency ${latencyMs}ms is greater than threshold ${assertion.threshold}ms`,
-      assertion,
-    };
+    return handleLatency(assertion, latencyMs);
   }
 
   if (baseType === 'perplexity') {
