@@ -1,6 +1,6 @@
 import invariant from 'tiny-invariant';
 import { getGraderById } from '../redteam/graders';
-import type { ApiProvider, Assertion, GradingResult, TestCase } from '../types';
+import type { ApiProvider, Assertion, AssertionValue, GradingResult, TestCase } from '../types';
 
 export const handleRedteam = async (
   assertion: Assertion,
@@ -8,8 +8,8 @@ export const handleRedteam = async (
   test: TestCase,
   prompt: string | undefined,
   outputString: string,
-  provider: ApiProvider,
-  renderedValue: string,
+  provider: ApiProvider | undefined,
+  renderedValue: AssertionValue | undefined,
 ): Promise<GradingResult> => {
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown promptfoo grader: ${baseType}`);
