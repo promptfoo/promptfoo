@@ -3,6 +3,7 @@ import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
+  clearNunjucksCache,
 } from '../../src/util/templates';
 
 describe('extractVariablesFromTemplate', () => {
@@ -101,6 +102,7 @@ describe('getNunjucksEngine', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
+    clearNunjucksCache();
     jest.resetModules();
     process.env = { ...originalEnv };
   });
@@ -205,6 +207,51 @@ describe('getNunjucksEngine', () => {
       process.env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS = 'false';
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+    });
+  });
+
+  describe('caching behavior', () => {
+    it('should return the same instance for identical parameters', () => {
+      const engine1 = getNunjucksEngine();
+      const engine2 = getNunjucksEngine();
+      expect(engine1).toBe(engine2);
+    });
+
+    it('should return different instances for different filters', () => {
+      const engine1 = getNunjucksEngine({ filter1: () => 'a' });
+      const engine2 = getNunjucksEngine({ filter2: () => 'b' });
+      expect(engine1).not.toBe(engine2);
+    });
+
+    it('should return different instances for different throwOnUndefined values', () => {
+      const engine1 = getNunjucksEngine({}, true);
+      const engine2 = getNunjucksEngine({}, false);
+      expect(engine1).not.toBe(engine2);
+    });
+
+    it('should return different instances for different isGrader values', () => {
+      const engine1 = getNunjucksEngine({}, false, true);
+      const engine2 = getNunjucksEngine({}, false, false);
+      expect(engine1).not.toBe(engine2);
+    });
+
+    it('should cache disabled templating instance', () => {
+      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+      const engine1 = getNunjucksEngine();
+      const engine2 = getNunjucksEngine();
+      expect(engine1).toBe(engine2);
+      expect(engine1.renderString('{{ test }}')).toBe('{{ test }}');
+    });
+
+    it('should maintain separate caches for different configurations', () => {
+      const regularEngine1 = getNunjucksEngine();
+      const regularEngine2 = getNunjucksEngine();
+      const graderEngine1 = getNunjucksEngine({}, false, true);
+      const graderEngine2 = getNunjucksEngine({}, false, true);
+
+      expect(regularEngine1).toBe(regularEngine2);
+      expect(graderEngine1).toBe(graderEngine2);
+      expect(regularEngine1).not.toBe(graderEngine1);
     });
   });
 });

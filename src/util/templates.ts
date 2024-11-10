@@ -2,8 +2,10 @@ import nunjucks from 'nunjucks';
 import { getEnvBool } from '../envars';
 import type { NunjucksFilterMap } from '../types';
 
+const engineCache = new Map<string, nunjucks.Environment>();
+
 /**
- * Get a Nunjucks engine instance with optional filters and configuration.
+ * Get a cached Nunjucks engine instance with optional filters and configuration.
  * @param filters - Optional map of custom Nunjucks filters.
  * @param throwOnUndefined - Whether to throw an error on undefined variables.
  * @param isGrader - Whether this engine is being used in a grader context.
@@ -15,10 +17,25 @@ export function getNunjucksEngine(
   throwOnUndefined: boolean = false,
   isGrader: boolean = false,
 ): nunjucks.Environment {
+  // Create a cache key based on the parameters
+  const cacheKey = JSON.stringify({
+    filters: filters ? Object.keys(filters).sort().join(',') : undefined,
+    throwOnUndefined,
+    isGrader,
+  });
+
+  // Check if we have a cached instance
+  if (engineCache.has(cacheKey)) {
+    return engineCache.get(cacheKey)!;
+  }
+
   if (!isGrader && getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
-    return {
+    const env = {
       renderString: (template: string) => template,
     } as unknown as nunjucks.Environment;
+
+    engineCache.set(cacheKey, env);
+    return env;
   }
 
   const env = nunjucks.configure({
@@ -26,7 +43,6 @@ export function getNunjucksEngine(
     throwOnUndefined,
   });
 
-  // Configure environment variables as template globals unless disabled. Defaults to disabled in self-hosted mode
   if (
     !getEnvBool('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', getEnvBool('PROMPTFOO_SELF_HOSTED', false))
   ) {
@@ -38,6 +54,8 @@ export function getNunjucksEngine(
       env.addFilter(name, filter);
     }
   }
+
+  engineCache.set(cacheKey, env);
   return env;
 }
 
@@ -86,4 +104,14 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
     variables.forEach((variable) => variableSet.add(variable));
   }
   return Array.from(variableSet);
+}
+
+/**
+ * Clear the Nunjucks cache.
+ */
+export function clearNunjucksCache(): void {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('clearNunjucksCache should only be called in test environments');
+  }
+  engineCache.clear();
 }
