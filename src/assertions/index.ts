@@ -23,7 +23,6 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { getGraderById } from '../redteam/graders';
 import telemetry from '../telemetry';
 import type { AssertionValue, AssertionValueFunctionContext, ProviderResponse } from '../types';
 import {
@@ -50,6 +49,8 @@ import {
 } from './contains';
 import { handleContextFaithfulness } from './contextFaithfulness';
 import { handleContextRecall } from './contextRecall';
+import { handleContextRelevance } from './contextRelevance';
+import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleJavascript } from './javascript';
@@ -61,6 +62,7 @@ import { handleModeration } from './moderation';
 import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
+import { handleRedteam } from './redteam';
 import { handleRegex } from './regex';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
@@ -344,25 +346,7 @@ export async function runAssertion({
   }
 
   if (baseType === 'context-relevance') {
-    invariant(test.vars, 'context-relevance assertion type must have a vars object');
-    invariant(
-      typeof test.vars.query === 'string',
-      'context-relevance assertion type must have a query var',
-    );
-    invariant(
-      typeof test.vars.context === 'string',
-      'context-relevance assertion type must have a context var',
-    );
-
-    return {
-      assertion,
-      ...(await matchesContextRelevance(
-        test.vars.query,
-        test.vars.context,
-        assertion.threshold || 0,
-        test.options,
-      )),
-    };
+    return handleContextRelevance(assertion, test);
   }
 
   if (baseType === 'context-faithfulness') {
@@ -422,48 +406,11 @@ export async function runAssertion({
   }
 
   if (baseType === 'cost') {
-    if (!assertion.threshold) {
-      throw new Error('Cost assertion must have a threshold');
-    }
-    if (typeof cost === 'undefined') {
-      throw new Error('Cost assertion does not support providers that do not return cost');
-    }
-
-    pass = cost <= assertion.threshold;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Cost ${cost.toPrecision(2)} is greater than threshold ${assertion.threshold}`,
-      assertion,
-    };
+    return handleCost(cost, assertion);
   }
 
   if (baseType.startsWith('promptfoo:redteam:')) {
-    const grader = getGraderById(baseType);
-    invariant(grader, `Unknown promptfoo grader: ${baseType}`);
-    invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
-    const { grade, rubric, suggestions } = await grader.getResult(
-      prompt,
-      outputString,
-      test,
-      provider,
-      renderedValue,
-    );
-    return {
-      assertion: {
-        ...assertion,
-        value: rubric,
-      },
-      ...grade,
-      suggestions,
-      metadata: {
-        // Pass through all test metadata for redteam
-        ...test.metadata,
-        ...grade.metadata,
-      },
-    };
+    return handleRedteam(assertion, baseType, test, prompt, outputString, provider, renderedValue);
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);
