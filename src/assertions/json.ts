@@ -31,9 +31,9 @@ export function getAjv(): Ajv {
 export function handleIsJson(
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
-  valueFromScript: string | boolean | number | GradingResult | object | undefined,
   outputString: string,
   inverse: boolean,
+  valueFromScript: string | boolean | number | GradingResult | object | undefined,
 ): GradingResult {
   let parsedJson;
   let pass;
@@ -85,9 +85,9 @@ export function handleIsJson(
 export function handleContainsJson(
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
-  valueFromScript: string | boolean | number | GradingResult | object | undefined,
   outputString: string,
   inverse: boolean,
+  valueFromScript: string | boolean | number | GradingResult | object | undefined,
 ): GradingResult {
   let errorMessage = 'Expected output to contain valid JSON';
   const jsonObjects = extractJsonObjects(outputString);

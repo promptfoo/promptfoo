@@ -69,10 +69,10 @@ export function containsXml(
 
 export const handleIsXml = (
   assertion: Assertion,
-  baseType: string,
-  outputString: string,
   renderedValue: AssertionValue | undefined,
+  outputString: string,
   inverse: boolean,
+  baseType: string,
 ): GradingResult => {
   let requiredElements: string[] | undefined;
   if (typeof renderedValue === 'string') {

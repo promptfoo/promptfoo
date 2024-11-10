@@ -1,6 +1,5 @@
 import async from 'async';
 import fs from 'fs';
-import * as rouge from 'js-rouge';
 import yaml from 'js-yaml';
 import path from 'path';
 import invariant from 'tiny-invariant';
@@ -65,6 +64,7 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
 import { handleRegex } from './regex';
+import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
@@ -92,33 +92,6 @@ function coerceString(value: string | object): string {
     return value;
   }
   return JSON.stringify(value);
-}
-
-function handleRougeScore(
-  baseType: 'rouge-n',
-  assertion: Assertion,
-  expected: AssertionValue | undefined,
-  output: string,
-  inverted: boolean,
-): GradingResult {
-  invariant(typeof expected === 'string', '"rouge" assertion type must be a string value');
-  const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
-  const rougeMethod = rouge[fnName];
-  const score = rougeMethod(output, expected, {});
-  const pass = score >= (assertion.threshold || 0.75) != inverted;
-
-  return {
-    pass,
-    score: inverted ? 1 - score : score,
-    reason: pass
-      ? `${baseType.toUpperCase()} score ${score.toFixed(
-          2,
-        )} is greater than or equal to threshold ${assertion.threshold || 0.75}`
-      : `${baseType.toUpperCase()} score ${score.toFixed(2)} is less than threshold ${
-          assertion.threshold || 0.75
-        }`,
-    assertion,
-  };
 }
 
 export async function runAssertion({
@@ -238,15 +211,15 @@ export async function runAssertion({
   }
 
   if (baseType === 'is-json') {
-    return handleIsJson(assertion, renderedValue, valueFromScript, outputString, inverse);
+    return handleIsJson(assertion, renderedValue, outputString, inverse, valueFromScript);
   }
 
   if (baseType === 'contains-json') {
-    return handleContainsJson(assertion, renderedValue, valueFromScript, outputString, inverse);
+    return handleContainsJson(assertion, renderedValue, outputString, inverse, valueFromScript);
   }
 
   if (baseType === 'is-xml' || baseType === 'contains-xml') {
-    return handleIsXml(assertion, baseType, outputString, renderedValue, inverse);
+    return handleIsXml(assertion, renderedValue, outputString, inverse, baseType);
   }
 
   if (baseType === 'is-sql') {
