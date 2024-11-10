@@ -453,6 +453,7 @@ export interface AssertionParams {
   logProbs?: number[];
   latencyMs?: number;
   output: string | object;
+  outputString: string;
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;

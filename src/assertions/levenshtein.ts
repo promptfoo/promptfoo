@@ -1,18 +1,16 @@
 import { distance } from 'fastest-levenshtein';
 import invariant from 'tiny-invariant';
 import type { AssertionParams, GradingResult } from '../types';
-import { coerceString } from './utils';
 
 export function handleLevenshtein({
   assertion,
   renderedValue,
-  output,
+  outputString,
 }: AssertionParams): GradingResult {
   invariant(
     typeof renderedValue === 'string',
     '"levenshtein" assertion type must have a string value',
   );
-  const outputString = coerceString(output);
   const levDistance = distance(outputString, renderedValue);
   const pass = levDistance <= (assertion.threshold || 5);
   return {

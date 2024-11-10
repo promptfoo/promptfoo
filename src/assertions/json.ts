@@ -6,7 +6,6 @@ import invariant from 'tiny-invariant';
 import { getEnvBool } from '../envars';
 import type { AssertionParams, GradingResult } from '../types';
 import { extractJsonObjects } from '../util/json';
-import { coerceString } from './utils';
 
 let ajvInstance: Ajv | null = null;
 
@@ -29,7 +28,7 @@ export function getAjv(): Ajv {
 }
 
 export function handleIsJson({
-  output,
+  outputString,
   renderedValue,
   inverse,
   valueFromScript,
@@ -37,7 +36,6 @@ export function handleIsJson({
 }: AssertionParams): GradingResult {
   let parsedJson;
   let pass;
-  const outputString = coerceString(output);
   try {
     parsedJson = JSON.parse(outputString);
     pass = !inverse;
@@ -86,12 +84,11 @@ export function handleIsJson({
 export function handleContainsJson({
   assertion,
   renderedValue,
-  output,
+  outputString,
   inverse,
   valueFromScript,
 }: AssertionParams): GradingResult {
   let errorMessage = 'Expected output to contain valid JSON';
-  const outputString = coerceString(output);
   const jsonObjects = extractJsonObjects(outputString);
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   for (const jsonObject of jsonObjects) {

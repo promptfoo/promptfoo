@@ -73,7 +73,7 @@ import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
-import { getFinalTest, processFileReference } from './utils';
+import { coerceString, getFinalTest, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
 
@@ -127,8 +127,6 @@ export async function runAssertion({
       prompt: { label: prompt },
     });
   }
-
-  // const outputString = coerceString(output);
 
   const context: AssertionValueFunctionContext = {
     prompt,
@@ -207,17 +205,18 @@ export async function runAssertion({
     assertion,
     baseType,
     context,
+    cost,
     inverse,
-    logProbs,
     latencyMs,
+    logProbs,
     output,
+    outputString: coerceString(output),
     prompt,
     provider,
     providerResponse,
     renderedValue,
     test: getFinalTest(test, assertion),
     valueFromScript,
-    cost,
   };
 
   // Map assertion types to their handler functions>

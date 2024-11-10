@@ -1,16 +1,14 @@
 import util from 'util';
 import type { AssertionParams } from '../types';
 import type { GradingResult } from '../types';
-import { coerceString } from './utils';
 
 export const handleEquals = async ({
   assertion,
   renderedValue,
-  output,
+  outputString,
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
   let pass: boolean;
-  const outputString = coerceString(output);
   if (typeof renderedValue === 'object') {
     pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
     renderedValue = JSON.stringify(renderedValue);

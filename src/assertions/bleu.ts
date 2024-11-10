@@ -10,7 +10,6 @@
  */
 import invariant from 'tiny-invariant';
 import type { AssertionParams, GradingResult } from '../types';
-import { coerceString } from './utils';
 
 /**
  * Generates n-grams from an array of words
@@ -136,7 +135,7 @@ export function calculateBleuScore(
 export function handleBleuScore({
   assertion,
   renderedValue,
-  output,
+  outputString,
   inverse,
 }: AssertionParams): GradingResult {
   invariant(
@@ -147,7 +146,6 @@ export function handleBleuScore({
 
   const threshold = assertion.threshold ?? 0.5;
   const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
-  const outputString = coerceString(output);
   const score = calculateBleuScore(outputString, references);
   const pass = score >= threshold !== inverse;
 

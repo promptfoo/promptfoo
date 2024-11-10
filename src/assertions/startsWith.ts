@@ -1,11 +1,10 @@
 import invariant from 'tiny-invariant';
 import type { AssertionParams, GradingResult } from '../types';
-import { coerceString } from './utils';
 
 export const handleStartsWith = ({
   assertion,
   renderedValue,
-  output,
+  outputString,
   inverse,
 }: AssertionParams): GradingResult => {
   invariant(renderedValue, '"starts-with" assertion type must have a string value');
@@ -13,7 +12,6 @@ export const handleStartsWith = ({
     typeof renderedValue === 'string',
     '"starts-with" assertion type must have a string value',
   );
-  const outputString = coerceString(output);
   const pass = outputString.startsWith(String(renderedValue)) !== inverse;
   return {
     pass,

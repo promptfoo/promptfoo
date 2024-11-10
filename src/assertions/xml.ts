@@ -1,6 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
 import type { AssertionParams, GradingResult } from '../types';
-import { coerceString } from './utils';
 
 export function validateXml(
   xmlString: string,
@@ -69,11 +68,10 @@ export function containsXml(
 export const handleIsXml = ({
   assertion,
   renderedValue,
-  output,
+  outputString,
   inverse,
   baseType,
 }: AssertionParams): GradingResult => {
-  const outputString = coerceString(output);
   let requiredElements: string[] | undefined;
   if (typeof renderedValue === 'string') {
     requiredElements = renderedValue.split(',').map((el) => el.trim());

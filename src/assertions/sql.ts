@@ -5,14 +5,13 @@ import { coerceString } from './utils';
 export const handleIsSql = async ({
   assertion,
   renderedValue,
-  output,
+  outputString,
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
   let pass = false;
   let databaseType: string = 'MySQL';
   let whiteTableList: string[] | undefined;
   let whiteColumnList: string[] | undefined;
-  const outputString = coerceString(output);
   if (renderedValue && typeof renderedValue === 'object') {
     const value = renderedValue as {
       databaseType?: string;
@@ -86,10 +85,10 @@ export const handleIsSql = async ({
 export const handleContainsSql = async (
   assertionParams: AssertionParams,
 ): Promise<GradingResult> => {
-  const match = coerceString(assertionParams.output).match(/```(?:sql)?([^`]+)```/);
+  const match = coerceString(assertionParams.outputString).match(/```(?:sql)?([^`]+)```/);
   if (match) {
     const sqlCode = match[1].trim();
-    return handleIsSql({ ...assertionParams, output: sqlCode });
+    return handleIsSql({ ...assertionParams, outputString: sqlCode });
   }
   return handleIsSql(assertionParams);
 };

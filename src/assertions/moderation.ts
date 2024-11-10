@@ -6,13 +6,12 @@ import type { AssertionParams, GradingResult } from '../types';
 export const handleModeration = async ({
   assertion,
   test,
-  output,
+  outputString,
   providerResponse,
   prompt,
 }: AssertionParams): Promise<GradingResult> => {
   // Some redteam techniques override the actual prompt that is used, so we need to assess that prompt for moderation.
   const promptToModerate = providerResponse.metadata?.redteamFinalPrompt || prompt;
-  const outputString = typeof output === 'string' ? output : JSON.stringify(output);
   invariant(promptToModerate, 'moderation assertion type must have a prompt');
   invariant(
     !assertion.value || (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),

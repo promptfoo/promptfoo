@@ -1,12 +1,11 @@
 import invariant from 'tiny-invariant';
 import { matchesSimilarity } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
-import { coerceString } from './utils';
 
 export const handleSimilar = async ({
   assertion,
   renderedValue,
-  output,
+  outputString,
   inverse,
   test,
 }: AssertionParams): Promise<GradingResult> => {
@@ -14,8 +13,6 @@ export const handleSimilar = async ({
     typeof renderedValue === 'string' || Array.isArray(renderedValue),
     'Similarity assertion type must have a string or array of strings value',
   );
-  const outputString = coerceString(output);
-
   if (Array.isArray(renderedValue)) {
     let minScore = Infinity;
     for (const value of renderedValue) {
