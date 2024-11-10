@@ -613,3 +613,61 @@ You may also return a score:
   "reason": "The output meets the custom validation criteria"
 }
 ```
+
+### Rouge-N
+
+The `rouge-n` assertion checks if the Rouge-N score between the LLM output and expected value is above a given threshold.
+
+Example:
+
+```yaml
+assert:
+  # Ensure Rouge-N score compared to "hello world" is >= 0.75 (default threshold)
+  - type: rouge-n
+    value: hello world
+
+  # With custom threshold
+  - type: rouge-n
+    threshold: 0.6
+    value: hello world
+```
+
+`value` can reference other variables using template syntax. For example:
+
+```yaml
+tests:
+  - vars:
+      expected: hello world
+    assert:
+      - type: rouge-n
+        value: '{{expected}}'
+```
+
+### BLEU
+
+The `bleu` assertion checks if the BLEU score between the LLM output and expected value is above a given threshold.
+
+Example:
+
+```yaml
+assert:
+  # Ensure BLEU score compared to "hello world" is >= 0.5 (default threshold)
+  - type: bleu
+    value: hello world
+
+  # With custom threshold
+  - type: bleu
+    threshold: 0.7
+    value: hello world
+```
+
+`value` can reference other variables using template syntax. For example:
+
+```yaml
+tests:
+  - vars:
+      expected: hello world
+    assert:
+      - type: bleu
+        value: '{{expected}}'
+```
