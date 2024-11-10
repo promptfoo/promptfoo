@@ -15,7 +15,6 @@ export async function handleClassifier({
     '"classifier" assertion type must have a string value or be undefined',
   );
   const outputString = coerceString(output);
-
   // Assertion provider overrides test provider
   const classificationResult = await matchesClassification(
     renderedValue,

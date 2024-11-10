@@ -13,7 +13,6 @@ export const handleContextRecall = async ({
     'context-recall assertion type must have a string value',
   );
   invariant(prompt, 'context-recall assertion type must have a prompt');
-
   return {
     assertion,
     ...(await matchesContextRecall(

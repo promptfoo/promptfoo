@@ -23,7 +23,12 @@ import {
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
-import type { AssertionParams, AssertionValueFunctionContext, ProviderResponse } from '../types';
+import type {
+  AssertionParams,
+  AssertionValueFunctionContext,
+  BaseAssertionTypes,
+  ProviderResponse,
+} from '../types';
 import {
   type ApiProvider,
   type Assertion,
@@ -210,109 +215,64 @@ export async function runAssertion({
     provider,
     providerResponse,
     renderedValue,
-    test,
+    test: getFinalTest(test, assertion),
     valueFromScript,
     cost,
   };
 
-  // Transform test
-  test = getFinalTest(test, assertion);
-
   // Map assertion types to their handler functions>
-  const assertionHandlers: Partial<
-    Record<AssertionType, (params: AssertionParams) => GradingResult | Promise<GradingResult>>
+  const assertionHandlers: Record<
+    BaseAssertionTypes,
+    (params: AssertionParams) => GradingResult | Promise<GradingResult>
   > = {
-    equals: handleEquals,
-    'is-json': handleIsJson,
-    'contains-json': handleContainsJson,
-    'is-xml': handleIsXml,
-    'contains-xml': handleIsXml,
-    'is-sql': handleIsSql,
-    'contains-sql': handleContainsSql,
+    'answer-relevance': handleAnswerRelevance,
+    bleu: handleBleuScore,
+    classifier: handleClassifier,
     contains: handleContains,
-    'contains-any': handleContainsAny,
-    icontains: handleIContains,
-    'icontains-any': handleIContainsAny,
     'contains-all': handleContainsAll,
-    'icontains-all': handleIContainsAll,
-    regex: handleRegex,
-    'starts-with': handleStartsWith,
-    'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
-    'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
-    javascript: handleJavascript,
-    python: handlePython,
-    similar: handleSimilar,
-    'llm-rubric': handleLlmRubric,
+    'contains-any': handleContainsAny,
+    'contains-json': handleContainsJson,
+    'contains-sql': handleContainsSql,
+    'contains-xml': handleIsXml,
+    'context-faithfulness': handleContextFaithfulness,
+    'context-recall': handleContextRecall,
+    'context-relevance': handleContextRelevance,
+    cost: handleCost,
+    equals: handleEquals,
     factuality: handleFactuality,
-    'model-graded-factuality': handleFactuality,
+    icontains: handleIContains,
+    'icontains-all': handleIContainsAll,
+    'icontains-any': handleIContainsAny,
+    'is-json': handleIsJson,
+    'is-sql': handleIsSql,
+    'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
+    'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
+    'is-xml': handleIsXml,
+    javascript: handleJavascript,
+    latency: handleLatency,
+    levenshtein: handleLevenshtein,
+    'llm-rubric': handleLlmRubric,
     'model-graded-closedqa': handleModelGradedClosedQa,
+    'model-graded-factuality': handleFactuality,
+    moderation: handleModeration,
+    perplexity: handlePerplexity,
+    'perplexity-score': handlePerplexityScore,
+    python: handlePython,
+    regex: handleRegex,
+    'rouge-n': handleRougeScore,
+    similar: handleSimilar,
+    'starts-with': handleStartsWith,
+    webhook: handleWebhook,
   };
 
-  const handler = assertionHandlers[baseType];
+  const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
   if (handler) {
     return handler(assertionParams);
   }
 
-  if (baseType === 'context-recall') {
-    return handleContextRecall(assertionParams);
-  }
-
-  if (baseType === 'context-relevance') {
-    return handleContextRelevance(assertionParams);
-  }
-
-  if (baseType === 'context-faithfulness') {
-    return handleContextFaithfulness(assertionParams);
-  }
-
-  if (baseType === 'moderation') {
-    return handleModeration(assertionParams);
-  }
-
-  if (baseType === 'webhook') {
-    return handleWebhook(assertionParams);
-  }
-
-  if (baseType === 'rouge-n') {
-    return handleRougeScore(assertionParams);
-  }
-
-  if (baseType === 'bleu') {
-    return handleBleuScore(assertionParams);
-  }
-
-  if (baseType === 'levenshtein') {
-    return handleLevenshtein(assertionParams);
-  }
-
-  if (baseType === 'classifier') {
-    return handleClassifier(assertionParams);
-  }
-
-  if (baseType === 'latency') {
-    return handleLatency(assertionParams);
-  }
-
-  if (baseType === 'perplexity') {
-    return handlePerplexity(assertionParams);
-  }
-
-  if (baseType === 'perplexity-score') {
-    return handlePerplexityScore(assertionParams);
-  }
-
-  if (baseType === 'cost') {
-    return handleCost(assertionParams);
-  }
-
   if (baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertion, baseType, test, prompt, output, provider, renderedValue);
+    return handleRedteam(assertionParams);
   }
-
-  if (baseType === 'answer-relevance') {
-    return handleAnswerRelevance(assertion, output, prompt, test.options);
-  }
-
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 

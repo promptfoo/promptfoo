@@ -4,8 +4,6 @@ import type { AssertionParams, GradingResult } from '../types';
 import { getNunjucksEngine } from '../util/templates';
 import { coerceString } from './utils';
 
-const nunjucks = getNunjucksEngine();
-
 export const handleModelGradedClosedQa = async ({
   assertion,
   renderedValue,
@@ -19,10 +17,10 @@ export const handleModelGradedClosedQa = async ({
   );
   invariant(prompt, 'model-graded-closedqa assertion type must have a prompt');
   const outputString = coerceString(output);
-
   if (test.options?.rubricPrompt) {
     // Substitute vars in prompt
     invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');
+    const nunjucks = getNunjucksEngine();
     test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
   }
 

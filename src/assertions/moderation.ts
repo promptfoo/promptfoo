@@ -18,7 +18,6 @@ export const handleModeration = async ({
     !assertion.value || (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
     'moderation assertion value must be a string array if set',
   );
-
   if (promptToModerate[0] === '[' || promptToModerate[0] === '{') {
     // Try to extract the last user message from OpenAI-style prompts.
     try {
