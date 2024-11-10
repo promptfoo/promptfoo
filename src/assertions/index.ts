@@ -1,5 +1,4 @@
 import async from 'async';
-import { distance as levenshtein } from 'fastest-levenshtein';
 import fs from 'fs';
 import * as rouge from 'js-rouge';
 import yaml from 'js-yaml';
@@ -8,7 +7,6 @@ import invariant from 'tiny-invariant';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import { importModule } from '../esm';
-import { fetchWithRetries } from '../fetch';
 import logger from '../logger';
 import {
   matchesSimilarity,
@@ -24,7 +22,6 @@ import {
   matchesModeration,
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
-import { parseChatPrompt } from '../providers/shared';
 import { runPython } from '../python/pythonUtils';
 import { getGraderById } from '../redteam/graders';
 import telemetry from '../telemetry';
@@ -60,6 +57,7 @@ import { handleContainsJson, handleIsJson } from './json';
 import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
+import { handleModeration } from './moderation';
 import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
@@ -68,6 +66,7 @@ import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
 import { getFinalTest, processFileReference } from './utils';
+import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
@@ -137,7 +136,6 @@ export async function runAssertion({
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
   let pass: boolean = false;
-  let score: number = 0.0;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
@@ -372,103 +370,11 @@ export async function runAssertion({
   }
 
   if (baseType === 'moderation') {
-    // Some redteam techniques override the actual prompt that is used, so we need to assess that prompt for moderation.
-    const promptToModerate = providerResponse.metadata?.redteamFinalPrompt || prompt;
-    const outputString = typeof output === 'string' ? output : JSON.stringify(output);
-    invariant(promptToModerate, 'moderation assertion type must have a prompt');
-    invariant(
-      !assertion.value ||
-        (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
-      'moderation assertion value must be a string array if set',
-    );
-
-    if (promptToModerate[0] === '[' || promptToModerate[0] === '{') {
-      // Try to extract the last user message from OpenAI-style prompts.
-      try {
-        const parsedPrompt = parseChatPrompt<null | { role: string; content: string }[]>(
-          promptToModerate,
-          null,
-        );
-        if (parsedPrompt && parsedPrompt.length > 0) {
-          prompt = parsedPrompt[parsedPrompt.length - 1].content;
-        }
-      } catch {
-        // Ignore error
-      }
-    }
-
-    const moderationResult = await matchesModeration(
-      {
-        userPrompt: promptToModerate,
-        assistantResponse: outputString,
-        categories: Array.isArray(assertion.value) ? assertion.value : [],
-      },
-      test.options,
-    );
-
-    pass = moderationResult.pass;
-    return {
-      pass,
-      score: moderationResult.score,
-      reason: moderationResult.reason,
-      assertion,
-    };
+    return handleModeration(assertion, test, output, providerResponse, prompt);
   }
 
   if (baseType === 'webhook') {
-    invariant(renderedValue, '"webhook" assertion type must have a URL value');
-    invariant(typeof renderedValue === 'string', '"webhook" assertion type must have a URL value');
-
-    try {
-      const context = {
-        prompt,
-        vars: test.vars || {},
-      };
-      const response = await fetchWithRetries(
-        renderedValue,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ output, context }),
-        },
-        getEnvInt('WEBHOOK_TIMEOUT', 5000),
-      );
-
-      if (!response.ok) {
-        throw new Error(`Webhook response status: ${response.status}`);
-      }
-
-      const jsonResponse = await response.json();
-      pass = jsonResponse.pass !== inverse;
-      score =
-        typeof jsonResponse.score === 'undefined'
-          ? pass
-            ? 1
-            : 0
-          : inverse
-            ? 1 - jsonResponse.score
-            : jsonResponse.score;
-
-      const reason =
-        jsonResponse.reason ||
-        (pass ? 'Assertion passed' : `Webhook returned ${inverse ? 'true' : 'false'}`);
-
-      return {
-        pass,
-        score,
-        reason,
-        assertion,
-      };
-    } catch (err) {
-      return {
-        pass: false,
-        score: 0,
-        reason: `Webhook error: ${(err as Error).message}`,
-        assertion,
-      };
-    }
+    return handleWebhook(assertion, renderedValue, test, prompt, output, inverse);
   }
 
   if (baseType === 'rouge-n') {
