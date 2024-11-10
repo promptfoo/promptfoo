@@ -139,6 +139,8 @@ export type EnvVars = {
   AZURE_TENANT_ID?: string;
   AZURE_AUTHORITY_HOST?: string;
   AZURE_TOKEN_SCOPE?: string;
+  AZURE_DEPLOYMENT_NAME?: string;
+  AZURE_EMBEDDING_DEPLOYMENT_NAME?: string;
   AZURE_OPENAI_DEPLOYMENT_NAME?: string;
   AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME?: string;
 } & EnvOverrides;

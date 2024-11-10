@@ -573,7 +573,9 @@ export async function redteamInit(directory: string | undefined) {
 
       if (email) {
         try {
-          await telemetry.saveConsent(email);
+          await telemetry.saveConsent(email, {
+            source: 'redteam init',
+          });
           writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
         } catch (err) {
           logger.error(`Error saving consent: ${(err as Error).message}`);

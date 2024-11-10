@@ -7,7 +7,7 @@ import {
   DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
   DefaultLlmRubricProvider as AnthropicLlmRubricProvider,
 } from './anthropic';
-import { AzureOpenAiChatCompletionProvider, AzureOpenAiEmbeddingProvider } from './azureopenai';
+import { AzureChatCompletionProvider, AzureEmbeddingProvider } from './azure';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
@@ -38,7 +38,11 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !env?.OPENAI_API_KEY &&
     (getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY);
 
-  const hasAzureApiKey = getEnvString('AZURE_OPENAI_API_KEY') || env?.AZURE_OPENAI_API_KEY;
+  const hasAzureApiKey =
+    getEnvString('AZURE_OPENAI_API_KEY') ||
+    env?.AZURE_OPENAI_API_KEY ||
+    getEnvString('AZURE_API_KEY') ||
+    env?.AZURE_API_KEY;
   const hasAzureClientCreds =
     (getEnvString('AZURE_CLIENT_ID') || env?.AZURE_CLIENT_ID) &&
     (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&
@@ -48,6 +52,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !getEnvString('OPENAI_API_KEY') &&
     !env?.OPENAI_API_KEY &&
     (hasAzureApiKey || hasAzureClientCreds) &&
+    (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
     (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME);
 
   if (preferAzure) {
@@ -63,8 +68,8 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
       deploymentName;
 
-    const azureProvider = new AzureOpenAiChatCompletionProvider(deploymentName, { env });
-    const azureEmbeddingProvider = new AzureOpenAiEmbeddingProvider(embeddingDeploymentName, {
+    const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
+    const azureEmbeddingProvider = new AzureEmbeddingProvider(embeddingDeploymentName, {
       env,
     });
 
