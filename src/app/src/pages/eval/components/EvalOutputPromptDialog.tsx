@@ -52,7 +52,6 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
           </TableHead>
           <TableBody>
             {gradingResults.map((result, i) => {
-              console.log(`result ${i}: ${JSON.stringify(result, null, 2)}`);
               if (!result) {
                 return null;
               }
