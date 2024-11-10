@@ -23,7 +23,7 @@ import {
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
-import type { AssertionValue, AssertionValueFunctionContext, ProviderResponse } from '../types';
+import type { AssertionValueFunctionContext, ProviderResponse } from '../types';
 import {
   type ApiProvider,
   type Assertion,
@@ -79,9 +79,9 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'context-faithfulness',
   'context-recall',
   'context-relevance',
+  'factuality',
   'llm-rubric',
   'model-graded-closedqa',
-  'factuality',
   'model-graded-factuality',
 ]);
 
