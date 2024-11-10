@@ -11,6 +11,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
+import { promptForEmailUnverified } from '../globalConfig/accounts';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
@@ -64,6 +65,10 @@ export async function doEval(
   evaluateOptions: EvaluateOptions,
 ) {
   setupEnv(cmdObj.envPath);
+  if (cmdObj.verbose) {
+    setLogLevel('debug');
+  }
+
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
@@ -106,9 +111,6 @@ export async function doEval(
     }
 
     // Misc settings
-    if (cmdObj.verbose) {
-      setLogLevel('debug');
-    }
     const iterations = cmdObj.repeat ?? Number.NaN;
     const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;
 
@@ -133,7 +135,18 @@ export async function doEval(
       firstN: cmdObj.filterFirstN,
       pattern: cmdObj.filterPattern,
       failing: cmdObj.filterFailing,
+      sample: cmdObj.filterSample,
     });
+
+    if (
+      config.redteam &&
+      config.redteam.plugins &&
+      config.redteam.plugins.length > 0 &&
+      testSuite.tests &&
+      testSuite.tests.length > 0
+    ) {
+      await promptForEmailUnverified();
+    }
 
     testSuite.providers = filterProviders(
       testSuite.providers,
@@ -186,6 +199,8 @@ export async function doEval(
     const evalRecord = cmdObj.write
       ? await Eval.create(config, testSuite.prompts)
       : new Eval(config);
+
+    // Run the evaluation!!!!!!
     await evaluate(testSuite, evalRecord, {
       ...options,
       eventSource: 'cli',
@@ -482,6 +497,7 @@ export function evalCommand(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
     )
+    .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option('--filter-failing <path>', 'Path to json output file')
 
     // Output configuration
