@@ -1,15 +1,15 @@
 import invariant from 'tiny-invariant';
 import { matchesClassification } from '../matchers';
-import type { Assertion, AssertionValue, GradingResult, TestCase } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { coerceString } from './utils';
 
-export async function handleClassifier(
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  test: TestCase,
-  inverse: boolean,
-): Promise<GradingResult> {
+export async function handleClassifier({
+  assertion,
+  renderedValue,
+  output,
+  test,
+  inverse,
+}: AssertionParams): Promise<GradingResult> {
   invariant(
     typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
     '"classifier" assertion type must have a string value or be undefined',

@@ -1,12 +1,12 @@
 import invariant from 'tiny-invariant';
 import { matchesContextFaithfulness } from '../matchers';
-import type { Assertion, GradingResult, TestCase } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 
-export async function handleContextFaithfulness(
-  assertion: Assertion,
-  test: TestCase,
-  output: string,
-): Promise<GradingResult> {
+export async function handleContextFaithfulness({
+  assertion,
+  test,
+  output,
+}: AssertionParams): Promise<GradingResult> {
   invariant(test.vars, 'context-faithfulness assertion type must have a vars object');
   invariant(
     typeof test.vars.query === 'string',

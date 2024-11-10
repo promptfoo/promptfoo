@@ -1,14 +1,14 @@
 import invariant from 'tiny-invariant';
 import { matchesLlmRubric } from '../matchers';
-import type { Assertion, AssertionValue, AtomicTestCase, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { coerceString } from './utils';
 
-export const handleLlmRubric = async (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  test: AtomicTestCase,
-): Promise<GradingResult> => {
+export const handleLlmRubric = async ({
+  assertion,
+  renderedValue,
+  output,
+  test,
+}: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
     '"llm-rubric" assertion type must have a string value',

@@ -1,14 +1,14 @@
 import type { OpenAiChatCompletionProvider } from '../providers/openai';
 import { validateFunctionCall } from '../providers/openaiUtil';
-import type { ApiProvider, Assertion } from '../types';
-import type { GradingResult, TestCase } from '../types';
+import type { AssertionParams } from '../types';
+import type { GradingResult } from '../types';
 
-export const handleIsValidOpenAiFunctionCall = (
-  assertion: Assertion,
-  output: unknown,
-  provider: ApiProvider | undefined,
-  test: TestCase,
-): GradingResult => {
+export const handleIsValidOpenAiFunctionCall = ({
+  assertion,
+  output,
+  provider,
+  test,
+}: AssertionParams): GradingResult => {
   const functionOutput = output as { arguments: string; name: string };
   if (
     typeof functionOutput !== 'object' ||
@@ -46,12 +46,12 @@ export const handleIsValidOpenAiFunctionCall = (
   }
 };
 
-export const handleIsValidOpenAiToolsCall = (
-  assertion: Assertion,
-  output: unknown,
-  provider: ApiProvider | undefined,
-  test: TestCase,
-): GradingResult => {
+export const handleIsValidOpenAiToolsCall = ({
+  assertion,
+  output,
+  provider,
+  test,
+}: AssertionParams): GradingResult => {
   const toolsOutput = output as {
     type: 'function';
     function: { arguments: string; name: string };

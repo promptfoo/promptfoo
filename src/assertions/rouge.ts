@@ -1,24 +1,24 @@
 import * as rouge from 'js-rouge';
 import invariant from 'tiny-invariant';
-import type { Assertion, AssertionValue, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { coerceString } from './utils';
 
-export function handleRougeScore(
-  baseType: 'rouge-n',
-  assertion: Assertion,
-  expected: AssertionValue | undefined,
-  output: string | object,
-  inverted: boolean,
-): GradingResult {
-  invariant(typeof expected === 'string', '"rouge" assertion type must be a string value');
+export function handleRougeScore({
+  baseType,
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+}: AssertionParams): GradingResult {
+  invariant(typeof renderedValue === 'string', '"rouge" assertion type must be a string value');
   const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
   const rougeMethod = rouge[fnName];
   const outputString = coerceString(output);
-  const score = rougeMethod(outputString, expected, {});
-  const pass = score >= (assertion.threshold || 0.75) != inverted;
+  const score = rougeMethod(outputString, renderedValue, {});
+  const pass = score >= (assertion.threshold || 0.75) != inverse;
   return {
     pass,
-    score: inverted ? 1 - score : score,
+    score: inverse ? 1 - score : score,
     reason: pass
       ? `${baseType.toUpperCase()} score ${score.toFixed(
           2,

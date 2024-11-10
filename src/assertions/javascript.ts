@@ -1,6 +1,6 @@
 import invariant from 'tiny-invariant';
-import type { AssertionValueFunctionContext } from '../types';
-import { type AssertionValue, type Assertion, type GradingResult, isGradingResult } from '../types';
+import type { AssertionParams } from '../types';
+import { type GradingResult, isGradingResult } from '../types';
 import { coerceString } from './utils';
 
 const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
@@ -16,14 +16,14 @@ const validateResult = async (result: any): Promise<boolean | number | GradingRe
   }
 };
 
-export const handleJavascript = async (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  valueFromScript: string | boolean | number | GradingResult | object | undefined,
-  context: AssertionValueFunctionContext,
-  output: string | object,
-  inverse: boolean,
-): Promise<GradingResult> => {
+export const handleJavascript = async ({
+  assertion,
+  renderedValue,
+  valueFromScript,
+  context,
+  output,
+  inverse,
+}: AssertionParams): Promise<GradingResult> => {
   let pass;
   let score;
   const outputString = coerceString(output);

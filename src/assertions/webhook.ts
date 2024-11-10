@@ -1,16 +1,16 @@
 import invariant from 'tiny-invariant';
 import { getEnvInt } from '../envars';
 import { fetchWithRetries } from '../fetch';
-import type { Assertion, AssertionValue, GradingResult, TestCase } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 
-export async function handleWebhook(
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  test: TestCase,
-  prompt: string | undefined,
-  output: string,
-  inverse: boolean,
-): Promise<GradingResult> {
+export async function handleWebhook({
+  assertion,
+  renderedValue,
+  test,
+  prompt,
+  output,
+  inverse,
+}: AssertionParams): Promise<GradingResult> {
   invariant(renderedValue, '"webhook" assertion type must have a URL value');
   invariant(typeof renderedValue === 'string', '"webhook" assertion type must have a URL value');
   try {

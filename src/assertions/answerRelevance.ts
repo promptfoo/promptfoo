@@ -1,7 +1,6 @@
 import invariant from 'tiny-invariant';
 import { matchesAnswerRelevance } from '../matchers';
 import type { Assertion, GradingResult } from '../types';
-import { coerceString } from './utils';
 
 export const handleAnswerRelevance = async (
   assertion: Assertion,
@@ -14,10 +13,10 @@ export const handleAnswerRelevance = async (
     'answer-relevance assertion type must evaluate a string output',
   );
   invariant(prompt, 'answer-relevance assertion type must have a prompt');
-  const outputString = coerceString(output);
+
   const input = typeof options?.vars?.query === 'string' ? options.vars.query : prompt;
   return {
     assertion,
-    ...(await matchesAnswerRelevance(input, outputString, assertion.threshold || 0, options)),
+    ...(await matchesAnswerRelevance(input, output, assertion.threshold || 0, options)),
   };
 };

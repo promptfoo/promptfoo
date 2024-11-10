@@ -9,7 +9,7 @@
  * {@link https://doi.org/10.3115/1073083.1073135}
  */
 import invariant from 'tiny-invariant';
-import type { Assertion, AssertionValue, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { coerceString } from './utils';
 
 /**
@@ -133,12 +133,12 @@ export function calculateBleuScore(
  * @param inverse - Whether to invert the comparison
  * @returns Result of the BLEU score comparison
  */
-export function handleBleuScore(
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-  inverse: boolean,
-): GradingResult {
+export function handleBleuScore({
+  assertion,
+  renderedValue,
+  output,
+  inverse,
+}: AssertionParams): GradingResult {
   invariant(
     typeof renderedValue === 'string' ||
       (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),

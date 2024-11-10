@@ -1,13 +1,13 @@
 import invariant from 'tiny-invariant';
 import { matchesContextRecall } from '../matchers';
-import type { Assertion, AssertionValue, AtomicTestCase, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 
-export const handleContextRecall = async (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  prompt: string | undefined,
-  test: AtomicTestCase,
-): Promise<GradingResult> => {
+export const handleContextRecall = async ({
+  assertion,
+  renderedValue,
+  prompt,
+  test,
+}: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
     'context-recall assertion type must have a string value',

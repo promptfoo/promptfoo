@@ -1,15 +1,15 @@
 import invariant from 'tiny-invariant';
 import { matchesModeration } from '../matchers';
 import { parseChatPrompt } from '../providers/shared';
-import type { Assertion, GradingResult, ProviderResponse, TestCase } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 
-export const handleModeration = async (
-  assertion: Assertion,
-  test: TestCase & { prompt?: string },
-  output: string,
-  providerResponse: ProviderResponse,
-  prompt?: string,
-): Promise<GradingResult> => {
+export const handleModeration = async ({
+  assertion,
+  test,
+  output,
+  providerResponse,
+  prompt,
+}: AssertionParams): Promise<GradingResult> => {
   // Some redteam techniques override the actual prompt that is used, so we need to assess that prompt for moderation.
   const promptToModerate = providerResponse.metadata?.redteamFinalPrompt || prompt;
   const outputString = typeof output === 'string' ? output : JSON.stringify(output);

@@ -1,21 +1,15 @@
 import invariant from 'tiny-invariant';
 import { runPythonCode } from '../python/wrapper';
-import {
-  type AssertionValueFunctionContext,
-  type Assertion,
-  type AssertionValue,
-  type GradingResult,
-  isGradingResult,
-} from '../types';
+import type { AssertionParams } from '../types';
+import { type GradingResult, isGradingResult } from '../types';
 
-export const handlePython = async (
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  valueFromScript: string | boolean | number | GradingResult | object | undefined,
-  context: AssertionValueFunctionContext,
-  output: string | object,
-  inverse: boolean,
-): Promise<GradingResult> => {
+export const handlePython = async ({
+  assertion,
+  renderedValue,
+  valueFromScript,
+  context,
+  output,
+}: AssertionParams): Promise<GradingResult> => {
   invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
   let pass;
   let score;

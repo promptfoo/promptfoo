@@ -1,13 +1,13 @@
 import { distance } from 'fastest-levenshtein';
 import invariant from 'tiny-invariant';
-import type { Assertion, AssertionValue, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { coerceString } from './utils';
 
-export function handleLevenshtein(
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  output: string | object,
-): GradingResult {
+export function handleLevenshtein({
+  assertion,
+  renderedValue,
+  output,
+}: AssertionParams): GradingResult {
   invariant(
     typeof renderedValue === 'string',
     '"levenshtein" assertion type must have a string value',

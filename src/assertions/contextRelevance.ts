@@ -1,11 +1,11 @@
 import invariant from 'tiny-invariant';
 import { matchesContextRelevance } from '../matchers';
-import type { Assertion, GradingResult, TestCase } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 
-export const handleContextRelevance = async (
-  assertion: Assertion,
-  test: TestCase,
-): Promise<GradingResult> => {
+export const handleContextRelevance = async ({
+  assertion,
+  test,
+}: AssertionParams): Promise<GradingResult> => {
   invariant(test.vars, 'context-relevance assertion type must have a vars object');
   invariant(
     typeof test.vars.query === 'string',

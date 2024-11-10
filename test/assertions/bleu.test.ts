@@ -1,4 +1,5 @@
 import { calculateBleuScore, handleBleuScore } from '../../src/assertions/bleu';
+import type { AssertionParams } from '../../src/types';
 
 describe('BLEU score calculation', () => {
   it('identical sentences should have BLEU score close to, but not equal to one due to smoothing', () => {
@@ -108,12 +109,14 @@ describe('BLEU score calculation', () => {
 
 describe('handleBleuScore', () => {
   it('should handle string reference with passing score', () => {
-    const result = handleBleuScore(
-      { type: 'bleu', value: 'The cat sat on the mat.' },
-      'The cat sat on the mat.',
-      'The cat sat on the mat.',
-      false,
-    );
+    const result = handleBleuScore({
+      assertion: { type: 'bleu', value: 'The cat sat on the mat.' },
+      output: 'The cat sat on the mat.',
+      providerResponse: {
+        output: 'The cat sat on the mat.',
+      },
+      inverse: false,
+    } as AssertionParams);
     expect(result).toEqual({
       pass: true,
       score: expect.any(Number),
@@ -123,15 +126,17 @@ describe('handleBleuScore', () => {
   });
 
   it('should handle array of references', () => {
-    const result = handleBleuScore(
-      {
+    const result = handleBleuScore({
+      assertion: {
         type: 'bleu',
         value: ['The cat sat on mat.', 'The cat is sitting on mat.'],
       },
-      ['The cat sat on mat.', 'The cat is sitting on mat.'],
-      'The cat sat on mat.',
-      false,
-    );
+      output: 'The cat sat on mat.',
+      providerResponse: {
+        output: 'The cat sat on mat.',
+      },
+      inverse: false,
+    } as AssertionParams);
     expect(result).toEqual({
       pass: true,
       score: expect.any(Number),
@@ -141,12 +146,14 @@ describe('handleBleuScore', () => {
   });
 
   it('should handle custom threshold', () => {
-    const result = handleBleuScore(
-      { type: 'bleu', value: 'The cat sat on the mat.', threshold: 0.8 },
-      'The cat sat on the mat.',
-      'The dog sat on the mat.',
-      false,
-    );
+    const result = handleBleuScore({
+      assertion: { type: 'bleu', value: 'The cat sat on the mat.', threshold: 0.8 },
+      output: 'The cat sat on the mat.',
+      providerResponse: {
+        output: 'The dog sat on the mat.',
+      },
+      inverse: false,
+    } as AssertionParams);
 
     expect(result).toEqual({
       pass: false,
@@ -157,12 +164,14 @@ describe('handleBleuScore', () => {
   });
 
   it('should handle inverse assertion', () => {
-    const result = handleBleuScore(
-      { type: 'bleu', value: 'The cat sat on the mat.', threshold: 0.8 },
-      'The cat sat on the mat.',
-      'The dog ran in the park.',
-      true,
-    );
+    const result = handleBleuScore({
+      assertion: { type: 'bleu', value: 'The cat sat on the mat.', threshold: 0.8 },
+      output: 'The cat sat on the mat.',
+      providerResponse: {
+        output: 'The dog ran in the park.',
+      },
+      inverse: true,
+    } as AssertionParams);
     expect(result).toEqual({
       pass: true,
       score: expect.any(Number),
@@ -172,12 +181,14 @@ describe('handleBleuScore', () => {
   });
 
   it('should use default threshold of 0.5', () => {
-    const result = handleBleuScore(
-      { type: 'bleu', value: 'The cat sat on the mat.' },
-      'The cat sat on the mat.',
-      'The dog ran in the park.',
-      false,
-    );
+    const result = handleBleuScore({
+      assertion: { type: 'bleu', value: 'The cat sat on the mat.' },
+      output: 'The cat sat on the mat.',
+      providerResponse: {
+        output: 'The dog ran in the park.',
+      },
+      inverse: false,
+    } as AssertionParams);
 
     expect(result).toEqual({
       pass: false,

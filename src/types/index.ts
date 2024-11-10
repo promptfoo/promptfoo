@@ -445,7 +445,11 @@ export type AssertionValueFunctionResult = boolean | number | GradingResult;
 export interface AssertionParams {
   assertion: Assertion;
   baseType: AssertionType;
+  context: AssertionValueFunctionContext;
+  cost?: number;
   inverse: boolean;
+  logProbs?: number[];
+  latencyMs?: number;
   output: string | object;
   prompt?: string;
   provider?: ApiProvider;
