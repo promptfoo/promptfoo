@@ -2,13 +2,14 @@ import invariant from 'tiny-invariant';
 import { matchesFactuality } from '../matchers';
 import type { Assertion, AssertionValue, GradingResult, TestCase } from '../types';
 import { getNunjucksEngine } from '../util/templates';
+import { coerceString } from './utils';
 
 const nunjucks = getNunjucksEngine();
 
 export const handleFactuality = async (
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
-  outputString: string,
+  output: string | object,
   test: TestCase,
   prompt: string | undefined,
 ): Promise<GradingResult> => {
@@ -17,7 +18,7 @@ export const handleFactuality = async (
     'factuality assertion type must have a string value',
   );
   invariant(prompt, 'factuality assertion type must have a prompt');
-
+  const outputString = coerceString(output);
   if (test.options?.rubricPrompt) {
     // Substitute vars in prompt
     invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');

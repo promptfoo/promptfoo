@@ -12,9 +12,8 @@ export const handlePython = async (
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
   valueFromScript: string | boolean | number | GradingResult | object | undefined,
-  outputString: string,
   context: AssertionValueFunctionContext,
-  output: string,
+  output: string | object,
   inverse: boolean,
 ): Promise<GradingResult> => {
   invariant(typeof renderedValue === 'string', 'python assertion must have a string value');

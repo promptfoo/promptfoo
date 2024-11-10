@@ -87,13 +87,6 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
 
 const nunjucks = getNunjucksEngine();
 
-function coerceString(value: string | object): string {
-  if (typeof value === 'string') {
-    return value;
-  }
-  return JSON.stringify(value);
-}
-
 export async function runAssertion({
   prompt,
   provider,
@@ -128,7 +121,7 @@ export async function runAssertion({
     });
   }
 
-  const outputString = coerceString(output);
+  // const outputString = coerceString(output);
 
   const context: AssertionValueFunctionContext = {
     prompt,
@@ -207,59 +200,59 @@ export async function runAssertion({
   test = getFinalTest(test, assertion);
 
   if (baseType === 'equals') {
-    return handleEquals(assertion, renderedValue, outputString, inverse);
+    return handleEquals(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'is-json') {
-    return handleIsJson(assertion, renderedValue, outputString, inverse, valueFromScript);
+    return handleIsJson(assertion, renderedValue, output, inverse, valueFromScript);
   }
 
   if (baseType === 'contains-json') {
-    return handleContainsJson(assertion, renderedValue, outputString, inverse, valueFromScript);
+    return handleContainsJson(assertion, renderedValue, output, inverse, valueFromScript);
   }
 
   if (baseType === 'is-xml' || baseType === 'contains-xml') {
-    return handleIsXml(assertion, renderedValue, outputString, inverse, baseType);
+    return handleIsXml(assertion, renderedValue, output, inverse, baseType);
   }
 
   if (baseType === 'is-sql') {
-    return handleIsSql(assertion, renderedValue, outputString, inverse);
+    return handleIsSql(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'contains-sql') {
-    return handleContainsSql(assertion, renderedValue, outputString, inverse);
+    return handleContainsSql(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'contains') {
-    return handleContains(assertion, renderedValue, outputString, inverse);
+    return handleContains(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'contains-any') {
-    return handleContainsAny(assertion, renderedValue, outputString, inverse);
+    return handleContainsAny(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'icontains') {
-    return handleIContains(assertion, renderedValue, outputString, inverse);
+    return handleIContains(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'icontains-any') {
-    return handleIContainsAny(assertion, renderedValue, outputString, inverse);
+    return handleIContainsAny(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'contains-all') {
-    return handleContainsAll(assertion, renderedValue, outputString, inverse);
+    return handleContainsAll(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'icontains-all') {
-    return handleIContainsAll(assertion, renderedValue, outputString, inverse);
+    return handleIContainsAll(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'regex') {
-    return handleRegex(assertion, renderedValue, outputString, inverse);
+    return handleRegex(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'starts-with') {
-    return handleStartsWith(assertion, renderedValue, outputString, inverse);
+    return handleStartsWith(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'is-valid-openai-tools-call') {
@@ -271,47 +264,31 @@ export async function runAssertion({
   }
 
   if (baseType === 'javascript') {
-    return handleJavascript(
-      assertion,
-      renderedValue,
-      valueFromScript,
-      outputString,
-      context,
-      output,
-      inverse,
-    );
+    return handleJavascript(assertion, renderedValue, valueFromScript, context, output, inverse);
   }
 
   if (baseType === 'python') {
-    return handlePython(
-      assertion,
-      renderedValue,
-      valueFromScript,
-      outputString,
-      context,
-      output,
-      inverse,
-    );
+    return handlePython(assertion, renderedValue, valueFromScript, context, output, inverse);
   }
 
   if (baseType === 'similar') {
-    return handleSimilar(assertion, renderedValue, outputString, inverse, test);
+    return handleSimilar(assertion, renderedValue, output, inverse, test);
   }
 
   if (baseType === 'llm-rubric') {
-    return handleLlmRubric(assertion, renderedValue, outputString, test);
+    return handleLlmRubric(assertion, renderedValue, output, test);
   }
 
   if (baseType === 'model-graded-factuality' || baseType === 'factuality') {
-    return handleFactuality(assertion, renderedValue, outputString, test, prompt);
+    return handleFactuality(assertion, renderedValue, output, test, prompt);
   }
 
   if (baseType === 'model-graded-closedqa') {
-    return handleModelGradedClosedQa(assertion, renderedValue, outputString, test, prompt);
+    return handleModelGradedClosedQa(assertion, renderedValue, output, test, prompt);
   }
 
   if (baseType === 'answer-relevance') {
-    return handleAnswerRelevance(assertion, outputString, prompt, test.options);
+    return handleAnswerRelevance(assertion, output, prompt, test.options);
   }
 
   if (baseType === 'context-recall') {
@@ -335,19 +312,19 @@ export async function runAssertion({
   }
 
   if (baseType === 'rouge-n') {
-    return handleRougeScore(baseType, assertion, renderedValue, outputString, inverse);
+    return handleRougeScore(baseType, assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'bleu') {
-    return handleBleuScore(assertion, renderedValue, outputString, inverse);
+    return handleBleuScore(assertion, renderedValue, output, inverse);
   }
 
   if (baseType === 'levenshtein') {
-    return handleLevenshtein(assertion, renderedValue, outputString);
+    return handleLevenshtein(assertion, renderedValue, output);
   }
 
   if (baseType === 'classifier') {
-    return handleClassifier(assertion, renderedValue, outputString, test, inverse);
+    return handleClassifier(assertion, renderedValue, output, test, inverse);
   }
 
   if (baseType === 'latency') {
@@ -367,7 +344,7 @@ export async function runAssertion({
   }
 
   if (baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertion, baseType, test, prompt, outputString, provider, renderedValue);
+    return handleRedteam(assertion, baseType, test, prompt, output, provider, renderedValue);
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);

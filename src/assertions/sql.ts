@@ -1,18 +1,19 @@
 import { type Option as sqlParserOption } from 'node-sql-parser';
 import type { Assertion, GradingResult } from '../types';
 import type { AssertionValue } from '../types';
+import { coerceString } from './utils';
 
 export const handleIsSql = async (
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
-  outputString: string,
+  output: string | object,
   inverse: boolean,
 ): Promise<GradingResult> => {
   let pass = false;
   let databaseType: string = 'MySQL';
   let whiteTableList: string[] | undefined;
   let whiteColumnList: string[] | undefined;
-
+  const outputString = coerceString(output);
   if (renderedValue && typeof renderedValue === 'object') {
     const value = renderedValue as {
       databaseType?: string;
@@ -86,9 +87,10 @@ export const handleIsSql = async (
 export const handleContainsSql = async (
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
-  outputString: string,
+  output: string | object,
   inverse: boolean,
 ): Promise<GradingResult> => {
+  const outputString = coerceString(output);
   const match = outputString.match(/```(?:sql)?([^`]+)```/);
   if (match) {
     const sqlCode = match[1].trim();

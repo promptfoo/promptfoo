@@ -1,6 +1,7 @@
 import invariant from 'tiny-invariant';
 import type { AssertionValueFunctionContext } from '../types';
 import { type AssertionValue, type Assertion, type GradingResult, isGradingResult } from '../types';
+import { coerceString } from './utils';
 
 const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
@@ -19,14 +20,13 @@ export const handleJavascript = async (
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
   valueFromScript: string | boolean | number | GradingResult | object | undefined,
-  outputString: string,
   context: AssertionValueFunctionContext,
-  output: string,
+  output: string | object,
   inverse: boolean,
 ): Promise<GradingResult> => {
   let pass;
   let score;
-
+  const outputString = coerceString(output);
   try {
     if (typeof assertion.value === 'function') {
       let ret = assertion.value(outputString, context);

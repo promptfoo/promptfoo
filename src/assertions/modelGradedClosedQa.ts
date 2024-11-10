@@ -2,13 +2,14 @@ import invariant from 'tiny-invariant';
 import { matchesClosedQa } from '../matchers';
 import type { Assertion, AssertionValue, AtomicTestCase, GradingResult } from '../types';
 import { getNunjucksEngine } from '../util/templates';
+import { coerceString } from './utils';
 
 const nunjucks = getNunjucksEngine();
 
 export const handleModelGradedClosedQa = async (
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
-  outputString: string,
+  output: string | object,
   test: AtomicTestCase,
   prompt: string | undefined,
 ): Promise<GradingResult> => {
@@ -17,6 +18,7 @@ export const handleModelGradedClosedQa = async (
     'model-graded-closedqa assertion type must have a string value',
   );
   invariant(prompt, 'model-graded-closedqa assertion type must have a prompt');
+  const outputString = coerceString(output);
 
   if (test.options?.rubricPrompt) {
     // Substitute vars in prompt

@@ -7,6 +7,7 @@ import { getEnvBool } from '../envars';
 import type { AssertionValue, GradingResult } from '../types';
 import type { Assertion } from '../types';
 import { extractJsonObjects } from '../util/json';
+import { coerceString } from './utils';
 
 let ajvInstance: Ajv | null = null;
 
@@ -31,12 +32,13 @@ export function getAjv(): Ajv {
 export function handleIsJson(
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
-  outputString: string,
+  output: string | object,
   inverse: boolean,
   valueFromScript: string | boolean | number | GradingResult | object | undefined,
 ): GradingResult {
   let parsedJson;
   let pass;
+  const outputString = coerceString(output);
   try {
     parsedJson = JSON.parse(outputString);
     pass = !inverse;
@@ -85,11 +87,12 @@ export function handleIsJson(
 export function handleContainsJson(
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
-  outputString: string,
+  output: string | object,
   inverse: boolean,
   valueFromScript: string | boolean | number | GradingResult | object | undefined,
 ): GradingResult {
   let errorMessage = 'Expected output to contain valid JSON';
+  const outputString = coerceString(output);
   const jsonObjects = extractJsonObjects(outputString);
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   for (const jsonObject of jsonObjects) {
