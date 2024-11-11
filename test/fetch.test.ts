@@ -1,4 +1,5 @@
 import { ProxyAgent } from 'proxy-agent';
+import { VERSION } from '../src/constants';
 import { getEnvBool } from '../src/envars';
 import {
   fetchWithProxy,
@@ -60,6 +61,20 @@ describe('fetchWithProxy', () => {
     jest.clearAllMocks();
   });
 
+  it('should add version header to all requests', async () => {
+    const url = 'https://example.com/api';
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'x-promptfoo-version': VERSION,
+        }),
+      }),
+    );
+  });
+
   it('should handle URLs with basic auth credentials', async () => {
     const url = 'https://username:password@example.com/api';
     const options = { headers: { 'Content-Type': 'application/json' } };
@@ -72,6 +87,7 @@ describe('fetchWithProxy', () => {
         headers: {
           'Content-Type': 'application/json',
           Authorization: 'Basic dXNlcm5hbWU6cGFzc3dvcmQ=',
+          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -88,6 +104,7 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           'Content-Type': 'application/json',
+          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -120,6 +137,7 @@ describe('fetchWithProxy', () => {
         headers: {
           Authorization: 'Bearer token123',
           'Content-Type': 'application/json',
+          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -143,6 +161,7 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           Authorization: 'Bearer token123',
+          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -157,6 +176,7 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           Authorization: 'Basic OnBhc3N3b3Jk',
+          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -171,6 +191,7 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           Authorization: 'Basic dXNlcm5hbWU6', // Base64 encoded 'username:'
+          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -194,6 +215,7 @@ describe('fetchWithProxy', () => {
           'Content-Type': 'application/json',
           'X-Custom-Header': 'value',
           Authorization: 'Basic dXNlcm5hbWU6cGFzc3dvcmQ=',
+          'x-promptfoo-version': VERSION,
         },
       }),
     );
