@@ -1,5 +1,6 @@
 import { ProxyAgent } from 'proxy-agent';
 import invariant from 'tiny-invariant';
+import { VERSION } from './constants';
 import { getEnvInt, getEnvBool } from './envars';
 import logger from './logger';
 import { sleep } from './util/time';
@@ -9,7 +10,14 @@ export async function fetchWithProxy(
   options: RequestInit = {},
 ): Promise<Response> {
   let finalUrl = url;
-  const finalOptions = { ...options };
+
+  const finalOptions = {
+    ...options,
+    headers: {
+      ...options.headers,
+      'x-promptfoo-version': VERSION,
+    } as Record<string, string>,
+  };
 
   if (typeof url === 'string') {
     try {
