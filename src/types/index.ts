@@ -338,7 +338,6 @@ export const BaseAssertionTypesSchema = z.enum([
   'cost',
   'equals',
   'factuality',
-  'human',
   'icontains-all',
   'icontains-any',
   'icontains',
@@ -358,10 +357,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'perplexity',
   'python',
   'regex',
-  'rouge-l',
   'rouge-n',
-  'rouge-s',
-  'select-best',
   'similar',
   'starts-with',
   'webhook',
@@ -371,9 +367,15 @@ export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
+// The 'human' assertion type is added via the web UI to allow manual grading.
+// The 'select-best' assertion type compares all variations for a given test case
+// and selects the highest scoring one after all other assertions have completed.
+export type SpecialAssertionTypes = 'select-best' | 'human';
+
 export type AssertionType =
   | BaseAssertionTypes
   | NotPrefixed<BaseAssertionTypes>
+  | SpecialAssertionTypes
   | RedteamAssertionTypes;
 
 const AssertionSetSchema = z.object({
@@ -441,6 +443,24 @@ export type AssertionValueFunction = (
 export type AssertionValue = string | string[] | object | AssertionValueFunction;
 
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
+
+export interface AssertionParams {
+  assertion: Assertion;
+  baseType: AssertionType;
+  context: AssertionValueFunctionContext;
+  cost?: number;
+  inverse: boolean;
+  logProbs?: number[];
+  latencyMs?: number;
+  output: string | object;
+  outputString: string;
+  prompt?: string;
+  provider?: ApiProvider;
+  providerResponse: ProviderResponse;
+  renderedValue?: AssertionValue;
+  test: AtomicTestCase;
+  valueFromScript?: string | boolean | number | GradingResult | object;
+}
 
 // Used when building prompts index from files.
 export const TestCasesWithMetadataPromptSchema = z.object({

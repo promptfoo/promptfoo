@@ -4,8 +4,7 @@ import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import { getEnvBool } from '../envars';
-import type { AssertionValue, GradingResult } from '../types';
-import type { Assertion } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import { extractJsonObjects } from '../util/json';
 
 let ajvInstance: Ajv | null = null;
@@ -28,13 +27,13 @@ export function getAjv(): Ajv {
   return ajvInstance;
 }
 
-export function handleIsJson(
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  valueFromScript: string | boolean | number | GradingResult | object | undefined,
-  outputString: string,
-  inverse: boolean,
-): GradingResult {
+export function handleIsJson({
+  outputString,
+  renderedValue,
+  inverse,
+  valueFromScript,
+  assertion,
+}: AssertionParams): GradingResult {
   let parsedJson;
   let pass;
   try {
@@ -82,13 +81,13 @@ export function handleIsJson(
   };
 }
 
-export function handleContainsJson(
-  assertion: Assertion,
-  renderedValue: AssertionValue | undefined,
-  valueFromScript: string | boolean | number | GradingResult | object | undefined,
-  outputString: string,
-  inverse: boolean,
-): GradingResult {
+export function handleContainsJson({
+  assertion,
+  renderedValue,
+  outputString,
+  inverse,
+  valueFromScript,
+}: AssertionParams): GradingResult {
   let errorMessage = 'Expected output to contain valid JSON';
   const jsonObjects = extractJsonObjects(outputString);
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;

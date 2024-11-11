@@ -1,9 +1,6 @@
-import type { Assertion, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 
-export function handlePerplexity(
-  logProbs: number[] | undefined,
-  assertion: Assertion,
-): GradingResult {
+export function handlePerplexity({ logProbs, assertion }: AssertionParams): GradingResult {
   if (!logProbs || logProbs.length === 0) {
     throw new Error('Perplexity assertion does not support providers that do not return logProbs');
   }
@@ -22,10 +19,7 @@ export function handlePerplexity(
   };
 }
 
-export function handlePerplexityScore(
-  logProbs: number[] | undefined,
-  assertion: Assertion,
-): GradingResult {
+export function handlePerplexityScore({ logProbs, assertion }: AssertionParams): GradingResult {
   if (!logProbs || logProbs.length === 0) {
     throw new Error(
       'perplexity-score assertion does not support providers that do not return logProbs',

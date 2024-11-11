@@ -151,6 +151,7 @@ Deterministic eval metrics
 | `levenshtein`                   | Levenshtein distance is below a threshold                         |
 | `latency`                       | Latency is below a threshold (milliseconds)                       |
 | `perplexity`                    | Perplexity is below a threshold                                   |
+| `perplexity-score`              | Normalized perplexity                                             |
 | `cost`                          | Cost is below a threshold (for models with cost info such as GPT) |
 | `is-valid-openai-function-call` | Ensure that the function call matches the function's JSON schema  |
 | `is-valid-openai-tools-call`    | Ensure that all tool calls match the tools JSON schema            |

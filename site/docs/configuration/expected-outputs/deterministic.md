@@ -613,3 +613,65 @@ You may also return a score:
   "reason": "The output meets the custom validation criteria"
 }
 ```
+
+### Rouge-N
+
+The `rouge-n` assertion checks if the Rouge-N score between the LLM output and expected value is above a given threshold.
+
+Rouge-N is a recall-oriented metric that measures the overlap of n-grams between the LLM output and the expected text. The score ranges from 0 (no overlap) to 1 (perfect match).
+
+Example:
+
+```yaml
+assert:
+  # Ensure Rouge-N score compared to "hello world" is >= 0.75 (default threshold)
+  - type: rouge-n
+    value: hello world
+
+  # With custom threshold
+  - type: rouge-n
+    threshold: 0.6
+    value: hello world
+```
+
+`value` can reference other variables using template syntax. For example:
+
+```yaml
+tests:
+  - vars:
+      expected: hello world
+    assert:
+      - type: rouge-n
+        value: '{{expected}}'
+```
+
+### BLEU
+
+BLEU (Bilingual Evaluation Understudy) is a precision-oriented metric that measures the quality of text by comparing it to one or more reference texts. The score ranges from 0 (no match) to 1 (perfect match). It considers exact matches of words and phrases (n-grams) between the output and reference text.
+
+While Rouge-N focuses on recall (how much of the reference text is captured), BLEU focuses on precision (how accurate the generated text is).
+
+Example:
+
+```yaml
+assert:
+  # Ensure BLEU score compared to "hello world" is >= 0.5 (default threshold)
+  - type: bleu
+    value: hello world
+
+  # With custom threshold
+  - type: bleu
+    threshold: 0.7
+    value: hello world
+```
+
+`value` can reference other variables using template syntax. For example:
+
+```yaml
+tests:
+  - vars:
+      expected: hello world
+    assert:
+      - type: bleu
+        value: '{{expected}}'
+```
