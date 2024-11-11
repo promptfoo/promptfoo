@@ -146,31 +146,32 @@ const EvaluateOptionsSchema = z.object({
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema>;
 
+const PromptMetricsSchema = z.object({
+  score: z.number(),
+  testPassCount: z.number(),
+  testFailCount: z.number(),
+  assertPassCount: z.number(),
+  assertFailCount: z.number(),
+  totalLatencyMs: z.number(),
+  tokenUsage: TokenUsageSchema,
+  namedScores: z.record(z.string(), z.number()),
+  namedScoresCount: z.record(z.string(), z.number()),
+  redteam: z
+    .object({
+      pluginPassCount: z.record(z.string(), z.number()),
+      pluginFailCount: z.record(z.string(), z.number()),
+      strategyPassCount: z.record(z.string(), z.number()),
+      strategyFailCount: z.record(z.string(), z.number()),
+    })
+    .optional(),
+  cost: z.number(),
+});
+export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
+
 // Used for final prompt display
 export const CompletedPromptSchema = PromptSchema.extend({
   provider: z.string(),
-  metrics: z
-    .object({
-      score: z.number(),
-      testPassCount: z.number(),
-      testFailCount: z.number(),
-      assertPassCount: z.number(),
-      assertFailCount: z.number(),
-      totalLatencyMs: z.number(),
-      tokenUsage: TokenUsageSchema,
-      namedScores: z.record(z.string(), z.number()),
-      namedScoresCount: z.record(z.string(), z.number()),
-      redteam: z
-        .object({
-          pluginPassCount: z.record(z.string(), z.number()),
-          pluginFailCount: z.record(z.string(), z.number()),
-          strategyPassCount: z.record(z.string(), z.number()),
-          strategyFailCount: z.record(z.string(), z.number()),
-        })
-        .optional(),
-      cost: z.number(),
-    })
-    .optional(),
+  metrics: PromptMetricsSchema.optional(),
 });
 
 export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;
