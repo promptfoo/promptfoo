@@ -13,6 +13,7 @@ export async function addGoatTestCases(
       id: 'promptfoo:redteam:goat',
       config: {
         injectVar,
+        ...config,
       },
     },
     assert: testCase.assert?.map((assertion) => ({

@@ -13,7 +13,7 @@ Use it like so in your promptfooconfig.yaml:
 ```yaml
 strategies:
   - id: goat
-    options:
+    config:
       maxTurns: 5 # Maximum conversation turns (default)
       stateless: true # Sends the entire conversation history with each turn (Default), set to False if you're using any custom providers
 ```
