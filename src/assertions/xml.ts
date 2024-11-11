@@ -77,7 +77,7 @@ export const handleIsXml = ({
     requiredElements = renderedValue.split(',').map((el) => el.trim());
   } else if (Array.isArray(renderedValue) && renderedValue.length > 0) {
     requiredElements = renderedValue.map((el) => el.toString());
-  } else if (typeof renderedValue === 'object' && Object.keys(renderedValue).length > 0) {
+  } else if (renderedValue !== null && typeof renderedValue === 'object' && Object.keys(renderedValue).length > 0) {
     if ('requiredElements' in renderedValue && Array.isArray(renderedValue.requiredElements)) {
       requiredElements = renderedValue.requiredElements.map((el) => el.toString());
     } else {

@@ -10,10 +10,14 @@ export const handleEquals = async ({
 }: AssertionParams): Promise<GradingResult> => {
   let pass: boolean;
   if (typeof renderedValue === 'object') {
-    pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
-    renderedValue = JSON.stringify(renderedValue);
+    try {
+      pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
+    } catch (error) {
+      pass = false;
+    }
+    const stringifiedValue = JSON.stringify(renderedValue);
   } else {
-    pass = (renderedValue == outputString) !== inverse;
+    pass = (String(renderedValue) === outputString) !== inverse;
   }
 
   return {

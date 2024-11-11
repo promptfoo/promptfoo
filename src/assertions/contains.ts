@@ -53,7 +53,9 @@ export const handleContainsAny = ({
 }: AssertionParams): GradingResult => {
   invariant(renderedValue, '"contains-any" assertion type must have a value');
   if (typeof renderedValue === 'string') {
-    renderedValue = renderedValue.split(',').map((v) => v.trim());
+    // Handle quoted values and escaped commas
+    renderedValue = renderedValue.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g)
+      ?.map(v => v.trim().replace(/^"|"$/g, '')) ?? [];
   }
   invariant(Array.isArray(renderedValue), '"contains-any" assertion type must have an array value');
   const pass = renderedValue.some((value) => outputString.includes(String(value))) !== inverse;

@@ -9,7 +9,17 @@ export const handleRegex = ({
 }: AssertionParams): GradingResult => {
   invariant(renderedValue, '"regex" assertion type must have a string value');
   invariant(typeof renderedValue === 'string', '"regex" assertion type must have a string value');
-  const regex = new RegExp(renderedValue);
+  let regex: RegExp;
+  try {
+    regex = new RegExp(renderedValue);
+  } catch (error) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Invalid regex pattern: ${error instanceof Error ? error.message : 'unknown error'}`,
+      assertion,
+    };
+  }
   const pass = regex.test(outputString) !== inverse;
   return {
     pass,
