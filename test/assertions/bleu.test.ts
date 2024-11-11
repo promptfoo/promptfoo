@@ -109,13 +109,13 @@ describe('BLEU score calculation', () => {
 
 describe('handleBleuScore', () => {
   it('should handle string reference with passing score', () => {
-    const result = handleBleuScore({
+    const params = {
       assertion: { type: 'bleu', value: 'The cat sat on the mat.' },
       renderedValue: 'The cat sat on the mat.',
       outputString: 'The cat sat on the mat.',
       inverse: false,
-    } as AssertionParams);
-    expect(result).toEqual({
+    } as AssertionParams;
+    expect(handleBleuScore(params)).toEqual({
       pass: true,
       score: expect.any(Number),
       reason: 'Assertion passed',
@@ -124,7 +124,7 @@ describe('handleBleuScore', () => {
   });
 
   it('should handle array of references', () => {
-    const result = handleBleuScore({
+    const params = {
       assertion: {
         type: 'bleu',
         value: ['The cat sat on mat.', 'The cat is sitting on mat.'],
@@ -132,8 +132,8 @@ describe('handleBleuScore', () => {
       renderedValue: ['The cat sat on mat.', 'The cat is sitting on mat.'],
       outputString: 'The cat sat on mat.',
       inverse: false,
-    } as AssertionParams);
-    expect(result).toEqual({
+    } as AssertionParams;
+    expect(handleBleuScore(params)).toEqual({
       pass: true,
       score: expect.any(Number),
       reason: 'Assertion passed',
@@ -142,14 +142,13 @@ describe('handleBleuScore', () => {
   });
 
   it('should handle custom threshold', () => {
-    const result = handleBleuScore({
+    const params = {
       assertion: { type: 'bleu', value: 'The cat sat on the mat.', threshold: 0.8 },
       renderedValue: 'The cat sat on the mat.',
       outputString: 'The dog sat on the mat.',
       inverse: false,
-    } as AssertionParams);
-
-    expect(result).toEqual({
+    } as AssertionParams;
+    expect(handleBleuScore(params)).toEqual({
       pass: false,
       score: expect.any(Number),
       reason: expect.stringMatching(/BLEU score \d+\.\d+ is less than threshold 0\.8/),
@@ -158,13 +157,13 @@ describe('handleBleuScore', () => {
   });
 
   it('should handle inverse assertion', () => {
-    const result = handleBleuScore({
+    const params = {
       assertion: { type: 'bleu', value: 'The cat sat on the mat.', threshold: 0.8 },
       renderedValue: 'The cat sat on the mat.',
       outputString: 'The dog ran in the park.',
       inverse: true,
-    } as AssertionParams);
-    expect(result).toEqual({
+    } as AssertionParams;
+    expect(handleBleuScore(params)).toEqual({
       pass: true,
       score: expect.any(Number),
       reason: 'Assertion passed',
@@ -173,14 +172,13 @@ describe('handleBleuScore', () => {
   });
 
   it('should use default threshold of 0.5', () => {
-    const result = handleBleuScore({
+    const params = {
       assertion: { type: 'bleu', value: 'The cat sat on the mat.' },
       renderedValue: 'The cat sat on the mat.',
       outputString: 'The dog ran in the park.',
       inverse: false,
-    } as AssertionParams);
-
-    expect(result).toEqual({
+    } as AssertionParams;
+    expect(handleBleuScore(params)).toEqual({
       pass: false,
       score: expect.any(Number),
       reason: expect.stringMatching(/BLEU score \d+\.\d+ is less than threshold 0\.5/),

@@ -127,17 +127,20 @@ export function calculateBleuScore(
  * Compares output against reference(s) using BLEU metric.
  *
  * @param assertion - The assertion configuration
- * @param renderedValue - Expected output(s)
- * @param outputString - Actual output to evaluate
  * @param inverse - Whether to invert the comparison
+ * @param outputString - Actual output to evaluate
+ * @param renderedValue - Expected output(s)
  * @returns Result of the BLEU score comparison
  */
 export function handleBleuScore({
   assertion,
-  renderedValue,
-  outputString,
   inverse,
-}: AssertionParams): GradingResult {
+  outputString,
+  renderedValue,
+}: Pick<
+  AssertionParams,
+  'assertion' | 'renderedValue' | 'outputString' | 'inverse'
+>): GradingResult {
   invariant(
     typeof renderedValue === 'string' ||
       (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
