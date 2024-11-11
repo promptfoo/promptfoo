@@ -40,6 +40,8 @@ Each conversation turn follows a structured three-step reasoning process:
 2. **Strategic Planning**: Reflects on conversation progress and develops the next approach
 3. **Attack Generation**: Selects and combines appropriate techniques to generate the next prompt
 
+![GOAT attack flow](/img/docs/goat-attack-flow.svg)
+
 This process is looped until we either achieve the goal or reach a maximum number of turns.
 
 GOAT's effectiveness stems from its ability to simulate realistic user behavior while maintaining technical sophistication.
