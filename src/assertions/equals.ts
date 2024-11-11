@@ -7,15 +7,18 @@ export const handleEquals = async ({
   renderedValue,
   outputString,
   inverse,
-}: AssertionParams): Promise<GradingResult> => {
+}: Pick<
+  AssertionParams,
+  'assertion' | 'renderedValue' | 'outputString' | 'inverse'
+>): Promise<GradingResult> => {
   let pass: boolean;
   if (typeof renderedValue === 'object') {
     try {
       pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
-    } catch (error) {
+    } catch {
       pass = false;
     }
-    const stringifiedValue = JSON.stringify(renderedValue);
+    renderedValue = JSON.stringify(renderedValue);
   } else {
     pass = (String(renderedValue) === outputString) !== inverse;
   }

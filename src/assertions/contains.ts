@@ -54,8 +54,10 @@ export const handleContainsAny = ({
   invariant(renderedValue, '"contains-any" assertion type must have a value');
   if (typeof renderedValue === 'string') {
     // Handle quoted values and escaped commas
-    renderedValue = renderedValue.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g)
-      ?.map(v => v.trim().replace(/^"|"$/g, '')) ?? [];
+    renderedValue =
+      renderedValue
+        .match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g)
+        ?.map((v) => v.trim().replace(/^"|"$/g, '')) ?? [];
   }
   invariant(Array.isArray(renderedValue), '"contains-any" assertion type must have an array value');
   const pass = renderedValue.some((value) => outputString.includes(String(value))) !== inverse;

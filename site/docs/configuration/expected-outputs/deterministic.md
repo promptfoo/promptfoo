@@ -618,12 +618,7 @@ You may also return a score:
 
 The `rouge-n` assertion checks if the Rouge-N score between the LLM output and expected value is above a given threshold.
 
-Rouge-N is a recall-oriented metric that measures the overlap of n-grams between the LLM output and the expected text. The score ranges from 0 (no overlap) to 1 (perfect match). This implementation uses Rouge-1, which compares individual words.
-
-This assertion is particularly useful for:
-- Evaluating text summarization quality
-- Checking paraphrasing accuracy
-- Verifying content preservation in text generation
+Rouge-N is a recall-oriented metric that measures the overlap of n-grams between the LLM output and the expected text. The score ranges from 0 (no overlap) to 1 (perfect match).
 
 Example:
 
@@ -649,16 +644,12 @@ tests:
       - type: rouge-n
         value: '{{expected}}'
 ```
-### BLEU
 
-The `bleu` assertion checks if the BLEU score between the LLM output and expected value is above a given threshold.
+### BLEU
 
 BLEU (Bilingual Evaluation Understudy) is a precision-oriented metric that measures the quality of text by comparing it to one or more reference texts. The score ranges from 0 (no match) to 1 (perfect match). It considers exact matches of words and phrases (n-grams) between the output and reference text.
 
-While Rouge-N focuses on recall (how much of the reference text is captured), BLEU focuses on precision (how accurate the generated text is). This assertion is particularly useful for:
-- Evaluating translation quality
-- Checking text generation accuracy
-- Verifying response correctness in question-answering tasks
+While Rouge-N focuses on recall (how much of the reference text is captured), BLEU focuses on precision (how accurate the generated text is).
 
 Example:
 
