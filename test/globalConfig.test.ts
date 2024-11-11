@@ -1,3 +1,4 @@
+import { faker } from '@faker-js/faker';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import { GlobalConfig } from '../src/configTypes';
@@ -91,8 +92,9 @@ describe('writeGlobalConfigPartial', () => {
     readGlobalConfig();
 
     // Write partial update
+    const key = faker.string.uuid();
     const partialUpdate = {
-      account: { verifiedEmailKey: 'xyz789' },
+      account: { verifiedEmailKey: key },
     };
     writeGlobalConfigPartial(partialUpdate);
 
@@ -102,23 +104,25 @@ describe('writeGlobalConfigPartial', () => {
     expect(result).toEqual({
       account: {
         email: 'test@example.com',
-        verifiedEmailKey: 'xyz789',
+        verifiedEmailKey: key,
       },
     });
   });
 
   it('merges top-level keys into existing config', () => {
     // Set up initial config
+    const cloudApiKey = faker.string.uuid();
     const initialConfig = {
       account: { email: 'test@example.com' },
-      cloud: { apiKey: 'abc123' },
+      cloud: { apiKey: cloudApiKey },
     };
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(initialConfig));
 
     // Write partial update
+    const verifiedEmailKey = faker.string.uuid();
     const partialUpdate = {
-      account: { verifiedEmailKey: 'xyz789' },
+      account: { verifiedEmailKey },
       hasHarmfulRedteamConsent: true,
     };
     writeGlobalConfigPartial(partialUpdate);
@@ -129,10 +133,10 @@ describe('writeGlobalConfigPartial', () => {
     expect(writtenConfig).toEqual({
       account: {
         email: 'test@example.com',
-        verifiedEmailKey: 'xyz789',
+        verifiedEmailKey,
       },
       cloud: {
-        apiKey: 'abc123',
+        apiKey: cloudApiKey,
       },
       hasHarmfulRedteamConsent: true,
     });
@@ -140,9 +144,10 @@ describe('writeGlobalConfigPartial', () => {
 
   it('ignores undefined values', () => {
     // Set up initial config
+    const cloudApiKey = faker.string.uuid();
     const initialConfig = {
       account: { email: 'test@example.com' },
-      cloud: { apiKey: 'abc123' },
+      cloud: { apiKey: cloudApiKey },
     };
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(initialConfig));
@@ -160,7 +165,7 @@ describe('writeGlobalConfigPartial', () => {
         email: 'test@example.com',
       },
       cloud: {
-        apiKey: 'abc123',
+        apiKey: cloudApiKey,
       },
     });
   });
