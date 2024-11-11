@@ -28,6 +28,10 @@ jest.mock('../src/fetch', () => ({
   sleep: jest.fn(),
 }));
 
+jest.mock('../src/globalConfig/accounts', () => ({
+  getVerifiedEmailKey: jest.fn().mockReturnValue(null),
+}));
+
 function createMockResponse(options: Partial<Response> = {}): Response {
   return {
     ok: true,

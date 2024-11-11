@@ -1,7 +1,12 @@
 import confirm from '@inquirer/confirm';
 import type { Command } from 'commander';
 import { z } from 'zod';
-import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
+import {
+  getUserEmail,
+  setUserEmail,
+  getVerifiedEmailKey,
+  setVerifiedEmailKey,
+} from '../globalConfig/accounts';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
@@ -77,6 +82,36 @@ export function configCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'config unset',
         configKey: 'email',
+      });
+      await telemetry.send();
+    });
+
+  getCommand
+    .command('verificationKey')
+    .description('Get email verification key')
+    .action(async () => {
+      const key = getVerifiedEmailKey();
+      if (key) {
+        logger.info(key);
+      } else {
+        logger.info('No verification key set.');
+      }
+      telemetry.record('command_used', {
+        name: 'config get',
+        configKey: 'verificationKey',
+      });
+      await telemetry.send();
+    });
+
+  setCommand
+    .command('verificationKey <key>')
+    .description('Set email verification key')
+    .action(async (key: string) => {
+      setVerifiedEmailKey(key);
+      logger.info('Verification key has been set.');
+      telemetry.record('command_used', {
+        name: 'config set',
+        configKey: 'verificationKey',
       });
       await telemetry.send();
     });

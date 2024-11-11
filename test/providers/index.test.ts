@@ -97,6 +97,10 @@ jest.mock('../../src/logger', () => ({
   warn: jest.fn(),
 }));
 
+jest.mock('../../src/globalConfig/accounts', () => ({
+  getVerifiedEmailKey: jest.fn().mockReturnValue(null),
+}));
+
 const mockFetch = jest.mocked(jest.fn());
 global.fetch = mockFetch;
 

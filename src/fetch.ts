@@ -2,6 +2,7 @@ import { ProxyAgent } from 'proxy-agent';
 import invariant from 'tiny-invariant';
 import { VERSION } from './constants';
 import { getEnvInt, getEnvBool } from './envars';
+import { getVerifiedEmailKey } from './globalConfig/accounts';
 import logger from './logger';
 import { sleep } from './util/time';
 
@@ -11,11 +12,13 @@ export async function fetchWithProxy(
 ): Promise<Response> {
   let finalUrl = url;
 
+  const verifiedEmailKey = getVerifiedEmailKey();
   const finalOptions = {
     ...options,
     headers: {
       ...options.headers,
       'x-promptfoo-version': VERSION,
+      ...(verifiedEmailKey ? { Authorization: `Bearer ${verifiedEmailKey}` } : {}),
     } as Record<string, string>,
   };
 

@@ -11,7 +11,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
-import { promptForEmailUnverified } from '../globalConfig/accounts';
+import { promptForEmailUnverified, promptForEmailVerified } from '../globalConfig/accounts';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
@@ -145,7 +145,7 @@ export async function doEval(
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
-      await promptForEmailUnverified();
+      await promptForEmailVerified();
     }
 
     testSuite.providers = filterProviders(

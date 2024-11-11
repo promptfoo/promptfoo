@@ -8,10 +8,17 @@ import * as path from 'path';
 import type { GlobalConfig } from '../configTypes';
 import { getConfigDirectoryPath } from '../util/config/manage';
 
+let globalConfigCache: GlobalConfig | null = null;
+
 export function readGlobalConfig(): GlobalConfig {
+  if (globalConfigCache !== null) {
+    return globalConfigCache;
+  }
+
   const configDir = getConfigDirectoryPath();
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
   let globalConfig: GlobalConfig = {};
+
   if (fs.existsSync(configFilePath)) {
     globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
   } else {
@@ -21,14 +28,14 @@ export function readGlobalConfig(): GlobalConfig {
     fs.writeFileSync(configFilePath, yaml.dump(globalConfig));
   }
 
+  globalConfigCache = globalConfig;
   return globalConfig;
 }
 
 export function writeGlobalConfig(config: GlobalConfig): void {
-  fs.writeFileSync(
-    path.join(getConfigDirectoryPath(true), 'promptfoo.yaml') /* createIfNotExists */,
-    yaml.dump(config),
-  );
+  globalConfigCache = config;
+  const configDir = getConfigDirectoryPath(true);
+  fs.writeFileSync(path.join(configDir, 'promptfoo.yaml'), yaml.dump(config));
 }
 
 /**
@@ -37,16 +44,37 @@ export function writeGlobalConfig(config: GlobalConfig): void {
  */
 export function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): void {
   const currentConfig = readGlobalConfig();
-  const updatedConfig = { ...currentConfig };
 
-  for (const key in partialConfig) {
-    const value = partialConfig[key as keyof GlobalConfig];
-    if (value) {
-      updatedConfig[key as keyof GlobalConfig] = value as any;
-    } else {
-      delete updatedConfig[key as keyof GlobalConfig];
+  function deepMerge(target: any, source: any): any {
+    if (source === null || source === undefined) {
+      return undefined;
     }
+
+    if (typeof source !== 'object') {
+      return source;
+    }
+
+    const output = { ...target };
+
+    for (const key in source) {
+      if (typeof source[key] === 'object' && source[key] !== null) {
+        if (key in target) {
+          output[key] = deepMerge(target[key], source[key]);
+        } else {
+          output[key] = source[key];
+        }
+      } else if (source[key] !== undefined) {
+        output[key] = source[key];
+      }
+    }
+
+    return output;
   }
 
+  const updatedConfig = deepMerge(currentConfig, partialConfig);
   writeGlobalConfig(updatedConfig);
+}
+
+export function clearGlobalConfigCache(): void {
+  globalConfigCache = null;
 }
