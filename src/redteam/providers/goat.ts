@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import { VERSION } from '../../constants';
+import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import type {
   ApiProvider,
@@ -16,18 +17,26 @@ import { neverGenerateRemote } from '../util';
 export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
   private readonly injectVar: string;
+  private readonly stateless: boolean;
 
   id() {
     return 'promptfoo:redteam:goat';
   }
 
-  constructor(options: ProviderOptions & { maxTurns?: number; injectVar?: string } = {}) {
+  constructor(
+    options: ProviderOptions & {
+      maxTurns?: number;
+      injectVar?: string;
+      stateless?: boolean;
+    } = {},
+  ) {
     if (neverGenerateRemote()) {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
     this.maxTurns = options.maxTurns || 5;
+    this.stateless = options.stateless ?? true;
   }
 
   async callApi(
@@ -36,6 +45,8 @@ export default class GoatProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     let response: Response | undefined = undefined;
+    invariant(context?.originalProvider, 'Expected originalProvider to be set');
+    invariant(context?.vars, 'Expected vars to be set');
 
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
@@ -65,11 +76,17 @@ export default class GoatProvider implements ApiProvider {
           ${chalk.cyan(JSON.stringify(messages, null, 2))}
         `,
       );
-      const targetResponse = await targetProvider.callApi(
-        JSON.stringify(messages),
-        context,
-        options,
-      );
+
+      const targetPrompt = this.stateless
+        ? JSON.stringify(messages)
+        : await renderPrompt(
+            context.prompt,
+            { ...context.vars, [this.injectVar]: messages[messages.length - 1].content },
+            context.filters,
+            targetProvider,
+          );
+      const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
+
       if (targetResponse.error) {
         throw new Error(`Error from target provider: ${targetResponse.error}`);
       }

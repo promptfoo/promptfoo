@@ -15,10 +15,15 @@ strategies:
   - name: goat
     options:
       maxTurns: 5 # Maximum conversation turns (default)
+      stateless: true # Sends the entire conversation history with each turn (Default), set to False if you're using any custom providers
 ```
 
 :::warning
-This is a remote-only strategy and requires an connection to promptfoo's free grading API. Local grading is not supported. Your target model must be able to handle the OpenAI message format.
+This is a remote-only strategy and requires an connection to promptfoo's free grading API. Local grading is not supported.
+:::
+
+:::warning
+By default, GOAT sends the entire conversation history with each turn. Set `stateless: false` if you're using any custom providers which just requires the last message. If your provider requires a sessionId or cookie ensure you're setting that up in your provider config.
 :::
 
 ## How It Works
