@@ -1,9 +1,12 @@
+import $RefParser from '@apidevtools/json-schema-ref-parser';
+import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
+import logger from '../../../src/logger';
 import { readTests } from '../../../src/testCases';
 import type { UnifiedConfig } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
@@ -818,7 +821,7 @@ describe('resolveConfigs', () => {
 
 describe('readConfig', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
   it('should read JSON config file', async () => {
@@ -935,5 +938,142 @@ describe('readConfig', () => {
       ...mockConfig,
       prompts: ['{{prompt}}'],
     });
+  });
+
+  it('should resolve YAML references before validation', async () => {
+    const mockFiles: Record<string, string> = {
+      'config.yaml': dedent`
+        description: test_config
+        prompts:
+          - test {{text}}
+        providers:
+          - $ref: defaultParams.yaml#/model
+        temperature: 1
+        tests:
+          - vars:
+              text: test text`,
+      'defaultParams.yaml': `
+        model: echo`,
+    };
+
+    jest.spyOn($RefParser.prototype, 'dereference').mockImplementation(async function (schema) {
+      const resolveRefs = (obj: any): any => {
+        if (typeof obj !== 'object' || obj === null) {
+          return obj;
+        }
+
+        if (obj.$ref && typeof obj.$ref === 'string') {
+          const [filePath, pointer] = obj.$ref.split('#/');
+          const fileContent = yaml.load(mockFiles[filePath]);
+          return pointer
+            .split('/')
+            .reduce((acc: Record<string, unknown>, key: string) => acc[key], fileContent);
+        }
+
+        if (Array.isArray(obj)) {
+          return obj.map(resolveRefs);
+        }
+
+        return Object.fromEntries(
+          Object.entries(obj).map(([key, value]) => [key, resolveRefs(value)]),
+        );
+      };
+
+      return resolveRefs(schema);
+    });
+
+    jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
+      if (typeof path === 'string') {
+        return mockFiles[path.split('/').pop()!] || '';
+      }
+      return '';
+    });
+
+    jest.mocked(fs.existsSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
+      if (typeof path === 'string') {
+        const fileName = path.split('/').pop()!;
+        return fileName in mockFiles;
+      }
+      return false;
+    });
+
+    const result = await readConfig('config.yaml');
+    expect(result).toEqual({
+      description: 'test_config',
+      prompts: ['test {{text}}'],
+      providers: ['echo'],
+      temperature: 1,
+      tests: [
+        {
+          vars: {
+            text: 'test text',
+          },
+        },
+      ],
+    });
+
+    // Verify readFileSync was called for config.yaml
+    expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
+  });
+
+  it('should throw validation error for invalid dereferenced config', async () => {
+    const mockFiles: Record<string, string> = {
+      'config.yaml': dedent`
+        description: invalid_config
+        prompts:
+          - test prompt
+        providers:
+          - $ref: defaultParams.yaml#/invalidKey`,
+      'defaultParams.yaml': `
+        invalidKey: 
+          invalid: true  # This will fail validation as it's not a valid provider format
+        `,
+    };
+
+    jest.spyOn($RefParser.prototype, 'dereference').mockImplementation(async function (schema) {
+      const resolveRefs = (obj: any): any => {
+        if (typeof obj !== 'object' || obj === null) {
+          return obj;
+        }
+
+        if (obj.$ref && typeof obj.$ref === 'string') {
+          const [filePath, pointer] = obj.$ref.split('#/');
+          const fileContent = yaml.load(mockFiles[filePath]);
+          return pointer
+            .split('/')
+            .reduce((acc: Record<string, unknown>, key: string) => acc[key], fileContent);
+        }
+
+        if (Array.isArray(obj)) {
+          return obj.map(resolveRefs);
+        }
+
+        return Object.fromEntries(
+          Object.entries(obj).map(([key, value]) => [key, resolveRefs(value)]),
+        );
+      };
+
+      return resolveRefs(schema);
+    });
+
+    // Mock the file system reads
+    jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
+      if (typeof path === 'string') {
+        const fileName = path.split('/').pop()!;
+        return mockFiles[fileName] || '';
+      }
+      return '';
+    });
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation();
+
+    await readConfig('config.yaml');
+    expect(loggerSpy).toHaveBeenCalledWith(
+      'Invalid configuration file config.yaml:\nValidation error: Unrecognized key(s) in object: \'invalid\' at "providers[0]"',
+    );
+    expect(loggerSpy.mock.calls[0][0]).toContain('Invalid configuration file');
+
+    loggerSpy.mockRestore();
   });
 });

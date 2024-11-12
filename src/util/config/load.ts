@@ -152,14 +152,14 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8'));
-
-    const validationResult = UnifiedConfigSchema.safeParse(rawConfig);
+    const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+    const validationResult = UnifiedConfigSchema.safeParse(dereferencedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
       );
     }
-    ret = await dereferenceConfig(rawConfig as UnifiedConfig);
+    ret = dereferencedConfig;
   } else if (isJavascriptFile(configPath)) {
     const imported = await importModule(configPath);
     const validationResult = UnifiedConfigSchema.safeParse(imported);
