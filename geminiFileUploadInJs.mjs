@@ -23,7 +23,9 @@ const nunjucksSnR = {
 }
 
 export class FileDb {
-  constructor() {
+  constructor(apiKey) {
+    this._fileManager = new GoogleAIFileManager(apiKey);
+
     try {
       const data = fs.readFileSync(fileDbLocalPath, 'utf8');
       this._db = data ? JSON.parse(data) : {};
@@ -35,11 +37,25 @@ export class FileDb {
     }
   }
 
-  get(originalUrl) {
+  async get(originalUrl) {
     console.log(`Getting ${originalUrl} from cache`);
     const result = this._db[originalUrl];
     console.log(`Found ${originalUrl} in cache: ${!!result}`);
-    return result;
+    if (!result) {
+      return result;
+    }
+
+    try {
+      await this._fileManager.getFile(result.name);
+      return result;
+    } catch (error) {
+      console.error('FileDb:get - Error getting file from file manager', {
+        error: error instanceof Error ? inspect(error) : 'Unknown error',
+        originalUrl,
+        result,
+      });
+      return null;
+    }
   }
 
   async set(originalUrl, fileDbEntry) {
@@ -71,6 +87,7 @@ async function downloadFile(url, outputPath) {
 class GeminiApiService {
   constructor(apiKey) {
     this._fileManager = new GoogleAIFileManager(apiKey);
+    this.fileDb = new FileDb(apiKey);
   }
 
   // TODO check if upload via buffer is feasible:
@@ -196,8 +213,15 @@ class GeminiApiService {
       throw new Error(`File upload unexpected state: ${inspect(file)} for url ${assetUrl}`);
     }
 
-    await fileDb.set(assetUrl, {
+    await this.fileDb.set(assetUrl, {
       url: file.uri,
+      name: file.name,
+      expirationTime: file.expirationTime,
+      sha256Hash: file.sha256Hash,
+      createTime: file.createTime,
+      updateTime: file.updateTime,
+      displayName: file.displayName,
+      sizeBytes: file.sizeBytes,
       mimeType,
       uploadTime: Date.now(),
     });
@@ -206,16 +230,18 @@ class GeminiApiService {
   }
 
   async uploadMultipleFiles(uploadAssets) {
-    const relevantAssets = uploadAssets.filter((asset) => {
-      const fileDbEntry = fileDb.get(asset);
+    const relevantAssets = [];
+    for (const asset of uploadAssets) {
+      const fileDbEntry = await this.fileDb.get(asset);
       if (!fileDbEntry) {
-        return true;
+        relevantAssets.push(asset);
+        continue;
       }
       if (fileDbEntry.uploadTime + fileTtl < Date.now()) {
-        return true;
+        relevantAssets.push(asset);
+        continue;
       }
-      return false;
-    });
+    }
 
     const uploadResponses = await Promise.all(
       relevantAssets.map((url) =>
@@ -356,7 +382,7 @@ export const geminiUploadExtension = async (hookName, context) => {
   try {
     const geminiApiService = new GeminiApiService(geminiApiKey);
     await geminiApiService.uploadMultipleFiles(fileUrls);
-    testSuite.tests.forEach((test) => {
+    for (const test of testSuite.tests) {
       if (!test.vars) {
         test.vars = {};
       }
@@ -366,7 +392,7 @@ export const geminiUploadExtension = async (hookName, context) => {
 
       const fileUrl = test.vars.fileUrl;
       test.llmFile = {
-        ...fileDb.get(fileUrl),
+        ...await geminiApiService.fileDb.get(fileUrl),
         originalUrl: fileUrl,
       };
 
@@ -374,7 +400,7 @@ export const geminiUploadExtension = async (hookName, context) => {
       const videoId = videoIds[videoUrlsString] || uuidV4();
       videoIds[videoUrlsString] = videoId;
       test.vars.fileId = videoId;
-    });
+    }
   } catch (error) {
     console.error('GeminiApiService:geminiUploadExtension - Error uploading files', {
       error: error instanceof Error ? inspect(error) : 'Unknown error',

@@ -1,6 +1,14 @@
+const { inspect } = require('util');
+
 const parseJson = (output) => {
   const cleanedUp = output.replace('```json', '').replace('```', '');
-  const result = JSON.parse(cleanedUp);
+  let result;
+  try {
+    result = JSON.parse(cleanedUp);
+  } catch (error) {
+    throw new Error(`Failed parsing output as JSON. Error: ${inspect(error, null, 3)}. Output: ${output}`);
+  }
+
   if (!Array.isArray(result)) {
     return Object.keys(result).map((key) => ({ label: key, ...result[key] }));
   }
