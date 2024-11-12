@@ -74,20 +74,20 @@ const VERIFICATION_BASE_URL = 'https://api.promptfoo.app/email-verification';
 const VERIFICATION_TIMEOUT_MS = 10 * 60 * 1000;
 
 export async function promptForEmailVerified() {
-  // First ensure we have an email
-  await promptForEmailUnverified();
   const email = getUserEmail();
-  if (!email) {
-    throw new Error('Failed to collect email');
-  }
-
-  // Check if we already have a verified key
   const existingKey = getVerifiedEmailKey();
+
   if (existingKey) {
-    await telemetry.saveConsent(email, {
+    // Email may be undefined if the verified key was set manually
+    await telemetry.saveConsent(email || existingKey, {
       source: 'promptForEmail - VERIFIED',
     });
     return;
+  }
+
+  await promptForEmailUnverified();
+  if (!email) {
+    throw new Error('Failed to collect email');
   }
 
   // Request verification
