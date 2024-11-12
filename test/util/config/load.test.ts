@@ -1012,7 +1012,6 @@ describe('readConfig', () => {
       ],
     });
 
-    // Verify readFileSync was called for config.yaml
     expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
   });
 
@@ -1056,7 +1055,6 @@ describe('readConfig', () => {
       return resolveRefs(schema);
     });
 
-    // Mock the file system reads
     jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
       if (typeof path === 'string') {
         const fileName = path.split('/').pop()!;
