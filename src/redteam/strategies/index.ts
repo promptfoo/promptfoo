@@ -33,9 +33,9 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'crescendo',
-    action: async (testCases, injectVar) => {
+    action: async (testCases, injectVar, config) => {
       logger.debug('Adding Crescendo to all test cases');
-      const newTestCases = addCrescendo(testCases, injectVar);
+      const newTestCases = addCrescendo(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
       return newTestCases;
     },
@@ -51,18 +51,18 @@ export const Strategies: Strategy[] = [
   },
   {
     key: 'jailbreak',
-    action: async (testCases, injectVar) => {
+    action: async (testCases, injectVar, config) => {
       logger.debug('Adding experimental jailbreaks to all test cases');
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative');
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative', config);
       logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
       return newTestCases;
     },
   },
   {
     key: 'jailbreak:tree',
-    action: async (testCases, injectVar) => {
+    action: async (testCases, injectVar, config) => {
       logger.debug('Adding experimental tree jailbreaks to all test cases');
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree');
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree', config);
       logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
       return newTestCases;
     },
@@ -122,8 +122,8 @@ export function validateStrategies(strategies: RedteamStrategyObject[]): void {
     const validStrategiesString = Strategies.map((s) => s.key).join(', ');
     const invalidStrategiesString = invalidStrategies.map((s) => s.id).join(', ');
     logger.error(
-      dedent`Invalid strategy(s): ${invalidStrategiesString}. 
-        
+      dedent`Invalid strategy(s): ${invalidStrategiesString}.
+
         ${chalk.green(`Valid strategies are: ${validStrategiesString}`)}`,
     );
     process.exit(1);
