@@ -638,7 +638,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:unsafe-practices',
   ],
 
-  'Content Safety & Moderation': [
+  'Trust & Safety': [
     'hijacking',
     'harmful:child-exploitation',
     'harmful:graphic-content',
@@ -653,7 +653,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'religion',
   ],
 
-  'Brand & Trust': [
+  Brand: [
     'policy',
     'intent',
     'competitors',
