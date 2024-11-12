@@ -33,6 +33,7 @@ export function setVerifiedEmailKey(key: string) {
 
 export async function promptForEmailUnverified() {
   let email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
+  const isFirstTime = !email;
   if (!email) {
     email = await input({
       message: dedent`
@@ -49,7 +50,9 @@ export async function promptForEmailUnverified() {
     setUserEmail(email);
   }
   await telemetry.saveConsent(email, {
-    source: 'promptForEmailUnverified',
+    source: isFirstTime
+      ? 'promptForEmail - Unverified - first time'
+      : 'promptForEmail - Unverified',
   });
 }
 
@@ -67,6 +70,9 @@ export async function promptForEmailVerified() {
   // Check if we already have a verified key
   const existingKey = getVerifiedEmailKey();
   if (existingKey) {
+    await telemetry.saveConsent(email, {
+      source: 'promptForEmail - VERIFIED',
+    });
     return;
   }
 
@@ -109,7 +115,7 @@ export async function promptForEmailVerified() {
       setVerifiedEmailKey(apiKey);
       logger.info(chalk.green('✅ Email verified successfully!'));
       await telemetry.saveConsent(email, {
-        source: 'promptForEmail - VERIFIED',
+        source: 'promptForEmail - VERIFIED - first time',
       });
       return;
     }
