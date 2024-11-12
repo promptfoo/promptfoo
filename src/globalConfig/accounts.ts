@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import type { GlobalConfig } from '../configTypes';
 import { getEnvString, isCI } from '../envars';
+import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
@@ -23,7 +24,9 @@ export function getAuthor(): string | null {
 
 export function getVerifiedEmailKey(): string | null {
   const globalConfig = readGlobalConfig();
-  return globalConfig.account?.verifiedEmailKey || null;
+  return (
+    getEnvString('PROMPTFOO_VERIFICATION_KEY') || globalConfig.account?.verifiedEmailKey || null
+  );
 }
 
 export function setVerifiedEmailKey(key: string) {
@@ -32,9 +35,20 @@ export function setVerifiedEmailKey(key: string) {
 }
 
 export async function promptForEmailUnverified() {
-  let email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
+  let email = getUserEmail();
   const isFirstTime = !email;
   if (!email) {
+    if (isCI()) {
+      logger.warn(dedent`It looks like you're running Promptfoo redteam in CI. This requires a verified email:
+
+          promptfoo config set email <your-email@work.com>
+          promptfoo config set verificationKey <verification-key>
+
+        If you don't have a verification key, you can generate one with:
+
+          promptfoo auth verify
+      `);
+    }
     email = await input({
       message: dedent`
         ${chalk.blue('Redteam scans require email verification.')}
@@ -77,7 +91,7 @@ export async function promptForEmailVerified() {
   }
 
   // Request verification
-  const response = await fetch(VERIFICATION_BASE_URL, {
+  const response = await fetchWithProxy(VERIFICATION_BASE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
@@ -103,7 +117,7 @@ export async function promptForEmailVerified() {
     }
 
     logger.debug(`Checking verification status for ${verificationId}`);
-    const checkResponse = await fetch(`${VERIFICATION_BASE_URL}/${verificationId}/status`);
+    const checkResponse = await fetchWithProxy(`${VERIFICATION_BASE_URL}/${verificationId}/status`);
     const json = await checkResponse.json();
     logger.debug(`Verification status: ${JSON.stringify(json)}`);
     if (!checkResponse.ok) {
@@ -114,6 +128,7 @@ export async function promptForEmailVerified() {
     if (verified && apiKey) {
       setVerifiedEmailKey(apiKey);
       logger.info(chalk.green('✅ Email verified successfully!'));
+      logger.info(`Your verification key has been saved: ${apiKey}`);
       await telemetry.saveConsent(email, {
         source: 'promptForEmail - VERIFIED - first time',
       });

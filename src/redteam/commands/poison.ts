@@ -3,6 +3,7 @@ import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import { fetchWithProxy } from '../../fetch';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
@@ -39,7 +40,7 @@ function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
 }
 
 async function generatePoisonedDocument(document: string, goal?: string): Promise<PoisonResponse> {
-  const response = await fetch(getRemoteGenerationUrl(), {
+  const response = await fetchWithProxy(getRemoteGenerationUrl(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

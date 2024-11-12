@@ -717,3 +717,27 @@ Either way, this will allow you to evaluate your custom tests.
 ### Loading custom tests from CSV
 
 Promptfoo supports loading tests from CSV as well as Google Sheets. See [CSV loading](/docs/configuration/guide/#loading-tests-from-csv) and [Google Sheets](/docs/integrations/google-sheets/) for more info.
+
+## Email verification
+
+Promptfoo requires a verified email to run redteam scans. This process is used to prevent abuse.
+
+If you are running a red team manually, you will be automatically prompted.
+
+If you are running Promptfoo in CI/CD, first get a verification key with the following command:
+
+```sh
+promptfoo auth verify
+```
+
+Then, set the verification key in CI:
+
+```sh
+promptfoo config set verificationKey <verification-key>
+```
+
+Or as environment variable:
+
+```sh
+export PROMPTFOO_VERIFICATION_KEY=<verification-key>
+```

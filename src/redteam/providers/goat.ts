@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
+import { fetchWithProxy } from '../../fetch';
 import logger from '../../logger';
 import type {
   ApiProvider,
@@ -54,7 +55,7 @@ export default class GoatProvider implements ApiProvider {
     const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] = [];
 
     for (let turn = 0; turn < this.maxTurns; turn++) {
-      response = await fetch(getRemoteGenerationUrl(), {
+      response = await fetchWithProxy(getRemoteGenerationUrl(), {
         body: JSON.stringify({
           goal: context?.vars[this.injectVar],
           i: turn,

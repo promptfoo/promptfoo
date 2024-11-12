@@ -115,4 +115,3 @@ export function configCommand(program: Command) {
       });
       await telemetry.send();
     });
-}

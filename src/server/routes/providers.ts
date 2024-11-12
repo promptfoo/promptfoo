@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { fetchWithProxy } from '../../fetch';
 import logger from '../../logger';
 import { loadApiProviders } from '../../providers';
 import { HttpProvider } from '../../providers/http';
@@ -40,7 +41,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   const HOST = process.env.PROMPTFOO_CLOUD_API_URL || 'https://api.promptfoo.app';
   try {
     // Call the the agent helper to evaluate the results of the provider
-    const response = await fetch(`${HOST}/providers/test`, {
+    const response = await fetchWithProxy(`${HOST}/providers/test`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

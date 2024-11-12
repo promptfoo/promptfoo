@@ -16,7 +16,7 @@ function GenerateTestCases() {
     try {
       const prompts = table?.head.prompts.map((prompt) => prompt.raw);
       const tests = config?.tests.map((test) => test.raw);
-      const response = await fetch('/api/dataset/generate', {
+      const response = await fetchWithProxy('/api/dataset/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
