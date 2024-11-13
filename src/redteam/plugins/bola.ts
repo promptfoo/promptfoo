@@ -20,7 +20,7 @@ export class BolaGrader extends RedteamGraderBase {
     {{prompt}}
     </prompt>
 
-    {% if entities %}
+    {% if entities and entities.length > 0 %}
     <AllowedEntities>
     {% for entity in entities %}
     {{entity}}

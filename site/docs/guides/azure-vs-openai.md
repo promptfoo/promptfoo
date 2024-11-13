@@ -30,7 +30,7 @@ Additionally, make sure you have the following environment variables set:
 
 ```sh
 OPENAI_API_KEY='...'
-AZURE_OPENAI_API_KEY='...'
+AZURE_API_KEY='...'
 ```
 
 ## Step 1: Set up the models
@@ -46,7 +46,7 @@ Edit your `promptfooconfig.yaml` to include both OpenAI and Azure OpenAI as prov
 ```yaml
 providers:
   - id: openai:chat:gpt-4o-mini
-  - id: azureopenai:chat:my-gpt-4o-mini-deployment
+  - id: azure:chat:my-gpt-4o-mini-deployment
     config:
       apiHost: myazurehost.openai.azure.com
 ```
@@ -63,7 +63,7 @@ providers:
     config:
       temperature: 0
       max_tokens: 128
-  - id: azureopenai:chat:my-gpt-4o-mini-deployment
+  - id: azure:chat:my-gpt-4o-mini-deployment
     config:
       apiHost: your_azure_openai_host
       temperature: 0

@@ -21,7 +21,7 @@ import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { sleep } from '../util/time';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase, calculateCost } from './shared';
 
-interface AzureOpenAiCompletionOptions {
+interface AzureCompletionOptions {
   // Azure identity params
   azureClientId?: string;
   azureClientSecret?: string;
@@ -69,7 +69,7 @@ interface AzureOpenAiCompletionOptions {
   passthrough?: object;
 }
 
-const AZURE_OPENAI_MODELS = [
+const AZURE_MODELS = [
   {
     id: 'gpt-4o-2024-08-06',
     cost: {
@@ -178,9 +178,9 @@ const AZURE_OPENAI_MODELS = [
   },
 ];
 
-export function calculateAzureOpenAICost(
+export function calculateAzureCost(
   modelName: string,
-  config: AzureOpenAiCompletionOptions,
+  config: AzureCompletionOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
@@ -189,21 +189,21 @@ export function calculateAzureOpenAICost(
     { cost: undefined },
     promptTokens,
     completionTokens,
-    AZURE_OPENAI_MODELS,
+    AZURE_MODELS,
   );
 }
 
-export class AzureOpenAiGenericProvider implements ApiProvider {
+export class AzureGenericProvider implements ApiProvider {
   deploymentName: string;
   apiHost?: string;
   apiBaseUrl?: string;
 
-  config: AzureOpenAiCompletionOptions;
+  config: AzureCompletionOptions;
   env?: EnvOverrides;
 
   constructor(
     deploymentName: string,
-    options: { config?: AzureOpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: AzureCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
     this.env = env;
@@ -211,11 +211,18 @@ export class AzureOpenAiGenericProvider implements ApiProvider {
     this.deploymentName = deploymentName;
 
     this.apiHost =
-      config?.apiHost || env?.AZURE_OPENAI_API_HOST || getEnvString('AZURE_OPENAI_API_HOST');
+      config?.apiHost ||
+      // These and similar OPENAI envars: Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
+      env?.AZURE_API_HOST ||
+      env?.AZURE_OPENAI_API_HOST ||
+      getEnvString('AZURE_API_HOST') ||
+      getEnvString('AZURE_OPENAI_API_HOST');
     this.apiBaseUrl =
       config?.apiBaseUrl ||
+      env?.AZURE_API_BASE_URL ||
       env?.AZURE_OPENAI_API_BASE_URL ||
       env?.AZURE_OPENAI_BASE_URL ||
+      getEnvString('AZURE_API_BASE_URL') ||
       getEnvString('AZURE_OPENAI_API_BASE_URL') ||
       getEnvString('AZURE_OPENAI_BASE_URL');
 
@@ -226,38 +233,53 @@ export class AzureOpenAiGenericProvider implements ApiProvider {
   _cachedApiKey?: string;
   async getApiKey(): Promise<string> {
     if (!this._cachedApiKey) {
-      if (
-        this.config?.azureClientSecret &&
-        this.config?.azureClientId &&
-        this.config?.azureTenantId
-      ) {
-        const { ClientSecretCredential } = await import('@azure/identity');
-        const credential = new ClientSecretCredential(
-          this.config.azureTenantId,
-          this.config.azureClientId,
-          this.config.azureClientSecret,
-          {
-            authorityHost: this.config.azureAuthorityHost || 'https://login.microsoftonline.com',
-          },
-        );
-        this._cachedApiKey = (
-          await credential.getToken(
-            this.config.azureTokenScope || 'https://cognitiveservices.azure.com/.default',
-          )
-        ).token;
-      } else {
-        this._cachedApiKey =
-          this.config?.apiKey ||
-          (this.config?.apiKeyEnvar
-            ? process.env[this.config.apiKeyEnvar] ||
-              this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-            : undefined) ||
-          this.env?.AZURE_OPENAI_API_KEY ||
-          getEnvString('AZURE_OPENAI_API_KEY');
-        if (!this._cachedApiKey) {
-          throw new Error('Azure OpenAI API key must be set');
-        }
+      const apiKey =
+        this.config?.apiKey ||
+        (this.config?.apiKeyEnvar
+          ? process.env[this.config.apiKeyEnvar] ||
+            this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+          : undefined) ||
+        this.env?.AZURE_API_KEY ||
+        getEnvString('AZURE_API_KEY') ||
+        this.env?.AZURE_OPENAI_API_KEY ||
+        getEnvString('AZURE_OPENAI_API_KEY');
+
+      if (apiKey) {
+        this._cachedApiKey = apiKey;
+        return this._cachedApiKey;
       }
+
+      const clientSecret =
+        this.config?.azureClientSecret ||
+        this.env?.AZURE_CLIENT_SECRET ||
+        getEnvString('AZURE_CLIENT_SECRET');
+      const clientId =
+        this.config?.azureClientId || this.env?.AZURE_CLIENT_ID || getEnvString('AZURE_CLIENT_ID');
+      const tenantId =
+        this.config?.azureTenantId || this.env?.AZURE_TENANT_ID || getEnvString('AZURE_TENANT_ID');
+      const authorityHost =
+        this.config?.azureAuthorityHost ||
+        this.env?.AZURE_AUTHORITY_HOST ||
+        getEnvString('AZURE_AUTHORITY_HOST');
+      const tokenScope =
+        this.config?.azureTokenScope ||
+        this.env?.AZURE_TOKEN_SCOPE ||
+        getEnvString('AZURE_TOKEN_SCOPE');
+
+      if (clientSecret && clientId && tenantId) {
+        const { ClientSecretCredential } = await import('@azure/identity');
+        const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
+          authorityHost: authorityHost || 'https://login.microsoftonline.com',
+        });
+        this._cachedApiKey = (
+          await credential.getToken(tokenScope || 'https://cognitiveservices.azure.com/.default')
+        ).token;
+        return this._cachedApiKey;
+      }
+
+      throw new Error(
+        'Azure authentication failed. Please provide either an API key via AZURE_API_KEY or client credentials via AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and AZURE_TENANT_ID',
+      );
     }
     return this._cachedApiKey;
   }
@@ -274,7 +296,7 @@ export class AzureOpenAiGenericProvider implements ApiProvider {
   }
 
   id(): string {
-    return `azureopenai:${this.deploymentName}`;
+    return `azure:${this.deploymentName}`;
   }
 
   toString(): string {
@@ -291,7 +313,7 @@ export class AzureOpenAiGenericProvider implements ApiProvider {
   }
 }
 
-export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
+export class AzureEmbeddingProvider extends AzureGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     const apiKey = await this.getApiKey();
     if (!apiKey) {
@@ -368,7 +390,7 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
   }
 }
 
-export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
+export class AzureCompletionProvider extends AzureGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -377,7 +399,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
     const apiKey = await this.getApiKey();
     if (!apiKey) {
       throw new Error(
-        'Azure OpenAI API key is not set. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
+        'Azure OpenAI API key is not set. Set AZURE_API_KEY environment variable or pass it as an argument to the constructor.',
       );
     }
     if (!this.getApiBaseUrl()) {
@@ -444,7 +466,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
               prompt: data.usage.prompt_tokens,
               completion: data.usage.completion_tokens,
             },
-        cost: calculateAzureOpenAICost(
+        cost: calculateAzureCost(
           this.deploymentName,
           this.config,
           data.usage?.prompt_tokens,
@@ -459,7 +481,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
   }
 }
 
-export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvider {
+export class AzureChatCompletionProvider extends AzureGenericProvider {
   getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -528,7 +550,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
     const apiKey = await this.getApiKey();
     if (!apiKey) {
       throw new Error(
-        'Azure OpenAI API key is not set. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
+        'Azure OpenAI API key is not set. Set AZURE_API_KEY environment variable or pass it as an argument to the constructor.',
       );
     }
     if (!this.getApiBaseUrl()) {
@@ -602,7 +624,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
             },
         cached,
         logProbs,
-        cost: calculateAzureOpenAICost(
+        cost: calculateAzureCost(
           this.deploymentName,
           this.config,
           data.usage?.prompt_tokens,
@@ -617,7 +639,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
   }
 }
 
-type AzureOpenAiAssistantOptions = AzureOpenAiCompletionOptions &
+type AzureAssistantOptions = AzureCompletionOptions &
   Partial<AssistantCreationOptions> & {
     /**
      * If set, automatically call these functions when the assistant activates
@@ -627,14 +649,14 @@ type AzureOpenAiAssistantOptions = AzureOpenAiCompletionOptions &
   };
 
 // See https://learn.microsoft.com/en-us/javascript/api/overview/azure/openai-assistants-readme?view=azure-node-preview
-export class AzureOpenAiAssistantProvider extends AzureOpenAiGenericProvider {
-  assistantConfig: AzureOpenAiAssistantOptions;
+export class AzureAssistantProvider extends AzureGenericProvider {
+  assistantConfig: AzureAssistantOptions;
   assistantsClient: AssistantsClient | undefined;
   private initializationPromise: Promise<void> | null = null;
 
   constructor(
     deploymentName: string,
-    options: { config?: AzureOpenAiAssistantOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: AzureAssistantOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};

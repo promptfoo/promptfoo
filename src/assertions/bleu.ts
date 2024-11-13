@@ -8,7 +8,8 @@
  *
  * {@link https://doi.org/10.3115/1073083.1073135}
  */
-import type { Assertion, GradingResult } from '../types';
+import invariant from 'tiny-invariant';
+import type { AssertionParams, GradingResult } from '../types';
 
 /**
  * Generates n-grams from an array of words
@@ -126,17 +127,26 @@ export function calculateBleuScore(
  * Compares output against reference(s) using BLEU metric.
  *
  * @param assertion - The assertion configuration
- * @param renderedValue - Expected output(s)
- * @param outputString - Actual output to evaluate
  * @param inverse - Whether to invert the comparison
+ * @param outputString - Actual output to evaluate
+ * @param renderedValue - Expected output(s)
  * @returns Result of the BLEU score comparison
  */
-export function handleBleuScore(
-  assertion: Assertion,
-  renderedValue: string | string[],
-  outputString: string,
-  inverse: boolean,
-): GradingResult {
+export function handleBleuScore({
+  assertion,
+  inverse,
+  outputString,
+  renderedValue,
+}: Pick<
+  AssertionParams,
+  'assertion' | 'renderedValue' | 'outputString' | 'inverse'
+>): GradingResult {
+  invariant(
+    typeof renderedValue === 'string' ||
+      (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
+    '"bleu" assertion type must have a string or array of strings value',
+  );
+
   const threshold = assertion.threshold ?? 0.5;
   const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
   const score = calculateBleuScore(outputString, references);

@@ -13,6 +13,7 @@ import type {
 import { PromptSchema } from './prompts';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from './shared';
 
+// Note: sync with types/providers.ts
 export const ProviderEnvOverridesSchema = z.object({
   AI21_API_BASE_URL: z.string().optional(),
   AI21_API_KEY: z.string().optional(),
@@ -21,12 +22,26 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_OPENAI_API_BASE_URL: z.string().optional(),
   AZURE_OPENAI_API_HOST: z.string().optional(),
   AZURE_OPENAI_API_KEY: z.string().optional(),
+  AZURE_API_BASE_URL: z.string().optional(),
+  AZURE_API_HOST: z.string().optional(),
+  AZURE_API_KEY: z.string().optional(),
+  AZURE_DEPLOYMENT_NAME: z.string().optional(),
+  AZURE_EMBEDDING_DEPLOYMENT_NAME: z.string().optional(),
   AZURE_OPENAI_BASE_URL: z.string().optional(),
+  AZURE_OPENAI_DEPLOYMENT_NAME: z.string().optional(),
+  AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: z.string().optional(),
+  AZURE_CLIENT_SECRET: z.string().optional(),
+  AZURE_CLIENT_ID: z.string().optional(),
+  AZURE_TENANT_ID: z.string().optional(),
+  AZURE_AUTHORITY_HOST: z.string().optional(),
+  AZURE_TOKEN_SCOPE: z.string().optional(),
   BAM_API_HOST: z.string().optional(),
   BAM_API_KEY: z.string().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_API_KEY: z.string().optional(),
+  PROMPTFOO_REMOTE_GENERATION_URL: z.string().optional(),
   COHERE_API_KEY: z.string().optional(),
+  FAL_KEY: z.string().optional(),
   GOOGLE_API_HOST: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
@@ -48,6 +63,9 @@ export const ProviderEnvOverridesSchema = z.object({
   VERTEX_PROJECT_ID: z.string().optional(),
   VERTEX_PUBLISHER: z.string().optional(),
   VERTEX_REGION: z.string().optional(),
+  WATSONX_AI_APIKEY: z.string().optional(),
+  WATSONX_AI_PROJECT_ID: z.string().optional(),
+  WATSONX_AI_BEARER_TOKEN: z.string().optional(),
 });
 
 export const ProviderOptionsSchema = z

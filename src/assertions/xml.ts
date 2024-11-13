@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
+import type { AssertionParams, GradingResult } from '../types';
 
 export function validateXml(
   xmlString: string,
@@ -63,3 +64,40 @@ export function containsXml(
 
   return { isValid: false, reason: 'No valid XML content found matching the requirements' };
 }
+
+export const handleIsXml = ({
+  assertion,
+  renderedValue,
+  outputString,
+  inverse,
+  baseType,
+}: AssertionParams): GradingResult => {
+  let requiredElements: string[] | undefined;
+  if (typeof renderedValue === 'string') {
+    requiredElements = renderedValue.split(',').map((el) => el.trim());
+  } else if (Array.isArray(renderedValue) && renderedValue.length > 0) {
+    requiredElements = renderedValue.map((el) => el.toString());
+  } else if (
+    renderedValue !== null &&
+    typeof renderedValue === 'object' &&
+    Object.keys(renderedValue).length > 0
+  ) {
+    if ('requiredElements' in renderedValue && Array.isArray(renderedValue.requiredElements)) {
+      requiredElements = renderedValue.requiredElements.map((el) => el.toString());
+    } else {
+      throw new Error('xml assertion must contain a string, array value, or no value');
+    }
+  }
+
+  const result = (baseType === 'is-xml' ? validateXml : containsXml)(
+    outputString,
+    requiredElements,
+  );
+  const pass = result.isValid !== inverse;
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass ? 'Assertion passed' : result.reason,
+    assertion,
+  };
+};

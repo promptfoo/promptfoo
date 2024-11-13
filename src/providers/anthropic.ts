@@ -124,11 +124,21 @@ export function parseMessages(messages: string): {
   try {
     const parsed = JSON.parse(messages);
     if (Array.isArray(parsed)) {
+      const systemMessage = parsed.find((msg) => msg.role === 'system');
       return {
-        extractedMessages: parsed.map((msg) => ({
-          role: msg.role,
-          content: Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }],
-        })),
+        extractedMessages: parsed
+          .filter((msg) => msg.role !== 'system')
+          .map((msg) => ({
+            role: msg.role,
+            content: Array.isArray(msg.content)
+              ? msg.content
+              : [{ type: 'text', text: msg.content }],
+          })),
+        system: systemMessage
+          ? Array.isArray(systemMessage.content)
+            ? systemMessage.content
+            : [{ type: 'text', text: systemMessage.content }]
+          : undefined,
       };
     }
   } catch {

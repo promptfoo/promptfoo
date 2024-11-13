@@ -8,6 +8,7 @@ import { importModule } from './esm';
 import logger from './logger';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
+import telemetry from './telemetry';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
 import { isJavascriptFile } from './util/file';
@@ -213,6 +214,11 @@ export async function runExtensionHook(
   if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
     return;
   }
+
+  telemetry.recordOnce('feature_used', {
+    feature: 'extension_hook',
+  });
+
   for (const extension of extensions) {
     invariant(typeof extension === 'string', 'extension must be a string');
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);

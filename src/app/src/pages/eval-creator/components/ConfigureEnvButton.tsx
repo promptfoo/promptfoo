@@ -70,8 +70,8 @@ const ConfigureEnvButton: React.FC = () => {
                 label="Azure API key"
                 fullWidth
                 margin="normal"
-                value={env.AZURE_OPENAI_API_KEY}
-                onChange={(e) => setEnv({ ...env, AZURE_OPENAI_API_KEY: e.target.value })}
+                value={env.AZURE_API_KEY || env.AZURE_OPENAI_API_KEY}
+                onChange={(e) => setEnv({ ...env, AZURE_API_KEY: e.target.value })}
               />
             </AccordionDetails>
           </Accordion>

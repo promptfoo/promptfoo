@@ -12,13 +12,18 @@ Use it like so in your promptfooconfig.yaml:
 
 ```yaml
 strategies:
-  - name: goat
-    options:
+  - id: goat
+    config:
       maxTurns: 5 # Maximum conversation turns (default)
+      stateless: true # Sends the entire conversation history with each turn (Default), set to False if you're using any custom providers
 ```
 
 :::warning
-This is a remote-only strategy and requires an connection to promptfoo's free grading API. Local grading is not supported. Your target model must be able to handle the OpenAI message format.
+This is a remote-only strategy and requires an connection to promptfoo's free grading API. Local grading is not supported.
+:::
+
+:::warning
+By default, GOAT sends the entire conversation history with each turn. Set `stateless: false` if you're using any custom providers which just requires the last message. If your provider requires a sessionId or cookie ensure you're setting that up in your provider config.
 :::
 
 ## How It Works
@@ -34,6 +39,8 @@ Each conversation turn follows a structured three-step reasoning process:
 1. **Observation**: Analyzes the target model's previous response and identifies triggered safety mechanisms
 2. **Strategic Planning**: Reflects on conversation progress and develops the next approach
 3. **Attack Generation**: Selects and combines appropriate techniques to generate the next prompt
+
+![GOAT attack flow](/img/docs/goat-attack-flow.svg)
 
 This process is looped until we either achieve the goal or reach a maximum number of turns.
 
