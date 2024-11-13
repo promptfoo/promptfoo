@@ -35,16 +35,16 @@ These subprocessors support the infrastructure and hosting services necessary fo
 
 ### LLM API Providers
 
-The following subprocessors are only used when you explicitly configure them and provide your own API keys. No data is processed through these providers unless you specifically invoke them:
+These subprocessors are only used when you explicitly configure them and provide your own API keys. No data is processed through these providers unless you specifically invoke them:
 
-| Subprocessor             | Purpose                   | Location                   | Data Categories                                       | Security Standards | Privacy Policy                                                               |
-| ------------------------ | ------------------------- | -------------------------- | ----------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------- |
-| OpenAI                   | LLM API Provider          | United States              | - Prompt inputs<br>- Model outputs<br>- Usage metrics | SOC 2 Type II      | [OpenAI Privacy Policy](https://openai.com/privacy)                          |
-| Anthropic                | LLM API Provider          | United States              | - Prompt inputs<br>- Model outputs<br>- Usage metrics | SOC 2 Type II      | [Anthropic Privacy Policy](https://www.anthropic.com/privacy)                |
-| Google Cloud (Vertex AI) | LLM API Provider          | Global (US, EU, APAC)      | - Prompt inputs<br>- Model outputs<br>- Usage metrics | ISO 27001, SOC 2/3 | [Google Cloud Privacy Policy](https://policies.google.com/privacy)           |
-| Azure OpenAI             | LLM API Provider          | User-selected Azure region | - Prompt inputs<br>- Model outputs<br>- Usage metrics | ISO 27001, SOC 2   | [Azure Privacy Policy](https://privacy.microsoft.com/en-us/privacystatement) |
-| Hugging Face             | Model Hub & Inference API | United States, France      | - Prompt inputs<br>- Model outputs<br>- Usage metrics | SOC 2 Type II      | [Hugging Face Privacy Policy](https://huggingface.co/privacy)                |
-| Replicate                | Model Deployment Platform | United States              | - Prompt inputs<br>- Model outputs<br>- Usage metrics | SOC 2              | [Replicate Privacy Policy](https://replicate.com/privacy)                    |
+| Subprocessor             | Purpose                   | Location                   | Data Categories                                   | Security Standards | Privacy Policy                                                               |
+| ------------------------ | ------------------------- | -------------------------- | ------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------- |
+| OpenAI                   | LLM API Provider          | United States              | • Prompt inputs\n• Model outputs\n• Usage metrics | SOC 2 Type II      | [OpenAI Privacy Policy](https://openai.com/privacy)                          |
+| Anthropic                | LLM API Provider          | United States              | • Prompt inputs\n• Model outputs\n• Usage metrics | SOC 2 Type II      | [Anthropic Privacy Policy](https://www.anthropic.com/privacy)                |
+| Google Cloud (Vertex AI) | LLM API Provider          | Global (US, EU, APAC)      | • Prompt inputs\n• Model outputs\n• Usage metrics | ISO 27001, SOC 2/3 | [Google Cloud Privacy Policy](https://policies.google.com/privacy)           |
+| Azure OpenAI             | LLM API Provider          | User-selected Azure region | • Prompt inputs\n• Model outputs\n• Usage metrics | ISO 27001, SOC 2   | [Azure Privacy Policy](https://privacy.microsoft.com/en-us/privacystatement) |
+| Hugging Face             | Model Hub & Inference API | United States, France      | • Prompt inputs\n• Model outputs\n• Usage metrics | SOC 2 Type II      | [Hugging Face Privacy Policy](https://huggingface.co/privacy)                |
+| Replicate                | Model Deployment Platform | United States              | • Prompt inputs\n• Model outputs\n• Usage metrics | SOC 2              | [Replicate Privacy Policy](https://replicate.com/privacy)                    |
 
 ### Optional Integrations
 
