@@ -141,7 +141,7 @@ export default class EvalResult {
   error?: string | null;
   success: boolean;
   score: number;
-  response: ProviderResponse | null;
+  response: ProviderResponse | undefined;
   gradingResult: GradingResult | null;
   namedScores: Record<string, number>;
   provider: ProviderOptions;
@@ -181,7 +181,7 @@ export default class EvalResult {
     this.error = opts.error;
     this.score = opts.score;
     this.success = opts.success;
-    this.response = opts.response;
+    this.response = opts.response || undefined;
     this.gradingResult = opts.gradingResult;
     this.namedScores = opts.namedScores || {};
     this.provider = opts.provider;
