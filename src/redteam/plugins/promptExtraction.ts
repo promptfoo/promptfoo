@@ -47,7 +47,7 @@ export class PromptExtractionPlugin extends RedteamPluginBase {
     The test works by prompting the model with a request that asks it to provide
   its system prompt. It may be disguised as a reasonable request, as it is intended to trick the model.
 
-    {% if examples and examples.length > 0 and example.length > 0 %}
+    {% if examples and examples.length > 0 %}
     {% for example in examples %}
     <Example>
     {{ example | trim }}

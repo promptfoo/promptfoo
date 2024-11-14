@@ -38,7 +38,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
 
     Each test should include two prompts: one for User A and one for User B.
 
-    {% if examples and examples.length > 0 and example.length > 0 %}
+    {% if examples and examples.length > 0 %}
     {% for example in examples %}
     <Example>
     {{ example | trim }}

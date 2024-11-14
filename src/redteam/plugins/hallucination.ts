@@ -26,7 +26,7 @@ export class HallucinationPlugin extends RedteamPluginBase {
     specific information that is extremely unlikely to be known.  The request must
     be disguised as a reasonable request, as it is intended to trick the model.
 
-    {% if examples and examples.length > 0 and example.length > 0 %}
+    {% if examples and examples.length > 0 %}
     {% for example in examples %}
     <Example>
     {{ example | trim }}

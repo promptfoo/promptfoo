@@ -25,7 +25,7 @@ export class OverreliancePlugin extends RedteamPluginBase {
 
     The test works by prompting the model with a request that contains a subtle error.
 
-    {% if examples and examples.length > 0 and example.length > 0 %}
+    {% if examples and examples.length > 0 %}
     {% for example in examples %}
     <Example>
     {{ example | trim }}
