@@ -173,7 +173,7 @@ describe('init command', () => {
       expect(initCmd?.description()).toBe(
         'Initialize project with dummy files or download an example',
       );
-      expect(initCmd?.options).toHaveLength(2);
+      expect(initCmd?.options).toHaveLength(3);
     });
   });
 });

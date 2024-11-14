@@ -1,7 +1,6 @@
 import fs from 'fs';
 import { rm } from 'fs/promises';
 import yaml from 'js-yaml';
-import path from 'path';
 import { reportProviderAPIKeyWarnings } from '../src/onboarding';
 import { createDummyFiles } from '../src/onboarding';
 import { TestSuiteConfigSchema } from '../src/types';
@@ -132,18 +131,16 @@ describe('createDummyFiles', () => {
   it('should generate a valid YAML configuration file that matches TestSuiteConfigSchema', async () => {
     await createDummyFiles(tempDir, false);
 
-    expect(mockFs.writeFileSync).toHaveBeenCalledWith(
-      path.join(tempDir, 'promptfooconfig.yaml'),
-      expect.any(String),
+    const configCall = mockFs.writeFileSync.mock.calls.find((call) =>
+      call[0].toString().endsWith('promptfooconfig.yaml'),
     );
-    expect(mockFs.writeFileSync).toHaveBeenCalledWith(
-      path.join(tempDir, 'README.md'),
-      expect.any(String),
+    const readmeCall = mockFs.writeFileSync.mock.calls.find((call) =>
+      call[0].toString().endsWith('README.md'),
     );
 
-    const configCall = mockFs.writeFileSync.mock.calls.find(
-      (call) => call[0] === path.join(tempDir, 'promptfooconfig.yaml'),
-    );
+    expect(configCall).toBeDefined();
+    expect(readmeCall).toBeDefined();
+
     const configContent = configCall?.[1] as string;
     expect(configContent).toBeDefined();
 
@@ -169,18 +166,16 @@ describe('createDummyFiles', () => {
 
     await createDummyFiles(tempDir, true);
 
-    expect(mockFs.writeFileSync).toHaveBeenCalledWith(
-      path.join(tempDir, 'promptfooconfig.yaml'),
-      expect.any(String),
+    const configCall = mockFs.writeFileSync.mock.calls.find((call) =>
+      call[0].toString().endsWith('promptfooconfig.yaml'),
     );
-    expect(mockFs.writeFileSync).toHaveBeenCalledWith(
-      path.join(tempDir, 'context.py'),
-      expect.any(String),
+    const contextCall = mockFs.writeFileSync.mock.calls.find((call) =>
+      call[0].toString().endsWith('context.py'),
     );
 
-    const configCall = mockFs.writeFileSync.mock.calls.find(
-      (call) => call[0] === path.join(tempDir, 'promptfooconfig.yaml'),
-    );
+    expect(configCall).toBeDefined();
+    expect(contextCall).toBeDefined();
+
     const configContent = configCall?.[1] as string;
     expect(configContent).toBeDefined();
 

@@ -10,6 +10,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
+import { setupEnv } from '../util';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
@@ -159,6 +160,7 @@ async function handleExampleDownload(
 interface InitCommandOptions {
   interactive: boolean;
   example: string | boolean | undefined;
+  envPath: string | undefined;
 }
 
 export function initCommand(program: Command) {
@@ -166,11 +168,13 @@ export function initCommand(program: Command) {
     .command('init [directory]')
     .description('Initialize project with dummy files or download an example')
     .option('--no-interactive', 'Do not run in interactive mode')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
       telemetry.record('command_used', {
         name: 'init - started',
       });
+      setupEnv(cmdObj.envPath);
 
       if (directory === 'redteam' && cmdObj.interactive) {
         const useRedteam = await confirm({
