@@ -1,0 +1,94 @@
+# Default values for promptfoo.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: fghcr.io/promptfoo/promptfoo
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: v1.0.0
+
+imagePullSecrets:
+  - name: <yourcred>
+nameOverride: ''
+fullnameOverride: ''
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ''
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+# fsGroup: 2000
+
+securityContext: {}
+# capabilities:
+#   drop:
+#   - ALL
+# readOnlyRootFilesystem: true
+# runAsNonRoot: true
+# runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 3000
+
+domainName: 'promptfoo.example.com'
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+persistentVolumesClaims:
+  - name: promptfoo
+    size: 1Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: default
+
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: config
+    persistentVolumeClaim:
+      claimName: promptfoo
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: config
+    mountPath: '/home/promptfoo/.promptfoo'
+    readOnly: false
+
+nodeSelector:
+  kubernetes.io/arch: amd64
+
+tolerations: []
+
+affinity: {}
