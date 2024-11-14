@@ -2,13 +2,8 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import { createRequire } from 'node:module';
 import * as path from 'path';
-import {
-  containsXml,
-  createAjv,
-  runAssertion,
-  runAssertions,
-  validateXml,
-} from '../../src/assertions';
+import { runAssertion, runAssertions } from '../../src/assertions';
+import { validateXml, containsXml } from '../../src/assertions/xml';
 import { fetchWithRetries } from '../../src/fetch';
 import {
   DefaultGradingJsonProvider,
@@ -102,35 +97,6 @@ jest.mock('../../src/matchers', () => {
 });
 
 const Grader = new TestGrader();
-
-describe('createAjv', () => {
-  beforeAll(() => {
-    delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
-    jest.resetModules();
-  });
-
-  afterAll(() => {
-    delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
-  });
-
-  it('should create an Ajv instance with default options', () => {
-    const ajv = createAjv();
-    expect(ajv).toBeDefined();
-    expect(ajv.opts.strictSchema).toBe(true);
-  });
-
-  it('should disable strict mode when PROMPTFOO_DISABLE_AJV_STRICT_MODE is set', () => {
-    process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE = 'true';
-    const ajv = createAjv();
-    expect(ajv.opts.strictSchema).toBe(false);
-  });
-
-  it('should add formats to the Ajv instance', () => {
-    const ajv = createAjv();
-    expect(ajv.formats).toBeDefined();
-    expect(Object.keys(ajv.formats)).not.toHaveLength(0);
-  });
-});
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
@@ -1063,315 +1029,317 @@ describe('runAssertion', () => {
     });
   });
 
-  it('should pass when the is-sql assertion passes', async () => {
-    const output = 'SELECT id, name FROM users';
+  describe('SQL assertions', () => {
+    it('should pass when the is-sql assertion passes', async () => {
+      const output = 'SELECT id, name FROM users';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
 
-  it('should fail when the is-sql assertion fails', async () => {
-    const output = 'SELECT * FROM orders ORDERY BY order_date';
+    it('should fail when the is-sql assertion fails', async () => {
+      const output = 'SELECT * FROM orders ORDERY BY order_date';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+      });
     });
-    expect(result).toMatchObject({
-      pass: false,
-      reason: 'SQL statement does not conform to the provided MySQL database syntax.',
-    });
-  });
 
-  it('should pass when the not-is-sql assertion passes', async () => {
-    const output = 'SELECT * FROM orders ORDERY BY order_date';
+    it('should pass when the not-is-sql assertion passes', async () => {
+      const output = 'SELECT * FROM orders ORDERY BY order_date';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: notIsSqlAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: notIsSqlAssertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
 
-  it('should fail when the not-is-sql assertion fails', async () => {
-    const output = 'SELECT id, name FROM users';
+    it('should fail when the not-is-sql assertion fails', async () => {
+      const output = 'SELECT id, name FROM users';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: notIsSqlAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: notIsSqlAssertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'The output SQL statement is valid',
+      });
     });
-    expect(result).toMatchObject({
-      pass: false,
-      reason: 'The output SQL statement is valid',
-    });
-  });
 
-  it('should pass when the is-sql assertion passes given MySQL Database syntax', async () => {
-    const output = 'SELECT id, name FROM users';
+    it('should pass when the is-sql assertion passes given MySQL Database syntax', async () => {
+      const output = 'SELECT id, name FROM users';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertionWithDatabase,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertionWithDatabase,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax', async () => {
-    const output = `SELECT first_name, last_name FROM employees WHERE first_name ILIKE 'john%'`;
+    it('should fail when the is-sql assertion fails given MySQL Database syntax', async () => {
+      const output = `SELECT first_name, last_name FROM employees WHERE first_name ILIKE 'john%'`;
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertionWithDatabase,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertionWithDatabase,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+      });
     });
-    expect(result).toMatchObject({
-      pass: false,
-      reason: 'SQL statement does not conform to the provided MySQL database syntax.',
-    });
-  });
 
-  it('should pass when the is-sql assertion passes given MySQL Database syntax and allowedTables', async () => {
-    const output = 'SELECT * FROM departments WHERE department_id = 1';
+    it('should pass when the is-sql assertion passes given MySQL Database syntax and allowedTables', async () => {
+      const output = 'SELECT * FROM departments WHERE department_id = 1';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax and allowedTables', async () => {
-    const output = 'UPDATE employees SET department_id = 2 WHERE employee_id = 1';
+    it('should fail when the is-sql assertion fails given MySQL Database syntax and allowedTables', async () => {
+      const output = 'UPDATE employees SET department_id = 2 WHERE employee_id = 1';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: `SQL validation failed: authority = 'update::null::employees' is required in table whiteList to execute SQL = 'UPDATE employees SET department_id = 2 WHERE employee_id = 1'.`,
+      });
     });
-    expect(result).toMatchObject({
-      pass: false,
-      reason: `SQL validation failed: authority = 'update::null::employees' is required in table whiteList to execute SQL = 'UPDATE employees SET department_id = 2 WHERE employee_id = 1'.`,
-    });
-  });
 
-  it('should pass when the is-sql assertion passes given MySQL Database syntax and allowedColumns', async () => {
-    const output = 'SELECT name FROM t';
+    it('should pass when the is-sql assertion passes given MySQL Database syntax and allowedColumns', async () => {
+      const output = 'SELECT name FROM t';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax and allowedColumns', async () => {
-    const output = 'SELECT age FROM a WHERE id = 1';
+    it('should fail when the is-sql assertion fails given MySQL Database syntax and allowedColumns', async () => {
+      const output = 'SELECT age FROM a WHERE id = 1';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: `SQL validation failed: authority = 'select::null::age' is required in column whiteList to execute SQL = 'SELECT age FROM a WHERE id = 1'.`,
+      });
     });
-    expect(result).toMatchObject({
-      pass: false,
-      reason: `SQL validation failed: authority = 'select::null::age' is required in column whiteList to execute SQL = 'SELECT age FROM a WHERE id = 1'.`,
-    });
-  });
 
-  it('should pass when the is-sql assertion passes given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
-    const output = 'SELECT name FROM departments';
+    it('should pass when the is-sql assertion passes given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
+      const output = 'SELECT name FROM departments';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertionWithDatabaseAndBothList,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertionWithDatabaseAndBothList,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
-    const output = `INSERT INTO departments (name) VALUES ('HR')`;
+    it('should fail when the is-sql assertion fails given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
+      const output = `INSERT INTO departments (name) VALUES ('HR')`;
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertionWithDatabaseAndBothList,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertionWithDatabaseAndBothList,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: `SQL validation failed: authority = 'insert::departments::name' is required in column whiteList to execute SQL = 'INSERT INTO departments (name) VALUES ('HR')'.`,
+      });
     });
-    expect(result).toMatchObject({
-      pass: false,
-      reason: `SQL validation failed: authority = 'insert::departments::name' is required in column whiteList to execute SQL = 'INSERT INTO departments (name) VALUES ('HR')'.`,
-    });
-  });
 
-  it('should fail when the is-sql assertion fails due to missing table authority for MySQL Database syntax', async () => {
-    const output = 'UPDATE a SET id = 1';
+    it('should fail when the is-sql assertion fails due to missing table authority for MySQL Database syntax', async () => {
+      const output = 'UPDATE a SET id = 1';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertionWithDatabaseAndBothList,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertionWithDatabaseAndBothList,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: `SQL validation failed: authority = 'update::null::a' is required in table whiteList to execute SQL = 'UPDATE a SET id = 1'.`,
+      });
     });
-    expect(result).toMatchObject({
-      pass: false,
-      reason: `SQL validation failed: authority = 'update::null::a' is required in table whiteList to execute SQL = 'UPDATE a SET id = 1'.`,
-    });
-  });
 
-  it('should fail when the is-sql assertion fails due to missing authorities for DELETE statement in MySQL Database syntax', async () => {
-    const output = `DELETE FROM employees;`;
+    it('should fail when the is-sql assertion fails due to missing authorities for DELETE statement in MySQL Database syntax', async () => {
+      const output = `DELETE FROM employees;`;
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: isSqlAssertionWithDatabaseAndBothList,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: isSqlAssertionWithDatabaseAndBothList,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: `SQL validation failed: authority = 'delete::null::employees' is required in table whiteList to execute SQL = 'DELETE FROM employees;'. SQL validation failed: authority = 'delete::employees::(.*)' is required in column whiteList to execute SQL = 'DELETE FROM employees;'.`,
+      });
     });
-    expect(result).toMatchObject({
-      pass: false,
-      reason: `SQL validation failed: authority = 'delete::null::employees' is required in table whiteList to execute SQL = 'DELETE FROM employees;'. SQL validation failed: authority = 'delete::employees::(.*)' is required in column whiteList to execute SQL = 'DELETE FROM employees;'.`,
-    });
-  });
 
-  it('should pass when the contains-sql assertion passes', async () => {
-    const output = 'wassup\n```\nSELECT id, name FROM users\n```\nyolo';
+    it('should pass when the contains-sql assertion passes', async () => {
+      const output = 'wassup\n```\nSELECT id, name FROM users\n```\nyolo';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: {
-        type: 'contains-sql',
-      },
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'contains-sql',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
 
-  it('should pass when the contains-sql assertion sees `sql` in code block', async () => {
-    const output = 'wassup\n```sql\nSELECT id, name FROM users\n```\nyolo';
+    it('should pass when the contains-sql assertion sees `sql` in code block', async () => {
+      const output = 'wassup\n```sql\nSELECT id, name FROM users\n```\nyolo';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: {
-        type: 'contains-sql',
-      },
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'contains-sql',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
 
-  it('should pass when the contains-sql assertion sees sql without code block', async () => {
-    const output = 'SELECT id, name FROM users';
+    it('should pass when the contains-sql assertion sees sql without code block', async () => {
+      const output = 'SELECT id, name FROM users';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: {
-        type: 'contains-sql',
-      },
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'contains-sql',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
 
-  it('should fail when the contains-sql does not contain code block', async () => {
-    const output = 'nothin';
+    it('should fail when the contains-sql does not contain code block', async () => {
+      const output = 'nothin';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: {
-        type: 'contains-sql',
-      },
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'contains-sql',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+      });
     });
-    expect(result).toMatchObject({
-      pass: false,
-    });
-  });
 
-  it('should fail when the contains-sql does not contain sql in code block', async () => {
-    const output = '```python\nprint("Hello, World!")\n```';
+    it('should fail when the contains-sql does not contain sql in code block', async () => {
+      const output = '```python\nprint("Hello, World!")\n```';
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: {
-        type: 'contains-sql',
-      },
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-    });
-    expect(result).toMatchObject({
-      pass: false,
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'contains-sql',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+      expect(result).toMatchObject({
+        pass: false,
+      });
     });
   });
 

@@ -281,7 +281,7 @@ export async function synthesize({
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
-      const pluginTests = await action(
+      let pluginTests = await action(
         redteamProvider,
         purpose,
         injectVar,
@@ -292,6 +292,10 @@ export async function synthesize({
           ...resolvePluginConfig(plugin.config),
         },
       );
+      if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
+        logger.warn(`Failed to generate tests for ${plugin.id}`);
+        pluginTests = [];
+      }
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,
@@ -303,7 +307,10 @@ export async function synthesize({
       );
       progressBar?.increment(plugin.numTests);
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
-      pluginResults[plugin.id] = { requested: plugin.numTests, generated: pluginTests.length };
+      pluginResults[plugin.id] = {
+        requested: plugin.id === 'intent' ? pluginTests.length : plugin.numTests,
+        generated: pluginTests.length,
+      };
     } else if (plugin.id.startsWith('file://')) {
       try {
         const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
@@ -377,7 +384,7 @@ export async function synthesize({
   progressBar?.stop();
   if (progressBar) {
     // Newline after progress bar to avoid overlap
-    console.log();
+    logger.info('');
   }
 
   logger.info(generateReport(pluginResults, strategyResults));

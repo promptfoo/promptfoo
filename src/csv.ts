@@ -5,11 +5,16 @@ import { BaseAssertionTypesSchema } from './types';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
-// Get all assertion types from the schema, join them with '|' for the regex
-const assertionTypesRegex = BaseAssertionTypesSchema.options.join('|');
-const assertionRegex = new RegExp(
-  `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
-);
+let _assertionRegex: RegExp | null = null;
+function getAssertionRegex(): RegExp {
+  if (!_assertionRegex) {
+    const assertionTypesRegex = BaseAssertionTypesSchema.options.join('|');
+    _assertionRegex = new RegExp(
+      `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
+    );
+  }
+  return _assertionRegex;
+}
 
 export function assertionFromString(expected: string): Assertion {
   // Legacy options
@@ -54,7 +59,7 @@ export function assertionFromString(expected: string): Assertion {
     };
   }
 
-  const regexMatch = expected.match(assertionRegex);
+  const regexMatch = expected.match(getAssertionRegex());
 
   if (regexMatch) {
     const [_, notPrefix, type, thresholdStr, value] = regexMatch as [

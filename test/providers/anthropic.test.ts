@@ -696,5 +696,137 @@ describe('Anthropic', () => {
         },
       ]);
     });
+
+    it('should parse JSON message array with image content', () => {
+      const inputMessages = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: "What's in this image?" },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/jpeg',
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
+      ]);
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toBeUndefined();
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: "What's in this image?" },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/jpeg',
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('should parse JSON message array with mixed content types', () => {
+      const inputMessages = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe this image:' },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
+        { role: 'assistant', content: 'I see a beautiful landscape.' },
+      ]);
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toEqual([{ type: 'text', text: 'You are a helpful assistant.' }]);
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe this image:' },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'I see a beautiful landscape.' }],
+        },
+      ]);
+    });
+
+    it('should handle system messages in JSON array format', () => {
+      const inputMessages = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Hello!' },
+        { role: 'assistant', content: 'Hi there!' },
+      ]);
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toEqual([{ type: 'text', text: 'You are a helpful assistant.' }]);
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Hello!' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hi there!' }],
+        },
+      ]);
+    });
+
+    it('should handle system messages with array content in JSON format', () => {
+      const inputMessages = JSON.stringify([
+        {
+          role: 'system',
+          content: [
+            { type: 'text', text: 'You are a helpful assistant.' },
+            { type: 'text', text: 'Additional system context.' },
+          ],
+        },
+        { role: 'user', content: 'Hello!' },
+      ]);
+
+      const { system, extractedMessages } = parseMessages(inputMessages);
+
+      expect(system).toEqual([
+        { type: 'text', text: 'You are a helpful assistant.' },
+        { type: 'text', text: 'Additional system context.' },
+      ]);
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Hello!' }],
+        },
+      ]);
+    });
   });
 });

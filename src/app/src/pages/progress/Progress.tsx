@@ -5,6 +5,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Pagination from '@mui/material/Pagination';
@@ -25,16 +26,22 @@ export default function Cols() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [page, setPage] = React.useState(1);
   const [filter, setFilter] = useState({ evalId: '', datasetId: '', provider: '', promptId: '' });
+  const [isLoading, setIsLoading] = useState(true);
 
   const rowsPerPage = 25;
   const open = Boolean(anchorEl);
 
   useEffect(() => {
     (async () => {
-      const response = await callApi(`/progress`);
-      const data = await response.json();
-      if (data && data.data) {
-        setCols(data.data);
+      setIsLoading(true);
+      try {
+        const response = await callApi(`/progress`);
+        const data = await response.json();
+        if (data && data.data) {
+          setCols(data.data);
+        }
+      } finally {
+        setIsLoading(false);
       }
     })();
   }, []);
@@ -338,6 +345,11 @@ export default function Cols() {
           />
         )}
       </TableContainer>
+      {isLoading && (
+        <Box display="flex" justifyContent="center" my={4}>
+          <CircularProgress />
+        </Box>
+      )}
     </Box>
   );
 }

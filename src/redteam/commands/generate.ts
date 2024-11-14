@@ -11,7 +11,7 @@ import { synthesize } from '..';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
-import logger from '../../logger';
+import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
@@ -317,7 +317,12 @@ export function redteamGenerateCommand(
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
+    .option('--verbose', 'Show debug output', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
+      if (opts.verbose) {
+        setLogLevel('debug');
+      }
+
       if (opts.remote) {
         cliState.remote = true;
       }

@@ -15,7 +15,8 @@ export function listCommand(program: Command) {
     .description('List evaluations.')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of evals to display')
-    .action(async (cmdObj: { envPath?: string; n?: string }) => {
+    .option('--ids-only', 'Show only eval IDs')
+    .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
       setupEnv(cmdObj.envPath);
       telemetry.record('command_used', {
         name: 'list evals',
@@ -23,6 +24,11 @@ export function listCommand(program: Command) {
       await telemetry.send();
 
       const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
+
+      if (cmdObj.idsOnly) {
+        evals.forEach((evl) => logger.info(evl.id));
+        return;
+      }
 
       const vars = await EvalQueries.getVarsFromEvals(evals);
 
@@ -52,7 +58,8 @@ export function listCommand(program: Command) {
     .description('List prompts used')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of prompts to display')
-    .action(async (cmdObj: { envPath?: string; n?: string }) => {
+    .option('--ids-only', 'Show only prompt IDs')
+    .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
       setupEnv(cmdObj.envPath);
       telemetry.record('command_used', {
         name: 'list prompts',
@@ -62,6 +69,12 @@ export function listCommand(program: Command) {
       const prompts = (await getPrompts(Number(cmdObj.n) || undefined)).sort((a, b) =>
         b.recentEvalId.localeCompare(a.recentEvalId),
       );
+
+      if (cmdObj.idsOnly) {
+        prompts.forEach((prompt) => logger.info(prompt.id));
+        return;
+      }
+
       const tableData = prompts.map((prompt) => ({
         'Prompt ID': prompt.id.slice(0, 6),
         Raw: prompt.prompt.raw.slice(0, 100) + (prompt.prompt.raw.length > 100 ? '...' : ''),
@@ -84,7 +97,8 @@ export function listCommand(program: Command) {
     .description('List datasets used')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of datasets to display')
-    .action(async (cmdObj: { envPath?: string; n?: string }) => {
+    .option('--ids-only', 'Show only dataset IDs')
+    .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
       setupEnv(cmdObj.envPath);
       telemetry.record('command_used', {
         name: 'list datasets',
@@ -94,6 +108,12 @@ export function listCommand(program: Command) {
       const datasets = (await getTestCases(Number(cmdObj.n) || undefined)).sort((a, b) =>
         b.recentEvalId.localeCompare(a.recentEvalId),
       );
+
+      if (cmdObj.idsOnly) {
+        datasets.forEach((dataset) => logger.info(dataset.id));
+        return;
+      }
+
       const tableData = datasets.map((dataset) => ({
         'Dataset ID': dataset.id.slice(0, 6),
         'Highest scoring prompt': dataset.prompts

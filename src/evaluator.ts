@@ -13,7 +13,7 @@ import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
-import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
+import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type {
@@ -28,6 +28,7 @@ import type {
   RunEvalOptions,
   TestSuite,
 } from './types';
+import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { sleep } from './util/time';
 import { transform, TransformInputType } from './util/transform';
 
@@ -109,7 +110,7 @@ class Evaluator {
     { prompt: string | object; input: string; output: string | object }[]
   >;
   registers: Record<string, string | object>;
-
+  fileWriters: JsonlFileWriter[];
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
@@ -126,6 +127,14 @@ class Evaluator {
     };
     this.conversations = {};
     this.registers = {};
+
+    const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
+      ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
+      : evalRecord.config.outputPath?.endsWith('.jsonl')
+        ? [evalRecord.config.outputPath]
+        : [];
+
+    this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
   }
 
   async runEval({
@@ -341,6 +350,7 @@ class Evaluator {
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
+    const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
     await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
@@ -614,6 +624,11 @@ class Evaluator {
       if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
         rowsWithSelectBestAssertion.add(row.testIdx);
       }
+      for (const assert of evalStep.test.assert || []) {
+        if (assert.type) {
+          assertionTypes.add(assert.type);
+        }
+      }
 
       numComplete++;
       if (options.progressCallback) {
@@ -630,6 +645,11 @@ class Evaluator {
       } catch (error) {
         logger.error(`Error saving result: ${error} ${JSON.stringify(row)}`);
       }
+
+      for (const writer of this.fileWriters) {
+        await writer.write(row);
+      }
+
       const { promptIdx } = row;
       const metrics = prompts[promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
@@ -694,8 +714,6 @@ class Evaluator {
       if (multibar && evalStep) {
         const threadIndex = index % concurrency;
         const progressbar = multiProgressBars[threadIndex];
-        // Update the status line with current progress, control code moves cursor up one line
-        process.stdout.write(`\rRunning step ${completed}/${total}${' '.repeat(20)}\n\x1b[1A`);
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
@@ -753,10 +771,12 @@ class Evaluator {
       }
     }
 
-    // Run serial evaluations first
-    logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
-    for (const evalStep of serialRunEvalOptions) {
-      await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
+    if (serialRunEvalOptions.length > 0) {
+      // Run serial evaluations first
+      logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
+      for (const evalStep of serialRunEvalOptions) {
+        await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
+      }
     }
 
     // Then run concurrent evaluations
@@ -780,7 +800,9 @@ class Evaluator {
     for (const testIdx of rowsWithSelectBestAssertion) {
       compareCount++;
 
-      const resultsToCompare = this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+      const resultsToCompare = this.evalRecord.persisted
+        ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
+        : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
       if (resultsToCompare.length === 0) {
         logger.warn(`Expected results to be found for test index ${testIdx}`);
         continue;
@@ -857,13 +879,16 @@ class Evaluator {
     }
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
-      results: this.evalRecord.results.map((r) => r.toEvaluateResult()),
+      prompts: this.evalRecord.prompts,
       suite: testSuite,
     });
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
-      numTests: tests.length,
+      numTests: prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testPassCount || 0) + (p.metrics?.testFailCount || 0),
+        0,
+      ),
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
@@ -875,12 +900,12 @@ class Evaluator {
           }),
         ),
       ).sort(),
-      assertionTypes: Array.from(
-        new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
-      ).sort(),
+      assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
-      hasAnyPass: this.evalRecord.results.some((r) => r.success),
+      hasAnyPass: this.evalRecord.prompts.some(
+        (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
+      ),
       isRedteam: Boolean(testSuite.redteam),
     });
     return this.evalRecord;

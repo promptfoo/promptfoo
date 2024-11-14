@@ -236,7 +236,7 @@ import sys
 
 def my_prompt_function(context: dict) -> str:
 
-    provider: dict = context['providers']
+    provider: dict = context['provider']
     provider_id: str = provider['id']  # ex. openai:gpt-4o or bedrock:anthropic.claude-3-sonnet-20240229-v1:0
     provider_label: str | None = provider.get('label') # exists if set in promptfoo config.
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
 import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -27,6 +28,7 @@ export default function Datasets() {
   const [page, setPage] = useState(1);
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogTestCaseIndex, setDialogTestCaseIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
   const handleSort = (field: string) => {
     const order = sortField === field && sortOrder === 'asc' ? 'desc' : 'asc';
@@ -36,20 +38,23 @@ export default function Datasets() {
 
   useEffect(() => {
     (async () => {
-      callApi(`/datasets`)
-        .then((response) => response.json())
-        .then((data) => {
-          const sortedData = [...data.data].sort((a, b) => {
-            if (sortField === null) {
-              return 0;
-            }
-            if (sortOrder === 'asc') {
-              return a[sortField] > b[sortField] ? 1 : -1;
-            }
-            return a[sortField] < b[sortField] ? 1 : -1;
-          });
-          setTestCases(sortedData);
+      setIsLoading(true);
+      try {
+        const response = await callApi(`/datasets`);
+        const data = await response.json();
+        const sortedData = [...data.data].sort((a, b) => {
+          if (sortField === null) {
+            return 0;
+          }
+          if (sortOrder === 'asc') {
+            return a[sortField] > b[sortField] ? 1 : -1;
+          }
+          return a[sortField] < b[sortField] ? 1 : -1;
         });
+        setTestCases(sortedData);
+      } finally {
+        setIsLoading(false);
+      }
     })();
   }, [sortField, sortOrder, page]);
 
@@ -183,6 +188,11 @@ export default function Datasets() {
           />
         )}
       </TableContainer>
+      {isLoading && (
+        <Box display="flex" justifyContent="center" my={4}>
+          <CircularProgress />
+        </Box>
+      )}
     </Box>
   );
 }

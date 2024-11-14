@@ -77,6 +77,7 @@ export abstract class RedteamPluginBase {
       const renderedTemplate = nunjucks.renderString(await this.getTemplate(), {
         purpose: this.purpose,
         n: currentBatchSize,
+        examples: this.config.examples,
       });
 
       const finalTemplate = this.appendModifiers(renderedTemplate);
@@ -157,7 +158,7 @@ export abstract class RedteamPluginBase {
     const modifiers: Record<string, string> =
       (this.config.modifiers as Record<string, string>) ?? {};
 
-    // Right now, only pre-configured modifier is language
+    // `language` is a special top-level config field
     if (this.config.language) {
       invariant(typeof this.config.language === 'string', 'language must be a string');
       modifiers.language = this.config.language;

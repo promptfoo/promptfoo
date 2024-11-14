@@ -36,6 +36,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-n, --filter-first-n <number>`     | Only run the first N tests                                                      |
 | `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                      |
 | `--filter-providers <providers>`    | Only run tests with these providers                                             |
+| `--filter-sample <number>`          | Only run a random sample of N tests                                             |
 | `--filter-targets <targets>`        | Only run tests with these targets                                               |
 | `--grader <provider>`               | Model that will grade outputs                                                   |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                          |
@@ -44,7 +45,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--no-progress-bar`                 | Do not show progress bar                                                        |
 | `--no-table`                        | Do not output table in CLI                                                      |
 | `--no-write`                        | Do not write results to promptfoo directory                                     |
-| `-o, --output <paths...>`           | Path(s) to output file (csv, txt, json, yaml, yml, html)                        |
+| `-o, --output <paths...>`           | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html)                 |
 | `-p, --prompts <paths...>`          | Paths to prompt files (.txt)                                                    |
 | `--prompt-prefix <path>`            | Prefix prepended to every prompt                                                |
 | `--prompt-suffix <path>`            | Suffix appended to every prompt                                                 |

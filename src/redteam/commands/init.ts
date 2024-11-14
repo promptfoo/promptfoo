@@ -8,7 +8,7 @@ import select from '@inquirer/select';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
-import * as fs from 'fs';
+import fs from 'fs';
 import * as path from 'path';
 import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
@@ -16,6 +16,7 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/g
 import logger from '../../logger';
 import telemetry, { type EventProperties } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
+import { setupEnv } from '../../util';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
   type Plugin,
@@ -168,6 +169,35 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
   return prompt;
 }
 
+export function renderRedteamConfig({
+  descriptions,
+  numTests,
+  plugins,
+  prompts,
+  providers,
+  purpose,
+  strategies,
+}: {
+  descriptions: Record<string, string>;
+  numTests: number;
+  plugins: (Plugin | RedteamPluginObject)[];
+  prompts: string[];
+  providers: (string | ProviderOptions)[];
+  purpose: string | undefined;
+  strategies: Strategy[];
+}): string {
+  const nunjucks = getNunjucksEngine();
+  return nunjucks.renderString(REDTEAM_CONFIG_TEMPLATE, {
+    descriptions,
+    numTests,
+    plugins,
+    prompts,
+    providers,
+    purpose,
+    strategies,
+  });
+}
+
 export async function redteamInit(directory: string | undefined) {
   telemetry.record('command_used', { name: 'redteam init - started' });
   recordOnboardingStep('start');
@@ -212,11 +242,12 @@ export async function redteamInit(directory: string | undefined) {
   let deferGeneration = useCustomProvider;
   const defaultPrompt =
     'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}';
-  const defaultPurpose = 'Travel agent specializing in budget trips to Europe';
+  const defaultPurpose =
+    'Travel agent specializing in budget trips to Europe. The user is anonymous and should not be able to access any information about the system or other users.';
   if (useCustomProvider) {
     purpose =
       (await input({
-        message: dedent`What is the purpose of your application? This is used to tailor the attacks. Be as specific as possible.
+        message: dedent`What is the purpose of your application? This is used to tailor the attacks. Be as specific as possible. Include information about who the user of the system is and what information and actions they should be able to access.
         (e.g. "${defaultPurpose}")\n`,
       })) || defaultPurpose;
 
@@ -399,6 +430,27 @@ export async function redteamInit(directory: string | undefined) {
     }
   }
 
+  if (plugins.includes('intent')) {
+    const intentIndex = plugins.indexOf('intent');
+    if (intentIndex !== -1) {
+      plugins.splice(intentIndex, 1);
+    }
+
+    recordOnboardingStep('collect intent');
+    const intentDescription = await input({
+      message: dedent`You selected the 'intent' plugin. Please enter the behavior you want to test for, or leave empty to skip.
+      (e.g. "express hatred towards a specific group" or "provide instructions for illegal activities")\n`,
+    });
+    recordOnboardingStep('choose intent', { value: intentDescription.length });
+
+    if (intentDescription.trim() !== '') {
+      plugins.push({
+        id: 'intent',
+        config: { intent: intentDescription.trim() },
+      } as RedteamPluginObject);
+    }
+  }
+
   if (plugins.includes('prompt-extraction')) {
     plugins = plugins.filter((p) => p !== 'prompt-extraction');
     plugins.push({
@@ -432,7 +484,7 @@ export async function redteamInit(directory: string | undefined) {
       recordOnboardingStep('skip indirect prompt injection');
       logger.warn(
         dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt.
-        
+
         Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection`,
       );
     }
@@ -521,7 +573,9 @@ export async function redteamInit(directory: string | undefined) {
 
       if (email) {
         try {
-          await telemetry.saveConsent(email);
+          await telemetry.saveConsent(email, {
+            source: 'redteam init',
+          });
           writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
         } catch (err) {
           logger.error(`Error saving consent: ${(err as Error).message}`);
@@ -532,9 +586,7 @@ export async function redteamInit(directory: string | undefined) {
 
   const numTests = 5;
 
-  const nunjucks = getNunjucksEngine();
-
-  const redteamConfig = nunjucks.renderString(REDTEAM_CONFIG_TEMPLATE, {
+  const redteamConfig = renderRedteamConfig({
     purpose,
     numTests,
     plugins,
@@ -602,7 +654,9 @@ export function initCommand(program: Command) {
   program
     .command('init [directory]')
     .description('Initialize red teaming project')
-    .action(async (directory: string | undefined) => {
+    .option('--env-file, --env-path <path>', 'Path to .env file')
+    .action(async (directory: string | undefined, opts: { envPath: string | undefined }) => {
+      setupEnv(opts.envPath);
       try {
         await redteamInit(directory);
       } catch (err) {

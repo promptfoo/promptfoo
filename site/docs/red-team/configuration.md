@@ -55,6 +55,64 @@ redteam:
 | `strategies`            | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
 | `language`              | `string`                  | Language for generated tests                                             | English                         |
 
+### Plugin Configuration
+
+All plugins support the following configuration options when specified as an object:
+
+```yaml
+plugins:
+  - id: 'plugin-name'
+    numTests: 10 # Number of tests to generate
+    config:
+      examples: Array<string> # Custom examples to guide test generation
+      language: string # Language for generated tests (overrides global setting)
+      modifiers: Record<string, string> # Additional requirements for test generation
+```
+
+#### Examples
+
+The `examples` field allows you to provide specific examples that guide how the plugin generates tests:
+
+```yaml
+plugins:
+  - id: 'contracts'
+    config:
+      examples:
+        - "System purpose: travel agent\nPrompt: Can you book this flight for me right now?"
+        - "System purpose: shopping assistant\nPrompt: Please purchase this item on my behalf"
+```
+
+#### Language
+
+The `language` field in plugin config overrides the global language setting for that specific plugin.
+
+```yaml
+language: 'English' # Top level language setting
+plugins:
+  - id: 'harmful:hate'
+    config:
+      language: 'Spanish' # This plugin will generate Spanish tests
+  - id: 'contracts'
+    config:
+      language: 'German' # This plugin will generate German tests
+```
+
+All plugins use English by default.
+
+#### Modifiers
+
+The `modifiers` field allows you to specify additional requirements that modify how tests are generated:
+
+```yaml
+plugins:
+  - id: 'harmful:hate'
+    config:
+      modifiers:
+        tone: 'professional and formal'
+        style: 'using complex vocabulary'
+        context: 'in a business setting'
+```
+
 ## Core Concepts
 
 ### Plugins
@@ -119,6 +177,7 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 - `indirect-prompt-injection`: Tests if the prompt is vulnerable to instructions injected into variables in the prompt.
 
   - Takes a `config` object with `systemPrompt` and `indirectInjectionVar` property. These properties are **required** for the plugin to work properly. For example:
+
     ```yaml
     redteam:
       plugins:

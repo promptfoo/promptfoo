@@ -3,10 +3,11 @@ import type {
   BedrockAI21GenerationOptions,
   BedrockClaudeMessagesCompletionOptions,
   LlamaMessage,
+  TextGenerationOptions,
 } from '../../src/providers/bedrock';
+import { AwsBedrockGenericProvider } from '../../src/providers/bedrock';
 import {
   addConfigParam,
-  AwsBedrockGenericProvider,
   BEDROCK_MODEL,
   formatPromptLlama2Chat,
   formatPromptLlama3Instruct,
@@ -15,25 +16,19 @@ import {
   parseValue,
 } from '../../src/providers/bedrock';
 
-jest.mock('@aws-sdk/client-bedrock-runtime', () => {
+jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
+  BedrockRuntime: jest.fn().mockImplementation(() => ({
+    invokeModel: jest.fn(),
+  })),
+}));
+
+const { BedrockRuntime } = jest.requireMock('@aws-sdk/client-bedrock-runtime');
+
+jest.mock('@smithy/node-http-handler', () => {
   return {
-    BedrockRuntime: jest.fn().mockImplementation(() => {
-      return {
-        invokeModel: jest.fn(),
-      };
-    }),
+    NodeHttpHandler: jest.fn(),
   };
 });
-
-jest.mock(
-  '@smithy/node-http-handler',
-  () => {
-    return {
-      NodeHttpHandler: jest.fn(),
-    };
-  },
-  { virtual: true },
-);
 
 jest.mock('proxy-agent', () => jest.fn());
 
@@ -48,19 +43,33 @@ jest.mock('../../src/logger', () => ({
   error: jest.fn(),
 }));
 
-describe('AwsBedrockGenericProvider', () => {
-  let BedrockRuntime: any;
+class TestBedrockProvider extends AwsBedrockGenericProvider {
+  modelName = 'test-model';
 
+  constructor(config: any = {}) {
+    super('test-model', { config });
+  }
+
+  async getClient() {
+    return this.getBedrockInstance();
+  }
+
+  async generateText(prompt: string, options?: TextGenerationOptions): Promise<string> {
+    return '';
+  }
+
+  async generateChat(messages: any[], options?: any): Promise<any> {
+    return {};
+  }
+}
+
+describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
-    jest.resetModules();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    BedrockRuntime = require('@aws-sdk/client-bedrock-runtime').BedrockRuntime;
     jest.clearAllMocks();
   });
 
   afterEach(() => {
-    delete process.env.HTTP_PROXY;
-    delete process.env.HTTPS_PROXY;
+    jest.clearAllMocks();
   });
 
   it('should create Bedrock instance without proxy settings', async () => {
@@ -188,6 +197,92 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params).toHaveProperty('tool_choice');
       expect(params.tool_choice).toEqual({ type: 'tool', name: 'get_current_weather' });
     });
+
+    it('should handle JSON message array with image content', () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+      };
+
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: "What's in this image?" },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/jpeg',
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
+      ]);
+
+      const params = BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
+
+      expect(params.messages).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: "What's in this image?" },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/jpeg',
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('should handle JSON message array with system message and image content', () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+      };
+
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe this image:' },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
+      ]);
+
+      const params = BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
+
+      expect(params.messages).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe this image:' },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: 'base64EncodedImageData',
+              },
+            },
+          ],
+        },
+      ]);
+      expect(params.system).toBe('You are a helpful assistant.');
+    });
   });
 
   describe('BEDROCK_MODEL AI21', () => {
@@ -245,7 +340,7 @@ describe('AwsBedrockGenericProvider', () => {
   });
 
   describe('getCredentials', () => {
-    it('should return credentials if accessKeyId and secretAccessKey are provided', () => {
+    it('should return credentials if accessKeyId and secretAccessKey are provided', async () => {
       const provider = new (class extends AwsBedrockGenericProvider {
         constructor() {
           super('test-model', {
@@ -257,14 +352,14 @@ describe('AwsBedrockGenericProvider', () => {
         }
       })();
 
-      const credentials = provider.getCredentials();
+      const credentials = await provider.getCredentials();
       expect(credentials).toEqual({
         accessKeyId: 'test-access-key',
         secretAccessKey: 'test-secret-key',
       });
     });
 
-    it('should return undefined if accessKeyId or secretAccessKey is missing', () => {
+    it('should return undefined if accessKeyId or secretAccessKey is missing', async () => {
       const provider = new (class extends AwsBedrockGenericProvider {
         constructor() {
           super('test-model', {
@@ -275,7 +370,47 @@ describe('AwsBedrockGenericProvider', () => {
         }
       })();
 
-      const credentials = provider.getCredentials();
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined();
+    });
+
+    it('should return credentials when accessKeyId and secretAccessKey are provided', async () => {
+      const provider = new TestBedrockProvider({
+        accessKeyId: 'test-key',
+        secretAccessKey: 'test-secret',
+        sessionToken: 'test-token',
+      });
+
+      const credentials = await provider.getCredentials();
+      expect(credentials).toEqual({
+        accessKeyId: 'test-key',
+        secretAccessKey: 'test-secret',
+        sessionToken: 'test-token',
+      });
+    });
+
+    it('should return SSO credential provider when profile is specified', async () => {
+      const mockSSOProvider = jest.fn();
+      jest.mock('@aws-sdk/credential-provider-sso', () => ({
+        fromSSO: (config: any) => {
+          mockSSOProvider();
+          expect(config).toEqual({ profile: 'test-profile' });
+          return 'sso-provider';
+        },
+      }));
+
+      const provider = new TestBedrockProvider({
+        profile: 'test-profile',
+      });
+
+      const credentials = await provider.getCredentials();
+      expect(mockSSOProvider).toHaveBeenCalledWith();
+      expect(credentials).toBe('sso-provider');
+    });
+
+    it('should return undefined when no credentials are provided', async () => {
+      const provider = new TestBedrockProvider({});
+      const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined();
     });
   });

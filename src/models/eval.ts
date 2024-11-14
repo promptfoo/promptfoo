@@ -350,7 +350,21 @@ export default class Eval {
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, test, {
       persist: this.persisted,
     });
-    this.results.push(newResult);
+    if (!this.persisted) {
+      // We're only going to keep results in memory if the eval isn't persisted in the database
+      // This is to avoid memory issues when running large evaluations
+      this.results.push(newResult);
+    }
+  }
+
+  async *fetchResultsBatched(batchSize: number = 100) {
+    for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
+      yield batch;
+    }
+  }
+
+  async fetchResultsByTestIdx(testIdx: number) {
+    return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
-import type { AwsCredentialIdentity } from '@aws-sdk/types';
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
@@ -19,11 +19,13 @@ import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
   accessKeyId?: string;
+  profile?: string;
   region?: string;
   secretAccessKey?: string;
+  sessionToken?: string;
 }
 
-interface TextGenerationOptions {
+export interface TextGenerationOptions {
   maxTokenCount?: number;
   stopSequences?: Array<string>;
   temperature?: number;
@@ -411,8 +413,39 @@ export const BEDROCK_MODEL = {
   },
   CLAUDE_MESSAGES: {
     params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
-      const { system, extractedMessages } = parseMessages(prompt);
-      const params: any = { messages: extractedMessages };
+      let messages;
+      let systemPrompt;
+      try {
+        const parsed = JSON.parse(prompt);
+        if (Array.isArray(parsed)) {
+          messages = parsed
+            .map((msg) => ({
+              role: msg.role,
+              content: Array.isArray(msg.content)
+                ? msg.content
+                : [{ type: 'text', text: msg.content }],
+            }))
+            .filter((msg) => msg.role !== 'system');
+          systemPrompt = parsed.find((msg) => msg.role === 'system')?.content;
+        } else {
+          const { system, extractedMessages } = parseMessages(prompt);
+          messages = extractedMessages;
+          systemPrompt = system;
+        }
+      } catch {
+        const { system, extractedMessages } = parseMessages(prompt);
+        messages = extractedMessages;
+        systemPrompt = system;
+      }
+
+      const params: any = { messages };
+      addConfigParam(
+        params,
+        'anthropic_version',
+        config?.anthropic_version,
+        undefined,
+        'bedrock-2023-05-31',
+      );
       addConfigParam(
         params,
         'max_tokens',
@@ -436,12 +469,13 @@ export const BEDROCK_MODEL = {
         undefined,
       );
       addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
-      addConfigParam(params, 'system', system, undefined, undefined);
+      if (systemPrompt) {
+        addConfigParam(params, 'system', systemPrompt, undefined, undefined);
+      }
+
       return params;
     },
-    output: (responseJson: any) => {
-      return outputFromMessage(responseJson);
-    },
+    output: (responseJson: any) => outputFromMessage(responseJson),
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
@@ -578,6 +612,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -589,12 +624,13 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
+  'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA2,
-  'us.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
-  'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
-  'us.meta.llama3-2-11b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
-  'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -604,6 +640,14 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
+  'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.meta.llama3-2-11b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'us.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -667,12 +711,19 @@ export abstract class AwsBedrockGenericProvider {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
   }
 
-  getCredentials(): AwsCredentialIdentity | undefined {
+  async getCredentials(): Promise<
+    AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
+  > {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
       return {
         accessKeyId: this.config.accessKeyId,
         secretAccessKey: this.config.secretAccessKey,
+        sessionToken: this.config.sessionToken,
       };
+    }
+    if (this.config.profile) {
+      const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
+      return fromSSO({ profile: this.config.profile });
     }
     return undefined;
   }
@@ -696,7 +747,7 @@ export abstract class AwsBedrockGenericProvider {
       }
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
-        const credentials = this.getCredentials();
+        const credentials = await this.getCredentials();
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
           ...(credentials ? { credentials } : {}),
@@ -717,7 +768,7 @@ export abstract class AwsBedrockGenericProvider {
       this.config?.region ||
       this.env?.AWS_BEDROCK_REGION ||
       getEnvString('AWS_BEDROCK_REGION') ||
-      'us-west-2'
+      'us-east-1'
     );
   }
 }

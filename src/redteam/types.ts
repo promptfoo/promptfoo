@@ -2,7 +2,7 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
-export type PluginConfig = RedteamObjectConfig;
+export type PluginConfig = RedteamObjectConfig & { examples?: string[] };
 export type StrategyConfig = RedteamObjectConfig;
 
 type ConfigurableObject = {
@@ -45,6 +45,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   force?: boolean;
   write: boolean;
   inRedteamRun?: boolean;
+  verbose?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {

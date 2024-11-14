@@ -250,14 +250,15 @@ export const RedteamConfigSchema = z
             if (strategy === 'basic') {
               return [];
             }
-            return strategy === 'default' ? DEFAULT_STRATEGIES.map((id) => id) : [strategy];
+            return strategy === 'default'
+              ? DEFAULT_STRATEGIES.map((id) => ({ id }))
+              : [{ id: strategy }];
           }
-          return [strategy.id];
+          // Just return the original strategy object
+          return [strategy];
         }),
       ),
-    )
-      .map((id) => ({ id }))
-      .sort((a, b) => a.id.localeCompare(b.id));
+    ).sort((a, b) => a.id.localeCompare(b.id));
 
     return {
       numTests: data.numTests,

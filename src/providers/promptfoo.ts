@@ -4,7 +4,7 @@ import { getEnvString } from '../envars';
 import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
-import { REMOTE_GENERATION_URL } from '../redteam/constants';
+import { getRemoteGenerationUrl } from '../redteam/constants';
 import type {
   ApiProvider,
   ProviderResponse,
@@ -89,7 +89,7 @@ interface PromptfooChatCompletionOptions {
   id?: string;
   jsonOnly: boolean;
   preferSmallModel: boolean;
-  task: 'crescendo' | 'iterative' | 'iterative:image' | 'iterative:tree';
+  task: 'crescendo' | 'goat' | 'iterative' | 'iterative:image' | 'iterative:tree';
 }
 
 export class PromptfooChatCompletionProvider implements ApiProvider {
@@ -123,7 +123,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
 
     try {
       const { data } = await fetchWithCache(
-        REMOTE_GENERATION_URL,
+        getRemoteGenerationUrl(),
         {
           method: 'POST',
           headers: {
@@ -190,7 +190,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     logger.debug(`Calling promptfoo agent API with body: ${JSON.stringify(body)}`);
     try {
       const response = await fetchWithRetries(
-        REMOTE_GENERATION_URL,
+        getRemoteGenerationUrl(),
         {
           method: 'POST',
           headers: {
