@@ -496,12 +496,14 @@ function ResultsTable({
                   {prompt.metrics?.totalLatencyMs && prompt.metrics?.tokenUsage?.completion ? (
                     <div>
                       <strong>Tokens/Sec:</strong>{' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(
-                        prompt.metrics.tokenUsage.completion /
-                          (prompt.metrics.totalLatencyMs / 1000),
-                      )}
+                      {prompt.metrics.totalLatencyMs > 0
+                        ? Intl.NumberFormat(undefined, {
+                            maximumFractionDigits: 0,
+                          }).format(
+                            prompt.metrics.tokenUsage.completion /
+                              (prompt.metrics.totalLatencyMs / 1000),
+                          )
+                        : '0'}
                     </div>
                   ) : null}
                   {prompt.metrics?.cost ? (
