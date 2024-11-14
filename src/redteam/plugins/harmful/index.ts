@@ -24,6 +24,7 @@ import { isBasicRefusal } from '../../util';
 import { RedteamPluginBase, RedteamGraderBase } from '../base';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
 import type { HarmfulCategory } from './constants';
+import { sortTestCasesByCategory } from './util';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmful';
 
@@ -82,19 +83,8 @@ class HarmfulPlugin extends RedteamPluginBase {
   }
 }
 
-function createTestCase(
-  injectVar: string,
-  generatedPrompt: string,
-  harmCategory: string,
-): TestCase {
-  const injectValue = generatedPrompt.split('\n')[0].trim();
-  const harmCategoryLabel = HARM_PLUGINS[harmCategory as keyof typeof HARM_PLUGINS] || harmCategory;
-  const assertions: Assertion[] = [
-    {
-      metric: 'Harmful',
-      type: 'promptfoo:redteam:harmful',
-    },
-  ];
+function buildModeratorAssertions(): Assertion[] {
+  const assertions: Assertion[] = [];
 
   if (!getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION')) {
     if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
@@ -112,6 +102,17 @@ function createTestCase(
     }
   }
 
+  return assertions;
+}
+
+function createTestCase(
+  injectVar: string,
+  generatedPrompt: string,
+  harmCategory: string,
+): TestCase {
+  const injectValue = generatedPrompt.split('\n')[0].trim();
+  const harmCategoryLabel = HARM_PLUGINS[harmCategory as keyof typeof HARM_PLUGINS] || harmCategory;
+
   return {
     vars: {
       [injectVar]: injectValue,
@@ -120,7 +121,10 @@ function createTestCase(
     metadata: {
       harmCategory: harmCategoryLabel,
     },
-    assert: assertions,
+    assert: [
+      { metric: 'Harmful', type: 'promptfoo:redteam:harmful' },
+      ...buildModeratorAssertions(),
+    ],
   };
 }
 
@@ -150,46 +154,6 @@ async function generateTestsForCategory(
   }
 }
 
-async function generateAlignedTests(
-  currentTests: TestCase[],
-  provider: ApiProvider,
-  purpose: string,
-  injectVar: string,
-  n: number,
-  delayMs: number,
-  config: PluginConfig,
-  redteamProviderHarmCategories: string[],
-): Promise<TestCase[]> {
-  const remainingCount = n - currentTests.length;
-  const newTests: TestCase[] = [];
-
-  for (const harmCategory of redteamProviderHarmCategories) {
-    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, config);
-    const results = await plugin.generateTests(remainingCount, delayMs);
-    for (const result of results) {
-      if (result.vars) {
-        result.vars.harmCategory = harmCategory;
-      }
-      result.metadata = {
-        ...result.metadata,
-        harmCategory,
-      };
-      newTests.push(result);
-    }
-  }
-  return [...currentTests, ...newTests];
-}
-
-function sortTestCasesByCategory(a: TestCase, b: TestCase): number {
-  const categoryComparison = (a?.metadata?.harmCategory || '').localeCompare(
-    b?.metadata?.harmCategory || '',
-  );
-  if (categoryComparison !== 0) {
-    return categoryComparison;
-  }
-  return JSON.stringify(a?.vars || {}).localeCompare(JSON.stringify(b?.vars || {}));
-}
-
 export async function getHarmfulTests(
   { provider, purpose, injectVar, n, delayMs = 0, config = {} }: PluginActionParams,
   plugins: string[],
@@ -200,17 +164,14 @@ export async function getHarmfulTests(
       ? plugins.map((plugin) => HARM_PLUGINS[plugin as keyof typeof HARM_PLUGINS]).filter(Boolean)
       : Object.values(HARM_PLUGINS);
 
-  const unalignedProviderHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS).filter((p) =>
+  // Handle unaligned tests
+  const unalignedCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS).filter((p) =>
     harmCategoriesToUse.includes(
       UNALIGNED_PROVIDER_HARM_PLUGINS[p as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS],
     ),
   );
-  const redteamProviderHarmCategories = Object.values(REDTEAM_PROVIDER_HARM_PLUGINS).filter((p) =>
-    harmCategoriesToUse.includes(p),
-  );
 
-  // Handle unaligned tests
-  for (const harmCategory of unalignedProviderHarmCategories) {
+  for (const harmCategory of unalignedCategories) {
     const adversarialProvider = new PromptfooHarmfulCompletionProvider({ purpose, harmCategory });
     const unalignedTests = await retryWithDeduplication<TestCase>(
       (currentTests: TestCase[]) =>
@@ -228,22 +189,26 @@ export async function getHarmfulTests(
     testCases.push(...sampleArray(unalignedTests, n));
   }
 
-  const alignedTests = await retryWithDeduplication<TestCase>(
-    (currentTests: TestCase[]) =>
-      generateAlignedTests(
-        currentTests,
-        provider,
-        purpose,
-        injectVar,
-        n,
-        delayMs,
-        config,
-        redteamProviderHarmCategories,
-      ),
-    n,
+  // Handle aligned tests
+  const alignedCategories = Object.values(REDTEAM_PROVIDER_HARM_PLUGINS).filter((p) =>
+    harmCategoriesToUse.includes(p),
   );
 
-  testCases.push(...sampleArray(alignedTests, n));
+  for (const harmCategory of alignedCategories) {
+    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, config);
+    const alignedTests = await retryWithDeduplication<TestCase>(
+      async (currentTests: TestCase[]) => {
+        const results = await plugin.generateTests(n - currentTests.length, delayMs);
+        return results.map((result) => ({
+          ...result,
+          vars: { ...result.vars, harmCategory },
+          metadata: { ...result.metadata, harmCategory },
+        }));
+      },
+      n,
+    );
+    testCases.push(...sampleArray(alignedTests, n));
+  }
 
   return testCases.sort(sortTestCasesByCategory);
 }
