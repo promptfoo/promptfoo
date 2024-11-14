@@ -418,12 +418,14 @@ export const BEDROCK_MODEL = {
       try {
         const parsed = JSON.parse(prompt);
         if (Array.isArray(parsed)) {
-          messages = parsed.map((msg) => ({
-            role: msg.role,
-            content: Array.isArray(msg.content)
-              ? msg.content
-              : [{ type: 'text', text: msg.content }],
-          })).filter((msg) => msg.role !== 'system');
+          messages = parsed
+            .map((msg) => ({
+              role: msg.role,
+              content: Array.isArray(msg.content)
+                ? msg.content
+                : [{ type: 'text', text: msg.content }],
+            }))
+            .filter((msg) => msg.role !== 'system');
           systemPrompt = parsed.find((msg) => msg.role === 'system')?.content;
         } else {
           const { system, extractedMessages } = parseMessages(prompt);
@@ -435,9 +437,6 @@ export const BEDROCK_MODEL = {
         messages = extractedMessages;
         systemPrompt = system;
       }
-
-      logger.warn(`\n\n\nUsing system prompt: ${systemPrompt}`);
-      logger.warn(`Using messages: ${JSON.stringify(messages, null, 2)}`);
 
       const params: any = { messages };
       addConfigParam(

@@ -3,12 +3,20 @@ description: 'Claude vs GPT Image Analysis'
 
 prompts:
   - ./prompt.py:format_image_prompt
+  - ./prompt.js:formatImagePrompt
 
 providers:
   - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
   - id: anthropic:messages:claude-3-5-sonnet-20241022
+  - id: openai:gpt-4o
+    label: custom label for gpt-4o
 
 tests:
   - vars:
       image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Great_Wave_off_Kanagawa2.jpg/640px-Great_Wave_off_Kanagawa2.jpg
       label: Great Wave off Kanagawa
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: Is a detailed description of the image '{{label}}'
