@@ -9,7 +9,19 @@ import TabItem from '@theme/TabItem';
 
 # Quickstart
 
-This guide describes how to get started with Promptfoo's gen AI red teaming tool.
+Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for red teaming gen AI applications.
+
+- **Automatically scans 30+ vulnerability types**:
+  - <a href="/docs/red-team/llm-vulnerability-types/#privacy-and-security" style={{background: '#f0f0f0', borderRadius: '4px', padding: '2px 4px', fontSize: '14px'}}>Security & data privacy</a>: jailbreaks, injections, RAG poisoning, etc.
+  - <a href="/docs/red-team/llm-vulnerability-types/" style={{background: '#f0f0f0', borderRadius: '4px', padding: '2px 4px', fontSize: '14px'}}>Compliance & ethics</a>: harmful & biased content, content filter validation, OWASP/NIST/EU compliance, etc.
+  - <a href="/docs/red-team/configuration/#custom-policies" style={{background: '#f0f0f0', borderRadius: '4px', padding: '2px 4px', fontSize: '14px'}}>Custom policies</a>: enforce organizational and use-case specific guidelines.
+- Generates **dynamic attack probes** tailored to your application using specialized uncensored models.
+- Implements state-of-the-art **adversarial ML research** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and more.
+- Configure tests via API, browser, or direct model access
+
+<div style={{maxWidth: 460, margin: '0 auto'}}>
+![llm red team report](/img/riskreport-1@2x.png)
+</div>
 
 ## Prerequisites
 

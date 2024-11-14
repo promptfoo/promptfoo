@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Intro
 
-`promptfoo` is a CLI and library for evaluating and red-teaming LLM apps.
+`promptfoo` is an [open-source](https://github.com/promptfoo/promptfoo) CLI and library for evaluating and red-teaming LLM apps.
 
 With promptfoo, you can:
 

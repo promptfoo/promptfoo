@@ -381,7 +381,7 @@ policy: >
 2. Enumerate potential edge cases and loopholes.
 3. Write policies as affirmations rather than negations when possible.
 
-### Other pointers
+#### Other pointers
 
 - Duplicate plugins are removed, keeping the last occurrence
 - Plugins are sorted alphabetically in the final configuration
