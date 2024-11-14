@@ -27,6 +27,16 @@ redteam:
     - pii:api-db
 ```
 
+You can also provide a specific name to target:
+
+```yaml
+redteam:
+  plugins:
+    - id: pii:direct
+      config:
+        name: 'Jane Doe'
+```
+
 ## Subcategories
 
 | Subcategory         | Plugin ID   | Description                                    |
