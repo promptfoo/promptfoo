@@ -207,6 +207,7 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       let metadata: any;
       const chunks: any[] = [];
 
+      // Read metadata and chunks from the stream
       for await (const chunk of req) {
         const line = chunk.toString().trim();
         if (!line) {
@@ -223,12 +224,28 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      // Create eval from streamed data
+      // Create eval with initial metadata
       const eval_ = await Eval.create(metadata.config, [], {
         author: metadata.author,
         createdAt: new Date(metadata.createdAt),
-        results: chunks,
       });
+
+      // Process results in batches
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+        const batch = chunks.slice(i, i + BATCH_SIZE);
+        for (const result of batch) {
+          await EvalResult.createFromEvaluateResult(
+            eval_.id,
+            result.evaluateResult,
+            result.testCase,
+            {
+              persist: true,
+            },
+          );
+        }
+        logger.debug(`[POST /api/eval] Processed batch ${Math.floor(i / BATCH_SIZE) + 1}`);
+      }
 
       logger.debug(`[POST /api/eval] Created streaming eval with ID: ${eval_.id}`);
       logger.debug(`[POST /api/eval] Saved ${chunks.length} results to eval ${eval_.id}`);
