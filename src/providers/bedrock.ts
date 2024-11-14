@@ -418,12 +418,15 @@ export const BEDROCK_MODEL = {
       try {
         const parsed = JSON.parse(prompt);
         if (Array.isArray(parsed)) {
-          messages = parsed.map((msg) => ({
-            role: msg.role,
-            content: Array.isArray(msg.content)
-              ? msg.content
-              : [{ type: 'text', text: msg.content }],
-          }));
+          messages = parsed
+            .map((msg) => ({
+              role: msg.role,
+              content: Array.isArray(msg.content)
+                ? msg.content
+                : [{ type: 'text', text: msg.content }],
+            }))
+            .filter((msg) => msg.role !== 'system');
+          systemPrompt = parsed.find((msg) => msg.role === 'system')?.content;
         } else {
           const { system, extractedMessages } = parseMessages(prompt);
           messages = extractedMessages;

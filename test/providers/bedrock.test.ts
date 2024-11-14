@@ -267,10 +267,6 @@ describe('AwsBedrockGenericProvider', () => {
 
       expect(params.messages).toEqual([
         {
-          role: 'system',
-          content: [{ type: 'text', text: 'You are a helpful assistant.' }],
-        },
-        {
           role: 'user',
           content: [
             { type: 'text', text: 'Describe this image:' },
@@ -285,6 +281,7 @@ describe('AwsBedrockGenericProvider', () => {
           ],
         },
       ]);
+      expect(params.system).toBe('You are a helpful assistant.');
     });
   });
 
