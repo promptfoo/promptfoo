@@ -11,7 +11,7 @@ image:
   tag: v1.0.0
 
 imagePullSecrets:
-- name: <yourcred>
+  - name: <yourcred>
 nameOverride: ''
 fullnameOverride: ''
 
@@ -21,7 +21,7 @@ serviceAccount:
   annotations: {}
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
-  name: ""
+  name: ''
 
 podAnnotations: {}
 podLabels: {}
@@ -36,7 +36,6 @@ securityContext: {}
 # readOnlyRootFilesystem: true
 # runAsNonRoot: true
 # runAsUser: 1000
-
 
 service:
   type: ClusterIP
@@ -68,25 +67,24 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
-
 persistentVolumesClaims:
-- name: promptfoo
-  size: 1Gi
-  accessModes:
-  - ReadWriteOnce
-  storageClassName: default
+  - name: promptfoo
+    size: 1Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: default
 
 # Additional volumes on the output Deployment definition.
 volumes:
-- name: config
-  persistentVolumeClaim:
-    claimName: promptfoo
+  - name: config
+    persistentVolumeClaim:
+      claimName: promptfoo
 
 # Additional volumeMounts on the output Deployment definition.
 volumeMounts:
-- name: config
-  mountPath: "/home/promptfoo/.promptfoo"
-  readOnly: false
+  - name: config
+    mountPath: '/home/promptfoo/.promptfoo'
+    readOnly: false
 
 nodeSelector:
   kubernetes.io/arch: amd64
