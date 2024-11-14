@@ -101,6 +101,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     row.outputs[result.promptIdx] = {
       id: result.id || `${result.testIdx}-${result.promptIdx}`,
       ...result,
+      response: result.response || null,
       text: resultText || '',
       prompt: result.prompt.raw,
       provider: result.provider?.label || result.provider?.id || 'unknown provider',

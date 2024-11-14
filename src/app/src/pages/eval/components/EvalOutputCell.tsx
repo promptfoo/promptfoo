@@ -265,24 +265,26 @@ function EvalOutputCell({
     costDisplay = <span>${output.cost.toPrecision(2)}</span>;
   }
 
-  if (output.tokenUsage?.cached) {
+  console.info(`output: ${JSON.stringify(output, null, 2)}`);
+
+  if (output.response.tokenUsage?.cached) {
     tokenUsageDisplay = (
       <span>
         {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-          output.tokenUsage.cached,
+          output.response.tokenUsage.cached,
         )}{' '}
         (cached)
       </span>
     );
-  } else if (output.tokenUsage?.total) {
+  } else if (output.response.tokenUsage?.total) {
     const promptTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.tokenUsage.prompt ?? 0,
+      output.response.tokenUsage.prompt ?? 0,
     );
     const completionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.tokenUsage.completion ?? 0,
+      output.response.tokenUsage.completion ?? 0,
     );
     const totalTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.tokenUsage.total,
+      output.response.tokenUsage.total ?? 0,
     );
 
     tokenUsageDisplay = (
