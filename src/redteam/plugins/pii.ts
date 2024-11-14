@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { ApiProvider, PluginConfig, TestCase } from '../../types';
+import type { PluginActionParams, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import type { PII_PLUGINS } from '../constants';
 import { RedteamGraderBase } from './base';
