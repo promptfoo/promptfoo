@@ -4,7 +4,7 @@ import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { ApiProvider, PluginConfig, TestCase } from '../../types';
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS, getRemoteGenerationUrl } from '../constants';
 import { neverGenerateRemote, shouldGenerateRemote } from '../util';
 import { type RedteamPluginBase } from './base';
@@ -28,14 +28,7 @@ import { SqlInjectionPlugin } from './sqlInjection';
 export interface PluginFactory {
   key: string;
   validate?: (config: PluginConfig) => void;
-  action: (
-    provider: ApiProvider,
-    purpose: string,
-    injectVar: string,
-    n: number,
-    delayMs: number,
-    config?: PluginConfig,
-  ) => Promise<TestCase[]>;
+  action: (params: PluginActionParams) => Promise<TestCase[]>;
 }
 
 type PluginClass<T extends PluginConfig> = new (
@@ -94,7 +87,7 @@ function createPluginFactory<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async (provider, purpose, injectVar, n, delayMs, config) => {
+    action: async ({ provider, purpose, injectVar, n, delayMs, config }) => {
       if (shouldGenerateRemote()) {
         return fetchRemoteTestCases(key, purpose, injectVar, n, config);
       }
@@ -135,23 +128,23 @@ const pluginFactories: PluginFactory[] = [
 
 const harmPlugins: PluginFactory[] = Object.keys(HARM_PLUGINS).map((category) => ({
   key: category,
-  action: async (provider, purpose, injectVar, n, delayMs, config) => {
+  action: async (params) => {
     if (shouldGenerateRemote()) {
-      return fetchRemoteTestCases(category, purpose, injectVar, n);
+      return fetchRemoteTestCases(category, params.purpose, params.injectVar, params.n);
     }
     logger.debug(`Using local redteam generation for ${category}`);
-    return getHarmfulTests(provider, purpose, injectVar, [category], n, delayMs, config);
+    return getHarmfulTests(params, [category]);
   },
 }));
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category) => ({
   key: category,
-  action: async (provider, purpose, injectVar, n, delayMs, config) => {
+  action: async (params) => {
     if (shouldGenerateRemote()) {
-      return fetchRemoteTestCases(category, purpose, injectVar, n);
+      return fetchRemoteTestCases(category, params.purpose, params.injectVar, params.n);
     }
     logger.debug(`Using local redteam generation for ${category}`);
-    return getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n, delayMs, config);
+    return getPiiLeakTestsForCategory(params, category);
   },
 }));
 
@@ -162,7 +155,7 @@ function createRemotePlugin<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async (provider, purpose, injectVar, n, delayMs, config) => {
+    action: async ({ provider, purpose, injectVar, n, delayMs, config }) => {
       if (neverGenerateRemote()) {
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }

@@ -133,13 +133,8 @@ const generatePiiLeak = (examples: string[]) => dedent`
  * @returns A Promise resolving to an array of TestCase objects
  */
 export async function getPiiLeakTestsForCategory(
-  provider: ApiProvider,
-  purpose: string,
-  injectVar: string,
+  { provider, purpose, injectVar, n, config }: PluginActionParams,
   categoryKey: string,
-  n: number,
-  delayMs: number,
-  config: PluginConfig | undefined,
 ): Promise<TestCase[]> {
   const category = PII_CATEGORIES.find((cat) => cat.key === categoryKey);
   if (!category) {
