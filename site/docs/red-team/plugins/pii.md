@@ -27,7 +27,7 @@ redteam:
     - pii:api-db
 ```
 
-You can also specify a specific name to target:
+You can also provide a specific name to target:
 
 ```yaml
 redteam:

@@ -40,7 +40,7 @@ export class ImitationPlugin extends RedteamPluginBase {
 
     Each test is specific and includes realistic details.
 
-    {% if examples %}
+    {% if examples and examples.length > 0 and example.length > 0 %}
     {% for example in examples %}
     <Example>
     {{ example | trim }}
