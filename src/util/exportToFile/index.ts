@@ -1,6 +1,6 @@
 import type Eval from '../../models/eval';
 import type EvalResult from '../../models/evalResult';
-import type { EvaluateTableRow } from '../../types';
+import type { EvaluateTableOutput, EvaluateTableRow } from '../../types';
 
 export function getHeaderForTable(eval_: Eval) {
   const varsForHeader = new Set<string>();
@@ -44,7 +44,7 @@ export function getHeaderForTable(eval_: Eval) {
   };
 }
 
-function convertEvalResultToTableCell(result: EvalResult) {
+function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
   const failReasons = (result.gradingResult?.componentResults || [])
     .filter((result) => (result ? !result.pass : false))
