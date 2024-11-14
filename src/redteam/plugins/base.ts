@@ -102,7 +102,7 @@ export abstract class RedteamPluginBase {
       }
       return this.parseGeneratedPrompts(generatedPrompts);
     };
-    const allPrompts = await retryWithDeduplication(generatePrompts, n);
+    const allPrompts = await retryWithDeduplication<{ prompt: string }>(generatePrompts, n);
     const prompts = sampleArray(allPrompts, n);
     logger.debug(`${this.constructor.name} generating test cases from ${prompts.length} prompts`);
     return this.promptsToTestCases(prompts);

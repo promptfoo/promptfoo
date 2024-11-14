@@ -10,7 +10,7 @@ describe('retryWithDeduplication', () => {
       .mockResolvedValueOnce([3, 4, 5])
       .mockResolvedValueOnce([5, 6, 7]);
 
-    const result = await retryWithDeduplication(operation, 5);
+    const result = await retryWithDeduplication<number>(operation, 5);
 
     expect(result).toEqual([1, 2, 3, 4, 5]);
     expect(operation).toHaveBeenCalledTimes(2);
@@ -23,7 +23,7 @@ describe('retryWithDeduplication', () => {
       .mockResolvedValueOnce([1, 2])
       .mockResolvedValueOnce([1, 2]);
 
-    const result = await retryWithDeduplication(operation, 5, 2);
+    const result = await retryWithDeduplication<number>(operation, 5, 2);
 
     expect(result).toEqual([1, 2]);
     expect(operation).toHaveBeenCalledTimes(4);
@@ -38,7 +38,7 @@ describe('retryWithDeduplication', () => {
     const customDedupFn = (items: { id: number }[]) =>
       Array.from(new Set(items.map((item) => item.id))).map((id) => ({ id }));
 
-    const result = await retryWithDeduplication(operation, 3, 2, customDedupFn);
+    const result = await retryWithDeduplication<{ id: number }>(operation, 3, 2, customDedupFn);
 
     expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
     expect(operation).toHaveBeenCalledTimes(2);
@@ -51,7 +51,7 @@ describe('retryWithDeduplication', () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([3]);
 
-    const result = await retryWithDeduplication(operation, 3);
+    const result = await retryWithDeduplication<number>(operation, 3);
 
     expect(result).toEqual([1, 2, 3]);
     expect(operation).toHaveBeenCalledTimes(3);
@@ -64,7 +64,7 @@ describe('retryWithDeduplication', () => {
       .mockResolvedValueOnce([2, 3])
       .mockResolvedValueOnce([3, 4]);
 
-    const result = await retryWithDeduplication(operation, 10, 2);
+    const result = await retryWithDeduplication<number>(operation, 10, 2);
 
     expect(result).toEqual([1, 2, 3, 4]);
     expect(operation).toHaveBeenCalledTimes(6);

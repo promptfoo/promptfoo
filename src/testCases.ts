@@ -454,7 +454,10 @@ export async function synthesize({
     return parsed.vars || [];
   };
 
-  let testCaseVars = await retryWithDeduplication(generateTestCasesForPersona, totalTestCases);
+  let testCaseVars = await retryWithDeduplication<VarMapping>(
+    generateTestCasesForPersona,
+    totalTestCases,
+  );
 
   logger.debug(`Generated ${testCaseVars.length} test cases`);
 
