@@ -281,17 +281,17 @@ export async function synthesize({
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
-      let pluginTests = await action(
-        redteamProvider,
+      let pluginTests = await action({
+        provider: redteamProvider,
         purpose,
         injectVar,
-        plugin.numTests,
-        delay || 0,
-        {
+        n: plugin.numTests,
+        delayMs: delay || 0,
+        config: {
           language,
           ...resolvePluginConfig(plugin.config),
         },
-      );
+      });
       if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
         logger.warn(`Failed to generate tests for ${plugin.id}`);
         pluginTests = [];
