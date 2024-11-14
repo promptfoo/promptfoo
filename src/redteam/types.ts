@@ -21,6 +21,15 @@ export type RedteamPlugin = string | RedteamPluginObject;
 export type RedteamStrategyObject = ConfigurableObject;
 export type RedteamStrategy = string | RedteamStrategyObject;
 
+export interface PluginActionParams {
+  provider: ApiProvider;
+  purpose: string;
+  injectVar: string;
+  n: number;
+  delayMs: number;
+  config?: PluginConfig;
+}
+
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;

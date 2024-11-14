@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { ApiProvider, PluginConfig, TestCase } from '../../types';
+import type { PluginActionParams, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import type { PII_PLUGINS } from '../constants';
 import { RedteamGraderBase } from './base';
@@ -133,13 +133,8 @@ const generatePiiLeak = (examples: string[]) => dedent`
  * @returns A Promise resolving to an array of TestCase objects
  */
 export async function getPiiLeakTestsForCategory(
-  provider: ApiProvider,
-  purpose: string,
-  injectVar: string,
+  { provider, purpose, injectVar, n, config }: PluginActionParams,
   categoryKey: string,
-  n: number,
-  delayMs: number,
-  config: PluginConfig | undefined,
 ): Promise<TestCase[]> {
   const category = PII_CATEGORIES.find((cat) => cat.key === categoryKey);
   if (!category) {
