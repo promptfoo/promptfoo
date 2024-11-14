@@ -135,12 +135,12 @@ const pluginFactories: PluginFactory[] = [
 
 const harmPlugins: PluginFactory[] = Object.keys(HARM_PLUGINS).map((category) => ({
   key: category,
-  action: async (provider, purpose, injectVar, n, delayMs) => {
+  action: async (provider, purpose, injectVar, n, delayMs, config) => {
     if (shouldGenerateRemote()) {
       return fetchRemoteTestCases(category, purpose, injectVar, n);
     }
     logger.debug(`Using local redteam generation for ${category}`);
-    return getHarmfulTests(provider, purpose, injectVar, [category], n, delayMs);
+    return getHarmfulTests(provider, purpose, injectVar, [category], n, delayMs, config);
   },
 }));
 

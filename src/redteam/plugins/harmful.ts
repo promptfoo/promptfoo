@@ -168,6 +168,8 @@ class HarmfulPlugin extends RedteamPluginBase {
   protected async getTemplate(): Promise<string> {
     const nunjucks = getNunjucksEngine();
     return nunjucks.renderString(this.category.prompt, {
+      purpose: this.purpose,
+      n: this.config?.numExamples || 3,
       examples: this.config?.examples || this.category.examples,
     });
   }
@@ -177,14 +179,13 @@ class HarmfulPlugin extends RedteamPluginBase {
     purpose: string,
     injectVar: string,
     categoryLabel: string,
-    modifiers: Record<string, string>,
     config?: PluginConfig,
   ) {
     const category = REDTEAM_MODEL_CATEGORIES.find((cat) => cat.label === categoryLabel);
     if (!category) {
       throw new Error(`Category ${categoryLabel} not found`);
     }
-    super(provider, purpose, injectVar, modifiers);
+    super(provider, purpose, injectVar, config);
     this.category = category;
   }
 
@@ -265,6 +266,7 @@ async function generateTestsForCategory(
   harmCategory: string,
   delayMs: number,
   count: number,
+  config: PluginConfig,
 ): Promise<TestCase[]> {
   if (provider instanceof PromptfooHarmfulCompletionProvider) {
     const results = [];
@@ -278,7 +280,7 @@ async function generateTestsForCategory(
     }
     return results.map((result) => createTestCase(injectVar, result.output || '', harmCategory));
   } else {
-    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, {});
+    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, config);
     return plugin.generateTests(count, delayMs);
   }
 }
@@ -290,6 +292,7 @@ export async function getHarmfulTests(
   plugins: string[],
   numTests: number,
   delayMs: number = 0,
+  config: PluginConfig = {},
 ): Promise<TestCase[]> {
   const testCases: TestCase[] = [];
   const harmCategoriesToUse =
@@ -318,6 +321,7 @@ export async function getHarmfulTests(
         harmCategory,
         delayMs,
         remainingCount,
+        config,
       );
       newTests.push(...results);
     }
@@ -338,7 +342,7 @@ export async function getHarmfulTests(
     const newTests: TestCase[] = [];
 
     for (const harmCategory of redteamProviderHarmCategories) {
-      const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, {});
+      const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, config);
       const results = await plugin.generateTests(remainingCount, delayMs);
       for (const result of results) {
         if (result.vars) {
