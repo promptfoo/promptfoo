@@ -146,12 +146,12 @@ const harmPlugins: PluginFactory[] = Object.keys(HARM_PLUGINS).map((category) =>
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category) => ({
   key: category,
-  action: async (provider, purpose, injectVar, n) => {
+  action: async (provider, purpose, injectVar, n, delayMs, config) => {
     if (shouldGenerateRemote()) {
       return fetchRemoteTestCases(category, purpose, injectVar, n);
     }
     logger.debug(`Using local redteam generation for ${category}`);
-    return getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n);
+    return getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n, delayMs, config);
   },
 }));
 

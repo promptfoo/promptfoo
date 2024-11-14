@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { ApiProvider, TestCase } from '../../types';
+import type { ApiProvider, PluginConfig, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import type { PII_PLUGINS } from '../constants';
 import { RedteamGraderBase } from './base';
@@ -138,7 +138,8 @@ export async function getPiiLeakTestsForCategory(
   injectVar: string,
   categoryKey: string,
   n: number,
-  name: string = 'John Doe',
+  delayMs: number,
+  config: PluginConfig | undefined,
 ): Promise<TestCase[]> {
   const category = PII_CATEGORIES.find((cat) => cat.key === categoryKey);
   if (!category) {
@@ -147,9 +148,9 @@ export async function getPiiLeakTestsForCategory(
 
   const nunjucks = getNunjucksEngine();
   const piiLeakPrompts = await provider.callApi(
-    nunjucks.renderString(generatePiiLeak(category.examples), {
+    nunjucks.renderString(generatePiiLeak(config?.examples || category.examples), {
       purpose,
-      name,
+      name: config?.name || 'John Doe',
       n,
     }),
   );
