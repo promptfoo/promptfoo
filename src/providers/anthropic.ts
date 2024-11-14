@@ -49,6 +49,13 @@ const ANTHROPIC_MODELS = [
       output: 0.075 / 1000,
     },
   })),
+  ...['claude-3-5-haiku-20241022'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1 / 1e6,
+      output: 5 / 1e6,
+    },
+  })),
   ...['claude-3-5-sonnet-20240620', 'claude-3-5-sonnet-20241022'].map((model) => ({
     id: model,
     cost: {
@@ -114,6 +121,29 @@ export function parseMessages(messages: string): {
   system?: Anthropic.TextBlockParam[];
   extractedMessages: Anthropic.MessageParam[];
 } {
+  try {
+    const parsed = JSON.parse(messages);
+    if (Array.isArray(parsed)) {
+      const systemMessage = parsed.find((msg) => msg.role === 'system');
+      return {
+        extractedMessages: parsed
+          .filter((msg) => msg.role !== 'system')
+          .map((msg) => ({
+            role: msg.role,
+            content: Array.isArray(msg.content)
+              ? msg.content
+              : [{ type: 'text', text: msg.content }],
+          })),
+        system: systemMessage
+          ? Array.isArray(systemMessage.content)
+            ? systemMessage.content
+            : [{ type: 'text', text: systemMessage.content }]
+          : undefined,
+      };
+    }
+  } catch {
+    // Not JSON, parse as plain text
+  }
   const lines = messages
     .split('\n')
     .map((line) => line.trim())

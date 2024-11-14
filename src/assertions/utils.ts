@@ -32,3 +32,10 @@ export function processFileReference(fileRef: string): object | string {
     throw new Error(`Unsupported file type: ${filePath}`);
   }
 }
+
+export function coerceString(value: string | object): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  return JSON.stringify(value);
+}

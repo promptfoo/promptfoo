@@ -2,7 +2,7 @@
 sidebar_label: Multilingual
 ---
 
-#Multilingual Strategy
+# Multilingual jailbreaking
 
 The Multilingual strategy tests an AI system's ability to handle and process inputs in multiple languages, potentially uncovering inconsistencies in behavior across different languages or bypassing language-specific content filters.
 

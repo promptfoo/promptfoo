@@ -35,11 +35,7 @@ import type {
 } from '../types';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider, calculateAnthropicCost } from './anthropic';
-import {
-  AzureOpenAiChatCompletionProvider,
-  AzureOpenAiEmbeddingProvider,
-  calculateAzureOpenAICost,
-} from './azureopenai';
+import { AzureChatCompletionProvider, AzureEmbeddingProvider, calculateAzureCost } from './azure';
 import { GroqProvider } from './groq';
 import {
   OpenAiChatCompletionProvider,
@@ -234,7 +230,7 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         });
       } else if (this.providerName === 'azureopenai') {
         const provider = new GatewayAzure();
-        const parentClass = new AzureOpenAiEmbeddingProvider(this.modelName, this.providerOptions);
+        const parentClass = new AzureEmbeddingProvider(this.modelName, this.providerOptions);
         gatewayEmbeddingModel = provider.embeddingModel({
           apiKey: await parentClass.getApiKey(),
           deploymentId: this.modelName,
@@ -473,10 +469,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         });
       } else if (this.providerName === 'azureopenai') {
         const provider = new GatewayAzure();
-        const parentClass = new AzureOpenAiChatCompletionProvider(
-          this.modelName,
-          this.providerOptions,
-        );
+        const parentClass = new AzureChatCompletionProvider(this.modelName, this.providerOptions);
         const apiKey = await parentClass.getApiKey();
         gatewayChatModel = provider.chatModel({
           apiKey,
@@ -670,7 +663,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           response.response.usage?.completionTokens,
         );
       } else if (this.providerName === 'azureopenai') {
-        cost = calculateAzureOpenAICost(
+        cost = calculateAzureCost(
           this.modelName,
           {},
           response.response.usage?.promptTokens,

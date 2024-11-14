@@ -181,7 +181,6 @@
 
 .actionOrientedSection h2 {
   font-size: 2rem;
-  color: #333;
   margin-bottom: 2rem;
 }
 
@@ -196,6 +195,7 @@
 }
 
 .ctaSection {
+  background-color: var(--ifm-background-surface-color);
   text-align: center;
   padding: 6rem 0;
   /*
@@ -250,5 +250,140 @@
 
   .ctaSection h3 {
     font-size: 1.5rem;
+  }
+}
+
+.asSeenOnSection {
+  padding: 4rem 0 6rem;
+  background-color: var(--ifm-background-surface-color);
+}
+
+.asSeenOnSection h2 {
+  text-align: center;
+  font-size: 2rem;
+  margin-bottom: 3rem;
+}
+
+.asSeenOnGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.asSeenOnCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.asSeenOnCard:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.12);
+}
+
+.asSeenOnGrid a:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
+.asSeenOnLogo {
+  height: 40px;
+  margin-bottom: 1.5rem;
+  filter: grayscale(100%);
+  transition: filter 0.3s ease;
+}
+
+[data-theme='dark'] .asSeenOnLogo {
+  filter: invert(100%);
+}
+
+.asSeenOnCard:hover .asSeenOnLogo {
+  filter: grayscale(0%);
+}
+
+[data-theme='dark'] .asSeenOnCard:hover .asSeenOnLogo {
+  filter: invert(100%);
+}
+
+.asSeenOnContent {
+  text-align: center;
+}
+
+.asSeenOnContent h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.asSeenOnLogoInline {
+  height: 36px;
+  width: auto;
+  filter: grayscale(100%);
+  transition: filter 0.3s ease;
+}
+
+[data-theme='dark'] .asSeenOnLogoInline {
+  filter: invert(100%);
+}
+
+.asSeenOnCard:hover .asSeenOnLogoInline {
+  filter: grayscale(0%);
+}
+
+[data-theme='dark'] .asSeenOnCard:hover .asSeenOnLogoInline {
+  filter: invert(100%);
+}
+
+.asSeenOnContent p {
+  font-size: 1rem;
+  color: var(--ifm-color-emphasis-700);
+  margin-bottom: 1rem;
+}
+
+.watchNow {
+  display: inline-block;
+  color: var(--ifm-color-primary);
+  font-weight: 500;
+  transition: transform 0.2s ease;
+}
+
+[data-theme='dark'] .asSeenOnSection {
+  background: linear-gradient(
+    to bottom,
+    var(--ifm-background-color),
+    var(--ifm-background-surface-color)
+  );
+}
+
+[data-theme='dark'] .asSeenOnCard {
+  background: var(--ifm-card-background-color);
+}
+
+[data-theme='dark'] .asSeenOnSection h2 {
+  color: white;
+}
+
+@media screen and (max-width: 768px) {
+  .asSeenOnSection {
+    padding: 3rem 0;
+  }
+
+  .asSeenOnGrid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 }

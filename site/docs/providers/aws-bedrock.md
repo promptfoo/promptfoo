@@ -42,6 +42,34 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
          temperature: 0.7
    ```
 
+## Authentication
+
+Configure Amazon Bedrock authentication in your provider's `config` section using one of these methods:
+
+1. Access key authentication:
+
+```yaml
+providers:
+  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      accessKeyId: 'YOUR_ACCESS_KEY_ID'
+      secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
+      sessionToken: 'YOUR_SESSION_TOKEN' # Optional
+      region: 'us-east-1' # Optional, defaults to us-east-1
+```
+
+2. SSO authentication:
+
+```yaml
+providers:
+  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      profile: 'YOUR_SSO_PROFILE'
+      region: 'us-east-1' # Optional, defaults to us-east-1
+```
+
+The provider will automatically use AWS SSO credentials when a profile is specified. For access key authentication, both `accessKeyId` and `secretAccessKey` are required, while `sessionToken` is optional.
+
 ## Example
 
 See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, AI21, Llama 3.1, and Titan model usage.

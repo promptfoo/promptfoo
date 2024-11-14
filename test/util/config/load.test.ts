@@ -1,9 +1,11 @@
+import $RefParser from '@apidevtools/json-schema-ref-parser';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
+import logger from '../../../src/logger';
 import { readTests } from '../../../src/testCases';
 import type { UnifiedConfig } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
@@ -818,7 +820,7 @@ describe('resolveConfigs', () => {
 
 describe('readConfig', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
   it('should read JSON config file', async () => {
@@ -935,5 +937,60 @@ describe('readConfig', () => {
       ...mockConfig,
       prompts: ['{{prompt}}'],
     });
+  });
+
+  it('should resolve YAML references before validation', async () => {
+    const mockConfig = {
+      description: 'test_config',
+      prompts: ['test {{text}}'],
+      providers: [{ $ref: 'defaultParams.yaml#/model' }],
+      temperature: 1,
+      tests: [{ vars: { text: 'test text' } }],
+    };
+
+    const dereferencedConfig = {
+      description: 'test_config',
+      prompts: ['test {{text}}'],
+      providers: ['echo'],
+      temperature: 1,
+      tests: [{ vars: { text: 'test text' } }],
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(mockConfig));
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(dereferencedConfig);
+
+    const result = await readConfig('config.yaml');
+    expect(result).toEqual(dereferencedConfig);
+    expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
+  });
+
+  // Disabled because Validator requires `prompts`, but prompts is not actually required for redteam.
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('should throw validation error for invalid dereferenced config', async () => {
+    const mockConfig = {
+      description: 'invalid_config',
+      prompts: ['test prompt'],
+      providers: [{ $ref: 'defaultParams.yaml#/invalidKey' }],
+    };
+
+    const dereferencedConfig = {
+      description: 'invalid_config',
+      prompts: ['test prompt'],
+      providers: [{ invalid: true }], // This will fail validation
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(mockConfig));
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(dereferencedConfig);
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation();
+
+    await readConfig('config.yaml');
+
+    expect(loggerSpy).toHaveBeenCalledWith(
+      'Invalid configuration file config.yaml:\nValidation error: Unrecognized key(s) in object: \'invalid\' at "providers[0]"',
+    );
+    expect(loggerSpy.mock.calls[0][0]).toContain('Invalid configuration file');
+
+    loggerSpy.mockRestore();
   });
 });

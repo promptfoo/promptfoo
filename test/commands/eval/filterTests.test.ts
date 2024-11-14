@@ -62,4 +62,45 @@ describe('filterTests', () => {
       expect(result).not.toBe(tests);
     });
   });
+
+  describe('sample', () => {
+    it('should return the requested number of random tests', async () => {
+      const result = await filterTests(testSuite, { sample: 2 });
+
+      expect(result).toHaveLength(2);
+      // Each result should be one of the original tests
+      result?.forEach((test) => {
+        expect(tests).toContain(test);
+      });
+    });
+
+    it('accepts sample as string', async () => {
+      const result = await filterTests(testSuite, { sample: '2' });
+
+      expect(result).toHaveLength(2);
+    });
+
+    it('throws an exception when sample is not a number', async () => {
+      await expect(() => filterTests(testSuite, { sample: 'NOPE' })).rejects.toEqual(
+        new Error('sample must be a number, got: NOPE'),
+      );
+    });
+
+    it('returns all tests when sample size exceeds test count', async () => {
+      const result = await filterTests(testSuite, { sample: 10 });
+
+      expect(result).toHaveLength(tests.length);
+      result?.forEach((test) => {
+        expect(tests).toContain(test);
+      });
+    });
+
+    it('can combine with pattern filter', async () => {
+      const result = await filterTests(testSuite, { sample: 1, pattern: 'ey$' });
+
+      expect(result).toBeDefined();
+      expect(result).toHaveLength(1);
+      expect(result?.[0].description).toMatch(/ey$/);
+    });
+  });
 });

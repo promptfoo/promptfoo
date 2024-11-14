@@ -5,7 +5,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginConfig, TestCase } from '../../types';
-import { HARM_PLUGINS, PII_PLUGINS, REMOTE_GENERATION_URL } from '../constants';
+import { HARM_PLUGINS, PII_PLUGINS, getRemoteGenerationUrl } from '../constants';
 import { neverGenerateRemote, shouldGenerateRemote } from '../util';
 import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
@@ -15,6 +15,7 @@ import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { getHarmfulTests } from './harmful';
 import { ImitationPlugin } from './imitation';
+import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PolicyPlugin } from './policy';
@@ -64,10 +65,9 @@ async function fetchRemoteTestCases(
     config,
     version: VERSION,
   });
-  logger.debug(`Using remote redteam generation for ${key}:\n${body}`);
   try {
     const { data } = await fetchWithCache(
-      REMOTE_GENERATION_URL,
+      getRemoteGenerationUrl(),
       {
         method: 'POST',
         headers: {
@@ -119,6 +119,9 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
   ),
+  createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config) =>
+    invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
+  ),
   createPluginFactory<{ systemPrompt: string }>(
     PromptExtractionPlugin,
     'prompt-extraction',
@@ -132,23 +135,23 @@ const pluginFactories: PluginFactory[] = [
 
 const harmPlugins: PluginFactory[] = Object.keys(HARM_PLUGINS).map((category) => ({
   key: category,
-  action: async (provider, purpose, injectVar, n, delayMs) => {
+  action: async (provider, purpose, injectVar, n, delayMs, config) => {
     if (shouldGenerateRemote()) {
       return fetchRemoteTestCases(category, purpose, injectVar, n);
     }
     logger.debug(`Using local redteam generation for ${category}`);
-    return getHarmfulTests(provider, purpose, injectVar, [category], n, delayMs);
+    return getHarmfulTests(provider, purpose, injectVar, [category], n, delayMs, config);
   },
 }));
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category) => ({
   key: category,
-  action: async (provider, purpose, injectVar, n) => {
+  action: async (provider, purpose, injectVar, n, delayMs, config) => {
     if (shouldGenerateRemote()) {
       return fetchRemoteTestCases(category, purpose, injectVar, n);
     }
     logger.debug(`Using local redteam generation for ${category}`);
-    return getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n);
+    return getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n, delayMs, config);
   },
 }));
 

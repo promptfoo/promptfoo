@@ -6,7 +6,13 @@ sidebar_position: 60
 
 ## Out of memory error
 
-To increase the amount of memory available to Promptfoo, increase the node heap size using the `--max-old-space-size` flag. For example:
+If you have a large number of tests or your tests have large outputs, you may encounter an out of memory error. Setup promptfoo to handle this by following **all** of the following steps:
+
+1. Do not use the `--no-write` flag. We need to write to disk to avoid memory issues.
+2. Use the `--no-table` flag.
+3. Only output to `jsonl` ex: `--output results.jsonl`
+
+If you're still encountering memory issues, you can increase the amount of memory available to Promptfoo by setting the `NODE_OPTIONS` environment variable. For example:
 
 ```bash
 # 8192 MB is 8 GB. Set this to an appropriate value for your machine.

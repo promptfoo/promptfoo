@@ -81,7 +81,43 @@
                             "AZURE_OPENAI_API_KEY": {
                               "type": "string"
                             },
+                            "AZURE_API_BASE_URL": {
+                              "type": "string"
+                            },
+                            "AZURE_API_HOST": {
+                              "type": "string"
+                            },
+                            "AZURE_API_KEY": {
+                              "type": "string"
+                            },
+                            "AZURE_DEPLOYMENT_NAME": {
+                              "type": "string"
+                            },
+                            "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
+                              "type": "string"
+                            },
                             "AZURE_OPENAI_BASE_URL": {
+                              "type": "string"
+                            },
+                            "AZURE_OPENAI_DEPLOYMENT_NAME": {
+                              "type": "string"
+                            },
+                            "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
+                              "type": "string"
+                            },
+                            "AZURE_CLIENT_SECRET": {
+                              "type": "string"
+                            },
+                            "AZURE_CLIENT_ID": {
+                              "type": "string"
+                            },
+                            "AZURE_TENANT_ID": {
+                              "type": "string"
+                            },
+                            "AZURE_AUTHORITY_HOST": {
+                              "type": "string"
+                            },
+                            "AZURE_TOKEN_SCOPE": {
                               "type": "string"
                             },
                             "BAM_API_HOST": {
@@ -96,7 +132,13 @@
                             "CLOUDFLARE_API_KEY": {
                               "type": "string"
                             },
+                            "PROMPTFOO_REMOTE_GENERATION_URL": {
+                              "type": "string"
+                            },
                             "COHERE_API_KEY": {
+                              "type": "string"
+                            },
+                            "FAL_KEY": {
                               "type": "string"
                             },
                             "GOOGLE_API_HOST": {
@@ -160,6 +202,15 @@
                               "type": "string"
                             },
                             "VERTEX_REGION": {
+                              "type": "string"
+                            },
+                            "WATSONX_AI_APIKEY": {
+                              "type": "string"
+                            },
+                            "WATSONX_AI_PROJECT_ID": {
+                              "type": "string"
+                            },
+                            "WATSONX_AI_BEARER_TOKEN": {
                               "type": "string"
                             }
                           },
@@ -829,6 +880,10 @@
               "type": "string"
             },
             "filterFirstN": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "filterSample": {
               "type": "integer",
               "exclusiveMinimum": 0
             },

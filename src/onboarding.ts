@@ -292,7 +292,7 @@ async function askForPermissionToOverwrite({
   return hasPermissionToWrite;
 }
 
-async function createDummyFiles(directory: string | null, interactive: boolean = true) {
+export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
   console.clear();
   const outDirectory = directory || '.';
   const outDirAbsolute = path.join(process.cwd(), outDirectory);
@@ -332,7 +332,7 @@ async function createDummyFiles(directory: string | null, interactive: boolean =
   let language: string;
 
   if (!fs.existsSync(outDirAbsolute)) {
-    fs.mkdirSync(outDirAbsolute);
+    fs.mkdirSync(outDirAbsolute, { recursive: true });
   }
 
   if (interactive) {
@@ -418,7 +418,7 @@ async function createDummyFiles(directory: string | null, interactive: boolean =
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
           'anthropic:messages:claude-3-5-sonnet-20241022',
-          'anthropic:messages:claude-3-opus-20240307',
+          'anthropic:messages:claude-3-5-haiku-20241022',
         ],
       },
       {

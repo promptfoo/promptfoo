@@ -14,11 +14,11 @@ import {
 import { AI21ChatCompletionProvider } from './providers/ai21';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
-  AzureOpenAiAssistantProvider,
-  AzureOpenAiChatCompletionProvider,
-  AzureOpenAiCompletionProvider,
-  AzureOpenAiEmbeddingProvider,
-} from './providers/azureopenai';
+  AzureAssistantProvider,
+  AzureChatCompletionProvider,
+  AzureCompletionProvider,
+  AzureEmbeddingProvider,
+} from './providers/azure';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import { BrowserProvider } from './providers/browser';
@@ -75,6 +75,7 @@ import { WebhookProvider } from './providers/webhook';
 import { WebSocketProvider } from './providers/websocket';
 import { createXAIProvider } from './providers/xai';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
+import RedteamGoatProvider from './redteam/providers/goat';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
@@ -175,23 +176,20 @@ export async function loadApiProvider(
       );
       ret = new OpenAiChatCompletionProvider(modelType, providerOptions);
     }
-  } else if (providerPath.startsWith('azureopenai:')) {
+  } else if (providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:')) {
     // Load Azure OpenAI module
     const splits = providerPath.split(':');
     const modelType = splits[1];
     const deploymentName = splits[2];
 
     if (modelType === 'chat') {
-      ret = new AzureOpenAiChatCompletionProvider(deploymentName, providerOptions);
+      ret = new AzureChatCompletionProvider(deploymentName, providerOptions);
     } else if (modelType === 'assistant') {
-      ret = new AzureOpenAiAssistantProvider(deploymentName, providerOptions);
+      ret = new AzureAssistantProvider(deploymentName, providerOptions);
     } else if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new AzureOpenAiEmbeddingProvider(
-        deploymentName || 'text-embedding-ada-002',
-        providerOptions,
-      );
+      ret = new AzureEmbeddingProvider(deploymentName || 'text-embedding-ada-002', providerOptions);
     } else if (modelType === 'completion') {
-      ret = new AzureOpenAiCompletionProvider(deploymentName, providerOptions);
+      ret = new AzureCompletionProvider(deploymentName, providerOptions);
     } else {
       throw new Error(
         `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: azureopenai:chat:<model name>, azureopenai:assistant:<assistant id>, azureopenai:completion:<model name>`,
@@ -464,16 +462,18 @@ export async function loadApiProvider(
     ret = new WebSocketProvider(providerPath, providerOptions);
   } else if (providerPath === 'browser') {
     ret = new BrowserProvider(providerPath, providerOptions);
-  } else if (providerPath === 'promptfoo:redteam:iterative') {
-    ret = new RedteamIterativeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
-    ret = new RedteamIterativeTreeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
-    ret = new RedteamImageIterativeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:crescendo') {
-    ret = new RedteamCrescendoProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
+  } else if (providerPath === 'promptfoo:redteam:crescendo') {
+    ret = new RedteamCrescendoProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:goat') {
+    ret = new RedteamGoatProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative') {
+    ret = new RedteamIterativeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
+    ret = new RedteamImageIterativeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
+    ret = new RedteamIterativeTreeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:simulated-user') {
     ret = new SimulatedUser(providerOptions);
   } else if (providerPath.startsWith('groq:')) {
@@ -517,7 +517,7 @@ export async function loadApiProvider(
   }
   ret.transform = options.transform;
   ret.delay = options.delay;
-  ret.label ||= getNunjucksEngine().renderString(options.label || '', {});
+  ret.label ||= getNunjucksEngine().renderString(String(options.label || ''), {});
   return ret;
 }
 
@@ -590,10 +590,17 @@ export default {
   MistralChatCompletionProvider,
   MistralEmbeddingProvider,
   AI21ChatCompletionProvider,
-  AzureOpenAiAssistantProvider,
-  AzureOpenAiChatCompletionProvider,
-  AzureOpenAiCompletionProvider,
-  AzureOpenAiEmbeddingProvider,
+  AzureAssistantProvider,
+  AzureChatCompletionProvider,
+  AzureCompletionProvider,
+  AzureEmbeddingProvider,
+
+  // Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
+  AzureOpenAiAssistantProvider: AzureAssistantProvider,
+  AzureOpenAiChatCompletionProvider: AzureChatCompletionProvider,
+  AzureOpenAiCompletionProvider: AzureCompletionProvider,
+  AzureOpenAiEmbeddingProvider: AzureEmbeddingProvider,
+
   AwsBedrockCompletionProvider,
   AwsBedrockEmbeddingProvider,
   BrowserProvider,
