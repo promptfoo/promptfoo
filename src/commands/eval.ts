@@ -31,7 +31,7 @@ import { CommandLineOptionsSchema } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
-import { resolveConfigs } from '../util/config/load';
+import { resolveConfigs, combineConfigs } from '../util/config/load';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 
@@ -85,20 +85,12 @@ export async function doEval(
       await runDbMigrations();
     }
 
-    // Reload default config - because it may have changed.
-    if (defaultConfigPath) {
-      const configDir = path.dirname(defaultConfigPath);
-      const configName = path.basename(defaultConfigPath, path.extname(defaultConfigPath));
-      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName);
-      defaultConfig = newDefaultConfig;
-    }
-
     if (cmdObj.config !== undefined) {
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
       for (const configPath of configPaths) {
-        if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
+        if (fs.existsSync(configPath)) {
           const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-            await loadDefaultConfig(configPath);
+            await loadDefaultConfig(undefined, configPath);
           if (newConfigPath) {
             cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
             cmdObj.config.push(newConfigPath);
@@ -108,7 +100,7 @@ export async function doEval(
           }
         }
       }
-    }
+    } 
 
     // Misc settings
     const iterations = cmdObj.repeat ?? Number.NaN;
@@ -400,18 +392,81 @@ export async function doEval(
   await runEvaluation(true /* initialization */);
 }
 
+function setOptsWithConfig(opts: EvalCommandOptions, config: Partial<UnifiedConfig>): EvalCommandOptions  {
+  
+  // If `opts.hasOwnProperty` returns true, it tells us the user has set a value for that flag.
+  
+  // The following options do not have a `--no` flag, and may need defaults based on the config.
+  if (!opts.hasOwnProperty('repeat')) {
+    opts.repeat = config.evaluateOptions?.repeat ?? 1;
+  }
+  
+  if (!opts.hasOwnProperty('delay')) {
+    opts.delay = config.evaluateOptions?.delay ?? 0;
+  }
+  
+  if (!opts.hasOwnProperty('maxConcurrency')) {
+    opts.maxConcurrency = config.evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
+  }
+  
+  if (!opts.hasOwnProperty('verbose')) {
+    opts.verbose = config.commandLineOptions?.verbose ?? false;
+  }
+  
+  if (!opts.hasOwnProperty('vars') && config.commandLineOptions?.vars){
+    opts.vars = config.commandLineOptions.vars;
+  }
+
+  if (!opts.hasOwnProperty('promptPrefix') && config.defaultTest?.options?.prefix) {
+    opts.promptPrefix = config.defaultTest.options.prefix;
+  }
+
+  if (!opts.hasOwnProperty('promptSuffix') && config.defaultTest?.options?.suffix) {
+    opts.promptSuffix = config.defaultTest.options.suffix;
+  }
+
+  if (!opts.hasOwnProperty('grader') && config.commandLineOptions?.grader) {
+    opts.grader = config.commandLineOptions.grader;
+  }
+
+  if (!opts.hasOwnProperty('share') && config.commandLineOptions?.share) {
+    opts.share = config.commandLineOptions?.share;
+  }
+
+  // The table property has both a no flag and a regular flag. It is a 1 of 1 in this pattern.
+  if (!opts.hasOwnProperty('table')) {
+    opts.table = config.commandLineOptions?.table ?? true;
+  }
+
+  // The following options all have only a `--no-___` flag.
+  // This means they default to true. So we give user input precedence by checking if the opt is false.
+  if (opts.cache !== false) {
+    // What should the precedence be between commandLineOptions.cache & evaluateOptions.cache?
+    const evaluateCache = config.evaluateOptions?.cache;
+    const commandLineCache = config.commandLineOptions?.cache;
+
+    const cache = evaluateCache ?? commandLineCache;
+    opts.cache = cache ?? true;
+  }
+
+  if (opts.write !== false && config.commandLineOptions?.write) {
+    opts.write = config.commandLineOptions?.write;
+  }
+
+  if (opts.progressBar !== false && config.evaluateOptions?.showProgressBar) {
+    opts.progressBar = config.evaluateOptions?.showProgressBar;
+  }
+
+  return opts
+}
+
 export function evalCommand(
   program: Command,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
 ) {
-  const evaluateOptions: EvaluateOptions = {};
-  if (defaultConfig.evaluateOptions) {
-    evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
-    evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
-    evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
-  }
 
+  let config: Partial<UnifiedConfig> = defaultConfig;
   const evalCmd = program
     .command('eval')
     .description('Evaluate prompts')
@@ -419,8 +474,7 @@ export function evalCommand(
     // Core configuration
     .option(
       '-c, --config <paths...>',
-      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
-    )
+      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml')
     .option('--env-file, --env-path <path>', 'Path to .env file')
 
     // Input sources
@@ -434,7 +488,6 @@ export function evalCommand(
     .option(
       '-v, --vars <path>',
       'Path to CSV with test cases (alias for --tests)',
-      defaultConfig?.commandLineOptions?.vars,
     )
     .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
 
@@ -442,12 +495,10 @@ export function evalCommand(
     .option(
       '--prompt-prefix <path>',
       'This prefix is prepended to every prompt',
-      defaultConfig.defaultTest?.options?.prefix,
     )
     .option(
       '--prompt-suffix <path>',
       'This suffix is append to every prompt',
-      defaultConfig.defaultTest?.options?.suffix,
     )
     .option(
       '--var <key=value>',
@@ -466,24 +517,18 @@ export function evalCommand(
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
-      defaultConfig.evaluateOptions?.maxConcurrency
-        ? String(defaultConfig.evaluateOptions.maxConcurrency)
-        : `${DEFAULT_MAX_CONCURRENCY}`,
     )
     .option(
       '--repeat <number>',
       'Number of times to run each test',
-      defaultConfig.evaluateOptions?.repeat ? String(defaultConfig.evaluateOptions.repeat) : '1',
     )
     .option(
       '--delay <number>',
       'Delay between each test (in milliseconds)',
-      defaultConfig.evaluateOptions?.delay ? String(defaultConfig.evaluateOptions.delay) : '0',
     )
     .option(
       '--no-cache',
       'Do not read or write results to disk cache',
-      defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
     )
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
 
@@ -505,25 +550,23 @@ export function evalCommand(
       '-o, --output <paths...>',
       'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
     )
-    .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
-    .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
+    .option('--table', 'Output table in CLI',)
+    .option('--no-table', 'Do not output table in CLI')
     .option(
       '--table-cell-max-length <number>',
       'Truncate console table cells to this length',
       '250',
     )
-    .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
+    .option('--share', 'Create a shareable URL')
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',
-      defaultConfig?.commandLineOptions?.write,
     )
 
     // Additional features
     .option(
       '--grader <provider>',
       'Model that will grade outputs',
-      defaultConfig?.commandLineOptions?.grader,
     )
     .option(
       '--suggest-prompts <number>',
@@ -533,7 +576,7 @@ export function evalCommand(
 
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
-    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
+    .option('--verbose', 'Show debug logs')
     .option('--no-progress-bar', 'Do not show progress bar')
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
@@ -548,16 +591,26 @@ export function evalCommand(
         process.exitCode = 1;
         return;
       }
+
+      const configPaths = validatedOpts.config as string[];
+      if (configPaths) {
+        // Overwrite the defaultConfig (e.g. `./promptfooconfig.yaml`) with the config file specified by the user.
+        config = await combineConfigs(configPaths);
+      }
       if (command.args.length > 0) {
         logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
       }
+      
+      // Set options with defaults based on the config.
+      // Precedence is: 1. CLI provided value 2. Config provided input.
+      const optsWithConfigValues = setOptsWithConfig(validatedOpts, config)
 
-      if (validatedOpts.help) {
+      if (optsWithConfigValues.help) {
         evalCmd.help();
         return;
       }
 
-      if (validatedOpts.interactiveProviders) {
+      if (optsWithConfigValues.interactiveProviders) {
         logger.warn(
           chalk.yellow(dedent`
           Warning: The --interactive-providers option has been removed.
@@ -569,11 +622,11 @@ export function evalCommand(
         process.exit(2);
       }
 
-      if (validatedOpts.remote) {
+      if (optsWithConfigValues.remote) {
         cliState.remote = true;
       }
 
-      for (const maybeFilePath of validatedOpts.output ?? []) {
+      for (const maybeFilePath of optsWithConfigValues.output ?? []) {
         const { data: extension } = OutputFileExtension.safeParse(
           maybeFilePath.split('.').pop()?.toLowerCase(),
         );
@@ -583,9 +636,15 @@ export function evalCommand(
         );
       }
 
+      const evaluateOptions: EvaluateOptions = {};
+      if (config.evaluateOptions) {
+        evaluateOptions.generateSuggestions = config.evaluateOptions.generateSuggestions;
+      }
+    
+      console.log('Passing optsWithConfigValues', optsWithConfigValues)
       doEval(
-        validatedOpts as Partial<CommandLineOptions & Command>,
-        defaultConfig,
+        optsWithConfigValues as Partial<CommandLineOptions & Command>,
+        config,
         defaultConfigPath,
         evaluateOptions,
       );
