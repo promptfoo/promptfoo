@@ -1,10 +1,13 @@
 import { randomUUID } from 'crypto';
 import glob from 'glob';
+import type { EvalCommandOptions } from '../src/commands/eval';
+import { setOptsWithConfig } from '../src/commands/eval';
 import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
+import type { UnifiedConfig } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -1507,5 +1510,158 @@ describe('isAllowedPrompt', () => {
   // TODO: What should the expected behavior of this test be?
   it('should return false if allowedPrompts is an empty array', () => {
     expect(isAllowedPrompt(prompt1, [])).toBe(false);
+  });
+});
+
+describe('setOptsWithConfig', () => {
+  const DEFAULT_MAX_CONCURRENCY = 4;
+  it('should set default values when opts are not provided', () => {
+    const opts: EvalCommandOptions = {};
+    const config: Partial<UnifiedConfig> = {};
+    const result = setOptsWithConfig(opts, config);
+
+    expect(result).toEqual({
+      repeat: 1,
+      delay: 0,
+      maxConcurrency: DEFAULT_MAX_CONCURRENCY,
+      verbose: false,
+      table: true,
+      cache: true,
+    });
+  });
+
+  it('should use values from config when opts are not provided', () => {
+    const opts: EvalCommandOptions = {};
+    const config: Partial<UnifiedConfig> = {
+      evaluateOptions: {
+        repeat: 3,
+        delay: 1000,
+        maxConcurrency: 10,
+        cache: false,
+        showProgressBar: true,
+      },
+      commandLineOptions: {
+        verbose: true,
+        vars: 'test.csv',
+        grader: 'openai:gpt-4',
+        table: false,
+        write: true,
+      },
+      defaultTest: {
+        options: {
+          prefix: 'prefix',
+          suffix: 'suffix',
+        },
+      },
+    };
+    const result = setOptsWithConfig(opts, config);
+
+    expect(result).toEqual({
+      repeat: 3,
+      delay: 1000,
+      maxConcurrency: 10,
+      verbose: true,
+      vars: 'test.csv',
+      promptPrefix: 'prefix',
+      promptSuffix: 'suffix',
+      grader: 'openai:gpt-4',
+      table: false,
+      cache: false,
+      write: true,
+      progressBar: true,
+    });
+  });
+
+  it('should prioritize opts over config values', () => {
+    const opts: EvalCommandOptions = {
+      repeat: 2,
+      delay: 500,
+      maxConcurrency: 8,
+      verbose: false,
+      vars: 'custom.csv',
+      promptPrefix: 'customPrefix',
+      promptSuffix: 'customSuffix',
+      grader: 'openai:gpt-3.5-turbo',
+      table: true,
+      cache: true,
+      write: false,
+      progressBar: false,
+    };
+    const config: Partial<UnifiedConfig> = {
+      evaluateOptions: {
+        repeat: 3,
+        delay: 1000,
+        maxConcurrency: 10,
+        cache: false,
+        showProgressBar: true,
+      },
+      commandLineOptions: {
+        verbose: true,
+        vars: 'test.csv',
+        grader: 'openai:gpt-4',
+        table: false,
+        write: true,
+      },
+      defaultTest: {
+        options: {
+          prefix: 'prefix',
+          suffix: 'suffix',
+        },
+      },
+    };
+    const result = setOptsWithConfig(opts, config);
+
+    expect(result).toEqual(opts);
+  });
+
+  it('should handle undefined config values', () => {
+    const opts: EvalCommandOptions = {};
+    const config: Partial<UnifiedConfig> = {
+      evaluateOptions: {
+        repeat: undefined,
+        delay: undefined,
+        maxConcurrency: undefined,
+        cache: undefined,
+      },
+      commandLineOptions: {
+        verbose: undefined,
+        vars: undefined,
+        grader: undefined,
+        share: undefined,
+        table: undefined,
+        write: undefined,
+      },
+      defaultTest: {
+        options: {
+          prefix: undefined,
+          suffix: undefined,
+        },
+      },
+    };
+    const result = setOptsWithConfig(opts, config);
+
+    expect(result).toEqual({
+      repeat: 1,
+      delay: 0,
+      maxConcurrency: DEFAULT_MAX_CONCURRENCY,
+      verbose: false,
+      table: true,
+      cache: true,
+    });
+  });
+
+  it('should handle cache precedence correctly', () => {
+    const opts: EvalCommandOptions = {};
+    const config: Partial<UnifiedConfig> = {
+      evaluateOptions: {
+        cache: false,
+      },
+      commandLineOptions: {
+        cache: true,
+      },
+    };
+    const result = setOptsWithConfig(opts, config);
+
+    expect(result.cache).toBe(false);
   });
 });

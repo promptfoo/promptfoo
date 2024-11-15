@@ -41,7 +41,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   remote: z.boolean().optional(),
 }).partial();
 
-type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
 function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);
@@ -392,7 +392,7 @@ export async function doEval(
   await runEvaluation(true /* initialization */);
 }
 
-function setOptsWithConfig(
+export function setOptsWithConfig(
   opts: EvalCommandOptions,
   config: Partial<UnifiedConfig>,
 ): EvalCommandOptions {
