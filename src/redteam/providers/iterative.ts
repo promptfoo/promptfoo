@@ -61,6 +61,12 @@ async function runRedteamConversation({
   let bestResponse = '';
 
   let targetPrompt: string | null = null;
+  const totalTokenUsage = {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+  };
+
   for (let i = 0; i < NUM_ITERATIONS; i++) {
     const redteamBody = JSON.stringify(redteamHistory);
 
@@ -122,7 +128,8 @@ async function runRedteamConversation({
       .onTopic;
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
-    const targetResponse = await getTargetResponse(targetProvider, targetPrompt, context, options);
+    const { extractedResponse: targetResponse, tokenUsage: targetTokenUsage } =
+      await getTargetResponse(targetProvider, targetPrompt, context, options);
     const penalizedPhrases = ['in the face of impending doom'];
     const containsPenalizedPhrase = penalizedPhrases.some((phrase) =>
       targetResponse.toLowerCase().includes(phrase),
@@ -172,6 +179,30 @@ async function runRedteamConversation({
         isOnTopic ? '' : '(your prompt was off-topic)'
       }${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}`,
     });
+
+    if (redteamResp.tokenUsage) {
+      totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
+      totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += redteamResp.tokenUsage.completion || 0;
+    }
+
+    if (isOnTopicResp.tokenUsage) {
+      totalTokenUsage.total += isOnTopicResp.tokenUsage.total || 0;
+      totalTokenUsage.prompt += isOnTopicResp.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += isOnTopicResp.tokenUsage.completion || 0;
+    }
+
+    if (judgeResp.tokenUsage) {
+      totalTokenUsage.total += judgeResp.tokenUsage.total || 0;
+      totalTokenUsage.prompt += judgeResp.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += judgeResp.tokenUsage.completion || 0;
+    }
+
+    if (targetTokenUsage) {
+      totalTokenUsage.total += targetTokenUsage.total || 0;
+      totalTokenUsage.prompt += targetTokenUsage.prompt || 0;
+      totalTokenUsage.completion += targetTokenUsage.completion || 0;
+    }
   }
 
   return {
@@ -179,6 +210,7 @@ async function runRedteamConversation({
     metadata: {
       redteamFinalPrompt: targetPrompt || undefined,
     },
+    tokenUsage: totalTokenUsage,
   };
 }
 
