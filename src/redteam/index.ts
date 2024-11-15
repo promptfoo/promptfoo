@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import logger, { getLogLevel } from '../logger';
-import type { TestCaseWithPlugin } from '../types';
+import type { TestCase, TestCaseWithPlugin } from '../types';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
 import { extractEntities } from './extraction/entities';
@@ -360,17 +360,27 @@ export async function synthesize({
       }
       progressBar?.update({ task: `Applying strategy: ${key}` });
       logger.debug(`Generating ${key} tests`);
-      const strategyTestCases = await action(testCases, injectVar, strategy.config || {});
-      newTestCases.push(
-        ...strategyTestCases.map((t) => ({
-          ...t,
-          metadata: {
-            ...(t.metadata || {}),
-            pluginId: t.metadata?.pluginId,
-            strategyId: strategy.id,
-          },
-        })),
+      const strategyTestCases: TestCase[] = await action(
+        testCases,
+        injectVar,
+        strategy.config || {},
       );
+      try {
+        newTestCases.push(
+          ...strategyTestCases
+            .filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined)
+            .map((t) => ({
+              ...t,
+              metadata: {
+                ...(t?.metadata || {}),
+                pluginId: t?.metadata?.pluginId || null,
+                strategyId: strategy.id,
+              },
+            })),
+        );
+      } catch (e) {
+        logger.warn(`Strategy ${key} did not return valid test cases: ${e}`);
+      }
       strategyResults[key] = {
         requested: testCases.length,
         generated: strategyTestCases.length,

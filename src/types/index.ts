@@ -225,6 +225,7 @@ export interface EvaluateTableOutput {
   gradingResult?: GradingResult | null;
   cost: number;
   metadata?: Record<string, any>;
+  response?: ProviderResponse;
 }
 
 export interface EvaluateTableRow {

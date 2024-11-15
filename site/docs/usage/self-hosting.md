@@ -34,15 +34,15 @@ To use a pre-built image:
 1. Pull the image:
 
 ```bash
-docker pull ghcr.io/promptfoo/promptfoo:main
+docker pull ghcr.io/promptfoo/promptfoo:latest
 ```
 
-You can use specific version tags instead of `main` for more stable releases.
+You can use specific version tags instead of `latest` to pin to a specific version.
 
 2. Run the container:
 
 ```bash
-docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo ghcr.io/promptfoo/promptfoo:main
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo ghcr.io/promptfoo/promptfoo:latest
 ```
 
 Key points:

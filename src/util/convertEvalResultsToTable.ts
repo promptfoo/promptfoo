@@ -125,14 +125,10 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     prompt.metrics.assertFailCount +=
       result.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
     prompt.metrics.totalLatencyMs += result.latencyMs || 0;
-    // @ts-expect-error
-    prompt.metrics.tokenUsage.cached += result.providerResponse?.tokenUsage?.cached || 0;
-    // @ts-expect-error
-    prompt.metrics.tokenUsage.completion += result.providerResponse?.tokenUsage?.completion || 0;
-    // @ts-expect-error
-    prompt.metrics.tokenUsage.prompt += result.providerResponse?.tokenUsage?.prompt || 0;
-    // @ts-expect-error
-    prompt.metrics.tokenUsage.total += result.providerResponse?.tokenUsage?.total || 0;
+    prompt.metrics.tokenUsage!.cached! += result.response?.tokenUsage?.cached || 0;
+    prompt.metrics.tokenUsage!.completion! += result.response?.tokenUsage?.completion || 0;
+    prompt.metrics.tokenUsage!.prompt! += result.response?.tokenUsage?.prompt || 0;
+    prompt.metrics.tokenUsage!.total! += result.response?.tokenUsage?.total || 0;
     prompt.metrics.cost += result.cost || 0;
     prompt.metrics.namedScores = eval_.prompts[result.promptIdx]?.metrics?.namedScores || {};
     prompt.metrics.namedScoresCount =
