@@ -616,7 +616,6 @@ export function evalCommand(
         evaluateOptions.generateSuggestions = config.evaluateOptions.generateSuggestions;
       }
 
-      console.log('Passing optsWithConfigValues', optsWithConfigValues);
       doEval(
         optsWithConfigValues as Partial<CommandLineOptions & Command>,
         config,
