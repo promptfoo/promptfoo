@@ -100,7 +100,7 @@ export async function doEval(
           }
         }
       }
-    } 
+    }
 
     // Misc settings
     const iterations = cmdObj.repeat ?? Number.NaN;
@@ -392,28 +392,30 @@ export async function doEval(
   await runEvaluation(true /* initialization */);
 }
 
-function setOptsWithConfig(opts: EvalCommandOptions, config: Partial<UnifiedConfig>): EvalCommandOptions  {
-  
+function setOptsWithConfig(
+  opts: EvalCommandOptions,
+  config: Partial<UnifiedConfig>,
+): EvalCommandOptions {
   // If `opts.hasOwnProperty` returns true, it tells us the user has set a value for that flag.
-  
+
   // The following options do not have a `--no` flag, and may need defaults based on the config.
   if (!opts.hasOwnProperty('repeat')) {
     opts.repeat = config.evaluateOptions?.repeat ?? 1;
   }
-  
+
   if (!opts.hasOwnProperty('delay')) {
     opts.delay = config.evaluateOptions?.delay ?? 0;
   }
-  
+
   if (!opts.hasOwnProperty('maxConcurrency')) {
     opts.maxConcurrency = config.evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
   }
-  
+
   if (!opts.hasOwnProperty('verbose')) {
     opts.verbose = config.commandLineOptions?.verbose ?? false;
   }
-  
-  if (!opts.hasOwnProperty('vars') && config.commandLineOptions?.vars){
+
+  if (!opts.hasOwnProperty('vars') && config.commandLineOptions?.vars) {
     opts.vars = config.commandLineOptions.vars;
   }
 
@@ -457,7 +459,7 @@ function setOptsWithConfig(opts: EvalCommandOptions, config: Partial<UnifiedConf
     opts.progressBar = config.evaluateOptions?.showProgressBar;
   }
 
-  return opts
+  return opts;
 }
 
 export function evalCommand(
@@ -465,7 +467,6 @@ export function evalCommand(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
 ) {
-
   let config: Partial<UnifiedConfig> = defaultConfig;
   const evalCmd = program
     .command('eval')
@@ -474,7 +475,8 @@ export function evalCommand(
     // Core configuration
     .option(
       '-c, --config <paths...>',
-      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml')
+      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
+    )
     .option('--env-file, --env-path <path>', 'Path to .env file')
 
     // Input sources
@@ -485,21 +487,12 @@ export function evalCommand(
       'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
     )
     .option('-t, --tests <path>', 'Path to CSV with test cases')
-    .option(
-      '-v, --vars <path>',
-      'Path to CSV with test cases (alias for --tests)',
-    )
+    .option('-v, --vars <path>', 'Path to CSV with test cases (alias for --tests)')
     .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
 
     // Prompt modification
-    .option(
-      '--prompt-prefix <path>',
-      'This prefix is prepended to every prompt',
-    )
-    .option(
-      '--prompt-suffix <path>',
-      'This suffix is append to every prompt',
-    )
+    .option('--prompt-prefix <path>', 'This prefix is prepended to every prompt')
+    .option('--prompt-suffix <path>', 'This suffix is append to every prompt')
     .option(
       '--var <key=value>',
       'Set a variable in key=value format',
@@ -514,22 +507,10 @@ export function evalCommand(
     )
 
     // Execution control
-    .option(
-      '-j, --max-concurrency <number>',
-      'Maximum number of concurrent API calls',
-    )
-    .option(
-      '--repeat <number>',
-      'Number of times to run each test',
-    )
-    .option(
-      '--delay <number>',
-      'Delay between each test (in milliseconds)',
-    )
-    .option(
-      '--no-cache',
-      'Do not read or write results to disk cache',
-    )
+    .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls')
+    .option('--repeat <number>', 'Number of times to run each test')
+    .option('--delay <number>', 'Delay between each test (in milliseconds)')
+    .option('--no-cache', 'Do not read or write results to disk cache')
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
 
     // Filtering and subset selection
@@ -550,7 +531,7 @@ export function evalCommand(
       '-o, --output <paths...>',
       'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
     )
-    .option('--table', 'Output table in CLI',)
+    .option('--table', 'Output table in CLI')
     .option('--no-table', 'Do not output table in CLI')
     .option(
       '--table-cell-max-length <number>',
@@ -558,16 +539,10 @@ export function evalCommand(
       '250',
     )
     .option('--share', 'Create a shareable URL')
-    .option(
-      '--no-write',
-      'Do not write results to promptfoo directory',
-    )
+    .option('--no-write', 'Do not write results to promptfoo directory')
 
     // Additional features
-    .option(
-      '--grader <provider>',
-      'Model that will grade outputs',
-    )
+    .option('--grader <provider>', 'Model that will grade outputs')
     .option(
       '--suggest-prompts <number>',
       'Generate N new prompts and append them to the prompt list',
@@ -600,10 +575,10 @@ export function evalCommand(
       if (command.args.length > 0) {
         logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
       }
-      
+
       // Set options with defaults based on the config.
       // Precedence is: 1. CLI provided value 2. Config provided input.
-      const optsWithConfigValues = setOptsWithConfig(validatedOpts, config)
+      const optsWithConfigValues = setOptsWithConfig(validatedOpts, config);
 
       if (optsWithConfigValues.help) {
         evalCmd.help();
@@ -640,8 +615,8 @@ export function evalCommand(
       if (config.evaluateOptions) {
         evaluateOptions.generateSuggestions = config.evaluateOptions.generateSuggestions;
       }
-    
-      console.log('Passing optsWithConfigValues', optsWithConfigValues)
+
+      console.log('Passing optsWithConfigValues', optsWithConfigValues);
       doEval(
         optsWithConfigValues as Partial<CommandLineOptions & Command>,
         config,
