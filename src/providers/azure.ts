@@ -275,6 +275,16 @@ export class AzureGenericProvider implements ApiProvider {
           await credential.getToken(tokenScope || 'https://cognitiveservices.azure.com/.default')
         ).token;
         return this._cachedApiKey;
+      } else {
+        //fallback to Azure CLI
+        const { AzureCliCredential, getBearerTokenProvider } = await import('@azure/identity');
+        const credential = new AzureCliCredential();
+        const scope = 'https://cognitiveservices.azure.com/.default';
+        const azureADTokenProvider = getBearerTokenProvider(credential, scope);
+        const token = await azureADTokenProvider();
+        const BearerToken = `Bearer ${token}`;
+        this._cachedApiKey = BearerToken;
+        return BearerToken;
       }
 
       throw new Error(
@@ -338,7 +348,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'api-key': apiKey,
+            ...(apiKey.startsWith('Bearer ') ? { authorization: apiKey } : { 'api-key': apiKey }),
           },
           body: JSON.stringify(body),
         },
@@ -444,7 +454,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'api-key': apiKey,
+            ...(apiKey.startsWith('Bearer ') ? { authorization: apiKey } : { 'api-key': apiKey }),
           },
           body: JSON.stringify(body),
         },
@@ -578,7 +588,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'api-key': apiKey,
+            ...(apiKey.startsWith('Bearer ') ? { authorization: apiKey } : { 'api-key': apiKey }),
           },
           body: JSON.stringify(body),
         },
