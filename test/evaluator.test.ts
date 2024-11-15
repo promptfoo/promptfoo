@@ -1583,7 +1583,7 @@ describe('setOptsWithConfig', () => {
       promptSuffix: 'customSuffix',
       grader: 'openai:gpt-3.5-turbo',
       table: true,
-      cache: true,
+      cache: false,
       write: false,
       progressBar: false,
     };
@@ -1592,7 +1592,7 @@ describe('setOptsWithConfig', () => {
         repeat: 3,
         delay: 1000,
         maxConcurrency: 10,
-        cache: false,
+        cache: true,
         showProgressBar: true,
       },
       commandLineOptions: {
