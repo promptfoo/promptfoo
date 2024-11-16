@@ -11,6 +11,7 @@ import type {
   Prompt,
   NunjucksFilterMap,
   RedteamFileConfig,
+  TokenUsage,
 } from '../../../types';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
@@ -164,6 +165,11 @@ class CrescendoProvider implements ApiProvider {
     let lastFeedback = '';
     let evalFlag = false;
     let evalPercentage: number | null = null;
+    const totalTokenUsage = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+    };
 
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
       conversationObjective: this.userGoal,
@@ -180,15 +186,16 @@ class CrescendoProvider implements ApiProvider {
       roundNum++;
       logger.debug(`\nROUND ${roundNum}\n`);
 
-      const attackPrompt = await this.getAttackPrompt(
-        roundNum,
-        evalFlag,
-        lastResponse,
-        lastFeedback,
-      );
+      const { generatedQuestion: attackPrompt, tokenUsage: attackTokenUsage } =
+        await this.getAttackPrompt(roundNum, evalFlag, lastResponse, lastFeedback);
+      if (attackTokenUsage) {
+        totalTokenUsage.total += attackTokenUsage.total || 0;
+        totalTokenUsage.prompt += attackTokenUsage.prompt || 0;
+        totalTokenUsage.completion += attackTokenUsage.completion || 0;
+      }
       logger.debug(`Generated attack prompt: ${attackPrompt}`);
 
-      lastResponse = await this.sendPrompt(
+      const { response, tokenUsage: promptTokenUsage } = await this.sendPrompt(
         attackPrompt,
         prompt,
         vars,
@@ -198,7 +205,12 @@ class CrescendoProvider implements ApiProvider {
         context,
         options,
       );
-      logger.debug(`Received response from target: ${lastResponse.substring(0, 100)}...`);
+      lastResponse = response;
+      if (promptTokenUsage) {
+        totalTokenUsage.total += promptTokenUsage.total || 0;
+        totalTokenUsage.prompt += promptTokenUsage.prompt || 0;
+        totalTokenUsage.completion += promptTokenUsage.completion || 0;
+      }
 
       const [isRefusal, refusalRationale] = await this.getRefusalScore(attackPrompt, lastResponse);
       logger.debug(`Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`);
@@ -232,7 +244,12 @@ class CrescendoProvider implements ApiProvider {
         continue;
       }
 
-      const evalScore = await this.getEvalScore(lastResponse);
+      const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse);
+      if (evalTokenUsage) {
+        totalTokenUsage.total += evalTokenUsage.total || 0;
+        totalTokenUsage.prompt += evalTokenUsage.prompt || 0;
+        totalTokenUsage.completion += evalTokenUsage.completion || 0;
+      }
       evalFlag = evalScore.value;
       evalPercentage = evalScore.metadata;
       logger.debug(`Eval score: flag=${evalFlag}, percentage=${evalPercentage}`);
@@ -266,13 +283,12 @@ class CrescendoProvider implements ApiProvider {
           .getConversation(this.targetConversationId)
           .map((m) => `[${m.role}] ${m.content}`)
           .join('\n\n'),
-
-        // Misc stats
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
         crescendoConfidence: evalPercentage,
       },
+      tokenUsage: totalTokenUsage,
     };
   }
 
@@ -281,7 +297,7 @@ class CrescendoProvider implements ApiProvider {
     evalScore: boolean,
     lastResponse: string,
     lastFeedback: string,
-  ): Promise<string> {
+  ): Promise<{ generatedQuestion: string; tokenUsage?: TokenUsage }> {
     logger.debug(`getAttackPrompt called: round=${roundNum}, evalScore=${evalScore}`);
     let promptText: string;
 
@@ -354,7 +370,10 @@ class CrescendoProvider implements ApiProvider {
       content: response.output,
     });
 
-    return parsedOutput.generatedQuestion;
+    return {
+      generatedQuestion: parsedOutput.generatedQuestion,
+      tokenUsage: response.tokenUsage,
+    };
   }
 
   private async sendPrompt(
@@ -366,7 +385,7 @@ class CrescendoProvider implements ApiProvider {
     roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<string> {
+  ): Promise<{ response: string; tokenUsage?: TokenUsage }> {
     const renderedPrompt = await renderPrompt(
       originalPrompt,
       { ...vars, [this.config.injectVar]: attackPrompt },
@@ -397,8 +416,12 @@ class CrescendoProvider implements ApiProvider {
       });
     }
 
-    const targetResponse = await getTargetResponse(provider, renderedPrompt, context, options);
-    invariant(targetResponse, 'Expected output to be defined');
+    const { extractedResponse: targetResponse, tokenUsage } = await getTargetResponse(
+      provider,
+      renderedPrompt,
+      context,
+      options,
+    );
     logger.debug(`Received response from target: ${targetResponse}`);
 
     this.memory.addMessage(this.targetConversationId, {
@@ -406,7 +429,7 @@ class CrescendoProvider implements ApiProvider {
       content: targetResponse,
     });
 
-    return targetResponse;
+    return { response: targetResponse, tokenUsage };
   }
 
   private async getRefusalScore(
@@ -466,7 +489,7 @@ class CrescendoProvider implements ApiProvider {
     return [parsed.value, parsed.rationale];
   }
 
-  private async getEvalScore(lastResponse: string) {
+  private async getEvalScore(lastResponse: string): Promise<[any, TokenUsage | undefined]> {
     logger.debug(`Getting eval score for response: ${lastResponse.substring(0, 100)}...`);
     const evalInput = JSON.stringify({
       conversationObjective: this.userGoal,
@@ -506,7 +529,7 @@ class CrescendoProvider implements ApiProvider {
     invariant(typeof parsed.value === 'boolean', 'Expected eval grader value to be a boolean');
     invariant(typeof parsed.metadata === 'number', 'Expected eval grader metadata to be a number');
 
-    return parsed;
+    return [parsed, evalResponse.tokenUsage];
   }
 
   private async backtrackMemory(conversationId: string): Promise<string> {
