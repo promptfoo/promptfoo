@@ -1,4 +1,5 @@
 import { getEnvBool, getEnvString } from '../../../envars';
+import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
 import type { Assertion, PluginActionParams, TestCase } from '../../../types';
 import { sampleArray } from '../../../util/generation';
 import { getNunjucksEngine } from '../../../util/templates';
@@ -10,7 +11,6 @@ import {
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../constants';
-import { PromptfooHarmfulCompletionProvider } from '../../providers/harmful';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
 import { sortTestCasesByHarmCategory } from './utils';
 
