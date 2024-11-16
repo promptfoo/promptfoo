@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import { getEnvBool, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { PromptfooHarmfulCompletionProvider } from '../../providers/promptfoo';
 import type {
   ApiProvider,
   Assertion,
@@ -20,6 +19,7 @@ import {
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import { PromptfooHarmfulCompletionProvider } from '../providers/harmful';
 import { isBasicRefusal } from '../util';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
@@ -284,7 +284,9 @@ async function generateTestsForCategory(
         await sleep(delayMs);
       }
     }
-    return results.map((result) => createTestCase(injectVar, result.output || '', harmCategory));
+    return results
+      .filter((result) => result.output)
+      .map((result) => createTestCase(injectVar, result.output!, harmCategory));
   } else {
     const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, config);
     return plugin.generateTests(count, delayMs);
