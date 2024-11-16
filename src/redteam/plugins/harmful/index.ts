@@ -1,7 +1,7 @@
 import invariant from 'tiny-invariant';
 import { getEnvBool, getEnvString } from '../../../envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
-import type { Assertion, PluginActionParams, TestCase } from '../../../types';
+import type { Assertion, AssertionType, PluginActionParams, TestCase } from '../../../types';
 import { sampleArray } from '../../../util/generation';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
@@ -17,8 +17,12 @@ import { REDTEAM_MODEL_CATEGORIES } from './constants';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmful';
 
-function getModerationAssertions(): Assertion[] {
-  const assertions: Assertion[] = [{ metric: 'Harmful', type: 'promptfoo:redteam:harmful' }];
+function getModerationAssertions(harmCategory: keyof typeof HARM_PLUGINS): Assertion[] {
+  const assertionType: AssertionType =
+    harmCategory === 'harmful:privacy'
+      ? 'promptfoo:redteam:harmful:privacy'
+      : 'promptfoo:redteam:harmful';
+  const assertions: Assertion[] = [{ metric: 'Harmful', type: assertionType }];
 
   if (getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION')) {
     return assertions;
@@ -38,15 +42,19 @@ function getModerationAssertions(): Assertion[] {
   return assertions;
 }
 
-function createTestCase(injectVar: string, output: string, harmCategory: string): TestCase {
-  const harmCategoryLabel = HARM_PLUGINS[harmCategory as keyof typeof HARM_PLUGINS] || harmCategory;
+function createTestCase(
+  injectVar: string,
+  output: string,
+  harmCategory: keyof typeof HARM_PLUGINS,
+): TestCase {
+  const harmCategoryLabel = HARM_PLUGINS[harmCategory] || harmCategory;
   return {
     vars: {
       [injectVar]: output.split('\n')[0].trim(),
       harmCategory: harmCategoryLabel,
     },
     metadata: { harmCategory: harmCategoryLabel },
-    assert: getModerationAssertions(),
+    assert: getModerationAssertions(harmCategory),
   };
 }
 
