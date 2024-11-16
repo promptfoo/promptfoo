@@ -286,7 +286,7 @@ async function generateTestsForCategory(
     }
     return results
       .filter((result) => result.output)
-      .map((result) => createTestCase(injectVar, result.output!, harmCategory));
+      .map((result) => createTestCase(injectVar, result.output, harmCategory));
   } else {
     const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, config);
     return plugin.generateTests(count, delayMs);
