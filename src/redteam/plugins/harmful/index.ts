@@ -8,35 +8,31 @@ import {
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
-  REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../constants';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
-import { sortTestCasesByHarmCategory } from './utils';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmful';
 
 function getModerationAssertions(): Assertion[] {
+  const assertions: Assertion[] = [{ metric: 'Harmful', type: 'promptfoo:redteam:harmful' }];
+
   if (getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION')) {
-    return [];
+    return assertions;
   }
 
   if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
-    return [
-      {
-        metric: 'Harmful',
-        type: 'moderation',
-        value: LLAMA_GUARD_ENABLED_CATEGORIES,
-        provider: LLAMA_GUARD_REPLICATE_PROVIDER,
-      },
-    ];
+    assertions.push({
+      metric: 'Harmful',
+      type: 'moderation',
+      value: LLAMA_GUARD_ENABLED_CATEGORIES,
+      provider: LLAMA_GUARD_REPLICATE_PROVIDER,
+    });
+  } else if (getEnvString('OPENAI_API_KEY')) {
+    assertions.push({ metric: 'Harmful', type: 'moderation' });
   }
 
-  if (getEnvString('OPENAI_API_KEY')) {
-    return [{ metric: 'Harmful', type: 'moderation' }];
-  }
-
-  return [];
+  return assertions;
 }
 
 function createTestCase(injectVar: string, output: string, harmCategory: string): TestCase {
@@ -47,84 +43,73 @@ function createTestCase(injectVar: string, output: string, harmCategory: string)
       harmCategory: harmCategoryLabel,
     },
     metadata: { harmCategory: harmCategoryLabel },
-    assert: [
-      { metric: 'Harmful', type: 'promptfoo:redteam:harmful' },
-      ...getModerationAssertions(),
-    ],
+    assert: getModerationAssertions(),
   };
 }
 
 export async function getHarmfulTests(
   { provider, purpose, injectVar, n, delayMs = 0, config = {} }: PluginActionParams,
-  plugins: string[],
+  plugin: keyof typeof HARM_PLUGINS,
 ): Promise<TestCase[]> {
-  const harmCategories =
-    plugins.length > 0
-      ? plugins.map((p) => HARM_PLUGINS[p as keyof typeof HARM_PLUGINS]).filter(Boolean)
-      : Object.values(HARM_PLUGINS);
+  const harmCategory = HARM_PLUGINS[plugin];
+  if (!harmCategory) {
+    return [];
+  }
 
-  const unalignedCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS).filter((p) =>
-    harmCategories.includes(
-      UNALIGNED_PROVIDER_HARM_PLUGINS[p as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS],
-    ),
-  );
+  // Check if this is an unaligned category
+  const unalignedCategory = Object.entries(UNALIGNED_PROVIDER_HARM_PLUGINS).find(
+    ([key, value]) => value === harmCategory,
+  )?.[0];
 
-  const unalignedTests = await Promise.all(
-    unalignedCategories.map(async (category) => {
-      const unalignedProvider = new PromptfooHarmfulCompletionProvider({
-        purpose,
-        harmCategory: category,
-      });
-      const results = [];
+  if (unalignedCategory) {
+    // Handle unaligned case
+    const unalignedProvider = new PromptfooHarmfulCompletionProvider({
+      purpose,
+      harmCategory: unalignedCategory,
+    });
 
-      for (let i = 0; i < n; i++) {
-        const result = await unalignedProvider.callApi('');
-        if (result.output) {
-          results.push(createTestCase(injectVar, result.output, category));
-        }
-        if (delayMs > 0) {
-          await sleep(delayMs);
-        }
+    const tests: TestCase[] = [];
+    for (let i = 0; i < n; i++) {
+      const result = await unalignedProvider.callApi('');
+      if (result.output) {
+        tests.push(createTestCase(injectVar, result.output, unalignedCategory));
       }
-
-      return results;
-    }),
-  );
-
-  const alignedCategories = Object.values(REDTEAM_PROVIDER_HARM_PLUGINS).filter((p) =>
-    harmCategories.includes(p),
-  );
-
-  const alignedTests = await Promise.all(
-    alignedCategories.map(async (category) => {
-      const categoryConfig = REDTEAM_MODEL_CATEGORIES.find((c) => c.label === category);
-      if (!categoryConfig || !provider) {
-        return [];
+      if (delayMs > 0) {
+        await sleep(delayMs);
       }
+    }
+    return tests;
+  }
 
-      const nunjucks = getNunjucksEngine();
-      const prompt = await nunjucks.renderString(categoryConfig.prompt, {
-        purpose,
-        n: config?.numExamples || 3,
-        examples: config?.examples || categoryConfig.examples,
-      });
+  // Handle aligned case
+  if (!provider) {
+    return [];
+  }
 
-      const result = await provider.callApi(prompt);
-      if (!result.output) {
-        return [];
-      }
+  const categoryConfig = REDTEAM_MODEL_CATEGORIES.find((c) => c.label === harmCategory);
+  if (!categoryConfig) {
+    return [];
+  }
 
-      const outputs = result.output
-        .split('\n')
-        .filter((line: string) => line.startsWith('Prompt:'))
-        .map((line: string) => line.replace('Prompt:', '').trim());
+  const nunjucks = getNunjucksEngine();
+  const prompt = await nunjucks.renderString(categoryConfig.prompt, {
+    purpose,
+    n: config?.numExamples || 3,
+    examples: config?.examples || categoryConfig.examples,
+  });
 
-      return outputs.map((output: string) => createTestCase(injectVar, output, category));
-    }),
+  const result = await provider.callApi(prompt);
+  if (!result.output) {
+    return [];
+  }
+
+  const outputs = result.output
+    .split('\n')
+    .filter((line: string) => line.startsWith('Prompt:'))
+    .map((line: string) => line.replace('Prompt:', '').trim());
+
+  return sampleArray(
+    outputs.map((output: string) => createTestCase(injectVar, output, harmCategory)),
+    n,
   );
-
-  return sortTestCasesByHarmCategory([
-    ...sampleArray(unalignedTests.flat(), n),
-    ...sampleArray(alignedTests.flat(), n),
-  ]);
 }

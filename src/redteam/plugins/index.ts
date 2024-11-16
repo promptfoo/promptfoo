@@ -87,7 +87,7 @@ function createPluginFactory<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async ({ provider, purpose, injectVar, n, delayMs, config }) => {
+    action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
       if (shouldGenerateRemote()) {
         return fetchRemoteTestCases(key, purpose, injectVar, n, config);
       }
@@ -100,46 +100,46 @@ function createPluginFactory<T extends PluginConfig>(
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
+  createPluginFactory(DebugAccessPlugin, 'debug-access'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
-  createPluginFactory(OverreliancePlugin, 'overreliance'),
-  createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
-  createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
-  createPluginFactory(DebugAccessPlugin, 'debug-access'),
-  createPluginFactory(RbacPlugin, 'rbac'),
-  createPluginFactory(PoliticsPlugin, 'politics'),
-  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config) =>
-    invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
-  ),
-  createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config) =>
+  createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
+  ),
+  createPluginFactory(OverreliancePlugin, 'overreliance'),
+  createPluginFactory(PoliticsPlugin, 'politics'),
+  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
+    invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
   ),
   createPluginFactory<{ systemPrompt: string }>(
     PromptExtractionPlugin,
     'prompt-extraction',
-    (config) =>
+    (config: { systemPrompt: string }) =>
       invariant(
         config.systemPrompt,
         'Prompt extraction plugin requires `config.systemPrompt` to be set',
       ),
   ),
+  createPluginFactory(RbacPlugin, 'rbac'),
+  createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
+  createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
 ];
 
-const harmPlugins: PluginFactory[] = Object.keys(HARM_PLUGINS).map((category) => ({
+const harmPlugins: PluginFactory[] = Object.keys(HARM_PLUGINS).map((category: string) => ({
   key: category,
-  action: async (params) => {
+  action: async (params: PluginActionParams) => {
     if (shouldGenerateRemote()) {
       return fetchRemoteTestCases(category, params.purpose, params.injectVar, params.n);
     }
     logger.debug(`Using local redteam generation for ${category}`);
-    return getHarmfulTests(params, [category]);
+    return getHarmfulTests(params, category as keyof typeof HARM_PLUGINS);
   },
 }));
 
-const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category) => ({
+const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   key: category,
-  action: async (params) => {
+  action: async (params: PluginActionParams) => {
     if (shouldGenerateRemote()) {
       return fetchRemoteTestCases(category, params.purpose, params.injectVar, params.n);
     }
@@ -155,7 +155,7 @@ function createRemotePlugin<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async ({ provider, purpose, injectVar, n, delayMs, config }) => {
+    action: async ({ purpose, injectVar, n, config }: PluginActionParams) => {
       if (neverGenerateRemote()) {
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }
@@ -173,11 +173,13 @@ const remotePlugins: PluginFactory[] = [
   'ssrf',
 ].map((key) => createRemotePlugin(key));
 remotePlugins.push(
-  createRemotePlugin<{ indirectInjectionVar: string }>('indirect-prompt-injection', (config) =>
-    invariant(
-      config.indirectInjectionVar,
-      'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
-    ),
+  createRemotePlugin<{ indirectInjectionVar: string }>(
+    'indirect-prompt-injection',
+    (config: { indirectInjectionVar: string }) =>
+      invariant(
+        config.indirectInjectionVar,
+        'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
+      ),
   ),
 );
 
