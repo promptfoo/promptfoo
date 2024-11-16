@@ -23,8 +23,9 @@ import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import type { RedteamAssertionTypes } from './types';
 
-export const GRADERS: Record<string, RedteamGraderBase> = {
+export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
