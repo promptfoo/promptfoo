@@ -52,8 +52,6 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
     try {
       logger.debug(`Calling promptfoo generate harmful API with body: ${JSON.stringify(body)}`);
       // We're using the promptfoo API to avoid having users provide their own unaligned model.
-      // See here for a prompt you can use with Llama 3 base to host your own inference endpoint:
-      // https://gist.github.com/typpo/3815d97a638f1a41d28634293aff33a0
       const response = await fetchWithRetries(
         getEnvString('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT') ||
           'https://api.promptfoo.dev/redteam/generateHarmful',
@@ -65,6 +63,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
           body: JSON.stringify(body),
         },
         10000,
+        2,
       );
 
       if (!response.ok) {

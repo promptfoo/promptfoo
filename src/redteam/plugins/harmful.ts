@@ -284,7 +284,9 @@ async function generateTestsForCategory(
         await sleep(delayMs);
       }
     }
-    return results.map((result) => createTestCase(injectVar, result.output || '', harmCategory));
+    return results
+      .filter((result) => result.output)
+      .map((result) => createTestCase(injectVar, result.output, harmCategory));
   } else {
     const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, config);
     return plugin.generateTests(count, delayMs);
