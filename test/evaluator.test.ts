@@ -1524,9 +1524,11 @@ describe('setOptsWithConfig', () => {
       repeat: 1,
       delay: 0,
       maxConcurrency: DEFAULT_MAX_CONCURRENCY,
+      progressBar: true,
       verbose: false,
       table: true,
       cache: true,
+      write: true,
     });
   });
 
@@ -1644,9 +1646,11 @@ describe('setOptsWithConfig', () => {
       repeat: 1,
       delay: 0,
       maxConcurrency: DEFAULT_MAX_CONCURRENCY,
+      progressBar: true,
       verbose: false,
       table: true,
       cache: true,
+      write: true,
     });
   });
 

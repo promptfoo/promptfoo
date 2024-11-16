@@ -399,44 +399,44 @@ export function setOptsWithConfig(
   // If `opts.hasOwnProperty` returns true, it tells us the user has set a value for that flag.
 
   // The following options do not have a `--no` flag, and may need defaults based on the config.
-  if (!opts.hasOwnProperty('repeat')) {
+  if (opts.repeat === undefined) {
     opts.repeat = config.evaluateOptions?.repeat ?? 1;
   }
 
-  if (!opts.hasOwnProperty('delay')) {
+  if (opts.delay === undefined) {
     opts.delay = config.evaluateOptions?.delay ?? 0;
   }
 
-  if (!opts.hasOwnProperty('maxConcurrency')) {
+  if (opts.maxConcurrency === undefined) {
     opts.maxConcurrency = config.evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
   }
 
-  if (!opts.hasOwnProperty('verbose')) {
+  if (opts.verbose === undefined) {
     opts.verbose = config.commandLineOptions?.verbose ?? false;
   }
 
-  if (!opts.hasOwnProperty('vars') && config.commandLineOptions?.vars) {
-    opts.vars = config.commandLineOptions.vars;
+  if (opts.vars === undefined) {
+    opts.vars = config.commandLineOptions?.vars ?? undefined;
   }
 
-  if (!opts.hasOwnProperty('promptPrefix') && config.defaultTest?.options?.prefix) {
-    opts.promptPrefix = config.defaultTest.options.prefix;
+  if (opts.promptPrefix === undefined) {
+    opts.promptPrefix = config.defaultTest?.options?.prefix ?? undefined;
   }
 
-  if (!opts.hasOwnProperty('promptSuffix') && config.defaultTest?.options?.suffix) {
-    opts.promptSuffix = config.defaultTest.options.suffix;
+  if (opts.promptSuffix === undefined) {
+    opts.promptSuffix = config.defaultTest?.options?.suffix ?? undefined;
   }
 
-  if (!opts.hasOwnProperty('grader') && config.commandLineOptions?.grader) {
-    opts.grader = config.commandLineOptions.grader;
+  if (opts.grader === undefined) {
+    opts.grader = config.commandLineOptions?.grader;
   }
 
-  if (!opts.hasOwnProperty('share') && config.commandLineOptions?.share) {
-    opts.share = config.commandLineOptions?.share;
+  if (opts.share === undefined) {
+    opts.share = config.commandLineOptions?.share ?? undefined;
   }
 
   // The table property has both a no flag and a regular flag. It is a 1 of 1 in this pattern.
-  if (!opts.hasOwnProperty('table')) {
+  if (opts.table === undefined) {
     opts.table = config.commandLineOptions?.table ?? true;
   }
 
@@ -451,15 +451,22 @@ export function setOptsWithConfig(
     opts.cache = cache ?? true;
   }
 
-  if (opts.write !== false && config.commandLineOptions?.write) {
-    opts.write = config.commandLineOptions?.write;
+  if (opts.write !== false) {
+    opts.write = config.commandLineOptions?.write ?? true;
   }
 
-  if (opts.progressBar !== false && config.evaluateOptions?.showProgressBar) {
-    opts.progressBar = config.evaluateOptions?.showProgressBar;
+  if (opts.progressBar !== false) {
+    opts.progressBar = config.evaluateOptions?.showProgressBar ?? true;
   }
 
-  return opts;
+  const definedOpts: Partial<EvalCommandOptions> = {};
+  for (const [key, value] of Object.entries(opts)) {
+    if (value !== undefined) {
+      definedOpts[key as keyof EvalCommandOptions] = value as any;
+    }
+  }
+
+  return definedOpts;
 }
 
 export function evalCommand(
