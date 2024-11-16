@@ -12,8 +12,8 @@ import {
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../constants';
 import { parseGeneratedPrompts } from '../base';
-import type { HarmfulCategory } from './constants';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
+import type { HarmfulCategory } from './constants';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmful';
 

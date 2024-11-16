@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import type { ApiProvider, GradingResult, AtomicTestCase } from '../../..';
+import type { ApiProvider, AtomicTestCase, GradingResult } from '../../../types';
 import { isBasicRefusal } from '../../util';
 import { RedteamGraderBase } from '../base';
 
