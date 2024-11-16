@@ -1,5 +1,6 @@
 import { fetchWithCache } from '../cache';
 import { VERSION } from '../constants';
+import { getEnvString } from '../envars';
 import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -13,14 +14,6 @@ import type {
   TokenUsage,
 } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
-
-interface PromptfooChatCompletionOptions {
-  env?: EnvOverrides;
-  id?: string;
-  jsonOnly: boolean;
-  preferSmallModel: boolean;
-  task: 'crescendo' | 'goat' | 'iterative' | 'iterative:image' | 'iterative:tree';
-}
 
 interface PromptfooHarmfulCompletionOptions {
   purpose: string;
@@ -88,6 +81,14 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       };
     }
   }
+}
+
+interface PromptfooChatCompletionOptions {
+  env?: EnvOverrides;
+  id?: string;
+  jsonOnly: boolean;
+  preferSmallModel: boolean;
+  task: 'crescendo' | 'goat' | 'iterative' | 'iterative:image' | 'iterative:tree';
 }
 
 export class PromptfooChatCompletionProvider implements ApiProvider {
