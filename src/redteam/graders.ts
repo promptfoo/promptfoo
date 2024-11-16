@@ -1,3 +1,4 @@
+import { ALL_PLUGINS } from './constants';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
 import { BflaGrader } from './plugins/bfla';
@@ -24,7 +25,7 @@ import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 
-export const GRADERS = {
+export const GRADERS: Record<string, RedteamGraderBase> = {
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
