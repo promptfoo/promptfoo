@@ -20,6 +20,37 @@ import { loadRedteamProvider } from '../providers/shared';
 import { removePrefix } from '../util';
 
 /**
+ * Parses the LLM response of generated prompts into an array of objects.
+ *
+ * @param generatedPrompts - The LLM response of generated prompts.
+ * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
+ */
+export function parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
+  const parsePrompt = (line: string): string | null => {
+    if (!line.toLowerCase().includes('prompt:')) {
+      return null;
+    }
+    let prompt = removePrefix(line, 'Prompt');
+    // Handle numbered lists with various formats
+    prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
+    // Handle quotes
+    prompt = prompt.replace(/^["'](.*)["']$/, '$1');
+    // Handle nested quotes
+    prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
+    prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
+    return prompt.trim();
+  };
+
+  // Split by newline or semicolon
+  const promptLines = generatedPrompts.split(/[\n;]+/);
+
+  return promptLines
+    .map(parsePrompt)
+    .filter((prompt): prompt is string => prompt !== null)
+    .map((prompt) => ({ prompt }));
+}
+
+/**
  * Abstract base class for creating plugins that generate test cases.
  */
 export abstract class RedteamPluginBase {
@@ -100,7 +131,7 @@ export abstract class RedteamPluginBase {
         );
         return [];
       }
-      return this.parseGeneratedPrompts(generatedPrompts);
+      return parseGeneratedPrompts(generatedPrompts);
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
     const prompts = sampleArray(allPrompts, n);
@@ -123,36 +154,10 @@ export abstract class RedteamPluginBase {
   }
 
   /**
-   * Parses the LLM response of generated prompts into an array of objects.
-   *
-   * @param generatedPrompts - The LLM response of generated prompts.
-   * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
+   * Appends modifiers to the template.
+   * @param template - The template to append modifiers to.
+   * @returns The modified template.
    */
-  protected parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
-    const parsePrompt = (line: string): string | null => {
-      if (!line.toLowerCase().includes('prompt:')) {
-        return null;
-      }
-      let prompt = removePrefix(line, 'Prompt');
-      // Handle numbered lists with various formats
-      prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
-      // Handle quotes
-      prompt = prompt.replace(/^["'](.*)["']$/, '$1');
-      // Handle nested quotes
-      prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
-      prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
-      return prompt.trim();
-    };
-
-    // Split by newline or semicolon
-    const promptLines = generatedPrompts.split(/[\n;]+/);
-
-    return promptLines
-      .map(parsePrompt)
-      .filter((prompt): prompt is string => prompt !== null)
-      .map((prompt) => ({ prompt }));
-  }
-
   private appendModifiers(template: string): string {
     // Take everything under "modifiers" config key
     const modifiers: Record<string, string> =
