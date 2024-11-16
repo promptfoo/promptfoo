@@ -1,4 +1,3 @@
-import { ALL_PLUGINS } from './constants';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
 import { BflaGrader } from './plugins/bfla';
