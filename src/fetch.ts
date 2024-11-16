@@ -2,24 +2,40 @@ import { ProxyAgent } from 'proxy-agent';
 import invariant from 'tiny-invariant';
 import { VERSION } from './constants';
 import { getEnvInt, getEnvBool } from './envars';
+import { getVerifiedEmailKey } from './globalConfig/accounts';
 import logger from './logger';
 import { sleep } from './util/time';
+
+const PROMPTFOO_HOSTS = ['api.promptfoo.dev', 'api.promptfoo.app', 'api.promptfoo-staging.app'];
+
+function maybeAddPromptfooHeaders(url: string, options: RequestInit): RequestInit {
+  try {
+    const parsedUrl = new URL(url);
+    if (PROMPTFOO_HOSTS.includes(parsedUrl.hostname)) {
+      return {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          'x-promptfoo-version': VERSION,
+          ...(getVerifiedEmailKey() ? { Authorization: `Bearer ${getVerifiedEmailKey()}` } : {}),
+        },
+      };
+    }
+  } catch (e) {
+    logger.debug(`URL parsing failed in addPromptfooHeaders: ${e}`);
+  }
+  return { ...options, headers: options.headers || {} };
+}
 
 export async function fetchWithProxy(
   url: RequestInfo,
   options: RequestInit = {},
 ): Promise<Response> {
   let finalUrl = url;
-
-  const finalOptions = {
-    ...options,
-    headers: {
-      ...options.headers,
-      'x-promptfoo-version': VERSION,
-    } as Record<string, string>,
-  };
-
+  let finalOptions = options;
   if (typeof url === 'string') {
+    finalOptions = maybeAddPromptfooHeaders(url, options);
+
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.username || parsedUrl.password) {

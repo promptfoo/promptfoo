@@ -28,6 +28,10 @@ jest.mock('../src/fetch', () => ({
   sleep: jest.fn(),
 }));
 
+jest.mock('../src/globalConfig/accounts', () => ({
+  getVerifiedEmailKey: jest.fn().mockReturnValue(null),
+}));
+
 function createMockResponse(options: Partial<Response> = {}): Response {
   return {
     ok: true,
@@ -61,8 +65,8 @@ describe('fetchWithProxy', () => {
     jest.clearAllMocks();
   });
 
-  it('should add version header to all requests', async () => {
-    const url = 'https://example.com/api';
+  it('should add version header to all promptfoo domain requests', async () => {
+    const url = 'https://api.promptfoo.app/foo';
     await fetchWithProxy(url);
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -87,7 +91,6 @@ describe('fetchWithProxy', () => {
         headers: {
           'Content-Type': 'application/json',
           Authorization: 'Basic dXNlcm5hbWU6cGFzc3dvcmQ=',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -104,7 +107,6 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           'Content-Type': 'application/json',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -137,7 +139,6 @@ describe('fetchWithProxy', () => {
         headers: {
           Authorization: 'Bearer token123',
           'Content-Type': 'application/json',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -161,7 +162,6 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           Authorization: 'Bearer token123',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -176,7 +176,6 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           Authorization: 'Basic OnBhc3N3b3Jk',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -191,7 +190,6 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           Authorization: 'Basic dXNlcm5hbWU6', // Base64 encoded 'username:'
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -215,7 +213,6 @@ describe('fetchWithProxy', () => {
           'Content-Type': 'application/json',
           'X-Custom-Header': 'value',
           Authorization: 'Basic dXNlcm5hbWU6cGFzc3dvcmQ=',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );

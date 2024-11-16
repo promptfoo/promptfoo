@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { fetchWithProxy } from '../../fetch';
 import logger from '../../logger';
 
 export const redteamRouter = Router();
@@ -18,7 +19,7 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
 
   try {
     logger.debug(`Sending request to cloud function: ${CLOUD_FUNCTION_URL}`);
-    const response = await fetch(CLOUD_FUNCTION_URL, {
+    const response = await fetchWithProxy(CLOUD_FUNCTION_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

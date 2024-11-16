@@ -1,4 +1,10 @@
-import { getUserEmail, setUserEmail, getAuthor } from '../src/globalConfig/accounts';
+import {
+  getUserEmail,
+  setUserEmail,
+  getAuthor,
+  getVerifiedEmailKey,
+  setVerifiedEmailKey,
+} from '../src/globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../src/globalConfig/globalConfig';
 
 jest.mock('../src/globalConfig/globalConfig', () => ({
@@ -30,6 +36,30 @@ describe('accounts module', () => {
       const writeGlobalConfigSpy = jest.mocked(writeGlobalConfigPartial);
       setUserEmail('test@example.com');
       expect(writeGlobalConfigSpy).toHaveBeenCalledWith({ account: { email: 'test@example.com' } });
+    });
+  });
+
+  describe('getVerifiedEmailKey', () => {
+    it('should return the verified email key from global config', () => {
+      jest
+        .mocked(readGlobalConfig)
+        .mockReturnValue({ account: { verifiedEmailKey: 'test-key-123' } });
+      expect(getVerifiedEmailKey()).toBe('test-key-123');
+    });
+
+    it('should return null if no verified email key is set in global config', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({});
+      expect(getVerifiedEmailKey()).toBeNull();
+    });
+  });
+
+  describe('setVerifiedEmailKey', () => {
+    it('should write the verified email key to global config', () => {
+      const writeGlobalConfigSpy = jest.mocked(writeGlobalConfigPartial);
+      setVerifiedEmailKey('test-key-123');
+      expect(writeGlobalConfigSpy).toHaveBeenCalledWith({
+        account: { verifiedEmailKey: 'test-key-123' },
+      });
     });
   });
 

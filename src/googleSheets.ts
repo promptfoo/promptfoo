@@ -1,9 +1,10 @@
+import { fetchWithProxy } from './fetch';
 import logger from './logger';
 import type { CsvRow } from './types';
 
 async function checkGoogleSheetAccess(url: string) {
   try {
-    const response = await fetch(url);
+    const response = await fetchWithProxy(url);
     if (response.ok) {
       return { public: true, status: response.status };
     } else {

@@ -3,7 +3,7 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import readline from 'readline';
 import { fetchWithProxy } from '../fetch';
-import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
+import { getUserEmail, promptForEmailVerified, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -151,5 +151,12 @@ export function authCommand(program: Command) {
         logger.error(`Failed to get user info: ${errorMessage}`);
         process.exitCode = 1;
       }
+    });
+
+  authCommand
+    .command('verify')
+    .description('Verify email')
+    .action(async () => {
+      await promptForEmailVerified();
     });
 }

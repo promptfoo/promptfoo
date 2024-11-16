@@ -46,7 +46,7 @@ describe('init command', () => {
 
       await init.downloadFile('https://example.com/file.txt', '/path/to/file.txt');
 
-      expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.txt');
+      expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.txt', expect.any(Object));
       expect(fs.writeFile).toHaveBeenCalledWith('/path/to/file.txt', 'file content');
     });
 
