@@ -199,8 +199,63 @@ evalRouter.post(
 );
 
 evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
-  const body = req.body;
   try {
+    const isStreaming = req.headers['x-upload-mode'] === 'streaming';
+
+    if (isStreaming) {
+      logger.debug('[POST /api/eval] Receiving streaming eval results');
+      let metadata: any;
+      const chunks: any[] = [];
+
+      // Read metadata and chunks from the stream
+      for await (const chunk of req) {
+        const line = chunk.toString().trim();
+        if (!line) {
+          continue;
+        }
+
+        const data = JSON.parse(line);
+        if (data.type === 'metadata') {
+          metadata = data;
+          logger.debug(`[POST /api/eval] Received metadata for ${metadata.totalResults} results`);
+        } else if (data.type === 'results') {
+          chunks.push(...data.data);
+          logger.debug(`[POST /api/eval] Received batch ${data.batch + 1}/${data.totalBatches}`);
+        }
+      }
+
+      // Create eval with initial metadata
+      const eval_ = await Eval.create(metadata.config, [], {
+        author: metadata.author,
+        createdAt: new Date(metadata.createdAt),
+      });
+
+      // Process results in batches
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+        const batch = chunks.slice(i, i + BATCH_SIZE);
+        for (const result of batch) {
+          await EvalResult.createFromEvaluateResult(
+            eval_.id,
+            result.evaluateResult,
+            result.testCase,
+            {
+              persist: true,
+            },
+          );
+        }
+        logger.debug(`[POST /api/eval] Processed batch ${Math.floor(i / BATCH_SIZE) + 1}`);
+      }
+
+      logger.debug(`[POST /api/eval] Created streaming eval with ID: ${eval_.id}`);
+      logger.debug(`[POST /api/eval] Saved ${chunks.length} results to eval ${eval_.id}`);
+
+      res.json({ id: eval_.id });
+      return;
+    }
+
+    // Handle traditional uploads
+    const body = req.body;
     if (body.data) {
       logger.debug('[POST /api/eval] Saving eval results (v3) to database');
       const { data: payload } = req.body as { data: ResultsFile };
@@ -215,13 +270,12 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         results: incEval.results,
       });
       logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
-
       logger.debug(`[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`);
 
       res.json({ id: eval_.id });
     }
   } catch (error) {
-    console.error('Failed to write eval to database', error, body);
+    console.error('Failed to write eval to database', error);
     res.status(500).json({ error: 'Failed to write eval to database' });
   }
 });
