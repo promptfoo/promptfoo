@@ -17,7 +17,7 @@ import { REDTEAM_MODEL_CATEGORIES } from './constants';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmful';
 
-function getModerationAssertions(harmCategory: keyof typeof HARM_PLUGINS): Assertion[] {
+export function getModerationAssertions(harmCategory: keyof typeof HARM_PLUGINS): Assertion[] {
   const assertionType: AssertionType =
     harmCategory === 'harmful:privacy'
       ? 'promptfoo:redteam:harmful:privacy'
@@ -42,7 +42,7 @@ function getModerationAssertions(harmCategory: keyof typeof HARM_PLUGINS): Asser
   return assertions;
 }
 
-function createTestCase(
+export function createTestCase(
   injectVar: string,
   output: string,
   harmCategory: keyof typeof HARM_PLUGINS,
