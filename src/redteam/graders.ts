@@ -8,7 +8,7 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
-import { HarmfulGrader, HarmfulPrivacyGrader } from './plugins/harmful';
+import { HarmfulGrader, HarmfulPrivacyGrader } from './plugins/harmful/graders';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
