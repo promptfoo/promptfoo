@@ -320,7 +320,8 @@ const App: React.FC = () => {
               size="small"
               label={
                 <>
-                  <strong>Dataset:</strong> {tableData.length} probes
+                  <strong>Dataset:</strong>{' '}
+                  {selectedPrompt.metrics?.tokenUsage.numRequests || tableData.length} probes
                 </>
               }
             />
