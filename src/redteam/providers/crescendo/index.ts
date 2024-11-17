@@ -169,6 +169,7 @@ class CrescendoProvider implements ApiProvider {
       total: 0,
       prompt: 0,
       completion: 0,
+      numRequests: 0,
     };
 
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
@@ -210,6 +211,7 @@ class CrescendoProvider implements ApiProvider {
         totalTokenUsage.total += promptTokenUsage.total || 0;
         totalTokenUsage.prompt += promptTokenUsage.prompt || 0;
         totalTokenUsage.completion += promptTokenUsage.completion || 0;
+        totalTokenUsage.numRequests += promptTokenUsage.numRequests ?? 1;
       }
 
       const [isRefusal, refusalRationale] = await this.getRefusalScore(attackPrompt, lastResponse);

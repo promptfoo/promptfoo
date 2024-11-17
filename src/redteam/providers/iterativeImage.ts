@@ -120,6 +120,7 @@ async function runRedteamConversation({
     total: 0,
     prompt: 0,
     completion: 0,
+    numRequests: 0,
   };
 
   let targetPrompt: string | null = null;
@@ -262,6 +263,7 @@ async function runRedteamConversation({
       totalTokenUsage.total += targetTokenUsage.total || 0;
       totalTokenUsage.prompt += targetTokenUsage.prompt || 0;
       totalTokenUsage.completion += targetTokenUsage.completion || 0;
+      totalTokenUsage.numRequests += targetTokenUsage.numRequests ?? 1;
     }
   }
 
