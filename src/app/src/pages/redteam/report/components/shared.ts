@@ -1,6 +1,8 @@
 import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
+// TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
+
 export function getStrategyIdFromMetric(metric: string): string | null {
   const parts = metric.split('/');
   const metricSuffix = parts[1];
