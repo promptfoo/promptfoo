@@ -157,7 +157,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
         {activeTab === 0 ? (
           failures.length > 0 ? (
             <List>
-              {failures.slice(0, 5).map((failure, index) => (
+              {failures.map((failure, index) => (
                 <ListItem key={index} className="failure-item">
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
                     <Box sx={{ flexGrow: 1 }}>
@@ -192,7 +192,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           )
         ) : passes.length > 0 ? (
           <List>
-            {passes.slice(0, 5).map((pass, index) => (
+            {passes.map((pass, index) => (
               <ListItem key={index} className="failure-item">
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
                   <Box sx={{ flexGrow: 1 }}>
