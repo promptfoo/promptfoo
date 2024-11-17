@@ -8,6 +8,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -70,6 +71,30 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
   const totalFrameworks = Object.keys(frameworkCompliance).length;
   const compliantFrameworks = Object.values(frameworkCompliance).filter(Boolean).length;
 
+  const pluginComplianceStats = React.useMemo(() => {
+    let totalPlugins = 0;
+    let compliantPlugins = 0;
+
+    Object.entries(ALIASED_PLUGIN_MAPPINGS).forEach(([_, mappings]) => {
+      Object.values(mappings).forEach(({ plugins, strategies }) => {
+        const items = [...plugins, ...strategies];
+        totalPlugins += items.length;
+
+        const passingItems = items.filter((item) => {
+          const stats = categoryStats[item] || strategyStats[item];
+          return stats && stats.total > 0 && stats.pass / stats.total >= pluginPassRateThreshold;
+        });
+        compliantPlugins += passingItems.length;
+      });
+    });
+
+    return {
+      total: totalPlugins,
+      compliant: compliantPlugins,
+      percentage: (compliantPlugins / totalPlugins) * 100,
+    };
+  }, [categoryStats, strategyStats, pluginPassRateThreshold]);
+
   const toggleFramework = (framework: string) => {
     setExpandedFrameworks((prev) => ({
       ...prev,
@@ -84,9 +109,29 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
   return (
     <Card className="framework-compliance-card">
       <CardContent>
-        <Typography variant="h5" mb={2}>
-          Framework Compliance ({compliantFrameworks}/{totalFrameworks})
-        </Typography>
+        <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+          <Typography variant="h5">
+            Framework Compliance ({compliantFrameworks}/{totalFrameworks})
+          </Typography>
+          <Typography variant="h6" color="textSecondary">
+            {pluginComplianceStats.percentage.toFixed(0)}% ({pluginComplianceStats.compliant}/
+            {pluginComplianceStats.total} plugins)
+          </Typography>
+        </Box>
+        <LinearProgress
+          variant="determinate"
+          value={pluginComplianceStats.percentage}
+          sx={{
+            mb: 3,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+            '& .MuiLinearProgress-bar': {
+              borderRadius: 4,
+              backgroundColor: pluginComplianceStats.percentage === 100 ? '#4caf50' : '#1976d2',
+            },
+          }}
+        />
         <Grid container spacing={3} className="framework-grid">
           {Object.entries(frameworkCompliance).map(([framework, isCompliant]) => {
             const nonCompliantPlugins = getNonCompliantPlugins(framework);
