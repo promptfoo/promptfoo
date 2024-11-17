@@ -56,6 +56,7 @@ export default class GoatProvider implements ApiProvider {
       total: 0,
       prompt: 0,
       completion: 0,
+      numRequests: 0,
     };
 
     for (let turn = 0; turn < this.maxTurns; turn++) {
@@ -113,6 +114,9 @@ export default class GoatProvider implements ApiProvider {
         totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
         totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
         totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
+        totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
+      } else {
+        totalTokenUsage.numRequests += 1;
       }
     }
     return {

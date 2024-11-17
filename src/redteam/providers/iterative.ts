@@ -65,6 +65,7 @@ async function runRedteamConversation({
     total: 0,
     prompt: 0,
     completion: 0,
+    numRequests: 0,
   };
 
   for (let i = 0; i < NUM_ITERATIONS; i++) {
@@ -184,24 +185,40 @@ async function runRedteamConversation({
       totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
       totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
       totalTokenUsage.completion += redteamResp.tokenUsage.completion || 0;
+      totalTokenUsage.numRequests =
+        (totalTokenUsage.numRequests || 0) + (redteamResp.tokenUsage.numRequests || 1);
+    } else {
+      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }
 
     if (isOnTopicResp.tokenUsage) {
       totalTokenUsage.total += isOnTopicResp.tokenUsage.total || 0;
       totalTokenUsage.prompt += isOnTopicResp.tokenUsage.prompt || 0;
       totalTokenUsage.completion += isOnTopicResp.tokenUsage.completion || 0;
+      totalTokenUsage.numRequests =
+        (totalTokenUsage.numRequests || 0) + (isOnTopicResp.tokenUsage.numRequests || 1);
+    } else {
+      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }
 
     if (judgeResp.tokenUsage) {
       totalTokenUsage.total += judgeResp.tokenUsage.total || 0;
       totalTokenUsage.prompt += judgeResp.tokenUsage.prompt || 0;
       totalTokenUsage.completion += judgeResp.tokenUsage.completion || 0;
+      totalTokenUsage.numRequests =
+        (totalTokenUsage.numRequests || 0) + (judgeResp.tokenUsage.numRequests || 1);
+    } else {
+      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }
 
     if (targetTokenUsage) {
       totalTokenUsage.total += targetTokenUsage.total || 0;
       totalTokenUsage.prompt += targetTokenUsage.prompt || 0;
       totalTokenUsage.completion += targetTokenUsage.completion || 0;
+      totalTokenUsage.numRequests =
+        (totalTokenUsage.numRequests || 0) + (targetTokenUsage.numRequests || 1);
+    } else {
+      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }
   }
 

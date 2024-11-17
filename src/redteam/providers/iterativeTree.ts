@@ -375,6 +375,7 @@ export async function runRedteamConversation({
     total: 0,
     prompt: 0,
     completion: 0,
+    numRequests: 0,
   };
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
@@ -438,6 +439,7 @@ export async function runRedteamConversation({
           totalTokenUsage.total += targetTokenUsage.total || 0;
           totalTokenUsage.prompt += targetTokenUsage.prompt || 0;
           totalTokenUsage.completion += targetTokenUsage.completion || 0;
+          totalTokenUsage.numRequests += targetTokenUsage.numRequests ?? 1;
         }
 
         const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
@@ -543,6 +545,7 @@ export async function runRedteamConversation({
     totalTokenUsage.total += finalTargetTokenUsage.total || 0;
     totalTokenUsage.prompt += finalTargetTokenUsage.prompt || 0;
     totalTokenUsage.completion += finalTargetTokenUsage.completion || 0;
+    totalTokenUsage.numRequests += finalTargetTokenUsage.numRequests ?? 1;
   }
 
   logger.debug(
