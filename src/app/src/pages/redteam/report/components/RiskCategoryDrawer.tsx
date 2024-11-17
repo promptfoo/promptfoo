@@ -18,6 +18,7 @@ import {
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getStrategyIdFromGradingResult } from './shared';
 import './RiskCategoryDrawer.css';
@@ -122,6 +123,13 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   );
 
   const [activeTab, setActiveTab] = React.useState(0);
+  const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
+  const [selectedTest, setSelectedTest] = React.useState<{
+    prompt: string;
+    output: string;
+    gradingResult?: GradingResult;
+    result?: EvaluateResult;
+  } | null>(null);
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
@@ -176,7 +184,15 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           failures.length > 0 ? (
             <List>
               {failures.map((failure, index) => (
-                <ListItem key={index} className="failure-item">
+                <ListItem
+                  key={index}
+                  className="failure-item"
+                  sx={{ position: 'relative', cursor: 'pointer' }}
+                  onClick={() => {
+                    setSelectedTest(failure);
+                    setDetailsDialogOpen(true);
+                  }}
+                >
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
                     <Box sx={{ flexGrow: 1 }}>
                       <Typography variant="subtitle1" className="prompt">
@@ -205,19 +221,31 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
                           );
                         })()}
                     </Box>
-                    {failure.gradingResult?.componentResults?.some(
-                      (result) => (result.suggestions?.length || 0) > 0,
-                    ) && (
-                      <IconButton
-                        onClick={() => {
-                          setCurrentGradingResult(failure.gradingResult);
-                          setSuggestionsDialogOpen(true);
-                        }}
-                        sx={{ ml: 1 }}
-                      >
-                        <LightbulbOutlinedIcon color="primary" />
-                      </IconButton>
-                    )}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        opacity: 0,
+                        transition: 'opacity 0.2s',
+                        '.failure-item:hover &': {
+                          opacity: 1,
+                        },
+                      }}
+                    >
+                      {failure.gradingResult?.componentResults?.some(
+                        (result) => (result.suggestions?.length || 0) > 0,
+                      ) && (
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent list item click
+                            setCurrentGradingResult(failure.gradingResult);
+                            setSuggestionsDialogOpen(true);
+                          }}
+                          sx={{ ml: 1 }}
+                        >
+                          <LightbulbOutlinedIcon color="primary" />
+                        </IconButton>
+                      )}
+                    </Box>
                   </Box>
                 </ListItem>
               ))}
@@ -254,6 +282,18 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
         open={suggestionsDialogOpen}
         onClose={() => setSuggestionsDialogOpen(false)}
         gradingResult={currentGradingResult}
+      />
+      <EvalOutputPromptDialog
+        open={detailsDialogOpen}
+        onClose={() => setDetailsDialogOpen(false)}
+        prompt={selectedTest?.result?.prompt.raw || 'Unknown'}
+        output={
+          typeof selectedTest?.result?.response?.output === 'object'
+            ? JSON.stringify(selectedTest?.result?.response?.output)
+            : selectedTest?.result?.response?.output
+        }
+        gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
+        metadata={selectedTest?.result?.metadata}
       />
     </Drawer>
   );
