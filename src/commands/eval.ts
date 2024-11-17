@@ -296,7 +296,7 @@ export async function doEval(
     }
     if (tokenUsage.total > 0) {
       logger.info(
-        `Token usage: Total ${tokenUsage.total}, Prompt ${tokenUsage.prompt}, Completion ${tokenUsage.completion}, Cached ${tokenUsage.cached}`,
+        `Token usage: Total ${tokenUsage.total.toLocaleString()}, Prompt ${tokenUsage.prompt.toLocaleString()}, Completion ${tokenUsage.completion.toLocaleString()}, Cached ${tokenUsage.cached.toLocaleString()}`,
       );
     }
 
