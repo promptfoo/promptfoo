@@ -11,6 +11,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Modal from '@mui/material/Modal';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { categoryAliasesReverse, type categoryAliases } from '@promptfoo/redteam/constants';
 import {
@@ -316,15 +317,23 @@ const App: React.FC = () => {
                 style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
               />
             )}
-            <Chip
-              size="small"
-              label={
-                <>
-                  <strong>Dataset:</strong>{' '}
-                  {selectedPrompt.metrics?.tokenUsage.numRequests || tableData.length} probes
-                </>
+            <Tooltip
+              title={
+                selectedPrompt?.metrics?.tokenUsage?.total
+                  ? `${selectedPrompt.metrics.tokenUsage.total.toLocaleString()} tokens`
+                  : ''
               }
-            />
+            >
+              <Chip
+                size="small"
+                label={
+                  <>
+                    <strong>Dataset:</strong>{' '}
+                    {selectedPrompt.metrics?.tokenUsage.numRequests || tableData.length} probes
+                  </>
+                }
+              />
+            </Tooltip>
             {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
               <Chip
                 size="small"
