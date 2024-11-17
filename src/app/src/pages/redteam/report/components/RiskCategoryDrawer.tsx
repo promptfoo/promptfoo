@@ -2,27 +2,45 @@ import React from 'react';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
-import type { GradingResult } from '@promptfoo/types';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  type Strategy,
+  strategyDescriptions,
+} from '@promptfoo/redteam/constants';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import SuggestionsDialog from './SuggestionsDialog';
+import { getStrategyIdFromGradingResult } from './shared';
 import './RiskCategoryDrawer.css';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
   onClose: () => void;
   category: string;
-  failures: { prompt: string; output: string; gradingResult?: GradingResult }[];
-  passes: { prompt: string; output: string; gradingResult?: GradingResult }[];
+  failures: {
+    prompt: string;
+    output: string;
+    gradingResult?: GradingResult;
+    result?: EvaluateResult;
+  }[];
+  passes: {
+    prompt: string;
+    output: string;
+    gradingResult?: GradingResult;
+    result?: EvaluateResult;
+  }[];
+  evalId: string;
   numPassed: number;
   numFailed: number;
-  evalId: string;
 }
 
 function getPromptDisplayString(prompt: string): string {
@@ -167,6 +185,25 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
                       <Typography variant="body2" className="output">
                         {getOutputDisplay(failure.output)}
                       </Typography>
+                      {failure.gradingResult &&
+                        (() => {
+                          const strategyId = getStrategyIdFromGradingResult(failure.gradingResult);
+                          return (
+                            strategyId && (
+                              <Tooltip title={strategyDescriptions[strategyId as Strategy] || ''}>
+                                <Chip
+                                  size="small"
+                                  label={
+                                    displayNameOverrides[
+                                      strategyId as keyof typeof displayNameOverrides
+                                    ] || strategyId
+                                  }
+                                  sx={{ mt: 1 }}
+                                />
+                              </Tooltip>
+                            )
+                          );
+                        })()}
                     </Box>
                     {failure.gradingResult?.componentResults?.some(
                       (result) => (result.suggestions?.length || 0) > 0,

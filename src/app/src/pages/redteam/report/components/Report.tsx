@@ -31,51 +31,8 @@ import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
+import { getPluginIdFromResult, getStrategyIdFromMetric } from './shared';
 import './Report.css';
-
-function getStrategyIdFromMetric(metric: string): string | null {
-  const parts = metric.split('/');
-  const metricSuffix = parts[1];
-  if (metricSuffix) {
-    if (metricSuffix === 'Base64') {
-      return 'base64';
-    } else if (metricSuffix === 'Crescendo') {
-      return 'crescendo';
-    } else if (metricSuffix === 'GOAT') {
-      return 'goat';
-    } else if (metricSuffix === 'Injection') {
-      return 'prompt-injection';
-    } else if (metricSuffix === 'Iterative') {
-      return 'jailbreak';
-    } else if (metricSuffix === 'IterativeTree') {
-      return 'jailbreak:tree';
-    } else if (metricSuffix === 'Leetspeak') {
-      return 'leetspeak';
-    } else if (metricSuffix.startsWith('MathPrompt')) {
-      return 'math-prompt';
-    } else if (metricSuffix.startsWith('Multilingual')) {
-      return 'multilingual';
-    } else if (metricSuffix === 'Rot13') {
-      return 'rot13';
-    }
-  }
-  return null;
-}
-
-function getPluginIdFromResult(result: EvaluateResult): string | null {
-  // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
-  const harmCategory = result.vars['harmCategory'];
-  if (harmCategory) {
-    return categoryAliasesReverse[harmCategory as keyof typeof categoryAliases];
-  }
-  const metricNames =
-    result.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
-  const metricBaseName = metricNames[0]?.split('/')[0];
-  if (metricBaseName) {
-    return categoryAliasesReverse[metricBaseName as keyof typeof categoryAliases];
-  }
-  return null;
-}
 
 const App: React.FC = () => {
   const [evalId, setEvalId] = React.useState<string | null>(null);
@@ -129,7 +86,7 @@ const App: React.FC = () => {
   const failuresByPlugin = React.useMemo(() => {
     const failures: Record<
       string,
-      { prompt: string; output: string; gradingResult?: GradingResult }[]
+      { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
@@ -147,6 +104,7 @@ const App: React.FC = () => {
             result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
+          result,
         });
       }
     });
@@ -156,7 +114,7 @@ const App: React.FC = () => {
   const passesByPlugin = React.useMemo(() => {
     const passes: Record<
       string,
-      { prompt: string; output: string; gradingResult?: GradingResult }[]
+      { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
@@ -173,6 +131,7 @@ const App: React.FC = () => {
             result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
+          result,
         });
       }
     });
