@@ -1,4 +1,3 @@
-import logger from '../../../logger';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
 import type { PluginActionParams, TestCase } from '../../../types';
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
@@ -21,7 +20,6 @@ export async function getHarmfulTests(
 
   const generatePrompts = async (): Promise<{ prompt: string }[]> => {
     const result = await unalignedProvider.callApi('');
-    logger.warn(`${unalignedProvider.constructor.name} returned ${result.output}`);
     if (result.output) {
       if (delayMs > 0) {
         await sleep(delayMs);
