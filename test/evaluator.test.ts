@@ -24,7 +24,7 @@ const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
   callApi: jest.fn().mockResolvedValue({
     output: 'Test output',
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
   }),
 };
 
@@ -32,7 +32,7 @@ const mockApiProvider2: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider-2'),
   callApi: jest.fn().mockResolvedValue({
     output: 'Test output',
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
   }),
 };
 
@@ -40,7 +40,7 @@ const mockGradingApiProviderPasses: ApiProvider = {
   id: jest.fn().mockReturnValue('test-grading-provider'),
   callApi: jest.fn().mockResolvedValue({
     output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
   }),
 };
 
@@ -48,7 +48,7 @@ const mockGradingApiProviderFails: ApiProvider = {
   id: jest.fn().mockReturnValue('test-grading-provider'),
   callApi: jest.fn().mockResolvedValue({
     output: JSON.stringify({ pass: false, reason: 'Grading failed reason' }),
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
   }),
 };
 
@@ -91,7 +91,7 @@ describe('evaluator', () => {
       prompt: 5,
       completion: 5,
       cached: 0,
-      numRequests: 0,
+      numRequests: 1,
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -120,7 +120,7 @@ describe('evaluator', () => {
       prompt: 5,
       completion: 5,
       cached: 0,
-      numRequests: 0,
+      numRequests: 1,
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1 < 2 he said "hello world"...');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -149,7 +149,7 @@ describe('evaluator', () => {
       prompt: 5,
       completion: 5,
       cached: 0,
-      numRequests: 0,
+      numRequests: 1,
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1.prop1 }} {{ var2 }}');
@@ -178,7 +178,7 @@ describe('evaluator', () => {
       prompt: 5,
       completion: 5,
       cached: 0,
-      numRequests: 0,
+      numRequests: 1,
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('test display name');
@@ -207,7 +207,7 @@ describe('evaluator', () => {
       prompt: 20,
       completion: 20,
       cached: 0,
-      numRequests: 0,
+      numRequests: 4,
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -236,7 +236,7 @@ describe('evaluator', () => {
       prompt: 10,
       completion: 10,
       cached: 0,
-      numRequests: 0,
+      numRequests: 2,
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -260,7 +260,7 @@ describe('evaluator', () => {
       prompt: 5,
       completion: 5,
       cached: 0,
-      numRequests: 0,
+      numRequests: 1,
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
     expect(summary.results[0].prompt.label).toBe('Test prompt');
@@ -284,7 +284,7 @@ describe('evaluator', () => {
       prompt: 15,
       completion: 15,
       cached: 0,
-      numRequests: 0,
+      numRequests: 3,
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
     expect(summary.results[0].prompt.label).toBe('Test prompt');
@@ -510,7 +510,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider-json'),
       callApi: jest.fn().mockResolvedValue({
         output: '{"output": "testing", "value": 123}',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
     };
 
@@ -546,7 +546,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider-transform'),
       callApi: jest.fn().mockResolvedValue({
         output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
       transform: '`Transformed: ${output}`',
     };
@@ -641,7 +641,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider-transform'),
       callApi: jest.fn().mockResolvedValue({
         output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
       transform: '`ProviderTransformed: ${output}`',
     };
@@ -717,7 +717,7 @@ describe('evaluator', () => {
       prompt: 5,
       completion: 5,
       cached: 0,
-      numRequests: 0,
+      numRequests: 1,
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1');
     expect(summary.results[0].prompt.label).toBe('Test prompt 1');
@@ -729,7 +729,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider'),
       callApi: jest.fn().mockResolvedValue({
         output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
     };
 
@@ -770,11 +770,11 @@ describe('evaluator', () => {
         .fn()
         .mockResolvedValueOnce({
           output: 'Hola mundo',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
         })
         .mockResolvedValueOnce({
           output: 'Bonjour le monde',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
         }),
     };
 
@@ -828,19 +828,19 @@ describe('evaluator', () => {
         .fn()
         .mockResolvedValueOnce({
           output: 'Spanish Hola',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
         })
         .mockResolvedValueOnce({
           output: 'Spanish Bonjour',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
         })
         .mockResolvedValueOnce({
           output: 'French Hola',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
         })
         .mockResolvedValueOnce({
           output: 'French Bonjour',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
         }),
     };
     const testSuite: TestSuite = {
@@ -887,7 +887,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider'),
       callApi: jest.fn().mockResolvedValue({
         output: 'Hello, World',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
     };
 
@@ -995,7 +995,7 @@ describe('evaluator', () => {
       callApi: jest.fn().mockImplementation((prompt) => {
         return Promise.resolve({
           output: prompt,
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
         });
       }),
     };
@@ -1029,7 +1029,7 @@ describe('evaluator', () => {
       label: 'Labeled Provider',
       callApi: jest.fn().mockResolvedValue({
         output: 'Labeled Provider Output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
     };
 
@@ -1037,7 +1037,7 @@ describe('evaluator', () => {
       id: () => 'unlabeled-provider-id',
       callApi: jest.fn().mockResolvedValue({
         output: 'Unlabeled Provider Output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
     };
 
@@ -1167,7 +1167,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider-transform'),
       callApi: jest.fn().mockResolvedValue({
         output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
       transform: '`Provider: ${output}`',
     };
@@ -1208,7 +1208,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider-transform'),
       callApi: jest.fn().mockResolvedValue({
         output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
       transform: '`Provider: ${output}`',
     };
@@ -1255,7 +1255,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider-no-output'),
       callApi: jest.fn().mockResolvedValue({
         output: null,
-        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
       }),
     };
 
@@ -1281,7 +1281,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider-no-output'),
       callApi: jest.fn().mockResolvedValue({
         output: false,
-        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
       }),
     };
 
@@ -1306,7 +1306,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider'),
       callApi: jest.fn().mockResolvedValue({
         output: 'Test response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
     };
 
