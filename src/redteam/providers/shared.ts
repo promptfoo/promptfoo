@@ -7,6 +7,7 @@ import {
   type ApiProvider,
   type CallApiContextParams,
   type CallApiOptionsParams,
+  type TokenUsage,
 } from '../../types';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
@@ -57,22 +58,39 @@ export async function getTargetResponse(
   targetPrompt: string,
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
-): Promise<string> {
+): Promise<{ extractedResponse: string; tokenUsage?: TokenUsage }> {
   let targetRespRaw;
   try {
     targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
-    return (error as Error).message;
+    return {
+      extractedResponse: (error as Error).message,
+      tokenUsage: {
+        numRequests: 1,
+      },
+    };
   }
 
   if (targetRespRaw?.output) {
-    return typeof targetRespRaw.output === 'string'
-      ? targetRespRaw.output
-      : JSON.stringify(targetRespRaw.output);
+    return {
+      extractedResponse:
+        typeof targetRespRaw.output === 'string'
+          ? targetRespRaw.output
+          : JSON.stringify(targetRespRaw.output),
+      tokenUsage: {
+        ...(targetRespRaw.tokenUsage || {}),
+        numRequests: 1,
+      },
+    };
   }
 
   if (targetRespRaw?.error) {
-    return targetRespRaw.error;
+    return {
+      extractedResponse: targetRespRaw.error,
+      tokenUsage: {
+        numRequests: 1,
+      },
+    };
   }
 
   throw new Error('Expected target output or error to be set');

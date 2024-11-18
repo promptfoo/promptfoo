@@ -52,6 +52,12 @@ export default class GoatProvider implements ApiProvider {
     invariant(targetProvider, 'Expected originalProvider to be set');
 
     const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] = [];
+    const totalTokenUsage = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      numRequests: 0,
+    };
 
     for (let turn = 0; turn < this.maxTurns; turn++) {
       response = await fetch(getRemoteGenerationUrl(), {
@@ -70,6 +76,11 @@ export default class GoatProvider implements ApiProvider {
       });
       const data = await response.json();
       messages.push(data.message);
+      if (data.tokenUsage) {
+        totalTokenUsage.total += data.tokenUsage.total || 0;
+        totalTokenUsage.prompt += data.tokenUsage.prompt || 0;
+        totalTokenUsage.completion += data.tokenUsage.completion || 0;
+      }
       logger.debug(
         dedent`
           ${chalk.bold.green(`GOAT turn ${turn} history:`)}
@@ -98,12 +109,22 @@ export default class GoatProvider implements ApiProvider {
         content: targetResponse.output,
         role: 'assistant',
       });
+
+      if (targetResponse.tokenUsage) {
+        totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
+        totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
+        totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
+        totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
+      } else {
+        totalTokenUsage.numRequests += 1;
+      }
     }
     return {
       output: messages[messages.length - 1].content,
       metadata: {
         messages: JSON.stringify(messages, null, 2),
       },
+      tokenUsage: totalTokenUsage,
     };
   }
 }

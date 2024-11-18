@@ -24,6 +24,7 @@ import type {
   CallApiOptionsParams,
   Prompt,
   NunjucksFilterMap,
+  TokenUsage,
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -130,7 +131,7 @@ export async function evaluateResponse(
 export async function getNewPrompt(
   redteamProvider: ApiProvider,
   redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
-): Promise<{ improvement: string; prompt: string }> {
+): Promise<{ improvement: string; prompt: string; tokenUsage?: TokenUsage }> {
   const redteamBody = JSON.stringify(redteamHistory);
   const redteamResp = await redteamProvider.callApi(redteamBody, {
     prompt: {
@@ -146,7 +147,10 @@ export async function getNewPrompt(
     typeof redteamResp.output === 'string',
     `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
   );
-  return extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output);
+  return {
+    ...extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output),
+    tokenUsage: redteamResp.tokenUsage,
+  };
 }
 
 /**
@@ -160,7 +164,7 @@ export async function checkIfOnTopic(
   redteamProvider: ApiProvider,
   onTopicSystemPrompt: string,
   targetPrompt: string,
-): Promise<boolean> {
+): Promise<{ isOnTopic: boolean; tokenUsage?: TokenUsage }> {
   const isOnTopicBody = JSON.stringify([
     {
       role: 'system',
@@ -184,7 +188,10 @@ export async function checkIfOnTopic(
   invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
   const { onTopic } = extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output);
   invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
-  return onTopic;
+  return {
+    isOnTopic: onTopic,
+    tokenUsage: isOnTopicResp.tokenUsage,
+  };
 }
 
 /**
@@ -330,7 +337,11 @@ export async function runRedteamConversation({
   injectVar: string;
   context: CallApiContextParams;
   options: CallApiOptionsParams;
-}): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
+}): Promise<{
+  output: string;
+  metadata: { redteamFinalPrompt?: string };
+  tokenUsage?: TokenUsage;
+}> {
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;
 
@@ -360,6 +371,13 @@ export async function runRedteamConversation({
   let bestScore = 0;
   let noImprovementCount = 0;
 
+  const totalTokenUsage = {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    numRequests: 0,
+  };
+
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
       `[Depth ${depth}] Starting exploration. Nodes to explore: ${currentBestNodes.length}. Max score so far: ${maxScore}`,
@@ -374,10 +392,20 @@ export async function runRedteamConversation({
       );
 
       for (let i = 0; i < branchesForNode; i++) {
-        const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
+        const {
+          improvement,
+          prompt: newInjectVar,
+          tokenUsage: redteamTokenUsage,
+        } = await getNewPrompt(redteamProvider, [
           ...redteamHistory,
           { role: 'assistant', content: node.prompt },
         ]);
+
+        if (redteamTokenUsage) {
+          totalTokenUsage.total += redteamTokenUsage.total || 0;
+          totalTokenUsage.prompt += redteamTokenUsage.prompt || 0;
+          totalTokenUsage.completion += redteamTokenUsage.completion || 0;
+        }
 
         attempts++;
         logger.debug(
@@ -394,13 +422,26 @@ export async function runRedteamConversation({
           targetProvider,
         );
 
-        const isOnTopic = await checkIfOnTopic(redteamProvider, onTopicSystemPrompt, targetPrompt);
-        const targetResponse = await getTargetResponse(
-          targetProvider,
+        const { isOnTopic, tokenUsage: isOnTopicTokenUsage } = await checkIfOnTopic(
+          redteamProvider,
+          onTopicSystemPrompt,
           targetPrompt,
-          context,
-          options,
         );
+        if (isOnTopicTokenUsage) {
+          totalTokenUsage.total += isOnTopicTokenUsage.total || 0;
+          totalTokenUsage.prompt += isOnTopicTokenUsage.prompt || 0;
+          totalTokenUsage.completion += isOnTopicTokenUsage.completion || 0;
+        }
+
+        const { extractedResponse: targetResponse, tokenUsage: targetTokenUsage } =
+          await getTargetResponse(targetProvider, targetPrompt, context, options);
+        if (targetTokenUsage) {
+          totalTokenUsage.total += targetTokenUsage.total || 0;
+          totalTokenUsage.prompt += targetTokenUsage.prompt || 0;
+          totalTokenUsage.completion += targetTokenUsage.completion || 0;
+          totalTokenUsage.numRequests += targetTokenUsage.numRequests ?? 1;
+        }
+
         const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
           targetResponse.toLowerCase().includes(phrase),
         );
@@ -446,6 +487,7 @@ export async function runRedteamConversation({
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
+            tokenUsage: totalTokenUsage,
           };
         }
 
@@ -458,6 +500,7 @@ export async function runRedteamConversation({
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
+            tokenUsage: totalTokenUsage,
           };
         }
 
@@ -470,6 +513,7 @@ export async function runRedteamConversation({
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
+            tokenUsage: totalTokenUsage,
           };
         }
 
@@ -495,12 +539,14 @@ export async function runRedteamConversation({
     targetProvider,
   );
 
-  const finalTargetResponse = await getTargetResponse(
-    targetProvider,
-    finalTargetPrompt,
-    context,
-    options,
-  );
+  const { extractedResponse: finalTargetResponse, tokenUsage: finalTargetTokenUsage } =
+    await getTargetResponse(targetProvider, finalTargetPrompt, context, options);
+  if (finalTargetTokenUsage) {
+    totalTokenUsage.total += finalTargetTokenUsage.total || 0;
+    totalTokenUsage.prompt += finalTargetTokenUsage.prompt || 0;
+    totalTokenUsage.completion += finalTargetTokenUsage.completion || 0;
+    totalTokenUsage.numRequests += finalTargetTokenUsage.numRequests ?? 1;
+  }
 
   logger.debug(
     `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,
@@ -511,6 +557,7 @@ export async function runRedteamConversation({
     metadata: {
       redteamFinalPrompt: finalTargetPrompt,
     },
+    tokenUsage: totalTokenUsage,
   };
 }
 

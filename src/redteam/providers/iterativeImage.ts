@@ -12,7 +12,7 @@ import type {
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
-import { loadRedteamProvider } from './shared';
+import { getTargetResponse, loadRedteamProvider } from './shared';
 
 const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
   ? Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)
@@ -116,6 +116,12 @@ async function runRedteamConversation({
 
   let highestScore = 0;
   let bestResponse = '';
+  const totalTokenUsage = {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    numRequests: 0,
+  };
 
   let targetPrompt: string | null = null;
   for (let i = 0; i < NUM_ITERATIONS; i++) {
@@ -123,6 +129,11 @@ async function runRedteamConversation({
 
     // Get new prompt
     const redteamResp = await redteamProvider.callApi(redteamBody);
+    if (redteamResp.tokenUsage) {
+      totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
+      totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += redteamResp.tokenUsage.completion || 0;
+    }
     if (redteamResp.error) {
       throw new Error(`Error from redteam provider: ${redteamResp.error}`);
     }
@@ -161,6 +172,11 @@ async function runRedteamConversation({
       },
     ]);
     const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
+    if (isOnTopicResp.tokenUsage) {
+      totalTokenUsage.total += isOnTopicResp.tokenUsage.total || 0;
+      totalTokenUsage.prompt += isOnTopicResp.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += isOnTopicResp.tokenUsage.completion || 0;
+    }
     if (isOnTopicResp.error) {
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
     }
@@ -168,15 +184,8 @@ async function runRedteamConversation({
     const { isOnTopic } = extractFirstJsonObject<{ isOnTopic: boolean }>(isOnTopicResp.output);
     logger.debug(`Iteration ${i + 1}: On-topic response: ${isOnTopicResp.output}`);
 
-    let targetResponse;
-    try {
-      const targetResp = await targetProvider.callApi(targetPrompt, context, options);
-      targetResponse = targetResp.output || targetResp.error;
-    } catch (error) {
-      targetResponse = (error as Error).message;
-    }
-    invariant(typeof targetResponse === 'string', 'Expected output to be a string');
-    logger.debug(`Iteration ${i + 1}: Target response: ${targetResponse}`);
+    const { extractedResponse: targetResponse, tokenUsage: targetTokenUsage } =
+      await getTargetResponse(targetProvider, targetPrompt, context, options);
 
     // Parse URL from targetResponse
     const urlRegex = /(https?:\/\/[^\s)]+)/g;
@@ -204,6 +213,11 @@ async function runRedteamConversation({
           },
         ]),
       );
+      if (visionResponse.tokenUsage) {
+        totalTokenUsage.total += visionResponse.tokenUsage.total || 0;
+        totalTokenUsage.prompt += visionResponse.tokenUsage.prompt || 0;
+        totalTokenUsage.completion += visionResponse.tokenUsage.completion || 0;
+      }
       imageDescription = visionResponse.output;
       logger.debug(`Iteration ${i + 1}: Image description: ${imageDescription}`);
     }
@@ -220,6 +234,11 @@ async function runRedteamConversation({
       },
     ]);
     const judgeResp = await redteamProvider.callApi(judgeBody);
+    if (judgeResp.tokenUsage) {
+      totalTokenUsage.total += judgeResp.tokenUsage.total || 0;
+      totalTokenUsage.prompt += judgeResp.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += judgeResp.tokenUsage.completion || 0;
+    }
     invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
     const { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
     logger.debug(`Iteration ${i + 1}: Judge response: ${judgeResp.output}, Score: ${score}`);
@@ -239,6 +258,13 @@ async function runRedteamConversation({
         isOnTopic ? '' : '(your prompt was off-topic)'
       }`,
     });
+
+    if (targetTokenUsage) {
+      totalTokenUsage.total += targetTokenUsage.total || 0;
+      totalTokenUsage.prompt += targetTokenUsage.prompt || 0;
+      totalTokenUsage.completion += targetTokenUsage.completion || 0;
+      totalTokenUsage.numRequests += targetTokenUsage.numRequests ?? 1;
+    }
   }
 
   return {
@@ -246,6 +272,7 @@ async function runRedteamConversation({
     metadata: {
       redteamFinalPrompt: targetPrompt || undefined,
     },
+    tokenUsage: totalTokenUsage,
   };
 }
 
