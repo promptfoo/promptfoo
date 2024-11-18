@@ -11,24 +11,36 @@ jest.mock('../../../../src/envars');
 
 describe('harmful plugin', () => {
   let mockProvider: ApiProvider;
+  let mockCallApi: jest.SpyInstance;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     mockProvider = {
       callApi: jest.fn(),
       id: jest.fn().mockReturnValue('test-provider'),
     };
+    if (mockCallApi) {
+      mockCallApi.mockRestore();
+    }
+    mockCallApi = jest.spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi').mockReset();
+
     jest.mocked(getEnvBool).mockReset();
     jest.mocked(getEnvString).mockReset();
   });
 
-  describe('getHarmfulTests', () => {
-    it('should handle unaligned provider plugins', async () => {
-      const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
-      const mockOutput = 'Test harmful output';
+  afterEach(() => {
+    jest.clearAllMocks();
+    if (mockCallApi) {
+      mockCallApi.mockRestore();
+    }
+  });
 
-      jest
-        .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
-        .mockResolvedValue({ output: mockOutput });
+  describe('getHarmfulTests', () => {
+    it('should handle unaligned provider plugins with multiple prompts', async () => {
+      const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
+      const mockOutput = 'Prompt: Test harmful output\nPrompt: Another test output';
+
+      mockCallApi.mockResolvedValueOnce({ output: mockOutput });
 
       const result = await getHarmfulTests(
         {
@@ -41,15 +53,42 @@ describe('harmful plugin', () => {
         unalignedPlugin as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
       );
 
+      expect(mockCallApi).toHaveBeenCalledTimes(1);
       expect(result).toHaveLength(2);
-      expect(result[0].vars?.testVar).toBe(mockOutput);
+      const prompts = result.map((r) => r.vars?.testVar);
+      expect(prompts).toContain('Test harmful output');
+      expect(prompts).toContain('Another test output');
       expect(result[0].metadata?.harmCategory).toBe(
         HARM_PLUGINS[unalignedPlugin as keyof typeof HARM_PLUGINS],
       );
     });
 
+    it('should retry when not enough unique prompts are returned', async () => {
+      const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
+      mockCallApi
+        .mockResolvedValueOnce({ output: 'Prompt: Test output' })
+        .mockResolvedValueOnce({ output: 'Prompt: Test output' })
+        .mockResolvedValueOnce({ output: 'Prompt: Another test output' });
+
+      const result = await getHarmfulTests(
+        {
+          provider: mockProvider,
+          purpose: 'test purpose',
+          injectVar: 'testVar',
+          n: 2,
+          delayMs: 0,
+        },
+        unalignedPlugin as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
+      );
+
+      expect(mockCallApi).toHaveBeenCalledTimes(3);
+      expect(result).toHaveLength(2);
+      const prompts = result.map((r) => r.vars?.testVar);
+      expect(prompts).toContain('Test output');
+      expect(prompts).toContain('Another test output');
+    });
+
     it('should handle empty provider response', async () => {
-      jest.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: '' });
       jest
         .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
         .mockResolvedValue({ output: '' });
@@ -68,11 +107,12 @@ describe('harmful plugin', () => {
       expect(result).toHaveLength(0);
     });
 
-    it('should respect delay parameter for unaligned providers', async () => {
+    it('should respect delay parameter between API calls', async () => {
       const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
       jest
         .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
-        .mockResolvedValue({ output: 'test' });
+        .mockResolvedValueOnce({ output: 'Prompt: Test output' })
+        .mockResolvedValueOnce({ output: 'Prompt: Another output' });
 
       const startTime = Date.now();
       await getHarmfulTests(
@@ -107,7 +147,9 @@ describe('harmful plugin', () => {
       });
 
       const mockOutput = 'Prompt: Test output';
-      jest.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: mockOutput });
+      jest
+        .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
+        .mockResolvedValue({ output: mockOutput });
 
       const result = await getHarmfulTests(
         {
@@ -121,6 +163,7 @@ describe('harmful plugin', () => {
       );
 
       expect(result).toHaveLength(1);
+      expect(result[0].vars?.testVar).toBe('Test output');
       expect(result[0].assert).toContainEqual(expect.objectContaining({ type: 'moderation' }));
     });
 
@@ -142,7 +185,9 @@ describe('harmful plugin', () => {
       });
 
       const mockOutput = 'Prompt: Test output';
-      jest.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: mockOutput });
+      jest
+        .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
+        .mockResolvedValue({ output: mockOutput });
 
       const result = await getHarmfulTests(
         {
@@ -156,6 +201,7 @@ describe('harmful plugin', () => {
       );
 
       expect(result).toHaveLength(1);
+      expect(result[0].vars?.testVar).toBe('Test output');
       expect(result[0].assert).toContainEqual(
         expect.objectContaining({
           type: 'moderation',

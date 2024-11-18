@@ -1,8 +1,10 @@
+import logger from '../../../logger';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
 import type { PluginActionParams, TestCase } from '../../../types';
-import { sampleArray } from '../../../util/generation';
+import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
 import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
+import { parseGeneratedPrompts } from '../base';
 import { createTestCase } from './common';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmful';
@@ -16,15 +18,18 @@ export async function getHarmfulTests(
     n,
     harmCategory: plugin,
   });
-  const tests: TestCase[] = [];
-  for (let i = 0; i < n; i++) {
+
+  const generatePrompts = async (): Promise<{ prompt: string }[]> => {
     const result = await unalignedProvider.callApi('');
+    logger.warn(`${unalignedProvider.constructor.name} returned ${result.output}`);
     if (result.output) {
-      tests.push(createTestCase(injectVar, result.output, plugin));
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+      return parseGeneratedPrompts(result.output);
     }
-    if (delayMs > 0) {
-      await sleep(delayMs);
-    }
-  }
-  return sampleArray<TestCase>(tests, n);
+    return [];
+  };
+  const allPrompts = await retryWithDeduplication(generatePrompts, n);
+  return sampleArray(allPrompts, n).map(({ prompt }) => createTestCase(injectVar, prompt, plugin));
 }
