@@ -43,7 +43,7 @@ providers:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
 
-### Option 3: Azure Cli Authentication
+### Option 3: Azure CLI Authentication
 
 Authenticate with Azure CLI using `az login` before running promptfoo. This is the fallback option if the parameters for the previous options are not provided.
 
