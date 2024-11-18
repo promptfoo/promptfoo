@@ -302,6 +302,7 @@ export async function synthesize({
           metadata: {
             ...(t.metadata || {}),
             pluginId: plugin.id,
+            pluginConfig: resolvePluginConfig(plugin.config),
           },
         })),
       );
@@ -321,6 +322,7 @@ export async function synthesize({
             metadata: {
               ...(t.metadata || {}),
               pluginId: plugin.id,
+              pluginConfig: resolvePluginConfig(plugin.config),
             },
           })),
         );
@@ -373,8 +375,10 @@ export async function synthesize({
               ...t,
               metadata: {
                 ...(t?.metadata || {}),
-                pluginId: t?.metadata?.pluginId || null,
                 strategyId: strategy.id,
+                ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
+                ...(t?.metadata?.pluginConfig && { pluginConfig: t.metadata.pluginConfig }),
+                ...(strategy.config && { strategyConfig: strategy.config }),
               },
             })),
         );

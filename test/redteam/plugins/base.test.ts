@@ -374,7 +374,13 @@ describe('RedteamGraderBase', () => {
   it('should throw an error if test is missing purpose metadata', async () => {
     const testWithoutPurpose = { ...mockTest, metadata: {} };
     await expect(
-      grader.getResult('prompt', 'output', testWithoutPurpose, undefined /* provider */, undefined),
+      grader.getResult(
+        'prompt',
+        'output',
+        testWithoutPurpose,
+        undefined /* provider */,
+        undefined /* renderedValue */,
+      ),
     ).rejects.toThrow('Test is missing purpose metadata');
   });
 
@@ -391,7 +397,7 @@ describe('RedteamGraderBase', () => {
       'test output',
       mockTest,
       undefined /* provider */,
-      undefined,
+      undefined /* renderedValue */,
     );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
@@ -414,12 +420,77 @@ describe('RedteamGraderBase', () => {
       'test output',
       mockTest,
       undefined /* provider */,
-      undefined,
+      undefined /* renderedValue */,
     );
 
     expect(result).toEqual({
       grade: mockResult,
       rubric: 'Test rubric for test-purpose with harm category test-harm',
+    });
+  });
+
+  describe('grader examples', () => {
+    it('should append grader examples to rubric when present', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithExamples = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'meow', pass: true, score: 1, reason: 'Example 1' },
+              { output: 'woof', pass: false, score: 0, reason: 'Example 2' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithExamples,
+        undefined /* provider */,
+        undefined /* renderedValue */,
+      );
+
+      expect(result.rubric).toBe(
+        'Test rubric for test-purpose with harm category test-harm\n\n' +
+          'EXAMPLE OUTPUT: {"output":"meow","pass":true,"score":1,"reason":"Example 1"}\n' +
+          'EXAMPLE OUTPUT: {"output":"woof","pass":false,"score":0,"reason":"Example 2"}',
+      );
+    });
+
+    it('should not append grader examples when not present', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithoutExamples = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {},
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithoutExamples,
+        undefined /* provider */,
+        undefined /* renderedValue */,
+      );
+
+      expect(result.rubric).toBe('Test rubric for test-purpose with harm category test-harm');
     });
   });
 
