@@ -7,6 +7,7 @@ import type {
   RunStepToolCallDetails,
   RunStepMessageCreationDetails,
 } from '@azure/openai-assistants';
+import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
@@ -180,6 +181,14 @@ const AZURE_MODELS = [
   },
 ];
 
+function throwConfigurationError(message: string): never {
+  throw new Error(dedent`
+    ${message}
+
+    See https://www.promptfoo.dev/docs/providers/azure/ to learn more about Azure configuration.
+  `);
+}
+
 export function calculateAzureCost(
   modelName: string,
   config: AzureCompletionOptions,
@@ -265,7 +274,7 @@ export class AzureGenericProvider implements ApiProvider {
   getApiKeyOrThrow(): string {
     const apiKey = this.getApiKey();
     if (!apiKey) {
-      throw new Error('Azure OpenAI API key must be set');
+      throwConfigurationError('Azure API key must be set.');
     }
     return apiKey;
   }
@@ -306,7 +315,7 @@ export class AzureGenericProvider implements ApiProvider {
       tokenScope || 'https://cognitiveservices.azure.com/.default',
     );
     if (!tokenResponse) {
-      throw new Error('Failed to retrieve access token');
+      throwConfigurationError('Failed to retrieve access token.');
     }
     return tokenResponse.token;
   }
@@ -347,7 +356,7 @@ Please choose one of the following options:
   }
 
   toString(): string {
-    return `[Azure OpenAI Provider ${this.deploymentName}]`;
+    return `[Azure Provider ${this.deploymentName}]`;
   }
 
   // @ts-ignore: Params are not used in this implementation
@@ -365,7 +374,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
     if (!this.getApiBaseUrl()) {
-      throw new Error('Azure OpenAI API host must be set');
+      throwConfigurationError('Azure API host must be set.');
     }
 
     const body = {
@@ -399,7 +408,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
         },
       };
     }
-    logger.debug(`\tAzure OpenAI API response (embeddings): ${JSON.stringify(data)}`);
+    logger.debug(`\tAzure API response (embeddings): ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;
@@ -445,7 +454,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
     invariant(this.authHeaders, 'auth headers are not initialized');
 
     if (!this.getApiBaseUrl()) {
-      throw new Error('Azure OpenAI API host must be set');
+      throwConfigurationError('Azure API host must be set.');
     }
 
     let stop: string;
@@ -474,7 +483,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
-    logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
+    logger.debug(`Calling Azure API: ${JSON.stringify(body)}`);
     let data,
       cached = false;
     try {
@@ -497,7 +506,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tAzure OpenAI API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tAzure API response: ${JSON.stringify(data)}`);
     try {
       return {
         output: data.choices[0].text,
@@ -593,7 +602,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     invariant(this.authHeaders, 'auth headers are not initialized');
 
     if (!this.getApiBaseUrl()) {
-      throw new Error('Azure OpenAI API host must be set');
+      throwConfigurationError('Azure API host must be set.');
     }
 
     const body = this.getOpenAiBody(prompt, context, callApiOptions);
@@ -629,7 +638,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`\tAzure OpenAI API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tAzure API response: ${JSON.stringify(data)}`);
     try {
       if (data.error) {
         return {
@@ -707,14 +716,14 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
     const apiKey = this.getApiKey();
     if (!apiKey) {
-      throw new Error('Azure OpenAI API key must be set');
+      throwConfigurationError('Azure API key must be set.');
     }
 
     const { AssistantsClient, AzureKeyCredential } = await import('@azure/openai-assistants');
 
     const apiBaseUrl = this.getApiBaseUrl();
     if (!apiBaseUrl) {
-      throw new Error('Azure OpenAI API host must be set');
+      throwConfigurationError('Azure API host must be set.');
     }
     this.assistantsClient = new AssistantsClient(apiBaseUrl, new AzureKeyCredential(apiKey));
     this.initializationPromise = null;
@@ -734,7 +743,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     await this.ensureInitialized();
     invariant(this.assistantsClient, 'Assistants client not initialized');
     if (!this.getApiBaseUrl()) {
-      throw new Error('Azure OpenAI API host must be set');
+      throwConfigurationError('Azure API host must be set.');
     }
 
     const assistantId = this.deploymentName;
