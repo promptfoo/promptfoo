@@ -9,17 +9,17 @@ export const LOG_LEVELS = {
   debug: 3,
 };
 
-const customFormatter = winston.format.printf(({ level, message, ...args }) => {
-  if (level === 'error') {
-    return chalk.red(message);
-  } else if (level === 'warn') {
-    return chalk.yellow(message);
-  } else if (level === 'info') {
-    return message;
-  } else if (level === 'debug') {
-    return chalk.cyan(message);
+const customFormatter = winston.format.printf((info: winston.Logform.TransformableInfo): string => {
+  if (info.level === 'error') {
+    return chalk.red(info.message as string);
+  } else if (info.level === 'warn') {
+    return chalk.yellow(info.message as string);
+  } else if (info.level === 'info') {
+    return info.message as string;
+  } else if (info.level === 'debug') {
+    return chalk.cyan(info.message as string);
   }
-  throw new Error(`Invalid log level: ${level}`);
+  throw new Error(`Invalid log level: ${info.level}`);
 });
 
 const logger = winston.createLogger({
