@@ -45,7 +45,7 @@ providers:
 
 ### Option 3: Azure Cli Authentication
 
-Authenticate with Azure CLI using `az login`.
+Authenticate with Azure CLI using `az login` before running promptfoo. This is the fallback option if the parameters for the previous options are not provided.
 
 Optionally, you can also set:
 
