@@ -50,6 +50,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       harmCategory: this.harmCategory,
       n: this.n,
       purpose: this.purpose,
+      version: VERSION,
     };
 
     try {
