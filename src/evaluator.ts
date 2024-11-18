@@ -699,7 +699,7 @@ class Evaluator {
       metrics.tokenUsage.total =
         (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.tokenUsage.numRequests =
-        (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 0);
+        (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
       metrics.cost += row.cost || 0;
 
       await runExtensionHook(testSuite.extensions, 'afterEach', {
@@ -912,7 +912,7 @@ class Evaluator {
       hasAnyPass: this.evalRecord.prompts.some(
         (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
       ),
-      isRedteam: Boolean(testSuite.redteam),
+      //isRedteam: Boolean(testSuite.redteam),
     });
     return this.evalRecord;
   }
