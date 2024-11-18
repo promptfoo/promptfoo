@@ -691,7 +691,6 @@ type AzureAssistantOptions = AzureCompletionOptions &
 export class AzureAssistantProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   assistantsClient: AssistantsClient | undefined;
-  // private initializationPromise: Promise<void> | null = null;
 
   constructor(
     deploymentName: string,
