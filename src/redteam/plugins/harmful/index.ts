@@ -1,9 +1,7 @@
-import invariant from 'tiny-invariant';
 import { getEnvBool, getEnvString } from '../../../envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
 import type { Assertion, AssertionType, PluginActionParams, TestCase } from '../../../types';
 import { sampleArray } from '../../../util/generation';
-import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import {
   HARM_PLUGINS,
@@ -11,9 +9,7 @@ import {
   LLAMA_GUARD_REPLICATE_PROVIDER,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../constants';
-import { parseGeneratedPrompts } from '../base';
-import { REDTEAM_MODEL_CATEGORIES } from './constants';
-import type { HarmfulCategory } from './constants';
+import { AlignedHarmfulPlugin } from './alignedHarmful';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmful';
 
@@ -62,13 +58,13 @@ export async function getHarmfulTests(
   { provider, purpose, injectVar, n, delayMs = 0, config = {} }: PluginActionParams,
   plugin: keyof typeof HARM_PLUGINS,
 ): Promise<TestCase[]> {
-  const tests: TestCase[] = [];
-
   if (plugin in UNALIGNED_PROVIDER_HARM_PLUGINS) {
     const unalignedProvider = new PromptfooHarmfulCompletionProvider({
       purpose,
+      n,
       harmCategory: plugin,
     });
+    const tests: TestCase[] = [];
     for (let i = 0; i < n; i++) {
       const result = await unalignedProvider.callApi('');
       if (result.output) {
@@ -81,24 +77,6 @@ export async function getHarmfulTests(
     return sampleArray<TestCase>(tests, n);
   }
 
-  const categoryConfig: HarmfulCategory | undefined = REDTEAM_MODEL_CATEGORIES.find(
-    (c) => c.key === plugin,
-  );
-  invariant(categoryConfig, `Harmful category ${plugin} not found`);
-
-  const prompt = getNunjucksEngine().renderString(categoryConfig.prompt, {
-    purpose,
-    n,
-    examples: config?.examples || categoryConfig.examples,
-  });
-
-  const result = await provider.callApi(prompt);
-  if (!result.output) {
-    return [];
-  }
-  const outputs = parseGeneratedPrompts(result.output).map(({ prompt }) => prompt);
-  return sampleArray<TestCase>(
-    outputs.map((output: string) => createTestCase(injectVar, output, plugin)),
-    n,
-  );
+  const alignedPlugin = new AlignedHarmfulPlugin(provider, purpose, injectVar, plugin, config);
+  return alignedPlugin.generateTests(n, delayMs);
 }
