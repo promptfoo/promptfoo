@@ -3,13 +3,12 @@ import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo
 import type { Assertion, AssertionType, PluginActionParams, TestCase } from '../../../types';
 import { sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
+import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
 import {
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
-  UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../constants';
-import { AlignedHarmfulPlugin } from './alignedHarmful';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmful';
 
@@ -55,28 +54,23 @@ export function createTestCase(
 }
 
 export async function getHarmfulTests(
-  { provider, purpose, injectVar, n, delayMs = 0, config = {} }: PluginActionParams,
-  plugin: keyof typeof HARM_PLUGINS,
+  { purpose, injectVar, n, delayMs = 0 }: PluginActionParams,
+  plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
 ): Promise<TestCase[]> {
-  if (plugin in UNALIGNED_PROVIDER_HARM_PLUGINS) {
-    const unalignedProvider = new PromptfooHarmfulCompletionProvider({
-      purpose,
-      n,
-      harmCategory: plugin,
-    });
-    const tests: TestCase[] = [];
-    for (let i = 0; i < n; i++) {
-      const result = await unalignedProvider.callApi('');
-      if (result.output) {
-        tests.push(createTestCase(injectVar, result.output, plugin));
-      }
-      if (delayMs > 0) {
-        await sleep(delayMs);
-      }
+  const unalignedProvider = new PromptfooHarmfulCompletionProvider({
+    purpose,
+    n,
+    harmCategory: plugin,
+  });
+  const tests: TestCase[] = [];
+  for (let i = 0; i < n; i++) {
+    const result = await unalignedProvider.callApi('');
+    if (result.output) {
+      tests.push(createTestCase(injectVar, result.output, plugin));
     }
-    return sampleArray<TestCase>(tests, n);
+    if (delayMs > 0) {
+      await sleep(delayMs);
+    }
   }
-
-  const alignedPlugin = new AlignedHarmfulPlugin(provider, purpose, injectVar, plugin, config);
-  return alignedPlugin.generateTests(n, delayMs);
+  return sampleArray<TestCase>(tests, n);
 }

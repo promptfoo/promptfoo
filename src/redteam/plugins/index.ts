@@ -150,18 +150,10 @@ const pluginFactories: PluginFactory[] = [
   ),
 ];
 
-const harmPlugins: PluginFactory[] = unalignedHarmCategories.map((category) => {
-  return {
-    key: category,
-    action: async (params: PluginActionParams) => {
-      if (shouldGenerateRemote()) {
-        return fetchRemoteTestCases(category, params.purpose, params.injectVar, params.n);
-      }
-      logger.debug(`Using local redteam generation for ${category} (unaligned)`);
-      return getHarmfulTests(params, category);
-    },
-  };
-});
+const harmPlugins: PluginFactory[] = unalignedHarmCategories.map((category) => ({
+  key: category,
+  action: async (params: PluginActionParams) => getHarmfulTests(params, category),
+}));
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   key: category,
