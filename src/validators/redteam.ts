@@ -56,7 +56,14 @@ export const RedteamPluginSchema = z.union([
 export const RedteamStrategySchema = z.union([
   z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
   z.object({
-    id: z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
+    id: z
+      .union([
+        z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]),
+        z.string().refine((value) => value.startsWith('file://'), {
+          message: 'Strategy must be one of predefined strategies or start with "file://"',
+        }),
+      ])
+      .describe('Name of the strategy'),
     config: z.record(z.unknown()).optional().describe('Strategy-specific configuration'),
   }),
 ]);
