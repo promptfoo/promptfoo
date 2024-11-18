@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
 import type { Agent } from 'http';
@@ -23,6 +23,9 @@ interface BedrockOptions {
   region?: string;
   secretAccessKey?: string;
   sessionToken?: string;
+  guardrailIdentifier?: string;
+  guardrailVersion?: string;
+  trace?: Trace;
 }
 
 export interface TextGenerationOptions {
@@ -813,8 +816,14 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     const bedrockInstance = await this.getBedrockInstance();
     let response;
     try {
+      // https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel
       response = await bedrockInstance.invokeModel({
         modelId: this.modelName,
+        ...(this.config.guardrailIdentifier
+          ? { guardrailIdentifier: this.config.guardrailIdentifier }
+          : {}),
+        ...(this.config.guardrailVersion ? { guardrailVersion: this.config.guardrailVersion } : {}),
+        ...(this.config.trace ? { trace: this.config.trace } : {}),
         accept: 'application/json',
         contentType: 'application/json',
         body: JSON.stringify(params),
