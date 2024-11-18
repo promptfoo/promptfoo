@@ -219,7 +219,6 @@ export async function runAssertion({
     valueFromScript,
   };
 
-  // Map assertion types to their handler functions>
   const assertionHandlers: Record<
     BaseAssertionTypes,
     (params: AssertionParams) => GradingResult | Promise<GradingResult>
@@ -272,7 +271,7 @@ export async function runAssertion({
   if (baseType.startsWith('promptfoo:redteam:')) {
     return handleRedteam(assertionParams);
   }
-  throw new Error('Unknown assertion type: ' + assertion.type);
+  throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
 export async function runAssertions({
