@@ -1,5 +1,6 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
+import invariant from 'tiny-invariant';
 import { URL } from 'url';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { getEnvBool, isCI } from './envars';
@@ -76,7 +77,22 @@ export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
-  if (process.stdout.isTTY && !isCI() && !getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
+  if (cloudConfig.isEnabled()) {
+    const loggedInEmail = getUserEmail();
+    invariant(loggedInEmail, 'User email is not set');
+    const evalAuthor = evalRecord.author;
+    if (evalAuthor !== loggedInEmail) {
+      logger.warn(
+        `Warning: Changing eval author from ${evalAuthor} to logged-in user ${loggedInEmail}`,
+      );
+    }
+    evalRecord.author = loggedInEmail;
+    await evalRecord.save();
+  } else if (
+    process.stdout.isTTY &&
+    !isCI() &&
+    !getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')
+  ) {
     let email = getUserEmail();
     if (!email) {
       email = await input({
@@ -87,6 +103,8 @@ export async function createShareableUrl(
       });
       setUserEmail(email);
     }
+    evalRecord.author = email;
+    await evalRecord.save();
   }
 
   let response: Response;
