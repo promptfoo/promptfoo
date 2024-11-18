@@ -24,7 +24,7 @@
     "@docusaurus/theme-search-algolia": "^3.6.0",
     "@mdx-js/react": "^3.1.0",
     "@monaco-editor/react": "^4.6.0",
-    "@mui/icons-material": "^6.1.6",
+    "@mui/icons-material": "^6.1.7",
     "@segment/ajv-human-errors": "^2.14.0",
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
