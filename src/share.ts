@@ -77,22 +77,7 @@ export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
-  if (cloudConfig.isEnabled()) {
-    const loggedInEmail = getUserEmail();
-    invariant(loggedInEmail, 'User email is not set');
-    const evalAuthor = evalRecord.author;
-    if (evalAuthor !== loggedInEmail) {
-      logger.warn(
-        `Warning: Changing eval author from ${evalAuthor} to logged-in user ${loggedInEmail}`,
-      );
-    }
-    evalRecord.author = loggedInEmail;
-    await evalRecord.save();
-  } else if (
-    process.stdout.isTTY &&
-    !isCI() &&
-    !getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')
-  ) {
+  if (process.stdout.isTTY && !isCI() && !getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
     let email = getUserEmail();
     if (!email) {
       email = await input({
@@ -113,6 +98,17 @@ export async function createShareableUrl(
   if (cloudConfig.isEnabled()) {
     apiBaseUrl = cloudConfig.getApiHost();
     url = `${apiBaseUrl}/results`;
+
+    const loggedInEmail = getUserEmail();
+    invariant(loggedInEmail, 'User email is not set');
+    const evalAuthor = evalRecord.author;
+    if (evalAuthor !== loggedInEmail) {
+      logger.warn(
+        `Warning: Changing eval author from ${evalAuthor} to logged-in user ${loggedInEmail}`,
+      );
+    }
+    evalRecord.author = loggedInEmail;
+    await evalRecord.save();
   } else {
     apiBaseUrl =
       typeof evalRecord.config.sharing === 'object'
