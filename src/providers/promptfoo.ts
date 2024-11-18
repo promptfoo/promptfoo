@@ -16,17 +16,20 @@ import type {
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
-  purpose: string;
   harmCategory: string;
+  n: number;
+  purpose: string;
 }
 
 export class PromptfooHarmfulCompletionProvider implements ApiProvider {
-  purpose: string;
   harmCategory: string;
+  n: number;
+  purpose: string;
 
   constructor(options: PromptfooHarmfulCompletionOptions) {
-    this.purpose = options.purpose;
     this.harmCategory = options.harmCategory;
+    this.n = options.n;
+    this.purpose = options.purpose;
   }
 
   id(): string {
@@ -43,9 +46,10 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const body = {
-      purpose: this.purpose,
-      harmCategory: this.harmCategory,
       email: getUserEmail(),
+      harmCategory: this.harmCategory,
+      n: this.n,
+      purpose: this.purpose,
       version: VERSION,
     };
 
