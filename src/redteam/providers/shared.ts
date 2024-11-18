@@ -65,6 +65,9 @@ export async function getTargetResponse(
   } catch (error) {
     return {
       extractedResponse: (error as Error).message,
+      tokenUsage: {
+        numRequests: 1,
+      },
     };
   }
 
@@ -74,13 +77,19 @@ export async function getTargetResponse(
         typeof targetRespRaw.output === 'string'
           ? targetRespRaw.output
           : JSON.stringify(targetRespRaw.output),
-      tokenUsage: targetRespRaw.tokenUsage,
+      tokenUsage: {
+        ...(targetRespRaw.tokenUsage || {}),
+        numRequests: 1,
+      },
     };
   }
 
   if (targetRespRaw?.error) {
     return {
       extractedResponse: targetRespRaw.error,
+      tokenUsage: {
+        numRequests: 1,
+      },
     };
   }
 

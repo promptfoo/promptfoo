@@ -409,6 +409,7 @@ export default class Eval {
         completion: 0,
         prompt: 0,
         total: 0,
+        numRequests: 0,
       },
     };
 
@@ -419,6 +420,7 @@ export default class Eval {
       stats.tokenUsage.cached += prompt.metrics?.tokenUsage.cached || 0;
       stats.tokenUsage.completion += prompt.metrics?.tokenUsage.completion || 0;
       stats.tokenUsage.total += prompt.metrics?.tokenUsage.total || 0;
+      stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
     }
 
     return {
