@@ -5,7 +5,8 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
-import { HARM_PLUGINS, PII_PLUGINS, REDTEAM_PROVIDER_HARM_PLUGINS, getRemoteGenerationUrl } from '../constants';
+import { PII_PLUGINS, REDTEAM_PROVIDER_HARM_PLUGINS, getRemoteGenerationUrl } from '../constants';
+import { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../constants';
 import { neverGenerateRemote, shouldGenerateRemote } from '../util';
 import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
@@ -14,6 +15,7 @@ import { DebugAccessPlugin } from './debugAccess';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { getHarmfulTests } from './harmful';
+import { AlignedHarmfulPlugin } from './harmful/alignedHarmful';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
@@ -24,8 +26,6 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
-import { AlignedHarmfulPlugin } from './harmful/alignedHarmful';
-import { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../constants';
 
 export interface PluginFactory {
   key: string;
@@ -99,6 +99,13 @@ function createPluginFactory<T extends PluginConfig>(
   };
 }
 
+const alignedHarmCategories = Object.keys(REDTEAM_PROVIDER_HARM_PLUGINS) as Array<
+  keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS
+>;
+const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as Array<
+  keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS
+>;
+
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
@@ -126,38 +133,34 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
-  ...Object.keys(REDTEAM_PROVIDER_HARM_PLUGINS).map((category: keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS) => {
-    return createPluginFactory(
+  ...alignedHarmCategories.map((category) =>
+    createPluginFactory(
       class extends AlignedHarmfulPlugin {
-        constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
+        constructor(
+          provider: ApiProvider,
+          purpose: string,
+          injectVar: string,
+          config: PluginConfig,
+        ) {
           super(provider, purpose, injectVar, category, config);
         }
       },
-      category
-    );
-  }
+      category,
+    ),
   ),
 ];
 
-const harmPlugins: PluginFactory[] = Object.keys(HARM_PLUGINS).map((category: string) => {
-  const harmCategory = category as keyof typeof HARM_PLUGINS;
-  
-  if (harmCategory in UNALIGNED_PROVIDER_HARM_PLUGINS) {
-    // Use function-based approach for unaligned plugins
-    return {
-      key: category,
-      action: async (params: PluginActionParams) => {
-        if (shouldGenerateRemote()) {
-          return fetchRemoteTestCases(category, params.purpose, params.injectVar, params.n);
-        }
-        logger.debug(`Using local redteam generation for ${category} (unaligned)`);
-        return getHarmfulTests(params, harmCategory);
-      },
-    };
-  }
-
-  // Use class-based approach for aligned plugins
-
+const harmPlugins: PluginFactory[] = unalignedHarmCategories.map((category) => {
+  return {
+    key: category,
+    action: async (params: PluginActionParams) => {
+      if (shouldGenerateRemote()) {
+        return fetchRemoteTestCases(category, params.purpose, params.injectVar, params.n);
+      }
+      logger.debug(`Using local redteam generation for ${category} (unaligned)`);
+      return getHarmfulTests(params, category);
+    },
+  };
 });
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
