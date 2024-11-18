@@ -245,6 +245,7 @@ export abstract class RedteamGraderBase {
     renderedValue: AssertionValue | undefined,
   ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+
     const vars = {
       ...test.metadata,
       prompt,
@@ -252,7 +253,15 @@ export abstract class RedteamGraderBase {
       tools: maybeLoadFromExternalFile(provider?.config?.tools),
       value: renderedValue,
     };
-    const finalRubric = this.renderRubric(vars);
+    // Grader examples are appended to all rubrics if present.
+    const graderExamples = test.metadata?.pluginConfig?.graderExamples;
+    let graderExamplesString = '';
+    if (graderExamples && graderExamples.length > 0) {
+      graderExamplesString =
+        '\n\n' +
+        graderExamples.map((example) => `EXAMPLE OUTPUT: ${JSON.stringify(example)}`).join('\n');
+    }
+    const finalRubric = this.renderRubric(vars) + graderExamplesString;
 
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,

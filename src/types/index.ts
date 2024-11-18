@@ -1,7 +1,12 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import type { RedteamAssertionTypes, RedteamFileConfig } from '../redteam/types';
+import type {
+  PluginConfig,
+  RedteamAssertionTypes,
+  RedteamFileConfig,
+  StrategyConfig,
+} from '../redteam/types';
 import { isJavascriptFile } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import {
@@ -533,7 +538,15 @@ export const TestCaseSchema = z.object({
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
 
-  metadata: MetadataSchema.optional(),
+  metadata: z
+    .intersection(
+      MetadataSchema,
+      z.object({
+        pluginConfig: z.custom<PluginConfig>().optional(),
+        strategyConfig: z.custom<StrategyConfig>().optional(),
+      }),
+    )
+    .optional(),
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
