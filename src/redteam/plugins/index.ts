@@ -148,12 +148,16 @@ const pluginFactories: PluginFactory[] = [
       category,
     ),
   ),
+  ...unalignedHarmCategories.map((category) => ({
+    key: category,
+    action: async (params: PluginActionParams) => {
+      if (neverGenerateRemote()) {
+        throw new Error(`${category} plugin requires remote generation to be enabled`);
+      }
+      return getHarmfulTests(params, category);
+    },
+  })),
 ];
-
-const harmPlugins: PluginFactory[] = unalignedHarmCategories.map((category) => ({
-  key: category,
-  action: async (params: PluginActionParams) => getHarmfulTests(params, category),
-}));
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   key: category,
@@ -190,6 +194,7 @@ const remotePlugins: PluginFactory[] = [
   'religion',
   'ssrf',
 ].map((key) => createRemotePlugin(key));
+
 remotePlugins.push(
   createRemotePlugin<{ indirectInjectionVar: string }>(
     'indirect-prompt-injection',
@@ -201,9 +206,4 @@ remotePlugins.push(
   ),
 );
 
-export const Plugins: PluginFactory[] = [
-  ...pluginFactories,
-  ...harmPlugins,
-  ...piiPlugins,
-  ...remotePlugins,
-];
+export const Plugins: PluginFactory[] = [...pluginFactories, ...piiPlugins, ...remotePlugins];
