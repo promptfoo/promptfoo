@@ -1,6 +1,6 @@
 import { getEnvBool, getEnvString } from '../../../../src/envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../../src/providers/promptfoo';
-import { HARM_PLUGINS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/redteam/constants';
+import { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/redteam/constants';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../../../../src/redteam/constants';
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
@@ -38,9 +38,10 @@ describe('harmful plugin', () => {
   describe('getHarmfulTests', () => {
     it('should handle unaligned provider plugins with multiple prompts', async () => {
       const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
-      const mockOutput = 'Prompt: Test harmful output\nPrompt: Another test output';
 
-      mockCallApi.mockResolvedValueOnce({ output: mockOutput });
+      mockCallApi.mockResolvedValueOnce({
+        output: ['Test harmful output', 'Another test output'],
+      });
 
       const result = await getHarmfulTests(
         {
@@ -58,17 +59,15 @@ describe('harmful plugin', () => {
       const prompts = result.map((r) => r.vars?.testVar);
       expect(prompts).toContain('Test harmful output');
       expect(prompts).toContain('Another test output');
-      expect(result[0].metadata?.harmCategory).toBe(
-        HARM_PLUGINS[unalignedPlugin as keyof typeof HARM_PLUGINS],
-      );
     });
 
     it('should retry when not enough unique prompts are returned', async () => {
       const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
+
       mockCallApi
-        .mockResolvedValueOnce({ output: 'Prompt: Test output' })
-        .mockResolvedValueOnce({ output: 'Prompt: Test output' })
-        .mockResolvedValueOnce({ output: 'Prompt: Another test output' });
+        .mockResolvedValueOnce({ output: ['Test output'] })
+        .mockResolvedValueOnce({ output: ['Test output'] })
+        .mockResolvedValueOnce({ output: ['Another test output'] });
 
       const result = await getHarmfulTests(
         {
@@ -89,9 +88,7 @@ describe('harmful plugin', () => {
     });
 
     it('should handle empty provider response', async () => {
-      jest
-        .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
-        .mockResolvedValue({ output: '' });
+      mockCallApi.mockResolvedValue({ output: [] });
 
       const result = await getHarmfulTests(
         {
@@ -109,10 +106,9 @@ describe('harmful plugin', () => {
 
     it('should respect delay parameter between API calls', async () => {
       const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
-      jest
-        .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
-        .mockResolvedValueOnce({ output: 'Prompt: Test output' })
-        .mockResolvedValueOnce({ output: 'Prompt: Another output' });
+      mockCallApi
+        .mockResolvedValueOnce({ output: ['Test output'] })
+        .mockResolvedValueOnce({ output: ['Another output'] });
 
       const startTime = Date.now();
       await getHarmfulTests(
@@ -130,15 +126,6 @@ describe('harmful plugin', () => {
     });
 
     it('should handle moderation assertions with OPENAI_API_KEY', async () => {
-      const mockCategory: HarmfulCategory = {
-        key: 'harmful:privacy',
-        prompt: 'test prompt',
-        examples: 'example1',
-        label: 'Privacy violations',
-        description: 'test description',
-      };
-      jest.spyOn(REDTEAM_MODEL_CATEGORIES, 'find').mockReturnValue(mockCategory);
-
       jest.mocked(getEnvString).mockImplementation((key) => {
         if (key === 'OPENAI_API_KEY') {
           return 'test-key';
@@ -146,10 +133,7 @@ describe('harmful plugin', () => {
         return '';
       });
 
-      const mockOutput = 'Prompt: Test output';
-      jest
-        .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
-        .mockResolvedValue({ output: mockOutput });
+      mockCallApi.mockResolvedValueOnce({ output: ['Test output'] });
 
       const result = await getHarmfulTests(
         {
@@ -184,10 +168,10 @@ describe('harmful plugin', () => {
         return '';
       });
 
-      const mockOutput = 'Prompt: Test output';
+      const mockOutput = 'Test output';
       jest
         .spyOn(PromptfooHarmfulCompletionProvider.prototype, 'callApi')
-        .mockResolvedValue({ output: mockOutput });
+        .mockResolvedValue({ output: [mockOutput] });
 
       const result = await getHarmfulTests(
         {

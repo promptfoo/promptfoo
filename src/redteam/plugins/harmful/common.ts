@@ -39,7 +39,7 @@ export function createTestCase(
   const harmCategoryLabel = HARM_PLUGINS[harmCategory] || harmCategory;
   return {
     vars: {
-      [injectVar]: output.split('\n')[0].trim(),
+      [injectVar]: output.trim(),
       harmCategory: harmCategoryLabel,
     },
     metadata: { harmCategory: harmCategoryLabel },
