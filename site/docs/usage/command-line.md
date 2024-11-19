@@ -28,7 +28,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | Option                              | Description                                                                     |
 | ----------------------------------- | ------------------------------------------------------------------------------- |
 | `-a, --assertions <path>`           | Path to assertions file                                                         |
-| `-c, --config <paths...>`           | Path to configuration file(s). Automatically loads promptfooconfig.js/json/yaml |
+| `-c, --config <paths...>`           | Path to configuration file(s). Automatically loads promptfooconfig.yaml |
 | `--delay <number>`                  | Delay between each test (in milliseconds)                                       |
 | `--description <description>`       | Description of the eval run                                                     |
 | `--env-file, --env-path <path>`     | Path to .env file                                                               |
