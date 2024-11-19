@@ -97,6 +97,7 @@ export default class GoatProvider implements ApiProvider {
             targetProvider,
           );
       const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
+      logger.debug(`GOAT turn ${turn} target response: ${JSON.stringify(targetResponse)}`);
 
       if (targetResponse.error) {
         throw new Error(`Error from target provider: ${targetResponse.error}`);
