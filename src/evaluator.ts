@@ -912,7 +912,8 @@ class Evaluator {
       hasAnyPass: this.evalRecord.prompts.some(
         (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
       ),
-      //isRedteam: Boolean(testSuite.redteam),
+      // FIXME(ian): Does this work?  I think redteam is only on the config, not testSuite.
+      // isRedteam: Boolean(testSuite.redteam),
     });
     return this.evalRecord;
   }
