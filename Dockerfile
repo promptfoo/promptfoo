@@ -56,18 +56,16 @@ RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl \
 RUN mkdir -p /home/promptfoo/.cache && \
     chown -R promptfoo:promptfoo /home/promptfoo/.cache
 
-# Switch to promptfoo user for remaining operations
+# Install Playwright and its dependencies as root
+RUN npm install -g playwright@^1.49.0 @playwright/browser-chromium@^1.49.0 && \
+    npm link promptfoo
+
+# Switch to promptfoo user for browser installation
 USER promptfoo
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/promptfoo/.cache/ms-playwright
 
-# Install Playwright and its dependencies
-RUN npm install -g playwright@^1.47.2 @playwright/browser-chromium@^1.47.2 && \
-    npx playwright install chromium
-
-# Link promptfoo after all dependencies are installed
-USER root
-RUN npm link promptfoo
-USER promptfoo
+# Install browser
+RUN npx playwright install chromium
 
 # Set remaining environment variables
 ENV API_PORT=3000
@@ -75,7 +73,9 @@ ENV HOST=0.0.0.0
 ENV PROMPTFOO_SELF_HOSTED=1
 
 # Ensure app directory permissions
+USER root
 RUN chown -R promptfoo:promptfoo /app
+USER promptfoo
 
 EXPOSE 3000
 
