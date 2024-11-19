@@ -15,9 +15,9 @@ ARG PROMPTFOO_REMOTE_API_BASE_URL
 
 # Set environment variables for the build
 ENV VITE_IS_HOSTED=1 \
-VITE_TELEMETRY_DISABLED=1 \
-VITE_PUBLIC_BASENAME=${VITE_PUBLIC_BASENAME} \
-PROMPTFOO_REMOTE_API_BASE_URL=${PROMPTFOO_REMOTE_API_BASE_URL}
+    VITE_TELEMETRY_DISABLED=1 \
+    VITE_PUBLIC_BASENAME=${VITE_PUBLIC_BASENAME} \
+    PROMPTFOO_REMOTE_API_BASE_URL=${PROMPTFOO_REMOTE_API_BASE_URL}
 
 COPY . .
 
@@ -40,17 +40,42 @@ COPY --from=builder /app/dist ./dist
 # Make Python version configurable with a default of 3.12
 ARG PYTHON_VERSION=3.12
 
-# Install Python for python providers, prompts, asserts, etc.
-RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
-    ln -sf python3 /usr/bin/python && \
-    npm link promptfoo
+# Install Python and system dependencies
+RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl \
+    chromium \
+    chromium-chromedriver \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    && ln -sf python3 /usr/bin/python
 
+# Create necessary directories and set permissions
+RUN mkdir -p /home/promptfoo/.cache && \
+    chown -R promptfoo:promptfoo /home/promptfoo/.cache
+
+# Switch to promptfoo user for remaining operations
+USER promptfoo
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/promptfoo/.cache/ms-playwright
+
+# Install Playwright and its dependencies
+RUN npm install -g playwright@^1.47.2 @playwright/browser-chromium@^1.47.2 && \
+    npx playwright install chromium
+
+# Link promptfoo after all dependencies are installed
+USER root
+RUN npm link promptfoo
+USER promptfoo
+
+# Set remaining environment variables
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
 ENV PROMPTFOO_SELF_HOSTED=1
 
+# Ensure app directory permissions
 RUN chown -R promptfoo:promptfoo /app
-USER promptfoo
 
 EXPOSE 3000
 
