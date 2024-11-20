@@ -66,6 +66,7 @@ async function runRedteamConversation({
     prompt: 0,
     completion: 0,
     numRequests: 0,
+    cached: 0,
   };
 
   for (let i = 0; i < NUM_ITERATIONS; i++) {
@@ -186,6 +187,7 @@ async function runRedteamConversation({
       totalTokenUsage.completion += redteamResp.tokenUsage.completion || 0;
       totalTokenUsage.numRequests =
         (totalTokenUsage.numRequests || 0) + (redteamResp.tokenUsage.numRequests || 1);
+      totalTokenUsage.cached += redteamResp.tokenUsage.cached || 0;
     } else {
       totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }
@@ -196,6 +198,7 @@ async function runRedteamConversation({
       totalTokenUsage.completion += isOnTopicResp.tokenUsage.completion || 0;
       totalTokenUsage.numRequests =
         (totalTokenUsage.numRequests || 0) + (isOnTopicResp.tokenUsage.numRequests || 1);
+      totalTokenUsage.cached += isOnTopicResp.tokenUsage.cached || 0;
     } else {
       totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }
@@ -206,6 +209,7 @@ async function runRedteamConversation({
       totalTokenUsage.completion += judgeResp.tokenUsage.completion || 0;
       totalTokenUsage.numRequests =
         (totalTokenUsage.numRequests || 0) + (judgeResp.tokenUsage.numRequests || 1);
+      totalTokenUsage.cached += judgeResp.tokenUsage.cached || 0;
     } else {
       totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }
@@ -216,6 +220,7 @@ async function runRedteamConversation({
       totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
       totalTokenUsage.numRequests =
         (totalTokenUsage.numRequests || 0) + (targetResponse.tokenUsage.numRequests || 1);
+      totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
     } else {
       totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }

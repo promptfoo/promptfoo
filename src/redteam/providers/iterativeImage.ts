@@ -121,6 +121,7 @@ async function runRedteamConversation({
     prompt: 0,
     completion: 0,
     numRequests: 0,
+    cached: 0,
   };
 
   let targetPrompt: string | null = null;
@@ -133,6 +134,7 @@ async function runRedteamConversation({
       totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
       totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
       totalTokenUsage.completion += redteamResp.tokenUsage.completion || 0;
+      totalTokenUsage.cached += redteamResp.tokenUsage.cached ?? 0;
     }
     if (redteamResp.error) {
       throw new Error(`Error from redteam provider: ${redteamResp.error}`);
@@ -176,6 +178,7 @@ async function runRedteamConversation({
       totalTokenUsage.total += isOnTopicResp.tokenUsage.total || 0;
       totalTokenUsage.prompt += isOnTopicResp.tokenUsage.prompt || 0;
       totalTokenUsage.completion += isOnTopicResp.tokenUsage.completion || 0;
+      totalTokenUsage.cached += isOnTopicResp.tokenUsage.cached ?? 0;
     }
     if (isOnTopicResp.error) {
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
@@ -216,6 +219,7 @@ async function runRedteamConversation({
         totalTokenUsage.total += visionResponse.tokenUsage.total || 0;
         totalTokenUsage.prompt += visionResponse.tokenUsage.prompt || 0;
         totalTokenUsage.completion += visionResponse.tokenUsage.completion || 0;
+        totalTokenUsage.cached += visionResponse.tokenUsage.cached ?? 0;
       }
       imageDescription = visionResponse.output;
       logger.debug(`Iteration ${i + 1}: Image description: ${imageDescription}`);
@@ -237,6 +241,7 @@ async function runRedteamConversation({
       totalTokenUsage.total += judgeResp.tokenUsage.total || 0;
       totalTokenUsage.prompt += judgeResp.tokenUsage.prompt || 0;
       totalTokenUsage.completion += judgeResp.tokenUsage.completion || 0;
+      totalTokenUsage.cached += judgeResp.tokenUsage.cached ?? 0;
     }
     invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
     const { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
@@ -263,6 +268,7 @@ async function runRedteamConversation({
       totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
       totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
       totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
+      totalTokenUsage.cached += targetResponse.tokenUsage.cached ?? 0;
     }
   }
 

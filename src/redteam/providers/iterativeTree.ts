@@ -376,6 +376,7 @@ export async function runRedteamConversation({
     prompt: 0,
     completion: 0,
     numRequests: 0,
+    cached: 0,
   };
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
@@ -405,6 +406,8 @@ export async function runRedteamConversation({
           totalTokenUsage.total += redteamTokenUsage.total || 0;
           totalTokenUsage.prompt += redteamTokenUsage.prompt || 0;
           totalTokenUsage.completion += redteamTokenUsage.completion || 0;
+          totalTokenUsage.numRequests += redteamTokenUsage.numRequests ?? 1;
+          totalTokenUsage.cached += redteamTokenUsage.cached || 0;
         }
 
         attempts++;
@@ -431,6 +434,8 @@ export async function runRedteamConversation({
           totalTokenUsage.total += isOnTopicTokenUsage.total || 0;
           totalTokenUsage.prompt += isOnTopicTokenUsage.prompt || 0;
           totalTokenUsage.completion += isOnTopicTokenUsage.completion || 0;
+          totalTokenUsage.cached += isOnTopicTokenUsage.cached || 0;
+          totalTokenUsage.numRequests += isOnTopicTokenUsage.numRequests ?? 1;
         }
 
         const targetResponse = await getTargetResponse(
@@ -444,6 +449,7 @@ export async function runRedteamConversation({
           totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
           totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
           totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
+          totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
         }
 
         const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
@@ -560,6 +566,7 @@ export async function runRedteamConversation({
     totalTokenUsage.prompt += finalTargetResponse.tokenUsage.prompt || 0;
     totalTokenUsage.completion += finalTargetResponse.tokenUsage.completion || 0;
     totalTokenUsage.numRequests += finalTargetResponse.tokenUsage.numRequests ?? 1;
+    totalTokenUsage.cached += finalTargetResponse.tokenUsage.cached || 0;
   }
 
   logger.debug(
