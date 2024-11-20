@@ -248,6 +248,20 @@ defaultTest:
           region: us-east-1
 ```
 
+## Guardrails
+
+To use guardrails, set the `guardrailIdentifier` and `guardrailVersion` in the provider config.
+
+For example:
+
+```yaml
+providers:
+  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      guardrailIdentifier: 'test-guardrail'
+      guardrailVersion: 1 # The version number for the guardrail. The value can also be DRAFT.
+```
+
 ## Environment Variables
 
 The following environment variables can be used to configure the Bedrock provider:

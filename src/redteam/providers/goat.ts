@@ -97,6 +97,7 @@ export default class GoatProvider implements ApiProvider {
             targetProvider,
           );
       const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
+      logger.debug(`GOAT turn ${turn} target response: ${JSON.stringify(targetResponse)}`);
 
       if (targetResponse.error) {
         throw new Error(`Error from target provider: ${targetResponse.error}`);
@@ -120,8 +121,9 @@ export default class GoatProvider implements ApiProvider {
       }
     }
     return {
-      output: messages[messages.length - 1].content,
+      output: messages[messages.length - 1]?.content,
       metadata: {
+        redteamFinalPrompt: messages[messages.length - 2]?.content,
         messages: JSON.stringify(messages, null, 2),
       },
       tokenUsage: totalTokenUsage,

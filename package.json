@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.96.2",
+  "version": "0.97.0",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -82,10 +82,10 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.687.0",
-    "@aws-sdk/credential-provider-sso": "^3.687.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.693.0",
+    "@aws-sdk/credential-provider-sso": "^3.693.0",
     "@azure/identity": "^4.5.0",
-    "@eslint/js": "^9.14.0",
+    "@eslint/js": "^9.15.0",
     "@libsql/client": "^0.14.0",
     "@swc/cli": "^0.5.0",
     "@swc/core": "^1.9.2",
@@ -115,7 +115,7 @@
     "concurrently": "^9.1.0",
     "drizzle-kit": "^0.26.2",
     "esbuild": "^0.24.0",
-    "eslint": "^9.14.0",
+    "eslint": "^9.15.0",
     "eslint-plugin-jest": "^28.9.0",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.14",
@@ -132,7 +132,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.6.3",
-    "typescript-eslint": "^8.14.0",
+    "typescript-eslint": "^8.15.0",
     "zod-to-json-schema": "^3.23.5"
   },
   "dependencies": {
@@ -152,7 +152,7 @@
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
     "@googleapis/sheets": "^9.3.1",
-    "@mui/material": "^6.1.6",
+    "@mui/material": "^6.1.7",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
@@ -182,7 +182,7 @@
     "inquirer": "^11.1.0",
     "js-rouge": "3.0.0",
     "js-yaml": "^4.1.0",
-    "mathjs": "^13.2.1",
+    "mathjs": "^13.2.2",
     "node-cache": "^5.1.2",
     "nunjucks": "^3.2.4",
     "openai": "^4.72.0",
@@ -195,7 +195,7 @@
     "socket.io": "^4.8.1",
     "tiny-invariant": "^1.3.3",
     "uuid": "^10.0.0",
-    "winston": "^3.16.0",
+    "winston": "^3.17.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8",
     "zod-validation-error": "^3.4.0"

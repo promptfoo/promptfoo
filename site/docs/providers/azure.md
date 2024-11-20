@@ -43,6 +43,23 @@ providers:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
 
+### Option 3: Azure CLI Authentication
+
+Authenticate with Azure CLI using `az login` before running promptfoo. This is the fallback option if the parameters for the previous options are not provided.
+
+Optionally, you can also set:
+
+- AZURE_TOKEN_SCOPE / azureTokenScope (defaults to 'https://cognitiveservices.azure.com/.default')
+
+Then configure your deployment:
+
+```yaml
+providers:
+  - id: azure:chat:deploymentNameHere
+    config:
+      apiHost: 'xxxxxxxx.openai.azure.com'
+```
+
 ## Provider Types
 
 - `azure:chat:<deployment name>` - uses the given deployment (for chat endpoints such as gpt-35-turbo, gpt-4)

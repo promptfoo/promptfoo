@@ -5,7 +5,8 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
-import { HARM_PLUGINS, PII_PLUGINS, getRemoteGenerationUrl } from '../constants';
+import { PII_PLUGINS, REDTEAM_PROVIDER_HARM_PLUGINS, getRemoteGenerationUrl } from '../constants';
+import { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../constants';
 import { neverGenerateRemote, shouldGenerateRemote } from '../util';
 import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
@@ -13,7 +14,8 @@ import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { DebugAccessPlugin } from './debugAccess';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
-import { getHarmfulTests } from './harmful';
+import { AlignedHarmfulPlugin } from './harmful/aligned';
+import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
@@ -51,11 +53,11 @@ async function fetchRemoteTestCases(
   );
 
   const body = JSON.stringify({
-    task: key,
-    purpose,
+    config,
     injectVar,
     n,
-    config,
+    purpose,
+    task: key,
     version: VERSION,
   });
   try {
@@ -97,6 +99,13 @@ function createPluginFactory<T extends PluginConfig>(
   };
 }
 
+const alignedHarmCategories = Object.keys(REDTEAM_PROVIDER_HARM_PLUGINS) as Array<
+  keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS
+>;
+const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as Array<
+  keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS
+>;
+
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
@@ -124,18 +133,31 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  ...alignedHarmCategories.map((category) =>
+    createPluginFactory(
+      class extends AlignedHarmfulPlugin {
+        constructor(
+          provider: ApiProvider,
+          purpose: string,
+          injectVar: string,
+          config: PluginConfig,
+        ) {
+          super(provider, purpose, injectVar, category, config);
+        }
+      },
+      category,
+    ),
+  ),
+  ...unalignedHarmCategories.map((category) => ({
+    key: category,
+    action: async (params: PluginActionParams) => {
+      if (neverGenerateRemote()) {
+        throw new Error(`${category} plugin requires remote generation to be enabled`);
+      }
+      return getHarmfulTests(params, category);
+    },
+  })),
 ];
-
-const harmPlugins: PluginFactory[] = Object.keys(HARM_PLUGINS).map((category: string) => ({
-  key: category,
-  action: async (params: PluginActionParams) => {
-    if (shouldGenerateRemote()) {
-      return fetchRemoteTestCases(category, params.purpose, params.injectVar, params.n);
-    }
-    logger.debug(`Using local redteam generation for ${category}`);
-    return getHarmfulTests(params, category as keyof typeof HARM_PLUGINS);
-  },
-}));
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   key: category,
@@ -172,6 +194,7 @@ const remotePlugins: PluginFactory[] = [
   'religion',
   'ssrf',
 ].map((key) => createRemotePlugin(key));
+
 remotePlugins.push(
   createRemotePlugin<{ indirectInjectionVar: string }>(
     'indirect-prompt-injection',
@@ -183,9 +206,4 @@ remotePlugins.push(
   ),
 );
 
-export const Plugins: PluginFactory[] = [
-  ...pluginFactories,
-  ...harmPlugins,
-  ...piiPlugins,
-  ...remotePlugins,
-];
+export const Plugins: PluginFactory[] = [...pluginFactories, ...piiPlugins, ...remotePlugins];

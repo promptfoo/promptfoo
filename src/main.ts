@@ -22,6 +22,7 @@ import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
+import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 
@@ -68,6 +69,7 @@ async function main() {
   redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamRunCommand(redteamBaseCommand);
   redteamReportCommand(redteamBaseCommand);
+  redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
 
   program.parse();

@@ -1,5 +1,6 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
+import invariant from 'tiny-invariant';
 import { URL } from 'url';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { getEnvBool, isCI } from './envars';
@@ -87,6 +88,8 @@ export async function createShareableUrl(
       });
       setUserEmail(email);
     }
+    evalRecord.author = email;
+    await evalRecord.save();
   }
 
   let response: Response;
@@ -95,6 +98,17 @@ export async function createShareableUrl(
   if (cloudConfig.isEnabled()) {
     apiBaseUrl = cloudConfig.getApiHost();
     url = `${apiBaseUrl}/results`;
+
+    const loggedInEmail = getUserEmail();
+    invariant(loggedInEmail, 'User email is not set');
+    const evalAuthor = evalRecord.author;
+    if (evalAuthor !== loggedInEmail) {
+      logger.warn(
+        `Warning: Changing eval author from ${evalAuthor} to logged-in user ${loggedInEmail}`,
+      );
+    }
+    evalRecord.author = loggedInEmail;
+    await evalRecord.save();
   } else {
     apiBaseUrl =
       typeof evalRecord.config.sharing === 'object'

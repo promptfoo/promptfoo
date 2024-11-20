@@ -20,7 +20,6 @@ import { getTargetResponse } from '../../../src/redteam/providers/shared';
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
-// Mock dependencies
 jest.mock('../../../src/providers/openai');
 jest.mock('../../../src/util/templates');
 

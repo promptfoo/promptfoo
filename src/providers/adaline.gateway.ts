@@ -232,7 +232,7 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         const provider = new GatewayAzure();
         const parentClass = new AzureEmbeddingProvider(this.modelName, this.providerOptions);
         gatewayEmbeddingModel = provider.embeddingModel({
-          apiKey: await parentClass.getApiKey(),
+          apiKey: parentClass.getApiKeyOrThrow(),
           deploymentId: this.modelName,
           baseUrl: parentClass.getApiBaseUrl(),
         });
@@ -470,7 +470,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
       } else if (this.providerName === 'azureopenai') {
         const provider = new GatewayAzure();
         const parentClass = new AzureChatCompletionProvider(this.modelName, this.providerOptions);
-        const apiKey = await parentClass.getApiKey();
+        const apiKey = parentClass.getApiKeyOrThrow();
         gatewayChatModel = provider.chatModel({
           apiKey,
           deploymentId: this.modelName,

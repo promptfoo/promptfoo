@@ -46,6 +46,7 @@ export enum BrowserBehavior {
   OPEN = 1,
   SKIP = 2,
   OPEN_TO_REPORT = 3,
+  OPEN_TO_REDTEAM_CREATE = 4,
 }
 
 export function createApp() {
@@ -73,7 +74,6 @@ export function createApp() {
         return {
           ...meta,
           label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
-          isRedTeam: meta.isRedteam,
         };
       }),
     });
@@ -221,6 +221,8 @@ export function startServer(
           logger.info('Press Ctrl+C to stop the server');
           if (browserBehavior === BrowserBehavior.OPEN_TO_REPORT) {
             await opener(`${url}/report`);
+          } else if (browserBehavior === BrowserBehavior.OPEN_TO_REDTEAM_CREATE) {
+            await opener(`${url}/redteam/setup`);
           } else {
             await opener(url);
           }
