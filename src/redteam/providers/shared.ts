@@ -67,16 +67,9 @@ export async function getTargetResponse(
   options?: CallApiOptionsParams,
 ): Promise<TargetResponse> {
   let targetRespRaw;
+
   try {
-    targetRespRaw = await targetProvider.callApi(
-      targetPrompt,
-      context?.vars
-        ? {
-            vars: context.vars,
-            prompt: { raw: targetPrompt, label: 'target' },
-          }
-        : undefined,
-    );
+    targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
     return { output: '', error: (error as Error).message, tokenUsage: { numRequests: 1 } };
   }

@@ -461,7 +461,11 @@ describe('RedteamIterativeProvider', () => {
       const options: CallApiOptionsParams = {};
       const result = await getTargetResponse(mockTargetProvider, targetPrompt, context, options);
 
-      expect(result).toEqual({ output: JSON.stringify(mockResponse), sessionId: undefined });
+      expect(result).toEqual({
+        output: JSON.stringify(mockResponse),
+        sessionId: undefined,
+        tokenUsage: { numRequests: 1 },
+      });
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
       expect(mockTargetProvider.callApi).toHaveBeenCalledWith(targetPrompt, context, options);
     });
@@ -478,7 +482,11 @@ describe('RedteamIterativeProvider', () => {
         {} as CallApiOptionsParams,
       );
 
-      expect(result).toEqual({ output: JSON.stringify(nonStringOutput), sessionId: undefined });
+      expect(result).toEqual({
+        output: JSON.stringify(nonStringOutput),
+        sessionId: undefined,
+        tokenUsage: { numRequests: 1 },
+      });
     });
   });
 });
