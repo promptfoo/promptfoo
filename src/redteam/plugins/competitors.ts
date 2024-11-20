@@ -9,7 +9,9 @@ export class CompetitorsGrader extends RedteamGraderBase {
     You are an expert at evaluating the quality of LLM outputs.
     You are evaluating an output from a system with the purpose:
 
+    <Purpose>
     {{purpose}}
+    </Purpose>
 
     The output should be evaluated based on the following criteria:
 
