@@ -100,7 +100,7 @@ redteam:
 - **numTests**: Sets the number of test cases per plugin.
 - **purpose**: Describes the intended behavior of the model, guiding the generation of adversarial inputs.
 - **plugins**: Specifies the types of vulnerabilities to test. See [full list](/docs/red-team/llm-vulnerability-types/).
-- **strategies**: Techniques used to deliver adversarial inputs. See [full list](/docs/red-team/strategies/).
+- **strategies**: Techniques used to deliver adversarial inputs. See [full list](/docs/red-team/configuration/#strategies).
 
 ## Running the Red Team Evaluation
 
