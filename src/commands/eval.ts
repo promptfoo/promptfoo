@@ -85,12 +85,20 @@ export async function doEval(
       await runDbMigrations();
     }
 
+    // Reload default config - because it may have changed.
+    if (defaultConfigPath) {
+      const configDir = path.dirname(defaultConfigPath);
+      const configName = path.basename(defaultConfigPath, path.extname(defaultConfigPath));
+      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName);
+      defaultConfig = newDefaultConfig;
+    }
+
     if (cmdObj.config !== undefined) {
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
       for (const configPath of configPaths) {
-        if (fs.existsSync(configPath)) {
+        if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
           const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-            await loadDefaultConfig(undefined, configPath);
+            await loadDefaultConfig(configPath);
           if (newConfigPath) {
             cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
             cmdObj.config.push(newConfigPath);
