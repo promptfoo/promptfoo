@@ -188,7 +188,9 @@ export class PalmChatProvider extends PalmGenericProvider {
 
     const whatWeNeed = [
       {
+        role: 'user',
         parts: [
+          { text: 'Here is the ad' },
           ...geminiFiles,
           // { text: prompt }
         ]
