@@ -44,7 +44,7 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
 
 export async function createSessionParser(
   parser: string | Function | undefined,
-): Promise<(({ headers }: { headers: Record<string, string> }) => string) | null> {
+): Promise<({ headers }: { headers: Record<string, string> }) => string> {
   if (!parser) {
     return () => '';
   }
@@ -73,7 +73,7 @@ export async function createSessionParser(
     );
   } else if (typeof parser === 'string') {
     return ({ headers }) => {
-      return new Function('headers', `return headers.get('${parser}')`)(headers);
+      return new Function('headers', `return headers[${JSON.stringify(parser)}]`)(headers);
     };
   }
   throw new Error(
@@ -206,9 +206,7 @@ export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
   private responseParser: Promise<(data: any, text: string) => ProviderResponse>;
-  private sessionParser: Promise<
-    (({ headers }: { headers: Record<string, string> }) => string) | null
-  >;
+  private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config;
@@ -364,10 +362,14 @@ export class HttpProvider implements ApiProvider {
     try {
       const parsedOutput = (await this.responseParser)(parsedData, rawText);
       ret.output = parsedOutput.output || parsedOutput;
-      ret.sessionId =
-        response.headers && this.sessionParser !== null
-          ? (await this.sessionParser)?.({ headers: response.headers })
-          : undefined;
+      try {
+        ret.sessionId =
+          response.headers && this.sessionParser !== null
+            ? (await this.sessionParser)({ headers: response.headers })
+            : undefined;
+      } catch (err) {
+        logger.error(`Error parsing session ID: ${String(err)}`);
+      }
       return ret;
     } catch (err) {
       logger.error(`Error parsing response: ${String(err)}`);
