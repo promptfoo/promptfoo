@@ -11,7 +11,7 @@ You'll learn how to craft prompts that bypass safety filters and manipulate mode
 
 <!-- truncate -->
 
-## **Table of Contents**
+## Table of Contents
 
 1. [Prerequisites](#prerequisites)
 2. [Setting Up the Environment](#setting-up-the-environment)
@@ -19,10 +19,6 @@ You'll learn how to craft prompts that bypass safety filters and manipulate mode
 4. [Defining the Red Teaming Configuration](#defining-the-red-teaming-configuration)
 5. [Running the Red Team Evaluation](#running-the-red-team-evaluation)
 6. [Analyzing the Results](#analyzing-the-results)
-7. [Continuous Improvement](#continuous-improvement)
-8. [Conclusion](#conclusion)
-
----
 
 ## Prerequisites
 
