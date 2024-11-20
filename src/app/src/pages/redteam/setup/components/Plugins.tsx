@@ -21,12 +21,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import {
-  COLLECTIONS,
   HARM_PLUGINS,
-  PII_PLUGINS,
-  BASE_PLUGINS,
-  ADDITIONAL_PLUGINS,
-  CONFIG_REQUIRED_PLUGINS,
   DEFAULT_PLUGINS,
   ALL_PLUGINS,
   NIST_AI_RMF_MAPPING,
@@ -37,6 +32,7 @@ import {
   subCategoryDescriptions,
   categoryAliases,
   type Plugin,
+  riskCategories,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -429,12 +425,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               sx={{ mb: 3 }}
             />
             <Box sx={{ mb: 3 }}>
-              {renderPluginCategory('Collections', COLLECTIONS)}
-              {renderPluginCategory('Harm Plugins', Object.keys(HARM_PLUGINS) as Plugin[])}
-              {renderPluginCategory('PII Plugins', PII_PLUGINS)}
-              {renderPluginCategory('Base Plugins', BASE_PLUGINS)}
-              {renderPluginCategory('Additional Plugins', ADDITIONAL_PLUGINS)}
-              {renderPluginCategory('Custom Plugins', CONFIG_REQUIRED_PLUGINS)}
+              {Object.entries(riskCategories).map(([category, plugins]) =>
+                renderPluginCategory(category, plugins),
+              )}
             </Box>
           </>
         ) : (
