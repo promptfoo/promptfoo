@@ -13,7 +13,7 @@ export async function getHarmfulTests(
 ): Promise<TestCase[]> {
   const unalignedProvider = new PromptfooHarmfulCompletionProvider({
     purpose,
-    n,
+    n: Math.min(n, 5),
     harmCategory: plugin,
   });
 
