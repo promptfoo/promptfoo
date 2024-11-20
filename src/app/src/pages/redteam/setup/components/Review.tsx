@@ -199,13 +199,9 @@ export default function Review() {
               Additional Details
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={12}>
                 <Typography variant="subtitle2">Purpose</Typography>
                 <Typography variant="body2">{config.purpose || 'Not specified'}</Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2">Entities</Typography>
-                <Typography variant="body2">{config.entities?.join(', ') || 'None'}</Typography>
               </Grid>
             </Grid>
           </Paper>

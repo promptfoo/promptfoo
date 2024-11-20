@@ -8,6 +8,10 @@ interface RedTeamConfigState {
   updatePlugins: (plugins: Array<string | { id: string; config: any }>) => void;
   setFullConfig: (config: Config) => void;
   resetConfig: () => void;
+  updateApplicationDefinition: (
+    section: keyof Config['applicationDefinition'],
+    value: string,
+  ) => void;
 }
 
 export const DEFAULT_HTTP_TARGET: ProviderOptions = {
@@ -36,6 +40,19 @@ const defaultConfig: Config = {
   strategies: ['jailbreak', 'prompt-injection'],
   purpose: '',
   entities: [],
+  applicationDefinition: {
+    purpose: '',
+    redteamUser: '',
+    accessToData: '',
+    forbiddenData: '',
+    accessToActions: '',
+    forbiddenActions: '',
+    connectedSystems: '',
+  },
+};
+
+const applicationDefinitionToPurpose = (applicationDefinition: Config['applicationDefinition']) => {
+  return `The purpose of the redteam application is to ${applicationDefinition.purpose} \n\n You are ${applicationDefinition.redteamUser}. \n\n You have access to: ${applicationDefinition.accessToData}\n\n You do not have access to: ${applicationDefinition.forbiddenData} \n\n You can take the following actions: ${applicationDefinition.accessToActions}\n\n You should not take the following actions: ${applicationDefinition.forbiddenActions} \n\n The LLM agent has access to these systems: ${applicationDefinition.connectedSystems} \n\n `;
 };
 
 export const useRedTeamConfig = create<RedTeamConfigState>()(
@@ -90,6 +107,20 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         }),
       setFullConfig: (config) => set({ config }),
       resetConfig: () => set({ config: defaultConfig }),
+      updateApplicationDefinition: (
+        section: keyof Config['applicationDefinition'],
+        value: string,
+      ) =>
+        set((state) => ({
+          config: {
+            ...state.config,
+            applicationDefinition: {
+              ...state.config.applicationDefinition,
+              [section]: value,
+            },
+            purpose: applicationDefinitionToPurpose(state.config.applicationDefinition),
+          },
+        })),
     }),
     {
       name: 'redTeamConfig',
