@@ -16,7 +16,6 @@ import { listCommand } from './commands/list';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { viewCommand } from './commands/view';
-import logger from './logger';
 import { runDbMigrations } from './migrate';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
@@ -34,15 +33,7 @@ async function main() {
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
   const program = new Command('promptfoo');
-  program
-    .version(version)
-    .showHelpAfterError()
-    .showSuggestionAfterError()
-    .on('option:*', function () {
-      logger.error('Invalid option(s)');
-      program.help();
-      process.exitCode = 1;
-    });
+  program.version(version);
 
   // Main commands
   evalCommand(program, defaultConfig, defaultConfigPath);

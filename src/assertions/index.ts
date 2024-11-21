@@ -265,17 +265,7 @@ export async function runAssertion({
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
   if (handler) {
-    const result = await handler(assertionParams);
-
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
-      return {
-        ...result,
-        pass: true, // Force pass for weight=0 assertions
-      };
-    }
-
-    return result;
+    return handler(assertionParams);
   }
 
   if (baseType.startsWith('promptfoo:redteam:')) {
