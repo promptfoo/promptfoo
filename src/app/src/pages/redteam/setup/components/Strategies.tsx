@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Box from '@mui/material/Box';
@@ -74,13 +75,19 @@ const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];
 
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
+  const { recordEvent } = useTelemetry();
   const theme = useTheme();
+
   const [selectedStrategies, setSelectedStrategies] = useState<RedteamStrategy[]>(
     () =>
       config.strategies.map((strategy) =>
         typeof strategy === 'string' ? { id: strategy } : strategy,
       ) as RedteamStrategy[],
   );
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
+  }, []);
 
   useEffect(() => {
     updateConfig('strategies', selectedStrategies);
@@ -91,6 +98,13 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   };
 
   const handleStrategyToggle = (strategyId: string) => {
+    if (!selectedStrategies.find((strategy) => getStrategyId(strategy) === strategyId)) {
+      recordEvent('feature_used', {
+        feature: 'redteam_config_strategy_deselected',
+        strategy: strategyId,
+      });
+    }
+
     setSelectedStrategies((prev) =>
       prev.some((strategy) => getStrategyId(strategy) === strategyId)
         ? prev.filter((strategy) => getStrategyId(strategy) !== strategyId)

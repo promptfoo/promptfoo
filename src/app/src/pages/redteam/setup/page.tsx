@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import AppIcon from '@mui/icons-material/Apps';
@@ -204,6 +205,7 @@ interface SavedConfig {
 export default function RedTeamSetupPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { recordEvent } = useTelemetry();
 
   // Get initial tab from URL hash or default to first page
   const [value, setValue] = useState(() => {
@@ -274,6 +276,7 @@ export default function RedTeamSetupPage() {
   };
 
   const handleSaveConfig = async () => {
+    recordEvent('feature_used', { feature: 'redteam_config_save' });
     try {
       const response = await callApi('/configs', {
         method: 'POST',
@@ -305,6 +308,7 @@ export default function RedTeamSetupPage() {
   };
 
   const loadConfigs = async () => {
+    recordEvent('feature_used', { feature: 'redteam_config_load' });
     try {
       const response = await callApi('/configs?type=redteam');
       const data = await response.json();

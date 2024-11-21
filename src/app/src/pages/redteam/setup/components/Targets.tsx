@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -104,6 +105,12 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
 
   const [missingFields, setMissingFields] = useState<string[]>([]);
 
+  const { recordEvent } = useTelemetry();
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_targets' });
+  }, []);
+
   useEffect(() => {
     updateConfig('target', selectedTarget);
     const missingFields: string[] = [];
@@ -127,6 +134,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;
     const currentLabel = selectedTarget.label;
+    recordEvent('feature_used', { feature: 'redteam_config_target_changed', target: value });
 
     if (value === 'javascript' || value === 'python') {
       const filePath =
@@ -290,6 +298,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   const handleTestTarget = async () => {
     setTestingTarget(true);
     setTestResult(null);
+    recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
       const response = await callApi('/providers/test', {
         method: 'POST',

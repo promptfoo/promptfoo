@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -23,6 +24,7 @@ interface PolicyPlugin {
 export default function Review() {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
+  const { recordEvent } = useTelemetry();
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -37,6 +39,7 @@ export default function Review() {
     link.download = 'promptfooconfig.yaml';
     link.click();
     URL.revokeObjectURL(url);
+    recordEvent('feature_used', { feature: 'redteam_config_download' });
   };
 
   const getPluginSummary = useCallback((plugin: string | RedteamPlugin) => {
