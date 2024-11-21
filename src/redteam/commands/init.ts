@@ -283,9 +283,10 @@ export async function redteamInit(directory: string | undefined) {
     if (redTeamChoice === 'http_endpoint' || redTeamChoice === 'not_sure') {
       providers = [
         {
-          id: 'https://example.com/generate',
+          id: 'http',
           label,
           config: {
+            url: 'https://example.com/generate',
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

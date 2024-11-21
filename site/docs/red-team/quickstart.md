@@ -74,9 +74,10 @@ Edit the config to set up the target endpoint. For example:
 
 ```yaml
 targets:
-  - id: 'https://example.com/generate'
+  - id: https
     label: 'travel-agent-agent'
     config:
+      url: 'https://example.com/generate'
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
