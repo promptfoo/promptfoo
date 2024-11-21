@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
 import debounce from 'debounce';
+import dedent from 'dedent';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type { Stats } from 'fs';
@@ -233,7 +234,8 @@ export function startServer(
 
       if (
         browserBehavior === BrowserBehavior.OPEN ||
-        browserBehavior === BrowserBehavior.OPEN_TO_REPORT
+        browserBehavior === BrowserBehavior.OPEN_TO_REPORT ||
+        browserBehavior === BrowserBehavior.OPEN_TO_REDTEAM_CREATE
       ) {
         openUrl();
       } else if (browserBehavior === BrowserBehavior.ASK) {
@@ -252,7 +254,12 @@ export function startServer(
     .on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
         logger.error(
-          `Unable to start server on port ${port}. It's currently in use. Check for existing promptfoo instances.`,
+          dedent`Port ${port} is already in use. Do you have another Promptfoo instance running?
+
+          To resolve this:
+            1. Check if another promptfoo instance is running (try 'ps aux | grep promptfoo')
+            2. Kill the process using the port: 'lsof -i :${port}' then 'kill <PID>'
+            3. Or specify a different port with --port <number>`,
         );
         process.exit(1);
       } else {

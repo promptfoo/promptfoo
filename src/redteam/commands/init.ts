@@ -14,6 +14,8 @@ import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
+import { BrowserBehavior } from '../../server/server';
+import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
 import { setupEnv } from '../../util';
@@ -655,28 +657,39 @@ export function initCommand(program: Command) {
     .command('init [directory]')
     .description('Initialize red teaming project')
     .option('--env-file, --env-path <path>', 'Path to .env file')
-    .action(async (directory: string | undefined, opts: { envPath: string | undefined }) => {
-      setupEnv(opts.envPath);
-      try {
-        await redteamInit(directory);
-      } catch (err) {
-        if (err instanceof ExitPromptError) {
-          logger.info(
-            '\n' +
-              chalk.blue(
-                'Red team initialization paused. To continue setup later, use the command: ',
-              ) +
-              chalk.bold('promptfoo redteam init'),
-          );
-          logger.info(
-            chalk.blue('For help or feedback, visit ') +
-              chalk.green('https://www.promptfoo.dev/contact/'),
-          );
-          await recordOnboardingStep('early exit');
-          process.exit(130);
-        } else {
-          throw err;
+    .option('--no-gui', 'Do not open the browser UI')
+    .action(
+      async (
+        directory: string | undefined,
+        opts: { envPath: string | undefined; gui: boolean },
+      ) => {
+        setupEnv(opts.envPath);
+        try {
+          if (opts.gui) {
+            // Start the server and open browser to redteam setup
+            await startServer(15500, BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
+          } else {
+            await redteamInit(directory);
+          }
+        } catch (err) {
+          if (err instanceof ExitPromptError) {
+            logger.info(
+              '\n' +
+                chalk.blue(
+                  'Red team initialization paused. To continue setup later, use the command: ',
+                ) +
+                chalk.bold('promptfoo redteam init'),
+            );
+            logger.info(
+              chalk.blue('For help or feedback, visit ') +
+                chalk.green('https://www.promptfoo.dev/contact/'),
+            );
+            await recordOnboardingStep('early exit');
+            process.exit(130);
+          } else {
+            throw err;
+          }
         }
-      }
-    });
+      },
+    );
 }
