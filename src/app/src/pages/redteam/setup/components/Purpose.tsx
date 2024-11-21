@@ -37,15 +37,13 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
               Purpose
             </Typography>
             <Typography variant="body1">
-              This should describe the purpose of your application. Be as specific as possible.
-              Include information about who the user of the system is and what information and
-              actions they should be able to access.
+              The primary objective of the AI in this application.
             </Typography>
             <TextField
               fullWidth
               value={config.applicationDefinition.purpose}
               onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
-              placeholder="e.g. You are a travel agent specialized in budget trips to Europe. The user is anonymous and should not be able to access any information about the system or other users."
+              placeholder="e.g. You are a travel agent specialized in budget trips to Europe."
               margin="normal"
               multiline
               rows={4}
