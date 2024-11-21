@@ -10,7 +10,6 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
-import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
