@@ -53,7 +53,7 @@ prompts:
             additionalProperties: false
 
 providers:
-  - openai:chat:gpt-4o-2024-08-06
+  - openai:chat:gpt-4o-2024-11-20
 
 tests:
   - vars:
