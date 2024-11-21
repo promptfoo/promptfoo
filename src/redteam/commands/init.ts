@@ -613,9 +613,9 @@ export async function redteamInit(directory: string | undefined) {
     logger.info(
       '\n' +
         chalk.green(dedent`
-          To generate test cases after editing your configuration, use the command:
+          To generate test cases and run your red team, use the command:
 
-              ${chalk.bold('promptfoo redteam generate')}
+              ${chalk.bold('promptfoo redteam run')}
         `),
     );
     return;
@@ -642,8 +642,8 @@ export async function redteamInit(directory: string | undefined) {
       logger.info(
         '\n' +
           chalk.blue(
-            'To generate test cases later, use the command: ' +
-              chalk.bold('promptfoo redteam generate'),
+            'To generate test cases and run your red team later, use the command: ' +
+              chalk.bold('promptfoo redteam run'),
           ),
       );
     }
