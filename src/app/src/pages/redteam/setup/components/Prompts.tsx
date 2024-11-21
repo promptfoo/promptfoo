@@ -41,7 +41,7 @@ export default function Prompts() {
 
       // Check if there are any non-empty prompts left after removal
       const nonEmptyPrompts = newPrompts.filter((prompt) => prompt !== '');
-      if (nonEmptyPrompts.length == 0) {
+      if (nonEmptyPrompts.length === 0) {
         // Clear the purpose and entities if there are no valid prompts left
         updateConfig('purpose', '');
         updateConfig('entities', []);
