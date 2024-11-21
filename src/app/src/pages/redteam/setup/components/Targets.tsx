@@ -36,6 +36,7 @@ import {
   useRedTeamConfig,
 } from '../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../types';
+import Prompts from './Prompts';
 
 interface TargetsProps {
   onNext: () => void;
@@ -68,6 +69,10 @@ const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean 
   }
 };
 
+const requiresPrompt = (target: ProviderOptions) => {
+  return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
+};
+
 export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
@@ -75,6 +80,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   const setSelectedTarget = (value: ProviderOptions) => {
     updateConfig('target', value);
   };
+  const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
   const [urlError, setUrlError] = useState<string | null>(null);
   const [bodyError, setBodyError] = useState<string | null>(null);
   const [testingTarget, setTestingTarget] = useState(false);
@@ -115,6 +121,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     }
 
     setMissingFields(missingFields);
+    setPromptRequired(requiresPrompt(selectedTarget));
   }, [selectedTarget, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
@@ -930,6 +937,8 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           )}
         </Box>
       )}
+
+      {promptRequired && <Prompts />}
 
       <Box
         sx={{

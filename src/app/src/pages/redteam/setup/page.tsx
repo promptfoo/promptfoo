@@ -28,7 +28,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import Plugins from './components/Plugins';
-import Prompts from './components/Prompts';
+import Purpose from './components/Purpose';
 import Review from './components/Review';
 import Setup from './components/Setup';
 import Strategies from './components/Strategies';
@@ -364,15 +364,15 @@ export default function RedTeamSetupPage() {
                 sx={{ width: 200 }}
               >
                 <StyledTab
-                  icon={<TargetIcon />}
-                  iconPosition="start"
-                  label="Targets"
-                  {...a11yProps(0)}
-                />
-                <StyledTab
                   icon={<AppIcon />}
                   iconPosition="start"
                   label="Application"
+                  {...a11yProps(0)}
+                />
+                <StyledTab
+                  icon={<TargetIcon />}
+                  iconPosition="start"
+                  label="Targets"
                   {...a11yProps(1)}
                 />
                 <StyledTab
@@ -420,10 +420,10 @@ export default function RedTeamSetupPage() {
         </OuterSidebarContainer>
         <TabContent>
           <CustomTabPanel value={value} index={0}>
-            <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
+            <Purpose onNext={handleNext} onBack={handleBack} />
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>
-            <Prompts onNext={handleNext} onBack={handleBack} />
+            <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
           </CustomTabPanel>
           <CustomTabPanel value={value} index={2}>
             <Plugins onNext={handleNext} onBack={handleBack} />
