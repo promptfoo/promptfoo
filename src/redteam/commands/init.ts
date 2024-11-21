@@ -436,31 +436,42 @@ export async function redteamInit(directory: string | undefined) {
   if (plugins.includes('indirect-prompt-injection')) {
     recordOnboardingStep('choose indirect prompt injection variable');
     logger.info(chalk.bold('Indirect Prompt Injection Configuration\n'));
-    const variables = extractVariablesFromTemplate(prompts[0]);
-    if (variables.length > 1) {
-      const indirectInjectionVar = await select({
-        message: 'Which variable would you like to test for indirect prompt injection?',
-        choices: variables.sort().map((variable) => ({
-          name: variable,
-          value: variable,
-        })),
-      });
-      recordOnboardingStep('chose indirect prompt injection variable');
-      plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
-      plugins.push({
-        id: 'indirect-prompt-injection',
-        config: {
-          indirectInjectionVar,
-        },
-      } as RedteamPluginObject);
-    } else {
+    if (prompts.length === 0) {
       plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
       recordOnboardingStep('skip indirect prompt injection');
       logger.warn(
-        dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt.
+        dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because no prompt is specified. 
+        You can re-add this plugin after adding a prompt in your redteam config.
 
         Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection`,
       );
+    } else {
+      const variables = extractVariablesFromTemplate(prompts[0]);
+      if (variables.length > 1) {
+        const indirectInjectionVar = await select({
+          message: 'Which variable would you like to test for indirect prompt injection?',
+          choices: variables.sort().map((variable) => ({
+            name: variable,
+            value: variable,
+          })),
+        });
+        recordOnboardingStep('chose indirect prompt injection variable');
+        plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
+        plugins.push({
+          id: 'indirect-prompt-injection',
+          config: {
+            indirectInjectionVar,
+          },
+        } as RedteamPluginObject);
+      } else {
+        plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
+        recordOnboardingStep('skip indirect prompt injection');
+        logger.warn(
+          dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt.
+
+          Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection`,
+        );
+      }
     }
   }
 
