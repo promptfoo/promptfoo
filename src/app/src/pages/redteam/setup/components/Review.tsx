@@ -39,7 +39,11 @@ export default function Review() {
     link.download = 'promptfooconfig.yaml';
     link.click();
     URL.revokeObjectURL(url);
-    recordEvent('feature_used', { feature: 'redteam_config_download' });
+    recordEvent('feature_used', {
+      feature: 'redteam_config_download',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+    });
   };
 
   const getPluginSummary = useCallback((plugin: string | RedteamPlugin) => {

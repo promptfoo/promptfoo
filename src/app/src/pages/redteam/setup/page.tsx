@@ -276,7 +276,11 @@ export default function RedTeamSetupPage() {
   };
 
   const handleSaveConfig = async () => {
-    recordEvent('feature_used', { feature: 'redteam_config_save' });
+    recordEvent('feature_used', {
+      feature: 'redteam_config_save',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+    });
     try {
       const response = await callApi('/configs', {
         method: 'POST',
