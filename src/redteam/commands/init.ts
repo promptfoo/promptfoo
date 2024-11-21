@@ -10,7 +10,6 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
-import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
@@ -285,9 +284,10 @@ export async function redteamInit(directory: string | undefined) {
     if (redTeamChoice === 'http_endpoint' || redTeamChoice === 'not_sure') {
       providers = [
         {
-          id: 'https://example.com/generate',
+          id: 'https',
           label,
           config: {
+            url: 'https://example.com/generate',
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -331,32 +331,6 @@ export async function redteamInit(directory: string | undefined) {
       providers = [{ id: 'openai:gpt-4o-mini', label }];
     } else {
       providers = [{ id: selectedProvider, label }];
-    }
-  }
-
-  if (!getEnvString('OPENAI_API_KEY')) {
-    recordOnboardingStep('missing api key');
-
-    console.clear();
-    logger.info(chalk.bold('OpenAI API Configuration\n'));
-
-    const apiKeyChoice = await select({
-      message: `OpenAI API key is required, but I don't see an OPENAI_API_KEY environment variable. How to proceed?`,
-      choices: [
-        { name: 'Enter API key now', value: 'enter' },
-        { name: 'Set it later', value: 'later' },
-      ],
-    });
-
-    recordOnboardingStep('choose api key', { value: apiKeyChoice });
-
-    if (apiKeyChoice === 'enter') {
-      const apiKey = await input({ message: 'Enter your OpenAI API key:' });
-      process.env.OPENAI_API_KEY = apiKey;
-      logger.info('OPENAI_API_KEY set for this session.');
-    } else {
-      deferGeneration = true;
-      logger.warn('Remember to set OPENAI_API_KEY before generating the dataset.');
     }
   }
 
@@ -492,6 +466,8 @@ export async function redteamInit(directory: string | undefined) {
     }
   }
 
+  console.clear();
+
   logger.info(
     dedent`
     ${chalk.bold('Strategy Configuration')}
@@ -615,9 +591,9 @@ export async function redteamInit(directory: string | undefined) {
     logger.info(
       '\n' +
         chalk.green(dedent`
-          To generate test cases after editing your configuration, use the command:
+          To generate test cases and run your red team, use the command:
 
-              ${chalk.bold('promptfoo redteam generate')}
+              ${chalk.bold('promptfoo redteam run')}
         `),
     );
     return;
@@ -644,8 +620,8 @@ export async function redteamInit(directory: string | undefined) {
       logger.info(
         '\n' +
           chalk.blue(
-            'To generate test cases later, use the command: ' +
-              chalk.bold('promptfoo redteam generate'),
+            'To generate test cases and run your red team later, use the command: ' +
+              chalk.bold('promptfoo redteam run'),
           ),
       );
     }

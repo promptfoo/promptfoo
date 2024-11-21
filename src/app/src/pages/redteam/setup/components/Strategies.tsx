@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import { Alert } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
+import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
@@ -78,25 +83,54 @@ const availableStrategies: Strategy[] = [
 
 const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];
 
+const getStrategyId = (strategy: RedteamStrategy): string => {
+  return typeof strategy === 'string' ? strategy : strategy.id;
+};
+
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
+  const { recordEvent } = useTelemetry();
   const theme = useTheme();
+
   const [selectedStrategies, setSelectedStrategies] = useState<RedteamStrategy[]>(
     () =>
       config.strategies.map((strategy) =>
         typeof strategy === 'string' ? { id: strategy } : strategy,
       ) as RedteamStrategy[],
   );
+  const [isStateless, setIsStateless] = useState<boolean>(true);
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
+  }, []);
 
   useEffect(() => {
     updateConfig('strategies', selectedStrategies);
   }, [selectedStrategies, updateConfig]);
 
-  const getStrategyId = (strategy: RedteamStrategy): string => {
-    return typeof strategy === 'string' ? strategy : strategy.id;
-  };
+  useEffect(() => {
+    setSelectedStrategies((prev) =>
+      prev.map((strategy) => {
+        const strategyId = getStrategyId(strategy);
+        if (strategyId === 'goat' || strategyId === 'crescendo') {
+          return {
+            id: strategyId,
+            config: { stateless: isStateless },
+          };
+        }
+        return strategy;
+      }),
+    );
+  }, [isStateless]);
 
   const handleStrategyToggle = (strategyId: string) => {
+    if (!selectedStrategies.find((strategy) => getStrategyId(strategy) === strategyId)) {
+      recordEvent('feature_used', {
+        feature: 'redteam_config_strategy_deselected',
+        strategy: strategyId,
+      });
+    }
+
     setSelectedStrategies((prev) =>
       prev.some((strategy) => getStrategyId(strategy) === strategyId)
         ? prev.filter((strategy) => getStrategyId(strategy) !== strategyId)
@@ -141,6 +175,41 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           </Grid>
         ))}
       </Grid>
+
+      {selectedStrategies.some((s) => ['goat', 'crescendo'].includes(getStrategyId(s))) && (
+        <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            System Configuration
+          </Typography>
+          <FormControl component="fieldset">
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Is the target system stateless? (Does it maintain conversation history?)
+            </Typography>
+            <RadioGroup
+              value={isStateless}
+              onChange={(e) => setIsStateless(e.target.value === 'true')}
+            >
+              <FormControlLabel
+                value={true}
+                control={<Radio />}
+                label="Yes - System is stateless (no conversation history)"
+              />
+              <FormControlLabel
+                value={false}
+                control={<Radio />}
+                label="No - System maintains conversation history"
+              />
+            </RadioGroup>
+
+            {!config.target.config.sessionParser && (
+              <Alert severity="warning">
+                Your system is stateful but you don't have session handling setup. Please return to
+                your Target setup to configure it.
+              </Alert>
+            )}
+          </FormControl>
+        </Paper>
+      )}
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
         <Button

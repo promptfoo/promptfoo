@@ -11,8 +11,9 @@ The provider config gives you a way to construct the HTTP request and extract th
 
 ```yaml
 providers:
-  - id: 'https://example.com/generate'
+  - id: https
     config:
+      url: 'https://example.com/generate'
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
@@ -25,8 +26,9 @@ The placeholder variable `{{prompt}}` will be replaced by the final prompt for t
 
 ```yaml
 providers:
-  - id: 'https://example.com/generateTranslation'
+  - id: https
     config:
+      url: 'https://example.com/generateTranslation'
       body:
         prompt: '{{prompt}}'
         model: '{{model}}'
@@ -46,6 +48,7 @@ tests:
 providers:
   - id: https
     config:
+      url: 'https://example.com/generateTranslation'
       body:
         model: '{{model}}'
         translate: '{{language}}'
@@ -120,8 +123,9 @@ Nested objects are supported and should be passed to the `dump` function.
 
 ```yaml
 providers:
-  - id: 'https://example.com/generateTranslation'
+  - id: https
     config:
+      url: 'https://example.com/generateTranslation'
       body:
         // highlight-start
         messages: '{{messages | dump}}'
@@ -152,8 +156,9 @@ For example, this `responseParser` configuration:
 
 ```yaml
 providers:
-  - id: 'https://example.com/openai-compatible/chat/completions'
+  - id: https
     config:
+      url: 'https://example.com/openai-compatible/chat/completions'
       # ...
       responseParser: 'json.choices[0].message.content'
 ```
@@ -195,8 +200,9 @@ For example, this `responseParser` configuration:
 
 ```yaml
 providers:
-  - id: 'https://example.com/api'
+  - id: https
     config:
+      url: 'https://example.com/api'
       # ...
       responseParser: 'text.slice(11)'
 ```
@@ -213,8 +219,9 @@ Query parameters can be specified in the provider config using the `queryParams`
 
 ```yaml
 providers:
-  - id: 'https://example.com/search'
+  - id: https
     config:
+      url: 'https://example.com/search'
       // highlight-start
       method: 'GET'
       queryParams:
@@ -231,8 +238,9 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 {
   // ...
   providers: [{
-    id: 'https://example.com/generate',
+    id: 'https',
     config: {
+      url: 'https://example.com/generate',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -262,8 +270,9 @@ You can use a string containing a JavaScript expression to extract data from the
 
 ```yaml
 providers:
-  - id: 'https://example.com/api'
+  - id: https
     config:
+      url: 'https://example.com/api'
       responseParser: 'json.choices[0].message.content'
 ```
 
@@ -279,8 +288,9 @@ When using promptfoo as a Node.js library, you can provide a function as the res
 ```javascript
 {
   providers: [{
-    id: 'https://example.com/generate',
+    id: 'https',
     config: {
+      url: 'https://example.com/generate',
       responseParser: (json, text) => {
         // Custom parsing logic
         return json.choices[0].message.content;
@@ -296,8 +306,9 @@ You can use a JavaScript file as a response parser by specifying the file path w
 
 ```yaml
 providers:
-  - id: 'https://example.com/api'
+  - id: https
     config:
+      url: 'https://example.com/api'
       responseParser: 'file://path/to/parser.js'
 ```
 
@@ -321,8 +332,9 @@ You can also specify a function name to be imported from a file:
 
 ```yaml
 providers:
-  - id: 'https://example.com/api'
+  - id: https
     config:
+      url: 'https://example.com/api'
       responseParser: 'file://path/to/parser.js:parseResponse'
 ```
 
@@ -350,9 +362,11 @@ Then you need to set the session ID in the `vars` object for the next round:
 
 ```yaml
 providers:
-  - id: 'https://example.com/api'
-    headers:
-      'Cookie': '{{sessionId}}'
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      headers:
+        'Cookie': '{{sessionId}}'
 ```
 
 ## Reference
