@@ -39,8 +39,8 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
                 '0%' // Handle division by zero for totals
               ) : (
                 <>
-                  {((score / metricTotals[metric]) * 100).toFixed(2)}% ({score.toFixed(2)}/
-                  {metricTotals[metric].toFixed(2)})
+                  {((score / metricTotals[metric]) * 100).toFixed(2)}% ({score?.toFixed(2) ?? '0'}/
+                  {metricTotals[metric]?.toFixed(2) ?? '0'})
                 </>
               )
             ) : counts && counts[metric] ? (
@@ -48,12 +48,12 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
                 '0' // Handle division by zero for counts
               ) : (
                 <>
-                  {(score / counts[metric]).toFixed(2)} ({score.toFixed(2)}/
-                  {counts[metric].toFixed(2)})
+                  {(score / counts[metric]).toFixed(2)} ({score?.toFixed(2) ?? '0'}/
+                  {counts[metric]?.toFixed(2) ?? '0'})
                 </>
               )
             ) : (
-              score.toFixed(2)
+              (score?.toFixed(2) ?? '0')
             )}
           </span>
         ) : null,

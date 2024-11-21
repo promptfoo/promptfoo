@@ -65,6 +65,29 @@ defaultTest:
           reasoning:
             type: string
     - type: javascript
-      value: output.classification === context.vars.label
-      metric: classification-accuracy
+      value: 'output.classification === context.vars.label'
+      metric: accuracy
+    - type: javascript
+      value: 'output.classification === context.vars.label ? 1 : 0'
+      metric: correct_predictions
+      weight: 0
+    - type: javascript
+      value: '1'
+      metric: total_predictions
+      weight: 0
+    - type: javascript
+      value: 'output.classification'
+      metric: predicted_class
+      weight: 0
+    - type: javascript
+      value: 'context.vars.label'
+      metric: true_class
+      weight: 0
+
+derivedMetrics:
+  - name: classification_accuracy
+    value: correct_predictions / total_predictions
+  - name: macro_accuracy
+    value: accuracy
+
 tests: file://fashion_mnist_sample_base64.csv
