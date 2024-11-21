@@ -37,6 +37,7 @@ export interface ProviderOptions {
     headless?: boolean;
     timeoutMs?: number;
     responseParser?: string;
+    sessionParser?: string;
     cookies?:
       | Array<{
           name: string;
