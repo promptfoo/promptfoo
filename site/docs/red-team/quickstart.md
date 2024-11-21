@@ -107,6 +107,15 @@ Finally, download the generated configuration file. You'll use this to run the r
 
 Save the file as `promptfooconfig.yaml`. Then, navigate to the directory where you saved the file and run `promptfoo redteam run`.
 
+:::info
+If you don't want to use the UI to start a red team, you can use the `init` command instead:
+
+```sh
+promptfoo redteam init
+```
+
+:::
+
 ### Attacking an API endpoint
 
 Edit the config to set up the target endpoint. For example:
