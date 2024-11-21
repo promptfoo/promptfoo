@@ -10,7 +10,6 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
-import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
@@ -332,32 +331,6 @@ export async function redteamInit(directory: string | undefined) {
     }
   }
 
-  if (!getEnvString('OPENAI_API_KEY')) {
-    recordOnboardingStep('missing api key');
-
-    console.clear();
-    logger.info(chalk.bold('OpenAI API Configuration\n'));
-
-    const apiKeyChoice = await select({
-      message: `OpenAI API key is required, but I don't see an OPENAI_API_KEY environment variable. How to proceed?`,
-      choices: [
-        { name: 'Enter API key now', value: 'enter' },
-        { name: 'Set it later', value: 'later' },
-      ],
-    });
-
-    recordOnboardingStep('choose api key', { value: apiKeyChoice });
-
-    if (apiKeyChoice === 'enter') {
-      const apiKey = await input({ message: 'Enter your OpenAI API key:' });
-      process.env.OPENAI_API_KEY = apiKey;
-      logger.info('OPENAI_API_KEY set for this session.');
-    } else {
-      deferGeneration = true;
-      logger.warn('Remember to set OPENAI_API_KEY before generating the dataset.');
-    }
-  }
-
   console.clear();
 
   recordOnboardingStep('begin plugin & strategy selection');
@@ -489,6 +462,8 @@ export async function redteamInit(directory: string | undefined) {
       );
     }
   }
+
+  console.clear();
 
   logger.info(
     dedent`
