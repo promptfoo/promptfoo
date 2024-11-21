@@ -66,4 +66,5 @@ defaultTest:
             type: string
     - type: javascript
       value: output.classification === context.vars.label
+      metric: classification-accuracy
 tests: file://fashion_mnist_sample_base64.csv

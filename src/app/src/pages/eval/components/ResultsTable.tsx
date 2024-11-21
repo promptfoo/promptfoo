@@ -725,6 +725,22 @@ function ResultsTable({
                     colBorderDrawn = true;
                   }
                   const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
+
+                  let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
+                  const value = cell.getValue();
+                  if (
+                    typeof value === 'string' &&
+                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
+                      value.match(/^\/[0-9A-Za-z+/]{4}.*/))
+                  ) {
+                    const imgSrc = value.startsWith('data:')
+                      ? value
+                      : `data:image/jpeg;base64,${value}`;
+                    cellContent = (
+                      <img src={imgSrc} alt="Base64 encoded image" style={{ width: '100%' }} />
+                    );
+                  }
+
                   return (
                     <td
                       key={cell.id}
@@ -735,7 +751,7 @@ function ResultsTable({
                         shouldDrawRowBorder ? 'first-prompt-row' : ''
                       } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {cellContent}
                     </td>
                   );
                 })}
