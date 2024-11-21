@@ -57,7 +57,11 @@ export const generateOrderedYaml = (config: Config): string => {
         if (typeof strategy === 'string') {
           return { id: strategy };
         }
-        return { id: strategy.id };
+        return {
+          id: strategy.id,
+          ...(strategy.config &&
+            Object.keys(strategy.config).length > 0 && { config: strategy.config }),
+        };
       }),
     },
   };
