@@ -577,8 +577,9 @@ For example, to send a customized HTTP request, use a [HTTP Provider](/docs/prov
 
 ```yaml
 targets:
-  - id: 'https://example.com/generate'
+  - id: https
     config:
+      url: 'https://example.com/api'
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
