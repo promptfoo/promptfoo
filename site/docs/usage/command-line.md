@@ -207,6 +207,7 @@ Initialize a red teaming project.
 | Option        | Description                            | Default |
 | ------------- | -------------------------------------- | ------- |
 | `[directory]` | Directory to initialize the project in | .       |
+| `--no-gui`    | Do not open the browser UI             |         |
 
 Example:
 
@@ -219,6 +220,17 @@ Adversarial testing produces offensive, toxic, and harmful test inputs, and may 
 :::
 
 For more detail, see [red team configuration](/docs/red-team/configuration/).
+
+## `promptfoo redteam setup`
+
+Start browser UI and open to red team setup.
+
+| Option                           | Description                                     | Default |
+| -------------------------------- | ----------------------------------------------- | ------- |
+| `[configDirectory]`              | Directory containing configuration files        |         |
+| `-p, --port <number>`            | Port number for the local server                | 15500   |
+| `--filter-description <pattern>` | Filter evals by description using regex pattern |         |
+| `--env-file, --env-path <path>`  | Path to .env file                               |         |
 
 ## `promptfoo redteam run`
 

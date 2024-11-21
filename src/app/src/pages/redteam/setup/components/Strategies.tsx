@@ -50,7 +50,8 @@ const availableStrategies: Strategy[] = [
   {
     id: 'crescendo',
     name: 'Multi-turn Jailbreaks (Crescendo)',
-    description: 'Gradually escalates prompt harm to exploit fuzzy ethical boundaries.',
+    description:
+      "Microsoft Research's technique for gradually escalates prompt harm to exploit fuzzy ethical boundaries.",
   },
   {
     id: 'multilingual',
@@ -75,8 +76,8 @@ const availableStrategies: Strategy[] = [
   },
   {
     id: 'goat',
-    name: 'GOAT',
-    description: 'Multi-turn adversarial attack that adapts to the target model.',
+    name: 'Generative Offensive Agent Tester',
+    description: "Meta AI's technique for multi-step conversational testing.",
   },
 ];
 
