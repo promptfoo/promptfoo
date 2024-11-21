@@ -23,7 +23,7 @@ export function redteamSetupCommand(program: Command) {
       ) => {
         setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {
-          name: 'redteam report',
+          name: 'redteam setup',
         });
         await telemetry.send();
 
