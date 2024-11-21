@@ -88,7 +88,15 @@ export async function createResponseParser(
     return (data, text) => ({ output: data || text });
   }
   if (typeof parser === 'function') {
-    return (data, text) => ({ output: parser(data, text) });
+    return (data, text) => {
+      try {
+        const result = parser(data, text);
+        return { output: result };
+      } catch (err) {
+        logger.error(`Error in response parser function: ${String(err)}`);
+        throw err;
+      }
+    };
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
     let filename = parser.slice('file://'.length);
@@ -371,12 +379,14 @@ export class HttpProvider implements ApiProvider {
             ? (await this.sessionParser)({ headers: response.headers })
             : undefined;
       } catch (err) {
-        logger.error(`Error parsing session ID: ${String(err)}`);
+        logger.error(
+          `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)}`,
+        );
       }
       return ret;
     } catch (err) {
-      logger.error(`Error parsing response: ${String(err)}`);
-      ret.error = `Error parsing response: ${String(err)}`;
+      logger.error(`Error parsing response: ${String(err)}. Got response: ${rawText}`);
+      ret.error = `Error parsing response: ${String(err)}. Got response: ${rawText}`;
       return ret;
     }
   }
@@ -421,9 +431,16 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    const parsedOutput = (await this.responseParser)(parsedData, rawText);
-    return {
-      output: parsedOutput.output || parsedOutput,
-    };
+    try {
+      const parsedOutput = (await this.responseParser)(parsedData, rawText);
+      return {
+        output: parsedOutput.output || parsedOutput,
+      };
+    } catch (err) {
+      logger.error(`Error parsing response: ${String(err)}. Got response: ${rawText}`);
+      return {
+        error: `Error parsing response: ${String(err)}. Got response: ${rawText}`,
+      };
+    }
   }
 }
