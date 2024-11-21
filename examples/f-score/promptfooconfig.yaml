@@ -20,21 +20,18 @@ prompts:
       response_format:
         type: json_schema
         json_schema:
-          type: object
-          properties:
-            sentiment:
-              type: string
-              enum: ['positive', 'negative']
-            confidence:
-              type: integer
-              minimum: 1
-              maximum: 10
-            reasoning:
-              type: string
-          required:
-            - sentiment
-            - confidence
-            - reasoning
+          name: MovieReviewSentiment
+          schema:
+            {
+              type: object,
+              properties:
+                {
+                  sentiment: { type: string, enum: ['positive', 'negative'] },
+                  confidence: { type: integer, minimum: 1, maximum: 10 },
+                  reasoning: { type: string },
+                },
+              required: ['sentiment', 'confidence', 'reasoning'],
+            }
 
 defaultTest:
   assert:
