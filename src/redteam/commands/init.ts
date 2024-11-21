@@ -665,7 +665,12 @@ export function initCommand(program: Command) {
       ) => {
         setupEnv(opts.envPath);
         try {
-          if (opts.gui) {
+          // Check if we're in a non-GUI environment
+          const hasDisplay =
+            process.env.DISPLAY || process.platform === 'win32' || process.platform === 'darwin';
+          const useGui = opts.gui && hasDisplay;
+
+          if (useGui) {
             // Start the server and open browser to redteam setup
             await startServer(15500, BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
           } else {
