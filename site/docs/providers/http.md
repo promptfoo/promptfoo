@@ -341,8 +341,10 @@ The input to the session parser is an object with a `headers` field, which conta
 Simple header parser:
 
 ```yaml
-sessionParser: 'headers["set-cookie"]'
+sessionParser: 'set-cookie'
 ```
+
+The parser can take a string, file or function like the response parser. If you just include a string, it will be treated as a field on the `headers` object.
 
 Then you need to set the session ID in the `vars` object for the next round:
 
