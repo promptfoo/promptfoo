@@ -283,7 +283,7 @@ export async function redteamInit(directory: string | undefined) {
     if (redTeamChoice === 'http_endpoint' || redTeamChoice === 'not_sure') {
       providers = [
         {
-          id: 'http',
+          id: 'https',
           label,
           config: {
             url: 'https://example.com/generate',
