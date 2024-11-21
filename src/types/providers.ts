@@ -56,6 +56,7 @@ export interface ApiProvider {
   transform?: string;
   delay?: number;
   config?: any;
+  getSessionId?: () => string;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
@@ -87,6 +88,7 @@ export interface ProviderResponse {
   output?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
+  sessionId?: string;
 }
 
 export interface ProviderEmbeddingResponse {

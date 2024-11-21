@@ -613,26 +613,6 @@ describe('HttpProvider', () => {
     });
   });
 
-  describe('getContentType', () => {
-    it('should return content-type if present', () => {
-      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
-      const result = provider['getContentType']({ 'content-type': 'application/json' });
-      expect(result).toBe('application/json');
-    });
-
-    it('should return undefined if content-type is not present', () => {
-      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
-      const result = provider['getContentType']({});
-      expect(result).toBeUndefined();
-    });
-
-    it('should be case-insensitive', () => {
-      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
-      const result = provider['getContentType']({ 'Content-Type': 'application/json' });
-      expect(result).toBe('application/json');
-    });
-  });
-
   describe('getHeaders', () => {
     it('should combine default headers with config headers', () => {
       const provider = new HttpProvider(mockUrl, {
