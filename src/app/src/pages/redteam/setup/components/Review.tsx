@@ -43,6 +43,7 @@ export default function Review() {
       feature: 'redteam_config_download',
       numPlugins: config.plugins.length,
       numStrategies: config.strategies.length,
+      targetType: config.target.id,
     });
   };
 

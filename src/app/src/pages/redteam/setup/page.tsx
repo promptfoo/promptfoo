@@ -280,6 +280,7 @@ export default function RedTeamSetupPage() {
       feature: 'redteam_config_save',
       numPlugins: config.plugins.length,
       numStrategies: config.strategies.length,
+      targetType: config.target.id,
     });
     try {
       const response = await callApi('/configs', {
