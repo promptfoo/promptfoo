@@ -64,12 +64,10 @@ describe('CustomMetrics', () => {
       metric2: 0,
     };
 
-    // Test simple zero values (should show as "0.00")
     const { rerender } = render(<CustomMetrics lookup={lookup} />);
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.00');
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.00');
 
-    // Test with zero counts (should show as "0")
     rerender(
       <CustomMetrics
         lookup={lookup}
@@ -83,7 +81,6 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0');
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0');
 
-    // Test with zero metric totals (should show as "0%")
     rerender(
       <CustomMetrics
         lookup={lookup}
@@ -98,6 +95,21 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.00');
   });
 
+  it('handles undefined or null scores correctly', () => {
+    const lookup = {
+      metric1: undefined as unknown as number,
+      metric2: null as unknown as number,
+      metric3: 0,
+    };
+
+    render(<CustomMetrics lookup={lookup} />);
+
+    expect(screen.getByTestId('metric-value-metric3')).toHaveTextContent('0.00');
+
+    expect(screen.queryByTestId('metric-value-metric1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('metric-value-metric2')).toHaveTextContent('0');
+  });
+
   it('shows/hides metrics based on show more/less button', () => {
     const lookup = Object.fromEntries(
       Array.from({ length: 15 }, (_, i) => [`metric${i + 1}`, i + 1]),
@@ -105,14 +117,11 @@ describe('CustomMetrics', () => {
 
     render(<CustomMetrics lookup={lookup} />);
 
-    // Initially shows 10 metrics
     expect(screen.getAllByTestId(/^metric-metric\d+$/)).toHaveLength(10);
 
-    // Click show more
     fireEvent.click(screen.getByTestId('toggle-show-more'));
     expect(screen.getAllByTestId(/^metric-metric\d+$/)).toHaveLength(15);
 
-    // Click show less
     fireEvent.click(screen.getByTestId('toggle-show-more'));
     expect(screen.getAllByTestId(/^metric-metric\d+$/)).toHaveLength(10);
   });
@@ -127,5 +136,34 @@ describe('CustomMetrics', () => {
 
     fireEvent.click(screen.getByTestId('metric-metric1'));
     expect(onSearchTextChange).toHaveBeenCalledWith('metric=metric1:');
+  });
+
+  it('displays metric names correctly', () => {
+    const lookup = { 'test-metric': 10 };
+
+    render(<CustomMetrics lookup={lookup} />);
+
+    expect(screen.getByTestId('metric-name-test-metric')).toHaveTextContent('test-metric');
+  });
+
+  it('adds clickable class only when onSearchTextChange is provided', () => {
+    const lookup = { metric1: 10 };
+
+    const { rerender } = render(<CustomMetrics lookup={lookup} />);
+    expect(screen.getByTestId('metric-metric1')).not.toHaveClass('clickable');
+
+    rerender(<CustomMetrics lookup={lookup} onSearchTextChange={() => {}} />);
+    expect(screen.getByTestId('metric-metric1')).toHaveClass('clickable');
+  });
+
+  it('handles missing metrics in counts/totals objects', () => {
+    const lookup = { metric1: 10, metric2: 20 };
+    const counts = { metric1: 20 };
+    const metricTotals = { metric2: 40 };
+
+    render(<CustomMetrics lookup={lookup} counts={counts} metricTotals={metricTotals} />);
+
+    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.50 (10.00/20.00)');
+    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('50.00% (20.00/40.00)');
   });
 });
