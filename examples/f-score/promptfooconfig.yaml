@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: IMDB Review Sentiment Analysis
+
+providers:
+  - openai:gpt-4o-mini
+
+prompts:
+  - label: Sentiment Analysis
+    raw: |
+      Analyze the sentiment of the following movie review. Classify it as either positive or negative.
+
+      Review: "{{text}}"
+
+      Respond with a JSON object in the following format:
+      {
+        "sentiment": "positive" or "negative",
+        "confidence": number between 1-10,
+        "reasoning": "brief explanation"
+      }
+    config:
+      response_format:
+        type: json_schema
+        json_schema:
+          name: MovieReviewSentiment
+          schema:
+            type: object
+            properties:
+              sentiment:
+                type: string
+                enum: ['positive', 'negative']
+              confidence:
+                type: integer
+                minimum: 1
+                maximum: 10
+              reasoning:
+                type: string
+            required: ['sentiment', 'confidence', 'reasoning']
+
+defaultTest:
+  assert:
+    # Basic JSON validation
+    - type: is-json
+
+    # Track binary classification metrics
+    - type: javascript
+      value: 'output.sentiment === context.vars.sentiment'
+      metric: accuracy
+
+    # For F1 score components (treating 'positive' as the positive class)
+    - type: javascript
+      value: "output.sentiment === 'positive' && context.vars.sentiment === 'positive' ? 1 : 0"
+      metric: true_positives
+      weight: 0
+
+    - type: javascript
+      value: "output.sentiment === 'positive' && context.vars.sentiment === 'negative' ? 1 : 0"
+      metric: false_positives
+      weight: 0
+
+    - type: javascript
+      value: "output.sentiment === 'negative' && context.vars.sentiment === 'positive' ? 1 : 0"
+      metric: false_negatives
+      weight: 0
+
+    - type: javascript
+      value: "output.sentiment === 'negative' && context.vars.sentiment === 'negative' ? 1 : 0"
+      metric: true_negatives
+      weight: 0
+
+derivedMetrics:
+  # Precision = TP / (TP + FP)
+  - name: precision
+    value: true_positives / (true_positives + false_positives)
+
+  # Recall = TP / (TP + FN)
+  - name: recall
+    value: true_positives / (true_positives + false_negatives)
+
+  # F1 Score = 2 * (precision * recall) / (precision + recall)
+  - name: f1_score
+    value: 2 * true_positives / (2 * true_positives + false_positives + false_negatives)
+
+  # Accuracy = (TP + TN) / (TP + TN + FP + FN)
+  - name: accuracy_score
+    value: (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives)
+
+tests: file://imdb_eval_sample.csv
