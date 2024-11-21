@@ -1,27 +1,43 @@
 # F-Score HuggingFace Dataset Sentiment Analysis Eval
 
-This project evaluates GPT-4o-mini's zero-shot performance on IMDB movie review sentiment analysis using promptfoo.
+This project evaluates GPT-4o-mini's zero-shot performance on IMDB movie review sentiment analysis using promptfoo. Each model response includes:
+
+- Sentiment classification
+- Confidence score (1-10)
+- Reasoning for the classification
 
 ## Quick Start
+
+Set your OpenAI API key and run the evaluation:
 
 ```bash
 promptfoo eval
 ```
 
-The evaluation dataset (`imdb_eval_sample.csv`) is included, so you can run the evaluation immediately.
-
 ## Dataset
 
-The example uses the IMDB dataset from HuggingFace's datasets library, sampled to 100 reviews for efficient evaluation. The dataset is pre-processed into a CSV with two columns:
+The evaluation uses the IMDB dataset from HuggingFace's datasets library, sampled to 100 reviews. The dataset is preprocessed into a CSV with two columns:
 
 - `text`: The movie review content
 - `sentiment`: The label ("positive" or "negative")
 
-## Custom Metrics Implementation
+To modify the sample size or generate a new dataset, you can use `prepare_data.py`. First, install the Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Then run the preparation script:
+
+```bash
+python prepare_data.py
+```
+
+## Metrics Overview
 
 The evaluation implements F-score and related metrics using promptfoo's assertion system:
 
-1. **Base Metrics** (using JavaScript assertions):
+1. **Base Metrics** calculated for each test case using JavaScript assertions:
 
 ```yaml
 - type: javascript
@@ -29,7 +45,7 @@ The evaluation implements F-score and related metrics using promptfoo's assertio
   metric: true_positives
 ```
 
-2. **Derived Metrics** (calculated from base metrics):
+2. **Derived Metrics** calculated from base metrics after the evaluation completes:
 
 ```yaml
 - name: precision
@@ -39,46 +55,10 @@ The evaluation implements F-score and related metrics using promptfoo's assertio
   value: 2 * true_positives / (2 * true_positives + false_positives + false_negatives)
 ```
 
-## Files
-
-- `promptfooconfig.yaml`: Defines prompt, assertions, and metrics
-- `imdb_eval_sample.csv`: Pre-generated evaluation dataset
-
-## Optional Dataset Preparation
-
-If you want to generate a new evaluation dataset:
-
-1. Install Python dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-2. Run the preparation script:
-
-```bash
-python prepare_data.py
-```
-
-## Metrics Overview
-
 The evaluation tracks:
 
 - **True/False Positives/Negatives**: Base metrics for classification
 - **Precision**: TP / (TP + FP)
 - **Recall**: TP / (TP + FN)
-- **F1 Score**: 2 _ (precision _ recall) / (precision + recall)
+- **F1 Score**: 2 × (precision × recall) / (precision + recall)
 - **Accuracy**: (TP + TN) / Total
-
-Each model response includes:
-
-- Sentiment classification
-- Confidence score (1-10)
-- Reasoning for the decision
-
-## Notes
-
-- Uses HuggingFace's IMDB dataset (test split)
-- Implements custom F-score metrics using promptfoo's assertion system
-- Labels are in human-readable format (positive/negative)
-- All metrics treat "positive" as the positive class
