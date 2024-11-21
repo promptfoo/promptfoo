@@ -34,8 +34,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest redteam init my-project
-      cd my-project
+      npx promptfoo@latest redteam setup
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
@@ -46,8 +45,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
     Run:
     <CodeBlock language="bash">
-      promptfoo redteam init my-project
-      cd my-project
+      promptfoo redteam setup
     </CodeBlock>
 
   </TabItem>
@@ -59,16 +57,57 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
     Run:
     <CodeBlock language="bash">
-      promptfoo redteam init my-project
-      cd my-project
+      promptfoo redteam setup
     </CodeBlock>
 
   </TabItem>
 </Tabs>
 
-The `init` command creates some placeholders, including a `promptfooconfig.yaml` file. We'll use this config file to do most of our setup.
+The `setup` command will open a web UI that asks questions to help you configure your red teaming project.
 
-## Attacking an API endpoint
+## Configuring your redteam
+
+Start by providing some details about the target application. The more details we provide, the more tailored the generated test cases will be.
+
+At a minimum, be sure to fill out the **Purpose** field with a description of your application.
+
+![llm red team setup](/img/docs/setup/application-details.png)
+
+---
+
+Next, configure Promptfoo to communicate with your target application or model.
+
+Because the Promptfoo scanner runs locally on your machine, it can attack any endpoint accessible from your machine or network.
+
+[See below](#alternative-test-specific-prompts-and-models) for more info on how to talk with non-HTTP targets such as models (local or remote) or custom code.
+
+![llm red team setup](/img/docs/setup/target.png)
+
+---
+
+Next, select the plugins that you want to use. Plugins are adversarial generators. They produce malicious inputs that are sent to your application.
+
+Check off the individual plugins you want to use, or select a preset that includes a combination of plugins (if in doubt, stick with "Default").
+
+![llm red team setup](/img/docs/setup/plugins.png)
+
+---
+
+Now we select strategies. Strategies are adversarial techniques that wrap the generated inputs in a specific attack pattern.
+
+This is how Promptfoo generates more sophisticated jailbreaks and injections.
+
+![llm red team setup](/img/docs/setup/strategy.png)
+
+---
+
+Finally, download the generated configuration file. You'll use this to run the red team from your local machine.
+
+![llm red team setup](/img/docs/setup/review.png)
+
+Save the file as `promptfooconfig.yaml`. Then, navigate to the directory where you saved the file and run `promptfoo redteam run`.
+
+### Attacking an API endpoint
 
 Edit the config to set up the target endpoint. For example:
 
@@ -86,9 +125,7 @@ targets:
 purpose: 'The user is a budget traveler looking for the best deals. The system is a travel agent that helps the user plan their trip. The user is anonymous and should not be able to access any information about other users, employees, or other individuals.'
 ```
 
-:::important
 The `label` is used to create issues and report the results of the red teaming. Make sure to re-use the same `label` when generating new redteam configs for the same target.
-:::
 
 Setting the `purpose` is optional, but it will significantly improve the quality of the generated test cases and grading. Be specific about who the user of the system is and what information and actions they should be able to access.
 
