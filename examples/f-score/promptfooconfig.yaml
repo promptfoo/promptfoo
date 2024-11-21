@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: IMDB Review Sentiment Analysis
 
 providers:
@@ -22,16 +23,18 @@ prompts:
         json_schema:
           name: MovieReviewSentiment
           schema:
-            {
-              type: object,
-              properties:
-                {
-                  sentiment: { type: string, enum: ['positive', 'negative'] },
-                  confidence: { type: integer, minimum: 1, maximum: 10 },
-                  reasoning: { type: string },
-                },
-              required: ['sentiment', 'confidence', 'reasoning'],
-            }
+            type: object
+            properties:
+              sentiment:
+                type: string
+                enum: ['positive', 'negative']
+              confidence:
+                type: integer
+                minimum: 1
+                maximum: 10
+              reasoning:
+                type: string
+            required: ['sentiment', 'confidence', 'reasoning']
 
 defaultTest:
   assert:

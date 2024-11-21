@@ -1,95 +1,84 @@
-# IMDB Sentiment Analysis Evaluation
+# F-Score HuggingFace Dataset Sentiment Analysis Eval
 
-This project demonstrates how to evaluate LLM performance on binary sentiment classification using the IMDB movie reviews dataset.
+This project evaluates GPT-4o-mini's zero-shot performance on IMDB movie review sentiment analysis using promptfoo.
 
-## Overview
-
-The project uses promptfoo to evaluate LLM performance on sentiment analysis, calculating key binary classification metrics including:
-
-- Accuracy
-- Precision
-- Recall
-- F1 Score
-
-## Setup
-
-1. Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-2. Prepare the dataset:
-
-```bash
-python prepare_data.py
-```
-
-This will:
-
-- Download the IMDB dataset from Hugging Face
-- Create balanced samples for training and testing
-- Save the samples as CSV files
-
-3. Run the evaluation:
+## Quick Start
 
 ```bash
 promptfoo eval
 ```
 
+The evaluation dataset (`imdb_eval_sample.csv`) is included, so you can run the evaluation immediately.
+
+## Dataset
+
+The example uses the IMDB dataset from HuggingFace's datasets library, sampled to 100 reviews for efficient evaluation. The dataset is pre-processed into a CSV with two columns:
+
+- `text`: The movie review content
+- `sentiment`: The label ("positive" or "negative")
+
+## Custom Metrics Implementation
+
+The evaluation implements F-score and related metrics using promptfoo's assertion system:
+
+1. **Base Metrics** (using JavaScript assertions):
+
+```yaml
+- type: javascript
+  value: "output.sentiment === 'positive' && context.vars.sentiment === 'positive' ? 1 : 0"
+  metric: true_positives
+```
+
+2. **Derived Metrics** (calculated from base metrics):
+
+```yaml
+- name: precision
+  value: true_positives / (true_positives + false_positives)
+
+- name: f1_score
+  value: 2 * true_positives / (2 * true_positives + false_positives + false_negatives)
+```
+
 ## Files
 
-- `prepare_data.py`: Script to download and prepare the IMDB dataset
-- `promptfooconfig.yaml`: Configuration for the LLM evaluation
-- `requirements.txt`: Python dependencies
-- `imdb_train_sample.csv`: Generated training data sample
-- `imdb_test_sample.csv`: Generated test data sample
+- `promptfooconfig.yaml`: Defines prompt, assertions, and metrics
+- `imdb_eval_sample.csv`: Pre-generated evaluation dataset
 
-## Configuration
+## Optional Dataset Preparation
 
-The `promptfooconfig.yaml` file defines:
+If you want to generate a new evaluation dataset:
 
-- The prompt template for sentiment analysis
-- Expected JSON response format
-- Binary classification metrics calculation
-- F1 score and related metrics
+1. Install Python dependencies:
 
-## Metrics
+```bash
+pip install -r requirements.txt
+```
+
+2. Run the preparation script:
+
+```bash
+python prepare_data.py
+```
+
+## Metrics Overview
 
 The evaluation tracks:
 
-1. **Basic Metrics**
+- **True/False Positives/Negatives**: Base metrics for classification
+- **Precision**: TP / (TP + FP)
+- **Recall**: TP / (TP + FN)
+- **F1 Score**: 2 _ (precision _ recall) / (precision + recall)
+- **Accuracy**: (TP + TN) / Total
 
-   - Accuracy: Overall correct predictions
-   - True Positives: Correctly identified positive reviews
-   - False Positives: Negative reviews classified as positive
-   - False Negatives: Positive reviews classified as negative
+Each model response includes:
 
-2. **Derived Metrics**
-   - Precision: TP / (TP + FP)
-   - Recall: TP / (TP + FN)
-   - F1 Score: 2 _ (precision _ recall) / (precision + recall)
-
-## Sample Data
-
-The script creates two datasets:
-
-- Training sample: 100 reviews
-- Test sample: 20 reviews
-
-These samples are balanced between positive and negative sentiments to ensure fair evaluation.
-
-## Usage
-
-After setup, you can:
-
-1. Modify the prompt in `promptfooconfig.yaml`
-2. Adjust sample sizes in `prepare_data.py`
-3. Run new evaluations with `promptfoo eval`
-4. View results in the promptfoo web interface
+- Sentiment classification
+- Confidence score (1-10)
+- Reasoning for the decision
 
 ## Notes
 
-- The dataset is sampled to keep evaluation costs manageable
-- Positive/negative labels are converted to text for better readability
-- The F1 score implementation handles edge cases (division by zero)
+- Uses HuggingFace's IMDB dataset (test split)
+- Implements custom F-score metrics using promptfoo's assertion system
+- Labels are in human-readable format (positive/negative)
+- All metrics treat "positive" as the positive class
