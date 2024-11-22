@@ -30,12 +30,7 @@ import TextField from '@mui/material/TextField';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import {
-  DEFAULT_HTTP_TARGET,
-  PROMPT_EXAMPLE,
-  DEFAULT_PURPOSE,
-  useRedTeamConfig,
-} from '../hooks/useRedTeamConfig';
+import { DEFAULT_HTTP_TARGET, DEFAULT_PURPOSE, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../types';
 import Prompts from './Prompts';
 
@@ -155,14 +150,12 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         config: {},
         label: currentLabel,
       });
-      updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'http') {
       setSelectedTarget({
         ...DEFAULT_HTTP_TARGET,
         label: currentLabel,
       });
-      updateConfig('prompts', ['{{prompt}}']);
       updateConfig('purpose', '');
     } else if (value === 'websocket') {
       setSelectedTarget({
@@ -176,7 +169,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           timeoutMs: 30000,
         },
       });
-      updateConfig('prompts', ['{{prompt}}']);
       updateConfig('purpose', '');
     } else if (value === 'browser') {
       setSelectedTarget({
@@ -191,7 +183,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           ],
         },
       });
-      updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     } else {
       setSelectedTarget({
@@ -199,7 +190,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         config: {},
         label: currentLabel,
       });
-      updateConfig('prompts', [PROMPT_EXAMPLE]);
       updateConfig('purpose', DEFAULT_PURPOSE);
     }
   };
