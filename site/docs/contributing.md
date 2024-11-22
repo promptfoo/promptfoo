@@ -67,7 +67,7 @@ We particularly welcome contributions in the following areas:
    This will run the express server on port 15500 and the web UI on port 3000.
    Both the API and UI will be automatically reloaded when you make changes.
 
-   Note: The developement experience is a little bit different than how it runs in production. In development, the web UI is served using a Vite server. In all other environments, the front end is built and served as a static site via the Express server.
+   Note: The development experience is a little bit different than how it runs in production. In development, the web UI is served using a Vite server. In all other environments, the front end is built and served as a static site via the Express server.
 
 If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or join our [Discord community](https://discord.gg/gHPS9jjfbs) for guidance.
 

@@ -1,14 +1,16 @@
 import type { Command } from 'commander';
-import { BrowserBehavior, startServer } from '../../server/server';
+import { DEFAULT_PORT } from '../../constants';
+import { startServer } from '../../server/server';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { setConfigDirectoryPath } from '../../util/config/manage';
+import { BrowserBehavior } from '../../util/server';
 
 export function redteamSetupCommand(program: Command) {
   program
     .command('setup [configDirectory]')
     .description('Start browser ui and open to redteam setup')
-    .option('-p, --port <number>', 'Port number', '15500')
+    .option('-p, --port <number>', 'Port number', DEFAULT_PORT.toString())
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(
