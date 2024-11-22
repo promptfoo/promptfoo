@@ -16,8 +16,9 @@ describe('processYamlFile', () => {
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processYamlFile(filePath, {})).toEqual([
       {
-        raw: fileContent,
-        label: `${filePath}: ${fileContent}`,
+        raw: JSON.stringify({ key: 'value' }),
+        label: `${filePath}: ${JSON.stringify({ key: 'value' })}`,
+        config: undefined,
       },
     ]);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
@@ -29,8 +30,9 @@ describe('processYamlFile', () => {
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processYamlFile(filePath, { label: 'Label' })).toEqual([
       {
-        raw: fileContent,
-        label: `Label`,
+        raw: JSON.stringify({ key: 'value' }),
+        label: 'Label',
+        config: undefined,
       },
     ]);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
