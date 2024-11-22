@@ -669,6 +669,7 @@ export function initCommand(program: Command) {
       ) => {
         setupEnv(opts.envPath);
         try {
+          // Check if we're in a non-GUI environment
           const hasDisplay =
             process.env.DISPLAY || process.platform === 'win32' || process.platform === 'darwin';
           const useGui = opts.gui && hasDisplay;

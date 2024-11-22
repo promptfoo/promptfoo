@@ -20,15 +20,12 @@ export async function openBrowser(
   port = DEFAULT_PORT,
 ): Promise<void> {
   const baseUrl = `http://localhost:${port}`;
-  // Map behavior to paths with proper type checking
-  const BEHAVIOR_PATHS: Partial<Record<BrowserBehavior, string>> = {
-    [BrowserBehavior.OPEN_TO_REPORT]: '/report',
-    [BrowserBehavior.OPEN_TO_REDTEAM_CREATE]: '/redteam/setup',
-  } as const;
-
-  logger.warn(`Opening browser to ${baseUrl}${BEHAVIOR_PATHS[browserBehavior]}`);
-  const path = BEHAVIOR_PATHS[browserBehavior] ?? '';
-  const url = `${baseUrl}${path}`;
+  let url = baseUrl;
+  if (browserBehavior === BrowserBehavior.OPEN_TO_REPORT) {
+    url = `${baseUrl}/report`;
+  } else if (browserBehavior === BrowserBehavior.OPEN_TO_REDTEAM_CREATE) {
+    url = `${baseUrl}/redteam/setup`;
+  }
 
   const doOpen = async () => {
     try {
