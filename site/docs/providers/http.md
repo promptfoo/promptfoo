@@ -371,7 +371,7 @@ providers:
 
 ## Client-side session management
 
-If you want the Promptfoo client to send a session ID with each request, you can add a `transformVars` option to your Promptfoo and redteam config.
+If you want the Promptfoo client to send a unique session or conversation ID with each test case, you can add a `transformVars` option to your Promptfoo or redteam config. This is useful for multi-turn redteam attacks or multi-turn evals where the provider maintains a conversation state.
 
 For example:
 
