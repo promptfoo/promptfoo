@@ -6,7 +6,8 @@ import { z } from 'zod';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
+import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
 import { calculateCost } from './shared';
 

@@ -4,7 +4,8 @@ import {
   OpenAiEmbeddingProvider,
 } from '../../src/providers/openai';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
-import type { ProviderOptions, EnvOverrides } from '../../src/types';
+import type { ProviderOptions } from '../../src/types';
+import type { EnvOverrides } from '../../src/types/env';
 
 jest.mock('../../src/providers/openai');
 

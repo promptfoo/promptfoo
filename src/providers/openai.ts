@@ -8,13 +8,13 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  EnvOverrides,
   ModerationFlag,
   ProviderEmbeddingResponse,
   ProviderModerationResponse,
   ProviderResponse,
   TokenUsage,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
