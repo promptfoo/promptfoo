@@ -27,12 +27,12 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider, calculateAnthropicCost } from './anthropic';
 import { AzureChatCompletionProvider, AzureEmbeddingProvider, calculateAzureCost } from './azure';

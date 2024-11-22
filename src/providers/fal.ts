@@ -2,7 +2,8 @@ import type { Cache } from 'cache-manager';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, CallApiContextParams, EnvOverrides, ProviderResponse } from '../types';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types';
+import type { EnvOverrides } from '../types/env';
 
 type FalProviderOptions = {
   apiKey?: string;

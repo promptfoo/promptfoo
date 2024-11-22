@@ -53,7 +53,7 @@ describe('synthesize', () => {
     jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null | undefined) => {
       throw new Error(`Process.exit called with code ${code}`);
     });
-    jest.mocked(validateStrategies).mockImplementation(() => {});
+    jest.mocked(validateStrategies).mockImplementation(async () => {});
     jest.mocked(cliProgress.SingleBar).mockReturnValue({
       increment: jest.fn(),
       start: jest.fn(),
@@ -219,7 +219,7 @@ describe('synthesize', () => {
       const mockStrategyAction = jest.fn().mockReturnValue([{ test: 'strategy case' }]);
       jest
         .spyOn(Strategies, 'find')
-        .mockReturnValue({ action: mockStrategyAction, key: 'mockStrategy' });
+        .mockReturnValue({ action: mockStrategyAction, id: 'mockStrategy' });
 
       await synthesize({
         language: 'en',

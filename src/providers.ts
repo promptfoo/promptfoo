@@ -80,12 +80,8 @@ import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
 import type { TestSuiteConfig } from './types';
-import type {
-  ApiProvider,
-  EnvOverrides,
-  ProviderOptions,
-  ProviderOptionsMap,
-} from './types/providers';
+import type { EnvOverrides } from './types/env';
+import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from './types/providers';
 import { isJavascriptFile } from './util/file';
 import { getNunjucksEngine } from './util/templates';
 
