@@ -57,6 +57,7 @@ export default class GoatProvider implements ApiProvider {
       prompt: 0,
       completion: 0,
       numRequests: 0,
+      cached: 0,
     };
 
     for (let turn = 0; turn < this.maxTurns; turn++) {
@@ -80,6 +81,8 @@ export default class GoatProvider implements ApiProvider {
         totalTokenUsage.total += data.tokenUsage.total || 0;
         totalTokenUsage.prompt += data.tokenUsage.prompt || 0;
         totalTokenUsage.completion += data.tokenUsage.completion || 0;
+        totalTokenUsage.cached += data.tokenUsage.cached || 0;
+        totalTokenUsage.numRequests += data.tokenUsage.numRequests ?? 1;
       }
       logger.debug(
         dedent`
@@ -97,7 +100,12 @@ export default class GoatProvider implements ApiProvider {
             targetProvider,
           );
       const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
+      logger.debug(`GOAT turn ${turn} target response: ${JSON.stringify(targetResponse)}`);
 
+      if (targetResponse.sessionId) {
+        context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
+        context.vars.sessionId = targetResponse.sessionId;
+      }
       if (targetResponse.error) {
         throw new Error(`Error from target provider: ${targetResponse.error}`);
       }
@@ -115,10 +123,13 @@ export default class GoatProvider implements ApiProvider {
         totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
         totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
         totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
+        totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
       } else {
         totalTokenUsage.numRequests += 1;
       }
     }
+    delete context?.vars?.sessionId;
+
     return {
       output: messages[messages.length - 1]?.content,
       metadata: {

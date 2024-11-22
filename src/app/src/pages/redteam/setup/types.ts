@@ -8,6 +8,16 @@ export interface Config {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  applicationDefinition: {
+    purpose?: string;
+    systemPrompt?: string;
+    redteamUser?: string;
+    accessToData?: string;
+    forbiddenData?: string;
+    accessToActions?: string;
+    forbiddenActions?: string;
+    connectedSystems?: string;
+  };
   entities: string[];
 }
 
@@ -27,6 +37,7 @@ export interface ProviderOptions {
     headless?: boolean;
     timeoutMs?: number;
     responseParser?: string;
+    sessionParser?: string;
     cookies?:
       | Array<{
           name: string;

@@ -104,14 +104,14 @@ describe('harmful plugin', () => {
       });
     });
 
-    it('should handle multiline output by taking first line', () => {
+    it('should handle multiline output', () => {
       const testCase = createTestCase(
         'inputVar',
         'first line\nsecond line\nthird line',
         'harmful:privacy',
       );
 
-      expect(testCase.vars?.inputVar).toBe('first line');
+      expect(testCase.vars?.inputVar).toBe('first line\nsecond line\nthird line');
     });
 
     it('should handle whitespace in output', () => {

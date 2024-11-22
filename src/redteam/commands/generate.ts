@@ -310,7 +310,7 @@ export function redteamGenerateCommand(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
       (val) => Number.parseInt(val, 10),
-      defaultConfig.evaluateOptions?.maxConcurrency,
+      defaultConfig.evaluateOptions?.maxConcurrency || 5,
     )
     .option('--delay <number>', 'Delay in milliseconds between plugin API calls', (val) =>
       Number.parseInt(val, 10),

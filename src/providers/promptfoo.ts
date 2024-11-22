@@ -44,7 +44,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
+  ): Promise<ProviderResponse & { output?: string[] }> {
     const body = {
       email: getUserEmail(),
       harmCategory: this.harmCategory,
@@ -77,7 +77,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       const data = await response.json();
       logger.debug(`promptfoo API call response: ${JSON.stringify(data)}`);
       return {
-        output: data.output,
+        output: [data.output].flat(),
       };
     } catch (err) {
       return {

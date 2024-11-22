@@ -1,0 +1,185 @@
+import { useEffect } from 'react';
+import { useTelemetry } from '@app/hooks/useTelemetry';
+import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import { Alert } from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Grid from '@mui/material/Grid';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import Prompts from './Prompts';
+
+interface PromptsProps {
+  onNext: () => void;
+  onBack: () => void;
+}
+
+export default function Purpose({ onNext, onBack }: PromptsProps) {
+  const { config, updateApplicationDefinition } = useRedTeamConfig();
+  const { recordEvent } = useTelemetry();
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
+  }, []);
+
+  const isPurposePresent = config.purpose && config.purpose.trim() !== '';
+
+  return (
+    <Stack direction="column" spacing={4}>
+      <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+        Application Details
+      </Typography>
+      <Alert severity="info">
+        The more information you provide, the better the redteam attacks will be and the more
+        accurate the results.
+      </Alert>
+
+      <Box>
+        <Stack direction="column" spacing={3}>
+          <Box>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
+              Purpose
+            </Typography>
+            <Typography variant="body1">
+              The primary objective of the AI in this application.
+            </Typography>
+            <TextField
+              fullWidth
+              value={config.applicationDefinition.purpose}
+              onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
+              placeholder="e.g. You are a travel agent specialized in budget trips to Europe."
+              margin="normal"
+              multiline
+              rows={4}
+            />
+          </Box>
+
+          <Box>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
+              Describe the user the redteam application is impersonating
+            </Typography>
+            <TextField
+              fullWidth
+              value={config.applicationDefinition.redteamUser}
+              onChange={(e) => updateApplicationDefinition('redteamUser', e.target.value)}
+              placeholder="e.g. A traveler looking for budget flights to Europe. An employee of the company."
+            />
+          </Box>
+
+          <Box>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
+              Access
+            </Typography>
+            <Typography variant="body1">What data does the user have access to?</Typography>
+            <TextField
+              fullWidth
+              value={config.applicationDefinition.accessToData}
+              onChange={(e) => updateApplicationDefinition('accessToData', e.target.value)}
+              multiline
+              rows={2}
+              placeholder="e.g. Flight prices and schedules, their own profile and purchase history. Basic HR information like holiday schedules, expense policy. 2024 Company plans, budget allocations and org chart."
+            />
+
+            <Typography sx={{ mt: 2 }} variant="body1">
+              What data exists in the system that the user shouldn't have access to?
+            </Typography>
+            <TextField
+              fullWidth
+              value={config.applicationDefinition.forbiddenData}
+              onChange={(e) => updateApplicationDefinition('forbiddenData', e.target.value)}
+              multiline
+              rows={2}
+              placeholder="e.g. Other users' profiles and purchase history. Sensitive company information like financials, strategy, other employee data."
+            />
+
+            <Typography sx={{ mt: 2 }} variant="body1">
+              What actions can the user take?
+            </Typography>
+            <TextField
+              fullWidth
+              value={config.applicationDefinition.accessToActions}
+              onChange={(e) => updateApplicationDefinition('accessToActions', e.target.value)}
+              multiline
+              rows={2}
+              placeholder="e.g. Update their profile, search for flights, book flights, view purchase history, view HR information."
+            />
+
+            <Typography sx={{ mt: 2 }} variant="body1">
+              What actions shouldn't the user be able to take?
+            </Typography>
+            <TextField
+              fullWidth
+              value={config.applicationDefinition.forbiddenActions}
+              onChange={(e) => updateApplicationDefinition('forbiddenActions', e.target.value)}
+              multiline
+              rows={2}
+              placeholder="e.g. Update other users' profile, cancel other users' flights."
+            />
+          </Box>
+
+          <Box>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
+              Connected Systems
+            </Typography>
+            <Typography sx={{ mt: 2 }} variant="body1">
+              What other systems are connected to this one?
+            </Typography>
+            <TextField
+              fullWidth
+              value={config.applicationDefinition.connectedSystems}
+              onChange={(e) => updateApplicationDefinition('connectedSystems', e.target.value)}
+              multiline
+              rows={2}
+              placeholder="e.g. A CRM system for managing customer relationships. Flight booking system. Internal company knowledge base."
+            />
+          </Box>
+
+          <Box>
+            <Prompts />
+          </Box>
+        </Stack>
+
+        <Grid item xs={12}>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              mt: 4,
+            }}
+          >
+            <Button
+              variant="outlined"
+              startIcon={<KeyboardArrowLeftIcon />}
+              onClick={onBack}
+              sx={{
+                px: 4,
+                py: 1,
+              }}
+            >
+              Back
+            </Button>
+            <Button
+              variant="contained"
+              endIcon={<KeyboardArrowRightIcon />}
+              onClick={onNext}
+              disabled={!isPurposePresent}
+              sx={{
+                backgroundColor: '#3498db',
+                '&:hover': { backgroundColor: '#2980b9' },
+                '&:disabled': { backgroundColor: '#bdc3c7' },
+                px: 4,
+                py: 1,
+              }}
+            >
+              Next
+            </Button>
+          </Box>
+        </Grid>
+      </Box>
+    </Stack>
+  );
+}

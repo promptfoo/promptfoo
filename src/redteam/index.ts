@@ -295,17 +295,20 @@ export async function synthesize({
       if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
         logger.warn(`Failed to generate tests for ${plugin.id}`);
         pluginTests = [];
+      } else {
+        testCases.push(
+          ...pluginTests.map((t) => ({
+            ...t,
+            metadata: {
+              ...(t?.metadata || {}),
+              pluginId: plugin.id,
+              pluginConfig: resolvePluginConfig(plugin.config),
+            },
+          })),
+        );
       }
-      testCases.push(
-        ...pluginTests.map((t) => ({
-          ...t,
-          metadata: {
-            ...(t.metadata || {}),
-            pluginId: plugin.id,
-            pluginConfig: resolvePluginConfig(plugin.config),
-          },
-        })),
-      );
+
+      pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
       progressBar?.increment(plugin.numTests);
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
       pluginResults[plugin.id] = {

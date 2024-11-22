@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
@@ -21,12 +22,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import {
-  COLLECTIONS,
   HARM_PLUGINS,
-  PII_PLUGINS,
-  BASE_PLUGINS,
-  ADDITIONAL_PLUGINS,
-  CONFIG_REQUIRED_PLUGINS,
   DEFAULT_PLUGINS,
   ALL_PLUGINS,
   NIST_AI_RMF_MAPPING,
@@ -37,6 +33,7 @@ import {
   subCategoryDescriptions,
   categoryAliases,
   type Plugin,
+  riskCategories,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -63,6 +60,7 @@ const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
+  const { recordEvent } = useTelemetry();
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
@@ -102,6 +100,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     ),
     1000,
   );
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
+  }, []);
 
   useEffect(() => {
     if (debouncedPlugins) {
@@ -149,6 +151,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     name: string;
     plugins: Set<Plugin> | ReadonlySet<Plugin>;
   }) => {
+    recordEvent('feature_used', {
+      feature: 'redteam_config_plugins_preset_selected',
+      preset: preset.name,
+    });
     if (preset.name === 'Custom') {
       setIsCustomMode(true);
     } else {
@@ -429,12 +435,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               sx={{ mb: 3 }}
             />
             <Box sx={{ mb: 3 }}>
-              {renderPluginCategory('Collections', COLLECTIONS)}
-              {renderPluginCategory('Harm Plugins', Object.keys(HARM_PLUGINS) as Plugin[])}
-              {renderPluginCategory('PII Plugins', PII_PLUGINS)}
-              {renderPluginCategory('Base Plugins', BASE_PLUGINS)}
-              {renderPluginCategory('Additional Plugins', ADDITIONAL_PLUGINS)}
-              {renderPluginCategory('Custom Plugins', CONFIG_REQUIRED_PLUGINS)}
+              {Object.entries(riskCategories).map(([category, plugins]) =>
+                renderPluginCategory(category, plugins),
+              )}
             </Box>
           </>
         ) : (

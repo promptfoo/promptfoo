@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -23,6 +24,7 @@ interface PolicyPlugin {
 export default function Review() {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
+  const { recordEvent } = useTelemetry();
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -37,6 +39,12 @@ export default function Review() {
     link.download = 'promptfooconfig.yaml';
     link.click();
     URL.revokeObjectURL(url);
+    recordEvent('feature_used', {
+      feature: 'redteam_config_download',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
   };
 
   const getPluginSummary = useCallback((plugin: string | RedteamPlugin) => {
@@ -199,13 +207,9 @@ export default function Review() {
               Additional Details
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={12}>
                 <Typography variant="subtitle2">Purpose</Typography>
                 <Typography variant="body2">{config.purpose || 'Not specified'}</Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2">Entities</Typography>
-                <Typography variant="body2">{config.entities?.join(', ') || 'None'}</Typography>
               </Grid>
             </Grid>
           </Paper>

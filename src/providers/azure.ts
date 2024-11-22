@@ -1,3 +1,5 @@
+import type { TokenCredential } from '@azure/identity';
+import { ClientSecretCredential, AzureCliCredential } from '@azure/identity';
 import type {
   AssistantsClient,
   AssistantCreationOptions,
@@ -5,6 +7,7 @@ import type {
   RunStepToolCallDetails,
   RunStepMessageCreationDetails,
 } from '@azure/openai-assistants';
+import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
@@ -178,6 +181,14 @@ const AZURE_MODELS = [
   },
 ];
 
+function throwConfigurationError(message: string): never {
+  throw new Error(dedent`
+    ${message}
+
+    See https://www.promptfoo.dev/docs/providers/azure/ to learn more about Azure configuration.
+  `);
+}
+
 export function calculateAzureCost(
   modelName: string,
   config: AzureCompletionOptions,
@@ -200,6 +211,10 @@ export class AzureGenericProvider implements ApiProvider {
 
   config: AzureCompletionOptions;
   env?: EnvOverrides;
+
+  authHeaders?: Record<string, string>;
+
+  protected initializationPromise: Promise<void> | null = null;
 
   constructor(
     deploymentName: string,
@@ -228,60 +243,101 @@ export class AzureGenericProvider implements ApiProvider {
 
     this.config = config || {};
     this.id = id ? () => id : this.id;
+
+    this.initializationPromise = this.initialize();
   }
 
-  _cachedApiKey?: string;
-  async getApiKey(): Promise<string> {
-    if (!this._cachedApiKey) {
-      const apiKey =
-        this.config?.apiKey ||
-        (this.config?.apiKeyEnvar
-          ? process.env[this.config.apiKeyEnvar] ||
-            this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-          : undefined) ||
-        this.env?.AZURE_API_KEY ||
-        getEnvString('AZURE_API_KEY') ||
-        this.env?.AZURE_OPENAI_API_KEY ||
-        getEnvString('AZURE_OPENAI_API_KEY');
+  async initialize() {
+    this.authHeaders = await this.getAuthHeaders();
+  }
 
-      if (apiKey) {
-        this._cachedApiKey = apiKey;
-        return this._cachedApiKey;
-      }
-
-      const clientSecret =
-        this.config?.azureClientSecret ||
-        this.env?.AZURE_CLIENT_SECRET ||
-        getEnvString('AZURE_CLIENT_SECRET');
-      const clientId =
-        this.config?.azureClientId || this.env?.AZURE_CLIENT_ID || getEnvString('AZURE_CLIENT_ID');
-      const tenantId =
-        this.config?.azureTenantId || this.env?.AZURE_TENANT_ID || getEnvString('AZURE_TENANT_ID');
-      const authorityHost =
-        this.config?.azureAuthorityHost ||
-        this.env?.AZURE_AUTHORITY_HOST ||
-        getEnvString('AZURE_AUTHORITY_HOST');
-      const tokenScope =
-        this.config?.azureTokenScope ||
-        this.env?.AZURE_TOKEN_SCOPE ||
-        getEnvString('AZURE_TOKEN_SCOPE');
-
-      if (clientSecret && clientId && tenantId) {
-        const { ClientSecretCredential } = await import('@azure/identity');
-        const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
-          authorityHost: authorityHost || 'https://login.microsoftonline.com',
-        });
-        this._cachedApiKey = (
-          await credential.getToken(tokenScope || 'https://cognitiveservices.azure.com/.default')
-        ).token;
-        return this._cachedApiKey;
-      }
-
-      throw new Error(
-        'Azure authentication failed. Please provide either an API key via AZURE_API_KEY or client credentials via AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and AZURE_TENANT_ID',
-      );
+  async ensureInitialized() {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
     }
-    return this._cachedApiKey;
+  }
+
+  getApiKey(): string | undefined {
+    return (
+      this.config?.apiKey ||
+      (this.config?.apiKeyEnvar
+        ? process.env[this.config.apiKeyEnvar] ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.AZURE_API_KEY ||
+      getEnvString('AZURE_API_KEY') ||
+      this.env?.AZURE_OPENAI_API_KEY ||
+      getEnvString('AZURE_OPENAI_API_KEY')
+    );
+  }
+
+  getApiKeyOrThrow(): string {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throwConfigurationError('Azure API key must be set.');
+    }
+    return apiKey;
+  }
+
+  getAzureTokenCredential(): TokenCredential {
+    const clientSecret =
+      this.config?.azureClientSecret ||
+      this.env?.AZURE_CLIENT_SECRET ||
+      getEnvString('AZURE_CLIENT_SECRET');
+    const clientId =
+      this.config?.azureClientId || this.env?.AZURE_CLIENT_ID || getEnvString('AZURE_CLIENT_ID');
+    const tenantId =
+      this.config?.azureTenantId || this.env?.AZURE_TENANT_ID || getEnvString('AZURE_TENANT_ID');
+    const authorityHost =
+      this.config?.azureAuthorityHost ||
+      this.env?.AZURE_AUTHORITY_HOST ||
+      getEnvString('AZURE_AUTHORITY_HOST');
+
+    if (clientSecret && clientId && tenantId) {
+      const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
+        authorityHost: authorityHost || 'https://login.microsoftonline.com',
+      });
+      return credential;
+    }
+
+    //fallback to Azure CLI
+    const credential = new AzureCliCredential();
+    return credential;
+  }
+
+  async getAccessToken() {
+    const credential = this.getAzureTokenCredential();
+    const tokenScope =
+      this.config?.azureTokenScope ||
+      this.env?.AZURE_TOKEN_SCOPE ||
+      getEnvString('AZURE_TOKEN_SCOPE');
+    const tokenResponse = await credential.getToken(
+      tokenScope || 'https://cognitiveservices.azure.com/.default',
+    );
+    if (!tokenResponse) {
+      throwConfigurationError('Failed to retrieve access token.');
+    }
+    return tokenResponse.token;
+  }
+
+  async getAuthHeaders(): Promise<Record<string, string>> {
+    const apiKey = this.getApiKey();
+    if (apiKey) {
+      return { 'api-key': apiKey };
+    } else {
+      try {
+        const token = await this.getAccessToken();
+        return { Authorization: 'Bearer ' + token };
+      } catch (err) {
+        logger.info('Azure Authentication failed. Please check your credentials.', err);
+        throw new Error(`Azure Authentication failed. 
+Please choose one of the following options:
+  1. Set an API key via the AZURE_API_KEY environment variable.
+  2. Provide client credentials (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID).
+  3. Authenticate with Azure CLI using az login.
+    `);
+      }
+    }
   }
 
   getApiBaseUrl(): string | undefined {
@@ -300,7 +356,7 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   toString(): string {
-    return `[Azure OpenAI Provider ${this.deploymentName}]`;
+    return `[Azure Provider ${this.deploymentName}]`;
   }
 
   // @ts-ignore: Params are not used in this implementation
@@ -315,12 +371,10 @@ export class AzureGenericProvider implements ApiProvider {
 
 export class AzureEmbeddingProvider extends AzureGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    const apiKey = await this.getApiKey();
-    if (!apiKey) {
-      throw new Error('Azure OpenAI API key must be set for similarity comparison');
-    }
+    await this.ensureInitialized();
+    invariant(this.authHeaders, 'auth headers are not initialized');
     if (!this.getApiBaseUrl()) {
-      throw new Error('Azure OpenAI API host must be set');
+      throwConfigurationError('Azure API host must be set.');
     }
 
     const body = {
@@ -338,7 +392,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'api-key': apiKey,
+            ...this.authHeaders,
           },
           body: JSON.stringify(body),
         },
@@ -354,7 +408,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
         },
       };
     }
-    logger.debug(`\tAzure OpenAI API response (embeddings): ${JSON.stringify(data)}`);
+    logger.debug(`\tAzure API response (embeddings): ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;
@@ -396,14 +450,11 @@ export class AzureCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const apiKey = await this.getApiKey();
-    if (!apiKey) {
-      throw new Error(
-        'Azure OpenAI API key is not set. Set AZURE_API_KEY environment variable or pass it as an argument to the constructor.',
-      );
-    }
+    await this.ensureInitialized();
+    invariant(this.authHeaders, 'auth headers are not initialized');
+
     if (!this.getApiBaseUrl()) {
-      throw new Error('Azure OpenAI API host must be set');
+      throwConfigurationError('Azure API host must be set.');
     }
 
     let stop: string;
@@ -432,7 +483,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
-    logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
+    logger.debug(`Calling Azure API: ${JSON.stringify(body)}`);
     let data,
       cached = false;
     try {
@@ -444,7 +495,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'api-key': apiKey,
+            ...this.authHeaders,
           },
           body: JSON.stringify(body),
         },
@@ -455,7 +506,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tAzure OpenAI API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tAzure API response: ${JSON.stringify(data)}`);
     try {
       return {
         output: data.choices[0].text,
@@ -547,14 +598,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const apiKey = await this.getApiKey();
-    if (!apiKey) {
-      throw new Error(
-        'Azure OpenAI API key is not set. Set AZURE_API_KEY environment variable or pass it as an argument to the constructor.',
-      );
-    }
+    await this.ensureInitialized();
+    invariant(this.authHeaders, 'auth headers are not initialized');
+
     if (!this.getApiBaseUrl()) {
-      throw new Error('Azure OpenAI API host must be set');
+      throwConfigurationError('Azure API host must be set.');
     }
 
     const body = this.getOpenAiBody(prompt, context, callApiOptions);
@@ -578,7 +626,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'api-key': apiKey,
+            ...this.authHeaders,
           },
           body: JSON.stringify(body),
         },
@@ -590,7 +638,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`\tAzure OpenAI API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tAzure API response: ${JSON.stringify(data)}`);
     try {
       if (data.error) {
         return {
@@ -652,7 +700,6 @@ type AzureAssistantOptions = AzureCompletionOptions &
 export class AzureAssistantProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   assistantsClient: AssistantsClient | undefined;
-  private initializationPromise: Promise<void> | null = null;
 
   constructor(
     deploymentName: string,
@@ -665,16 +712,18 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   }
 
   async initialize() {
-    const apiKey = await this.getApiKey();
+    await super.initialize();
+
+    const apiKey = this.getApiKey();
     if (!apiKey) {
-      throw new Error('Azure OpenAI API key must be set');
+      throwConfigurationError('Azure API key must be set.');
     }
 
     const { AssistantsClient, AzureKeyCredential } = await import('@azure/openai-assistants');
 
     const apiBaseUrl = this.getApiBaseUrl();
     if (!apiBaseUrl) {
-      throw new Error('Azure OpenAI API host must be set');
+      throwConfigurationError('Azure API host must be set.');
     }
     this.assistantsClient = new AssistantsClient(apiBaseUrl, new AzureKeyCredential(apiKey));
     this.initializationPromise = null;
@@ -694,7 +743,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     await this.ensureInitialized();
     invariant(this.assistantsClient, 'Assistants client not initialized');
     if (!this.getApiBaseUrl()) {
-      throw new Error('Azure OpenAI API host must be set');
+      throwConfigurationError('Azure API host must be set.');
     }
 
     const assistantId = this.deploymentName;

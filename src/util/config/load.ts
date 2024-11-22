@@ -367,7 +367,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
           typeof prompt === 'string' ||
             (typeof prompt === 'object' &&
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
-          'Invalid prompt',
+          `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
         addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
       });

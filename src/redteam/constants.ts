@@ -87,7 +87,6 @@ export const BASE_PLUGINS = [
   'excessive-agency',
   'hallucination',
   'hijacking',
-  'overreliance',
   'politics',
 ] as const;
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
@@ -100,6 +99,7 @@ export const ADDITIONAL_PLUGINS = [
   'debug-access',
   'imitation',
   'indirect-prompt-injection',
+  'overreliance',
   'prompt-extraction',
   'rbac',
   'religion',

@@ -6,6 +6,7 @@ import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
+import telemetry from '../telemetry';
 import type {
   ApiProvider,
   ApiEmbeddingProvider,
@@ -704,6 +705,13 @@ export abstract class AwsBedrockGenericProvider {
     this.modelName = modelName;
     this.config = config || {};
     this.id = id ? () => id : this.id;
+
+    if (this.config.guardrailIdentifier) {
+      telemetry.recordAndSendOnce('feature_used', {
+        feature: 'guardrail',
+        provider: 'bedrock',
+      });
+    }
   }
 
   id(): string {

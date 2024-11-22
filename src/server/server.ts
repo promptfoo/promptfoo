@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
 import debounce from 'debounce';
+import dedent from 'dedent';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type { Stats } from 'fs';
@@ -46,6 +47,7 @@ export enum BrowserBehavior {
   OPEN = 1,
   SKIP = 2,
   OPEN_TO_REPORT = 3,
+  OPEN_TO_REDTEAM_CREATE = 4,
 }
 
 export function createApp() {
@@ -73,7 +75,6 @@ export function createApp() {
         return {
           ...meta,
           label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
-          isRedTeam: meta.isRedteam,
         };
       }),
     });
@@ -221,6 +222,8 @@ export function startServer(
           logger.info('Press Ctrl+C to stop the server');
           if (browserBehavior === BrowserBehavior.OPEN_TO_REPORT) {
             await opener(`${url}/report`);
+          } else if (browserBehavior === BrowserBehavior.OPEN_TO_REDTEAM_CREATE) {
+            await opener(`${url}/redteam/setup`);
           } else {
             await opener(url);
           }
@@ -231,7 +234,8 @@ export function startServer(
 
       if (
         browserBehavior === BrowserBehavior.OPEN ||
-        browserBehavior === BrowserBehavior.OPEN_TO_REPORT
+        browserBehavior === BrowserBehavior.OPEN_TO_REPORT ||
+        browserBehavior === BrowserBehavior.OPEN_TO_REDTEAM_CREATE
       ) {
         openUrl();
       } else if (browserBehavior === BrowserBehavior.ASK) {
@@ -250,7 +254,12 @@ export function startServer(
     .on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
         logger.error(
-          `Unable to start server on port ${port}. It's currently in use. Check for existing promptfoo instances.`,
+          dedent`Port ${port} is already in use. Do you have another Promptfoo instance running?
+
+          To resolve this:
+            1. Check if another promptfoo instance is running (try 'ps aux | grep promptfoo')
+            2. Kill the process using the port: 'lsof -i :${port}' then 'kill <PID>'
+            3. Or specify a different port with --port <number>`,
         );
         process.exit(1);
       } else {

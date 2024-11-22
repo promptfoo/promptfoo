@@ -191,6 +191,10 @@ tests:
 
 If the LLM outputs `Goodbye world`, the `equals` assertion fails but the `contains` assertion passes and the final score is 0.33. Because this is below the 0.5 threshold, the test case fails. If the threshold were lowered to 0.2, the test case would succeed.
 
+:::info
+If weight is set to 0, the assertion automatically passes.
+:::
+
 ## Load assertions from external file
 
 #### Raw files
