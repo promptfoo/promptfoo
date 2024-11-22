@@ -25,6 +25,7 @@ export * from './prompts';
 export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
+export type { EnvOverrides } from './env';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
