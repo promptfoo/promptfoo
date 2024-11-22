@@ -37,15 +37,22 @@ export async function openBrowser(
   };
 
   if (browserBehavior === BrowserBehavior.ASK) {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    rl.question('Open URL in browser? (y/N): ', async (answer) => {
-      if (answer.toLowerCase().startsWith('y')) {
-        await doOpen();
+    return new Promise((resolve, reject) => {
+      try {
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+        rl.question('Open URL in browser? (y/N): ', async (answer) => {
+          if (answer.toLowerCase().startsWith('y')) {
+            await doOpen();
+          }
+          rl.close();
+          resolve();
+        });
+      } catch (err) {
+        reject(err);
       }
-      rl.close();
     });
   } else if (browserBehavior !== BrowserBehavior.SKIP) {
     await doOpen();
