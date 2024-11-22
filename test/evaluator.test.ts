@@ -636,6 +636,65 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
+  it('evaluate with context in vars transform in defaultTest', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Hello {{ name }}, your age is {{ age }}')],
+      defaultTest: {
+        options: {
+          transformVars: `return {
+              ...vars,
+              // Test that context.uuid is available
+              id: context.uuid,
+              // Test that context.prompt is available but empty
+              hasPrompt: Boolean(context.prompt)
+            }`,
+        },
+      },
+      tests: [
+        {
+          vars: {
+            name: 'Alice',
+            age: 25,
+          },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            vars: expect.objectContaining({
+              id: expect.stringMatching(
+                /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+              ),
+              hasPrompt: true,
+            }),
+          }),
+        ]),
+      }),
+    );
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('evaluate with provider transform and test transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider-transform'),

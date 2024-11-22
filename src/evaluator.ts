@@ -1,6 +1,7 @@
 import async from 'async';
 import chalk from 'chalk';
 import type { MultiBar, SingleBar } from 'cli-progress';
+import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
@@ -30,7 +31,7 @@ import type {
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { sleep } from './util/time';
-import { transform, TransformInputType } from './util/transform';
+import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -508,12 +509,14 @@ class Evaluator {
         const inputTransformForIndividualTest = testCase.options?.transformVars;
         const inputTransform = inputTransformForIndividualTest || inputTransformDefault;
         if (inputTransform) {
+          const transformContext: TransformContext = {
+            prompt: {},
+            uuid: randomUUID(),
+          };
           const transformedVars = await transform(
             inputTransform,
             testCase.vars,
-            {
-              prompt: {},
-            },
+            transformContext,
             true,
             TransformInputType.VARS,
           );

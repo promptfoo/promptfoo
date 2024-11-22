@@ -340,7 +340,7 @@ providers:
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
 
-## Maintaining session IDs with an HTTP provider and Multi-turn redteam attacks like GOAT and Crescendo
+## Server-side session management
 
 When using an HTTP provider with multi-turn redteam attacks like GOAT and Crescendo, you may need to maintain session IDs between rounds. The HTTP provider will automatically extract the session ID from the response headers and store it in the `vars` object.
 
@@ -367,6 +367,31 @@ providers:
       url: 'https://example.com/api'
       headers:
         'Cookie': '{{sessionId}}'
+```
+
+## Client-side session management
+
+If you want the Promptfoo client to send a unique session or conversation ID with each test case, you can add a `transformVars` option to your Promptfoo or redteam config. This is useful for multi-turn redteam attacks or multi-turn evals where the provider maintains a conversation state.
+
+For example:
+
+```yaml
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: "{{context.uuid}}" }'
+```
+
+Now you can use the `sessionId` variable in your HTTP target config:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      headers:
+        'x-promptfoo-session': '{{sessionId}}'
+      body:
+        user_message: '{{prompt}}'
 ```
 
 ## Reference
