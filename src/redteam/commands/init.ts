@@ -10,6 +10,7 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
+import { DEFAULT_PORT } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
@@ -18,6 +19,7 @@ import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
 import { setupEnv } from '../../util';
+import { checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
   type Plugin,
@@ -667,14 +669,18 @@ export function initCommand(program: Command) {
       ) => {
         setupEnv(opts.envPath);
         try {
-          // Check if we're in a non-GUI environment
           const hasDisplay =
             process.env.DISPLAY || process.platform === 'win32' || process.platform === 'darwin';
           const useGui = opts.gui && hasDisplay;
 
           if (useGui) {
-            // Start the server and open browser to redteam setup
-            await startServer(15500, BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
+            const isRunning = await checkServerRunning();
+
+            if (isRunning) {
+              await openBrowser(BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
+            } else {
+              await startServer(DEFAULT_PORT, BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
+            }
           } else {
             await redteamInit(directory);
           }

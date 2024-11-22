@@ -8,13 +8,11 @@ import type { Stats } from 'fs';
 import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
-import readline from 'node:readline';
-import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
-import { VERSION } from '../constants';
+import { VERSION, DEFAULT_PORT } from '../constants';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
@@ -33,6 +31,7 @@ import {
   getLatestEval,
   getStandaloneEvals,
 } from '../util';
+import { openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { providersRouter } from './routes/providers';
@@ -182,7 +181,7 @@ export function createApp() {
 }
 
 export function startServer(
-  port = 15500,
+  port = DEFAULT_PORT,
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
 ) {
@@ -216,40 +215,9 @@ export function startServer(
     .listen(port, () => {
       const url = `http://localhost:${port}`;
       logger.info(`Server running at ${url} and monitoring for new evals.`);
-
-      const openUrl = async () => {
-        try {
-          logger.info('Press Ctrl+C to stop the server');
-          if (browserBehavior === BrowserBehavior.OPEN_TO_REPORT) {
-            await opener(`${url}/report`);
-          } else if (browserBehavior === BrowserBehavior.OPEN_TO_REDTEAM_CREATE) {
-            await opener(`${url}/redteam/setup`);
-          } else {
-            await opener(url);
-          }
-        } catch (err) {
-          logger.error(`Failed to open browser: ${String(err)}`);
-        }
-      };
-
-      if (
-        browserBehavior === BrowserBehavior.OPEN ||
-        browserBehavior === BrowserBehavior.OPEN_TO_REPORT ||
-        browserBehavior === BrowserBehavior.OPEN_TO_REDTEAM_CREATE
-      ) {
-        openUrl();
-      } else if (browserBehavior === BrowserBehavior.ASK) {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-        rl.question('Open URL in browser? (y/N): ', async (answer) => {
-          if (answer.toLowerCase().startsWith('y')) {
-            openUrl();
-          }
-          rl.close();
-        });
-      }
+      openBrowser(browserBehavior, port).catch((err) => {
+        logger.error(`Failed to handle browser behavior: ${err}`);
+      });
     })
     .on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {

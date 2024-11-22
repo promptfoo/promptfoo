@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { DEFAULT_PORT } from '../constants';
 import { BrowserBehavior, startServer } from '../server/server';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
@@ -8,7 +9,7 @@ export function viewCommand(program: Command) {
   program
     .command('view [directory]')
     .description('Start browser ui')
-    .option('-p, --port <number>', 'Port number', '15500')
+    .option('-p, --port <number>', 'Port number', DEFAULT_PORT.toString())
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
