@@ -14,7 +14,7 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
 import { loadRedteamProvider } from './providers/shared';
-import { Strategies, validateStrategies } from './strategies';
+import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import type { SynthesizeOptions } from './types';
 
 /**
@@ -358,14 +358,24 @@ export async function synthesize({
         `\n• Total expected tests: ${chalk.cyan(existingTestCount + totalStrategyTests)}`,
     );
 
-    for (const { key, action } of Strategies) {
-      const strategy = strategies.find((s) => s.id === key);
-      if (!strategy) {
-        continue;
+    for (const strategy of strategies) {
+      progressBar?.update({ task: `Applying strategy: ${strategy.id}` });
+      logger.debug(`Generating ${strategy.id} tests`);
+
+      let strategyAction;
+      if (strategy.id.startsWith('file://')) {
+        const loadedStrategy = await loadStrategy(strategy.id);
+        strategyAction = loadedStrategy.action;
+      } else {
+        const builtinStrategy = Strategies.find((s) => s.id === strategy.id);
+        if (!builtinStrategy) {
+          logger.warn(`Strategy ${strategy.id} not registered, skipping`);
+          continue;
+        }
+        strategyAction = builtinStrategy.action;
       }
-      progressBar?.update({ task: `Applying strategy: ${key}` });
-      logger.debug(`Generating ${key} tests`);
-      const strategyTestCases: TestCase[] = await action(
+
+      const strategyTestCases: TestCase[] = await strategyAction(
         testCases,
         injectVar,
         strategy.config || {},
@@ -386,9 +396,9 @@ export async function synthesize({
             })),
         );
       } catch (e) {
-        logger.warn(`Strategy ${key} did not return valid test cases: ${e}`);
+        logger.warn(`Strategy ${strategy.id} did not return valid test cases: ${e}`);
       }
-      strategyResults[key] = {
+      strategyResults[strategy.id] = {
         requested: testCases.length,
         generated: strategyTestCases.length,
       };

@@ -1,6 +1,7 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides } from '../types';
+import type { ApiProvider } from '../types';
+import type { EnvOverrides } from '../types/env';
 import {
   DefaultGradingProvider as AnthropicGradingProvider,
   DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
