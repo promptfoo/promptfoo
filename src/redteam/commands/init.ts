@@ -27,6 +27,7 @@ import {
   DEFAULT_STRATEGIES,
   type Strategy,
   subCategoryDescriptions,
+  HARM_PLUGINS,
 } from '../constants';
 import { doGenerateRedteam } from './generate';
 
@@ -571,6 +572,20 @@ export async function redteamInit(directory: string | undefined) {
         }
       }
     }
+  }
+
+  // Remove harmful plugin collection if all harmful plugins are already selected
+  if (
+    plugins
+      .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
+      .includes('harmful') &&
+    Object.keys(HARM_PLUGINS).every((plugin: string) =>
+      plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)).includes(plugin),
+    )
+  ) {
+    plugins = plugins.filter((plugin) =>
+      typeof plugin === 'string' ? plugin !== 'harmful' : plugin.id !== 'harmful',
+    );
   }
 
   const numTests = 5;
