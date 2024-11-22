@@ -31,6 +31,7 @@ import {
   getLatestEval,
   getStandaloneEvals,
 } from '../util';
+import { BrowserBehavior } from '../util/server';
 import { openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
@@ -40,14 +41,6 @@ import { userRouter } from './routes/user';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
-
-export enum BrowserBehavior {
-  ASK = 0,
-  OPEN = 1,
-  SKIP = 2,
-  OPEN_TO_REPORT = 3,
-  OPEN_TO_REDTEAM_CREATE = 4,
-}
 
 export function createApp() {
   const app = express();

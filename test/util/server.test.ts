@@ -1,7 +1,7 @@
 import opener from 'opener';
 import { VERSION, DEFAULT_PORT } from '../../src/constants';
 import logger from '../../src/logger';
-import { BrowserBehavior } from '../../src/server/server';
+import { BrowserBehavior } from '../../src/util/server';
 import { checkServerRunning, openBrowser } from '../../src/util/server';
 
 jest.mock('opener');

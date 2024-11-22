@@ -2,7 +2,14 @@ import opener from 'opener';
 import readline from 'readline';
 import { VERSION, DEFAULT_PORT } from '../constants';
 import logger from '../logger';
-import { BrowserBehavior } from '../server/server';
+
+export enum BrowserBehavior {
+  ASK = 0,
+  OPEN = 1,
+  SKIP = 2,
+  OPEN_TO_REPORT = 3,
+  OPEN_TO_REDTEAM_CREATE = 4,
+}
 
 export async function checkServerRunning(port = DEFAULT_PORT): Promise<boolean> {
   try {
