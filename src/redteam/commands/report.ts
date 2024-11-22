@@ -32,8 +32,7 @@ export function redteamReportCommand(program: Command) {
           setConfigDirectoryPath(directory);
         }
 
-        const browserBehavior = BrowserBehavior.OPEN_TO_REPORT;
-        await startServer(cmdObj.port, browserBehavior, cmdObj.filterDescription);
+        await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT, cmdObj.filterDescription);
       },
     );
 }

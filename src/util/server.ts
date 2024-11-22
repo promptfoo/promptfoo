@@ -4,12 +4,6 @@ import { VERSION, DEFAULT_PORT } from '../constants';
 import logger from '../logger';
 import { BrowserBehavior } from '../server/server';
 
-// Map behavior to paths with proper type checking
-const BEHAVIOR_PATHS: Partial<Record<BrowserBehavior, string>> = {
-  [BrowserBehavior.OPEN_TO_REPORT]: '/report',
-  [BrowserBehavior.OPEN_TO_REDTEAM_CREATE]: '/redteam/setup',
-} as const;
-
 export async function checkServerRunning(port = DEFAULT_PORT): Promise<boolean> {
   try {
     const response = await fetch(`http://localhost:${port}/health`);
@@ -26,6 +20,13 @@ export async function openBrowser(
   port = DEFAULT_PORT,
 ): Promise<void> {
   const baseUrl = `http://localhost:${port}`;
+  // Map behavior to paths with proper type checking
+  const BEHAVIOR_PATHS: Partial<Record<BrowserBehavior, string>> = {
+    [BrowserBehavior.OPEN_TO_REPORT]: '/report',
+    [BrowserBehavior.OPEN_TO_REDTEAM_CREATE]: '/redteam/setup',
+  } as const;
+
+  logger.warn(`Opening browser to ${baseUrl}${BEHAVIOR_PATHS[browserBehavior]}`);
   const path = BEHAVIOR_PATHS[browserBehavior] ?? '';
   const url = `${baseUrl}${path}`;
 
