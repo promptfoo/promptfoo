@@ -10,10 +10,10 @@ import telemetry from '../telemetry';
 import type {
   ApiProvider,
   ApiEmbeddingProvider,
-  EnvOverrides,
   ProviderResponse,
   ProviderEmbeddingResponse,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';

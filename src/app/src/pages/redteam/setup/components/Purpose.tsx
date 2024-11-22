@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { Alert } from '@mui/material';
@@ -17,6 +19,11 @@ interface PromptsProps {
 
 export default function Purpose({ onNext, onBack }: PromptsProps) {
   const { config, updateApplicationDefinition } = useRedTeamConfig();
+  const { recordEvent } = useTelemetry();
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
+  }, []);
 
   const isPurposePresent = config.purpose && config.purpose.trim() !== '';
 

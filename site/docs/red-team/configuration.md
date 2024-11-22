@@ -482,6 +482,17 @@ See [Strategies](/docs/category/strategies/) for comprehensive descriptions of e
 
 Strategies are applied after regular plugins generate their test cases. They do not support `numTests` and the number of additional test cases varies by strategy.
 
+#### Custom Strategies
+
+Custom strategies are JavaScript files that implement a `action` function. You can use them to apply transformations to the base test cases.
+
+See the [example custom strategy](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-custom-strategy) for more information.
+
+```yaml
+strategies:
+  - id: file://path/to/custom-strategy.js
+```
+
 ### Purpose
 
 The `purpose` field provides context to guide the generation of adversarial inputs. It is derived automatically, or you can set it.
@@ -577,8 +588,9 @@ For example, to send a customized HTTP request, use a [HTTP Provider](/docs/prov
 
 ```yaml
 targets:
-  - id: 'https://example.com/generate'
+  - id: https
     config:
+      url: 'https://example.com/api'
       method: 'POST'
       headers:
         'Content-Type': 'application/json'

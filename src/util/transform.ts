@@ -8,6 +8,7 @@ import { isJavascriptFile } from './file';
 export type TransformContext = {
   vars?: Vars;
   prompt: Partial<Prompt>;
+  uuid?: string;
 };
 
 export enum TransformInputType {

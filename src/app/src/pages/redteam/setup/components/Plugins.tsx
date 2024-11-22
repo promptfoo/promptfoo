@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
@@ -59,6 +60,7 @@ const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
+  const { recordEvent } = useTelemetry();
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
@@ -98,6 +100,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     ),
     1000,
   );
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
+  }, []);
 
   useEffect(() => {
     if (debouncedPlugins) {
@@ -145,6 +151,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     name: string;
     plugins: Set<Plugin> | ReadonlySet<Plugin>;
   }) => {
+    recordEvent('feature_used', {
+      feature: 'redteam_config_plugins_preset_selected',
+      preset: preset.name,
+    });
     if (preset.name === 'Custom') {
       setIsCustomMode(true);
     } else {

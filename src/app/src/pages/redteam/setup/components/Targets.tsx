@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -69,6 +70,10 @@ const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean 
   }
 };
 
+const requiresResponseParser = (target: ProviderOptions) => {
+  return target.id === 'http' || target.id === 'websocket';
+};
+
 const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
@@ -91,6 +96,10 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     providerResponse?: {
       raw: string;
       output: string;
+      sessionId?: string;
+      metadata?: {
+        headers?: Record<string, string>;
+      };
     };
   } | null>(null);
   const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
@@ -103,6 +112,13 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   );
 
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [hasTestedTarget, setHasTestedTarget] = useState(false);
+
+  const { recordEvent } = useTelemetry();
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_targets' });
+  }, []);
 
   useEffect(() => {
     updateConfig('target', selectedTarget);
@@ -127,6 +143,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;
     const currentLabel = selectedTarget.label;
+    recordEvent('feature_used', { feature: 'redteam_config_target_changed', target: value });
 
     if (value === 'javascript' || value === 'python') {
       const filePath =
@@ -290,6 +307,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   const handleTestTarget = async () => {
     setTestingTarget(true);
     setTestResult(null);
+    recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
       const response = await callApi('/providers/test', {
         method: 'POST',
@@ -304,8 +322,8 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
       }
 
       const data = await response.json();
-
       const result = data.test_result;
+
       if (result.error) {
         setTestResult({
           success: false,
@@ -325,6 +343,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           message: 'Target configuration is valid!',
           providerResponse: data.provider_response,
         });
+        setHasTestedTarget(true);
       }
     } catch (error) {
       console.error('Error testing target:', error);
@@ -514,17 +533,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                 maxRows={10}
                 InputProps={{
                   inputComponent: TextareaAutosize,
-                }}
-              />
-              <TextField
-                fullWidth
-                label="Response Parser"
-                value={selectedTarget.config.responseParser}
-                placeholder="Optional: A Javascript expression to parse the response. E.g. json.choices[0].message.content"
-                onChange={(e) => updateCustomTarget('responseParser', e.target.value)}
-                margin="normal"
-                InputLabelProps={{
-                  shrink: true,
                 }}
               />
             </Box>
@@ -850,19 +858,20 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
               Test Target Configuration
             </Typography>
             <Button
-              variant="outlined"
+              variant="contained"
               onClick={handleTestTarget}
               disabled={testingTarget || !selectedTarget.config.url}
               startIcon={testingTarget ? <CircularProgress size={20} /> : null}
+              color="primary"
             >
               {testingTarget ? 'Testing...' : 'Test Target'}
             </Button>
           </Stack>
 
           {!selectedTarget.config.url && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Please enter a valid URL to test the target.
-            </Typography>
+            <Alert severity="info">
+              Please configure the HTTP endpoint above and click "Test Target" to proceed.
+            </Alert>
           )}
 
           {testResult && (
@@ -870,7 +879,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
               <Alert severity={testResult.success ? 'success' : 'error'}>
                 {testResult.message}
               </Alert>
-              <Accordion sx={{ mt: 2 }}>
+              <Accordion sx={{ mt: 2 }} expanded>
                 <AccordionSummary
                   expandIcon={<ExpandMoreIcon />}
                   aria-controls="provider-response-content"
@@ -880,8 +889,25 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                 </AccordionSummary>
                 <AccordionDetails>
                   <Typography variant="subtitle2" gutterBottom>
+                    Headers:
+                  </Typography>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 2,
+                      bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                      maxHeight: '200px',
+                      overflow: 'auto',
+                    }}
+                  >
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {JSON.stringify(testResult.providerResponse?.metadata?.headers, null, 2)}
+                    </pre>
+                  </Paper>
+                  <Typography variant="subtitle2" gutterBottom>
                     Raw Result:
                   </Typography>
+
                   <Paper
                     elevation={0}
                     sx={{
@@ -904,6 +930,17 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                   >
                     <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {JSON.stringify(testResult.providerResponse?.output, null, 2)}
+                    </pre>
+                  </Paper>
+                  <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
+                    Session ID:
+                  </Typography>
+                  <Paper
+                    elevation={0}
+                    sx={{ p: 2, bgcolor: 'grey.100', maxHeight: '200px', overflow: 'auto' }}
+                  >
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {testResult.providerResponse?.sessionId}
                     </pre>
                   </Paper>
                 </AccordionDetails>
@@ -933,6 +970,53 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
                   </Paper>
                 </Box>
               )}
+            </Box>
+          )}
+
+          {requiresResponseParser(selectedTarget) && (
+            <Box mt={4}>
+              <Typography variant="h6" gutterBottom>
+                Configure Response Parser
+              </Typography>
+              <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+                <TextField
+                  fullWidth
+                  label="Response Parser"
+                  value={selectedTarget.config.responseParser}
+                  placeholder="Optional: A Javascript expression to parse the response. E.g. json.choices[0].message.content"
+                  onChange={(e) => updateCustomTarget('responseParser', e.target.value)}
+                  margin="normal"
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Based on the test response above, configure how to extract the relevant content
+                  from the response.
+                </Typography>
+              </Box>
+              <Box mt={4}>
+                <Typography variant="h6" gutterBottom>
+                  Configure Session Parser
+                </Typography>
+                <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+                  <TextField
+                    fullWidth
+                    label="Session Parser"
+                    value={selectedTarget.config.sessionParser}
+                    placeholder="Optional: Enter the name of the header that contains the session ID"
+                    onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
+                    margin="normal"
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Based on the test response above, configure how to extract the session ID from
+                    the headers. This is only needed for stateful systems.
+                  </Typography>
+                </Box>
+              </Box>
             </Box>
           )}
         </Box>
@@ -967,12 +1051,16 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
             </Typography>
           </Alert>
         )}
-
+        {!hasTestedTarget && testingEnabled && (
+          <Alert severity="info" sx={{ flexGrow: 1, mr: 2 }}>
+            Please test the target configuration before proceeding
+          </Alert>
+        )}
         <Button
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          disabled={missingFields.length > 0}
+          disabled={missingFields.length > 0 || (testingEnabled && !hasTestedTarget)}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },

@@ -1,5 +1,6 @@
 import invariant from 'tiny-invariant';
-import type { ApiProvider, ProviderOptions, EnvOverrides } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { OpenAiChatCompletionProvider } from './openai';
 
 export function createXAIProvider(
