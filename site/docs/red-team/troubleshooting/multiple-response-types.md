@@ -34,7 +34,7 @@ For the simple case above you can use a response parser with a little bit of log
     responseParser: json.response ?? json.error
 ```
 
-For more complex cases, you can use a custom provider. See the [custom provider example](/docs/examples/custom-provider-multiple-response-types/).
+For more complex cases, you can use a custom provider. See the [custom provider docs](/docs/providers/custom-api/).
 
 For example, let's say the response will be return with a 400 status code.
 
