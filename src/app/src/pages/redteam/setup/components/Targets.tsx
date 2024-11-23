@@ -41,6 +41,7 @@ interface TargetsProps {
 
 const predefinedTargets = [
   { value: '', label: 'Select a target' },
+  { value: 'custom', label: 'Custom Target' },
   { value: 'http', label: 'HTTP/HTTPS Endpoint' },
   { value: 'websocket', label: 'WebSocket Endpoint' },
   { value: 'browser', label: 'Web Browser Automation' },
@@ -111,6 +112,10 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
 
   const { recordEvent } = useTelemetry();
 
+  const [rawConfigJson, setRawConfigJson] = useState<string>(
+    JSON.stringify(selectedTarget.config, null, 2),
+  );
+
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_targets' });
   }, []);
@@ -140,7 +145,15 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     const currentLabel = selectedTarget.label;
     recordEvent('feature_used', { feature: 'redteam_config_target_changed', target: value });
 
-    if (value === 'javascript' || value === 'python') {
+    if (value === 'custom') {
+      setSelectedTarget({
+        id: '',
+        label: currentLabel,
+        config: { temperature: 0.5 },
+      });
+      setRawConfigJson(JSON.stringify({ temperature: 0.5 }, null, 2));
+      updateConfig('purpose', DEFAULT_PURPOSE);
+    } else if (value === 'javascript' || value === 'python') {
       const filePath =
         value === 'javascript'
           ? 'file://path/to/custom_provider.js'
@@ -443,6 +456,66 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
               </Typography>
             )}
           </>
+        )}
+        {!predefinedTargets.some(
+          (predefinedTarget) => predefinedTarget.value === selectedTarget.id,
+        ) && (
+          <Box mt={2}>
+            <Typography variant="h6" gutterBottom>
+              Custom Target Configuration
+            </Typography>
+            <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+              <TextField
+                fullWidth
+                label="Target ID"
+                value={selectedTarget.id}
+                onChange={(e) => updateCustomTarget('id', e.target.value)}
+                margin="normal"
+                required
+                placeholder="e.g., openai:chat:gpt-4o"
+                helperText={
+                  <>
+                    The configuration string for your custom target. See{' '}
+                    <a href="https://www.promptfoo.dev/docs/red-team/configuration/#custom-providerstargets">
+                      Custom Targets documentation
+                    </a>{' '}
+                    for more information.
+                  </>
+                }
+              />
+
+              <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+                Custom Configuration
+              </Typography>
+              <TextField
+                fullWidth
+                label="Configuration (JSON)"
+                value={rawConfigJson}
+                onChange={(e) => {
+                  setRawConfigJson(e.target.value);
+                  try {
+                    const config = JSON.parse(e.target.value);
+                    updateCustomTarget('config', config);
+                    setBodyError(null);
+                  } catch (error) {
+                    console.error('Invalid JSON configuration:', error);
+                    setBodyError('Invalid JSON');
+                    // Still update the config even if invalid to preserve partial edits
+                    updateCustomTarget('config', {});
+                  }
+                }}
+                margin="normal"
+                multiline
+                minRows={4}
+                maxRows={10}
+                error={!!bodyError}
+                helperText={bodyError || 'Enter your custom configuration as JSON'}
+                InputProps={{
+                  inputComponent: TextareaAutosize,
+                }}
+              />
+            </Box>
+          </Box>
         )}
         {selectedTarget.id.startsWith('http') && (
           <Box mt={2}>
