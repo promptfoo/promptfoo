@@ -78,6 +78,13 @@
       "when": 1730348380232,
       "tag": "0010_needy_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1732340901582,
+      "tag": "0011_moaning_millenium_guard",
+      "breakpoints": true
     }
   ]
 }

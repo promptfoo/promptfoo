@@ -5,7 +5,12 @@ import cliState from '../../src/cliState';
 import { getDb } from '../../src/database';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
-import type { ApiProvider, EvaluateResult, TestCase } from '../../src/types';
+import {
+  ResultFailureReason,
+  type ApiProvider,
+  type EvaluateResult,
+  type TestCase,
+} from '../../src/types';
 import {
   maybeLoadFromExternalFile,
   parsePathOrGlob,
@@ -214,6 +219,7 @@ describe('util', () => {
       const results: EvaluateResult[] = [
         {
           success: true,
+          failureReason: ResultFailureReason.NONE,
           score: 1.0,
           namedScores: {},
           latencyMs: 1000,
