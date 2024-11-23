@@ -38,6 +38,8 @@ export function parseGeneratedPrompts(generatedPrompts: string): { prompt: strin
     // Handle nested quotes
     prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
     prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
+    // Strip leading and trailing asterisks
+    prompt = prompt.replace(/^\*+/, '').replace(/\*$/, '');
     return prompt.trim();
   };
 
