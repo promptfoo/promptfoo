@@ -4,6 +4,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderOptions,
   ProviderResponse,
 } from '../types';
 import { getNunjucksEngine } from '../util/templates';
@@ -18,14 +19,15 @@ export class SequenceProvider implements ApiProvider {
   private readonly separator: string;
   private readonly identifier: string;
 
-  constructor({ id, config }: { id?: string; config: SequenceProviderConfig }) {
+  constructor({ id, config }: ProviderOptions) {
     invariant(
       config && Array.isArray(config.inputs),
       'Expected sequence provider config to contain an array of inputs',
     );
 
-    this.inputs = config.inputs;
-    this.separator = config.separator || '\n---\n';
+    const typedConfig = config as SequenceProviderConfig;
+    this.inputs = typedConfig.inputs;
+    this.separator = typedConfig.separator || '\n---\n';
     this.identifier = id || 'sequence-provider';
   }
 
