@@ -138,7 +138,11 @@ export default class GoatProvider implements ApiProvider {
       output: messages[messages.length - 1]?.content,
       metadata: {
         redteamFinalPrompt: messages[messages.length - 2]?.content,
-        messages: JSON.stringify(messages, null, 2),
+        messages: JSON.stringify(
+          [{ content: context?.prompt?.raw || '', role: 'user' }, ...messages],
+          null,
+          2,
+        ),
       },
       tokenUsage: totalTokenUsage,
     };
