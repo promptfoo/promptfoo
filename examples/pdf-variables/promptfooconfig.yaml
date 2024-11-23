@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'PDF summarization'
+
+prompts:
+  - 'Summarize this paper in 1 sentence: {{paper}}'
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  - vars:
+      paper: file://pdfs/arxiv_1.pdf
+  - vars:
+      paper: file://pdfs/arxiv_2.pdf
+  - vars:
+      paper: file://pdfs/arxiv_3.pdf
