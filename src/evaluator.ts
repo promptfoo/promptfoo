@@ -16,17 +16,18 @@ import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
-import type {
-  ApiProvider,
-  Assertion,
-  CompletedPrompt,
-  EvaluateOptions,
-  EvaluateResult,
-  EvaluateStats,
-  Prompt,
-  ProviderResponse,
-  RunEvalOptions,
-  TestSuite,
+import {
+  ResultFailureReason,
+  type ApiProvider,
+  type Assertion,
+  type CompletedPrompt,
+  type EvaluateOptions,
+  type EvaluateResult,
+  type EvaluateStats,
+  type Prompt,
+  type ProviderResponse,
+  type RunEvalOptions,
+  type TestSuite,
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import invariant from './util/invariant';
@@ -255,6 +256,7 @@ class Evaluator {
         ...setup,
         response,
         success: false,
+        failureReason: ResultFailureReason.NONE,
         score: 0,
         namedScores: {},
         latencyMs,
@@ -298,6 +300,7 @@ class Evaluator {
         });
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
+          ret.failureReason = ResultFailureReason.ASSERT;
         }
         ret.success = checkResult.pass;
         ret.score = checkResult.score;
@@ -340,6 +343,7 @@ class Evaluator {
         ...setup,
         error: String(err) + '\n\n' + (err as Error).stack,
         success: false,
+        failureReason: ResultFailureReason.ERROR,
         score: 0,
         namedScores: {},
         latencyMs,

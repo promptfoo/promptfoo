@@ -52,6 +52,8 @@ function formatRowOutput(output: EvaluateTableOutput | string) {
       text = text.slice('[PASS]'.length);
     } else if (output.startsWith('[FAIL]')) {
       text = text.slice('[FAIL]'.length);
+    } else if (output.startsWith('[ERROR]')) {
+      text = text.slice('[ERROR]'.length);
     }
     return {
       text,

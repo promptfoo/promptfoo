@@ -105,6 +105,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       prompt: result.prompt.raw,
       provider: result.provider?.label || result.provider?.id || 'unknown provider',
       pass: result.success,
+      failureReason: result.failureReason,
       cost: result.cost || 0,
     };
     invariant(result.promptId, 'Prompt ID is required');
