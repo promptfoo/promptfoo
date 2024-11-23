@@ -4,7 +4,7 @@ sidebar_label: False Positives
 
 # False Positives
 
-False positives are when a test case is marked as passing when it should have been marked as failing or vice versa. A common cuase of false positives is when the Promptfoo graders don't know enough about the target to make an accurate assessment.
+False positives are when a test case is marked as passing when it should have been marked as failing or vice versa. A common cause of false positives is when the Promptfoo graders don't know enough about the target to make an accurate assessment.
 
 ### Solution
 

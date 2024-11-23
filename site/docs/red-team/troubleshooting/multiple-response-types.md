@@ -24,14 +24,14 @@ or if it is blocked by a guardrail, it could return an error message:
 
 For the simple case above you can use a response parser with a little bit of logic to handle the multiple response types.
 
-```
-  - id: http://url.foryour.bot/chat
-    label: 'internal-chatbot'
-    config:
-      method: 'POST'
-      headers: { 'Content-Type': 'application/json' }
-      body: { 'message': '{{prompt}}' }
-      responseParser: json.response ?? json.error
+```yaml
+- id: http://url.foryour.bot/chat
+  label: 'internal-chatbot'
+  config:
+    method: 'POST'
+    headers: { 'Content-Type': 'application/json' }
+    body: { 'message': '{{prompt}}' }
+    responseParser: json.response ?? json.error
 ```
 
 For more complex cases, you can use a custom provider. See the [custom provider example](/docs/examples/custom-provider-multiple-response-types/).
