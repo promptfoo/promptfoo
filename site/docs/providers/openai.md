@@ -156,7 +156,12 @@ providers:
       audio:
         voice: 'alloy' # The voice to use for generation
         format: 'wav' # Audio format
+      max_tokens: 4096 # Increase this if audio responses are getting cut off
 ```
+
+:::tip
+If your audio responses are getting cut off mid-sentence, try increasing the `max_tokens` parameter. Audio responses typically require more tokens than text-only responses.
+:::
 
 ### Audio Input
 
