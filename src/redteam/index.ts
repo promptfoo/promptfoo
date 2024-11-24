@@ -117,6 +117,31 @@ const formatTestCount = (numTests: number): string =>
   numTests === 1 ? '1 test' : `${numTests} tests`;
 
 /**
+ * Checks if a plugin matches any of the strategy's target plugins
+ */
+function pluginMatchesStrategyTargets(pluginId: string, targetPlugins?: string[]): boolean {
+  if (!targetPlugins || targetPlugins.length === 0) {
+    return true; // If no targets specified, strategy applies to all plugins
+  }
+
+  console.log('checking', pluginId, targetPlugins);
+
+  return targetPlugins.some((target) => {
+    // Direct match
+    if (target === pluginId) {
+      return true;
+    }
+
+    // Category match (e.g. 'harmful' matches 'harmful:hate')
+    if (pluginId.startsWith(`${target}:`)) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
+/**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
@@ -360,7 +385,16 @@ export async function synthesize({
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
   if (strategies.length > 0) {
     const existingTestCount = testCases.length;
-    const totalStrategyTests = existingTestCount * strategies.length;
+    let totalStrategyTests = 0;
+
+    // Calculate total expected tests based on plugin-strategy matches
+    strategies.forEach((strategy) => {
+      const targetPlugins = strategy.config?.plugins;
+      const matchingTests = testCases.filter((t) =>
+        pluginMatchesStrategyTargets(t.metadata?.pluginId || '', targetPlugins),
+      );
+      totalStrategyTests += matchingTests.length;
+    });
 
     logger.info(
       chalk.bold(
@@ -388,11 +422,18 @@ export async function synthesize({
         strategyAction = builtinStrategy.action;
       }
 
+      // Filter test cases based on plugin targets
+      const targetPlugins = strategy.config?.plugins;
+      const applicableTestCases = testCases.filter((t) =>
+        pluginMatchesStrategyTargets(t.metadata?.pluginId || '', targetPlugins),
+      );
+
       const strategyTestCases: TestCase[] = await strategyAction(
-        testCases,
+        applicableTestCases,
         injectVar,
         strategy.config || {},
       );
+
       try {
         newTestCases.push(
           ...strategyTestCases
@@ -412,7 +453,7 @@ export async function synthesize({
         logger.warn(`Strategy ${strategy.id} did not return valid test cases: ${e}`);
       }
       strategyResults[strategy.id] = {
-        requested: testCases.length,
+        requested: applicableTestCases.length,
         generated: strategyTestCases.length,
       };
     }
