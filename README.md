@@ -332,7 +332,7 @@ See the full example [here](https://github.com/promptfoo/promptfoo/tree/main/exa
 ## Configuration
 
 - **[Main guide](https://www.promptfoo.dev/docs/configuration/guide)**: Learn about how to configure your YAML file, setup prompt files, etc.
-- **[Configuring test cases](https://www.promptfoo.dev/docs/configuration/expected-outputs)**: Learn more about how to configure expected outputs and test assertions.
+- **[Configuring test cases](https://www.promptfoo.dev/docs/configuration/expected-outputs)**: Learn more about how to configure assertions and metrics.
 
 ## Installation
 

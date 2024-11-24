@@ -94,7 +94,7 @@ tests:
 ```
 
 :::tip
-To learn more about assertions, see docs on configuring [expected outputs](/docs/configuration/expected-outputs).
+To learn more about assertions, see docs on configuring [assertions and metrics](/docs/configuration/expected-outputs).
 :::
 
 ## Import providers from separate files

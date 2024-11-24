@@ -81,7 +81,7 @@ prompts:
 
 ## Step 4: Add test cases
 
-Provide test case inputs and expected outputs to evaluate performance:
+Provide test case inputs and assertions to evaluate performance:
 
 ```yaml
 tests:
