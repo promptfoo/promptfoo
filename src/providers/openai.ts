@@ -563,7 +563,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
-  ) {
+  ): { body: any; config: OpenAiCompletionOptions } {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
