@@ -465,7 +465,9 @@ Strategies modify or generate additional test cases based on the output of other
 
 - `base64`: Encodes the injected variable using Base64 encoding
 - `basic` - Raw payloads only (Default)
+- `citation`: Uses academic citations and references to potentially bypass safety measures
 - `crescendo`: Applies a multi-turn jailbreak technique
+- `jailbreak:composite`: Combines multiple jailbreak techniques from research papers
 - `jailbreak:tree`: Applies a tree-based jailbreak technique
 - `jailbreak`: Applies a linear probe jailbreak technique to deliver the payload (Default)
 - `leetspeak`: Converts the injected variable to leetspeak, replacing certain letters with numbers or symbols
