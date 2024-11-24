@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - '{{query}}'
+providers:
+  # Audio model with text + audio output
+  - id: openai:gpt-4o-audio-preview
+    config:
+      modalities: ['text', 'audio']
+      audio:
+        voice: 'alloy'
+        format: 'wav'
+      max_tokens: 2000
+tests:
+  - vars:
+      query: 'Write a love letter from a robot to a toaster'
+  - vars:
+      query: file:///path/to/your/audio/file.mp3
