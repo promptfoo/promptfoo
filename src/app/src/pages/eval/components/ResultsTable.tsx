@@ -736,19 +736,16 @@ function ResultsTable({
 
                   let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
                   const value = cell.getValue();
-                  console.log('--- value', value);
                   const response = typeof value === 'object' ? (value as any)?.response : undefined;
-                  console.log('--- response', response);
                   if (
                     typeof response === 'object' &&
                     'audio' in response &&
                     'data' in response.audio
                   ) {
                     try {
-                      console.info(Object.keys(response.audio));
                       if (response.audio.transcript && response.audio.data) {
                         return (
-                          <div className="cell">
+                          <div className="cell audio-cell">
                             {/* Display transcript as main text */}
                             <div>{response.audio.transcript}</div>
 
@@ -757,7 +754,7 @@ function ResultsTable({
                               <audio
                                 controls
                                 src={`data:audio/wav;base64,${response.audio.data}`}
-                                style={{ height: '32px', width: '200px' }}
+                                style={{ height: '32px', width: '320px' }}
                               >
                                 Your browser does not support the audio element.
                               </audio>
@@ -801,6 +798,27 @@ function ResultsTable({
                         )}
                       </>
                     );
+                  } else if (typeof value === 'string') {
+                    try {
+                      const parsed = JSON.parse(value);
+                      if (parsed.transcript && parsed.data) {
+                        return (
+                          <div className="cell">
+                            {/* Display full transcript with proper wrapping */}
+                            <div className="transcript-text">{parsed.transcript}</div>
+
+                            {/* Audio player */}
+                            <div className="audio-preview">
+                              <audio controls src={`data:audio/wav;base64,${parsed.data}`}>
+                                Your browser does not support the audio element.
+                              </audio>
+                            </div>
+                          </div>
+                        );
+                      }
+                    } catch {
+                      // ... existing handling ...
+                    }
                   }
                   return (
                     <td
