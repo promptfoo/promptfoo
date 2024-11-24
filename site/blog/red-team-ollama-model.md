@@ -1,6 +1,6 @@
 ---
 date: 2024-11-23
-image: /img/blog/llama-red-team.webp
+image: /img/blog/llama-hacker.webp
 ---
 
 # How to Red Team an Ollama Model
@@ -8,6 +8,10 @@ image: /img/blog/llama-red-team.webp
 Want to test the safety and security of a model hosted on Ollama? This guide shows you how to use [Promptfoo](https://github.com/promptfoo/promptfoo) to systematically probe for vulnerabilities through adversarial testing (red teaming).
 
 We'll use [Llama 3.2 3B](https://ollama.com/library/llama3.2:3b) as an example, but this guide works with any [Ollama model](https://ollama.ai/library).
+
+Here's an example of what the red team report looks like:
+
+![example llm red team report](/img/blog/llama-red-team/report1.png)
 
 <!-- truncate -->
 
@@ -77,7 +81,7 @@ To see the full configuration example on Github, [click here](https://github.com
   - `contracts`: Tests if model makes unauthorized commitments
   - `hallucination`: Tests for false information
   - `imitation`: Tests if model impersonates others
-- **strategies**: Techniques for delivering adversarial inputs (see [full list](/docs/red-team/strategies/)):
+- **strategies**: Techniques for delivering adversarial inputs (see [full list](/docs/category/strategies-1/)):
   - `jailbreak`: Tests if model can escape its constraints
   - `prompt-injection`: Tests if model is susceptible to injected instructions
 - **numTests**: Number of test cases per plugin
@@ -111,7 +115,17 @@ The report shows:
 - Specific test cases that exposed vulnerabilities
 - Suggested mitigations
 
-![example llm red team report](/img/riskreport-1@2x.png)
+Here's an example report card:
+
+![report card](/img/blog/llama-red-team/report2.png)
+
+You can click on each category to see the specific test cases and results:
+
+![test cases](/img/blog/llama-red-team/report3.png)
+
+It includes a breakdown of the performance of the model for each vulnerability category.
+
+![vulnerability categories](/img/blog/llama-red-team/report4.png)
 
 ### Example Findings
 
