@@ -20,10 +20,42 @@ import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { sleep } from '../util/time';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
-import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
+interface ModelCost {
+  input:
+    | number
+    | {
+        text: number;
+        audio: number;
+      };
+  output:
+    | number
+    | {
+        text: number;
+        audio: number;
+      };
+}
+
+interface ProviderModel {
+  id: string;
+  cost?: ModelCost;
+}
 // see https://platform.openai.com/docs/models
-const OPENAI_CHAT_MODELS = [
+const OPENAI_CHAT_MODELS: ProviderModel[] = [
+  ...['gpt-4o-audio-preview', 'gpt-4o-audio-preview-2024-10-01'].map((model) => ({
+    id: model,
+    cost: {
+      input: {
+        text: 2.5 / 1e6,
+        audio: 100 / 1e6,
+      },
+      output: {
+        text: 10 / 1e6,
+        audio: 200 / 1e6,
+      },
+    },
+  })),
   ...['o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
@@ -177,6 +209,12 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
     OpenAI.FunctionDefinition['name'],
     (arg: string) => Promise<string>
   >;
+
+  modalities?: ('text' | 'audio')[];
+  audio?: {
+    voice?: string;
+    format?: string;
+  };
 };
 
 function failApiCall(err: any) {
@@ -351,10 +389,26 @@ export function calculateOpenAICost(
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  return calculateCost(modelName, config, promptTokens, completionTokens, [
-    ...OPENAI_CHAT_MODELS,
-    ...OPENAI_COMPLETION_MODELS,
-  ]);
+  if (config.cost !== undefined) {
+    return config.cost;
+  }
+  if (!promptTokens || !completionTokens) {
+    return undefined;
+  }
+
+  const model = [...OPENAI_CHAT_MODELS, ...OPENAI_COMPLETION_MODELS].find(
+    (model) => model.id === modelName,
+  );
+  if (!model?.cost) {
+    return undefined;
+  }
+
+  const inputCost = typeof model.cost.input === 'number' ? model.cost.input : model.cost.input.text;
+
+  const outputCost =
+    typeof model.cost.output === 'number' ? model.cost.output : model.cost.output.text;
+
+  return promptTokens * inputCost + completionTokens * outputCost;
 }
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
@@ -485,7 +539,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
-    // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -493,25 +546,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    // NOTE: Special handling for o1 models which do not support max_tokens and temperature
-    const isO1Model = this.modelName.startsWith('o1-');
-    const maxCompletionTokens = isO1Model
-      ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
-      : undefined;
-    const maxTokens = isO1Model
-      ? undefined
-      : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
-    const temperature = isO1Model
-      ? undefined
-      : (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
-
     const body = {
       model: this.modelName,
       messages,
+      ...(config.modalities ? { modalities: config.modalities } : {}),
+      ...(config.audio ? { audio: config.audio } : {}),
       seed: config.seed,
-      ...(maxTokens ? { max_tokens: maxTokens } : {}),
-      ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
-      ...(temperature ? { temperature } : {}),
+      max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
       top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
         config.presence_penalty ?? Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
@@ -603,6 +645,27 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           isRefusal: true,
         };
       }
+
+      if (message.audio) {
+        return {
+          output: message.content || '',
+          audio: {
+            data: message.audio.data,
+            id: message.audio.id,
+            transcript: message.audio.transcript,
+            expiresAt: message.audio.expires_at,
+          },
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.prompt_tokens,
+            data.usage?.completion_tokens,
+          ),
+        };
+      }
+
       let output = '';
       if (message.content && (message.function_call || message.tool_calls)) {
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
@@ -1115,3 +1178,6 @@ export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-
 });
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
 export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');
+
+// Add this constant to track supported audio models
+export const OPENAI_AUDIO_MODELS = ['gpt-4o-audio-preview'];
