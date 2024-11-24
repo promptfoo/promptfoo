@@ -688,19 +688,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
 
       if (message.audio) {
-        const audioResponse = {
-          id: message.audio.id,
-          expires_at: message.audio.expires_at,
-          data: message.audio.data,
-          transcript: message.audio.transcript,
-        };
         return {
-          output: JSON.stringify(audioResponse, null, 2),
-          audio: {
+          output: {
             data: message.audio.data,
+            expires_at: message.audio.expires_at,
             id: message.audio.id,
             transcript: message.audio.transcript,
-            expiresAt: message.audio.expires_at,
           },
           tokenUsage: getTokenUsage(data, cached),
           cached,

@@ -77,12 +77,6 @@ export interface ApiModerationProvider extends ApiProvider {
 }
 
 export interface ProviderResponse {
-  audio?: {
-    data: string;
-    expiresAt: number;
-    id: string;
-    transcript?: string;
-  };
   cached?: boolean;
   cost?: number;
   error?: string;
@@ -92,7 +86,15 @@ export interface ProviderResponse {
     redteamFinalPrompt?: string;
     [key: string]: any;
   };
-  output?: string | any;
+  output?:
+    | string
+    | {
+        data: string;
+        expiresAt: number;
+        id: string;
+        transcript?: string;
+      }
+    | any;
   raw?: string | any;
   sessionId?: string;
   tokenUsage?: TokenUsage;
