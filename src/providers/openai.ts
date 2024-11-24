@@ -569,46 +569,62 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...context?.prompt?.config,
     };
 
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    interface ChatMessage {
+      role: string;
+      content: string | any[];
+    }
 
-    const body = {
-      model: this.modelName,
-      messages,
-      ...(config.modalities ? { modalities: config.modalities } : {}),
-      ...(config.audio ? { audio: config.audio } : {}),
-      seed: config.seed,
-      max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
-      temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
-      top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
-      presence_penalty:
-        config.presence_penalty ?? Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
-      frequency_penalty:
-        config.frequency_penalty ?? Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      ...(config.functions
-        ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(config.functions, context?.vars),
-            ),
-          }
-        : {}),
-      ...(config.function_call ? { function_call: config.function_call } : {}),
-      ...(config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
-        : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
-      ...(config.response_format
-        ? {
-            response_format: maybeLoadFromExternalFile(
-              renderVarsInObject(config.response_format, context?.vars),
-            ),
-          }
-        : {}),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(config.stop ? { stop: config.stop } : {}),
-      ...(config.passthrough || {}),
+    // First, try to parse the prompt itself as it might be the audio data
+    try {
+      const parsed = JSON.parse(prompt);
+      if (parsed.__type === 'audio') {
+        if (!this.modelName.includes('audio')) {
+          throw new Error(`Model ${this.modelName} does not support audio input`);
+        }
+
+        return {
+          body: {
+            model: this.modelName,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: 'What is in this recording?' },
+                  {
+                    type: 'input_audio',
+                    input_audio: {
+                      data: parsed.data,
+                      format: parsed.format,
+                    },
+                  },
+                ],
+              },
+            ],
+            ...(config.modalities ? { modalities: config.modalities } : {}),
+            ...(config.audio ? { audio: config.audio } : {}),
+          },
+          config,
+        };
+      }
+    } catch {
+      // Not JSON or not audio content, continue with normal processing
+    }
+
+    let messages = parseChatPrompt<ChatMessage[]>(prompt, [{ role: 'user', content: prompt }]);
+
+    if (!Array.isArray(messages)) {
+      messages = [messages];
+    }
+
+    return {
+      body: {
+        model: this.modelName,
+        messages,
+        ...(config.modalities ? { modalities: config.modalities } : {}),
+        ...(config.audio ? { audio: config.audio } : {}),
+      },
+      config,
     };
-
-    return { body, config };
   }
 
   async callApi(

@@ -15,6 +15,12 @@ import { isJavascriptFile } from './util/file';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
+// Add supported audio formats constant
+const SUPPORTED_AUDIO_FORMATS = [
+  'wav', // Waveform Audio File Format
+  'mp3', // MPEG Audio Layer III
+];
+
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
@@ -28,6 +34,18 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
     }
     throw new Error(
       `Failed to extract text from PDF ${pdfPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export async function extractAudioFromFile(audioPath: string): Promise<string> {
+  logger.debug(`Extracting audio from file: ${audioPath}`);
+  try {
+    const dataBuffer = fs.readFileSync(audioPath);
+    return dataBuffer.toString('base64');
+  } catch (error) {
+    throw new Error(
+      `Failed to extract audio from file ${audioPath}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -79,7 +97,7 @@ export async function renderPrompt(
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-      const fileExtension = filePath.split('.').pop();
+      const fileExtension = filePath.split('.').pop()?.toLowerCase();
 
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
       if (isJavascriptFile(filePath)) {
@@ -121,6 +139,13 @@ export async function renderPrompt(
         );
       } else if (fileExtension === 'pdf') {
         vars[varName] = await extractTextFromPDF(filePath);
+      } else if (SUPPORTED_AUDIO_FORMATS.includes(fileExtension || '')) {
+        const audioData = await extractAudioFromFile(filePath);
+        vars[varName] = JSON.stringify({
+          __type: 'audio',
+          data: audioData,
+          format: fileExtension,
+        });
       } else {
         vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
       }
