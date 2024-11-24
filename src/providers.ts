@@ -66,6 +66,7 @@ import {
   ReplicateProvider,
 } from './providers/replicate';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
+import { SequenceProvider } from './providers/sequence';
 import { SimulatedUser } from './providers/simulatedUser';
 import { createTogetherAiProvider } from './providers/togetherai';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
@@ -472,6 +473,8 @@ export async function loadApiProvider(
     ret = new RedteamIterativeTreeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:simulated-user') {
     ret = new SimulatedUser(providerOptions);
+  } else if (providerPath === 'sequence') {
+    ret = new SequenceProvider(providerOptions);
   } else if (providerPath.startsWith('groq:')) {
     const modelName = providerPath.split(':')[1];
     ret = new GroqProvider(modelName, providerOptions);
