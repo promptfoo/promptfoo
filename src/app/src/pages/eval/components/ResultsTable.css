@@ -504,3 +504,25 @@ thead.collapsed .header-dismiss {
   max-height: 90%;
   object-fit: contain;
 }
+
+.audio-cell {
+  padding: 12px;
+  border-radius: 4px;
+  background: #f5f5f5;
+}
+
+.audio-cell .transcript {
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.audio-cell audio {
+  width: 100%;
+  margin: 8px 0;
+}
+
+.audio-cell .audio-metadata {
+  margin-top: 8px;
+  font-size: 0.8em;
+  color: #666;
+}

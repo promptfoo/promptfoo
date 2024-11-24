@@ -736,7 +736,37 @@ function ResultsTable({
 
                   let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
                   const value = cell.getValue();
+                  console.log('--- value', value);
+                  const response = typeof value === 'object' ? (value as any)?.response : undefined;
+                  console.log('--- response', response);
                   if (
+                    typeof response === 'object' &&
+                    'audio' in response &&
+                    'data' in response.audio
+                  ) {
+                    try {
+                      console.info(Object.keys(response.audio));
+                      if (response.audio.transcript && response.audio.data) {
+                        return (
+                          <div className="cell">
+                            {/* Display transcript as main text */}
+                            <div>{response.audio.transcript}</div>
+
+                            {/* Add small audio player below */}
+                            <div style={{ marginTop: '8px' }}>
+                              <audio
+                                controls
+                                src={`data:audio/wav;base64,${response.audio.data}`}
+                                style={{ height: '32px', width: '200px' }}
+                              >
+                                Your browser does not support the audio element.
+                              </audio>
+                            </div>
+                          </div>
+                        );
+                      }
+                    } catch {}
+                  } else if (
                     typeof value === 'string' &&
                     (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
                       value.match(/^\/[0-9A-Za-z+/]{4}.*/))
@@ -772,7 +802,6 @@ function ResultsTable({
                       </>
                     );
                   }
-
                   return (
                     <td
                       key={cell.id}

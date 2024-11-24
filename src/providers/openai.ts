@@ -672,8 +672,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
 
       if (message.audio) {
+        const audioResponse = {
+          id: message.audio.id,
+          expires_at: message.audio.expires_at,
+          data: message.audio.data,
+          transcript: message.audio.transcript,
+        };
         return {
-          output: message.audio.transcript || '', // Use transcript if available
+          output: JSON.stringify(audioResponse, null, 2),
           audio: {
             data: message.audio.data,
             id: message.audio.id,
@@ -1203,6 +1209,3 @@ export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-
 });
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
 export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');
-
-// Add this constant to track supported audio models
-export const OPENAI_AUDIO_MODELS = ['gpt-4o-audio-preview'];
