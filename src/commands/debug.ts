@@ -25,7 +25,6 @@ async function doDebug(options: DebugOptions): Promise<void> {
     },
     env: {
       NODE_ENV: process.env.NODE_ENV,
-      // Add other relevant env vars, but exclude sensitive ones
     },
     configInfo: {
       defaultConfigPath: options.defaultConfigPath,
