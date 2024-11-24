@@ -16,6 +16,7 @@ import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
+import { addCompositeTestCases } from './singleTurnComposite';
 
 export interface Strategy {
   id: string;
@@ -123,6 +124,15 @@ export const Strategies: Strategy[] = [
       logger.debug('Adding Citation to all test cases');
       const newTestCases = await addCitationTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} Citation test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'jailbreak:composite',
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding composite jailbreak test cases');
+      const newTestCases = await addCompositeTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} composite jailbreak test cases`);
       return newTestCases;
     },
   },
