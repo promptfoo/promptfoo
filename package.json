@@ -77,6 +77,7 @@
     "ibm-cloud-sdk-core": "^5.0.2",
     "langfuse": "^3.7.0",
     "node-sql-parser": "^5.2.0",
+    "pdf-parse": "^1.1.1",
     "playwright": "^1.47.2",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2"
@@ -107,6 +108,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
+    "@types/pdf-parse": "^1.1.4",
     "@types/semver": "^7.5.8",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",
