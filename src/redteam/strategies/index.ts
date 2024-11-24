@@ -7,6 +7,7 @@ import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/file';
 import { addBase64Encoding } from './base64';
+import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addGoatTestCases } from './goat';
 import { addIterativeJailbreaks } from './iterative';
@@ -113,6 +114,15 @@ export const Strategies: Strategy[] = [
       logger.debug('Adding ROT13 encoding to all test cases');
       const newTestCases = addRot13(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'citation',
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding Citation to all test cases');
+      const newTestCases = await addCitationTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Citation test cases`);
       return newTestCases;
     },
   },

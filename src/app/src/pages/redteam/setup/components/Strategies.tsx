@@ -15,6 +15,12 @@ import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import {
+  DEFAULT_STRATEGIES,
+  ALL_STRATEGIES,
+  strategyDescriptions,
+  displayNameOverrides,
+} from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
@@ -23,65 +29,11 @@ interface StrategiesProps {
   onBack: () => void;
 }
 
-interface Strategy {
-  id: string;
-  name: string;
-  description: string;
-}
-
-const availableStrategies: Strategy[] = [
-  {
-    id: 'base64',
-    name: 'Base64 Encoding',
-    description:
-      "Tests AI's ability to handle encoded inputs, potentially bypassing content filters.",
-  },
-  {
-    id: 'jailbreak',
-    name: 'Iterative Jailbreaks',
-    description: 'Systematically probes and refines prompts to bypass AI constraints.',
-  },
-  {
-    id: 'leetspeak',
-    name: 'Leetspeak',
-    description:
-      'Replaces letters with numbers or special characters to test obfuscation handling.',
-  },
-  {
-    id: 'crescendo',
-    name: 'Multi-turn Jailbreaks (Crescendo)',
-    description:
-      "Microsoft Research's technique for gradually escalates prompt harm to exploit fuzzy ethical boundaries.",
-  },
-  {
-    id: 'multilingual',
-    name: 'Multilingual',
-    description: "Tests AI's consistency and safety across multiple languages.",
-  },
-  {
-    id: 'prompt-injection',
-    name: 'Prompt Injection',
-    description: 'Tests common direct prompt injection vulnerabilities.',
-  },
-  {
-    id: 'rot13',
-    name: 'ROT13 Encoding',
-    description: 'Simple letter substitution to test handling of obfuscated text.',
-  },
-  {
-    id: 'jailbreak:tree',
-    name: 'Tree-based Jailbreaks',
-    description:
-      'Creates a branching structure of prompts to explore AI constraints systematically.',
-  },
-  {
-    id: 'goat',
-    name: 'Generative Offensive Agent Tester',
-    description: "Meta AI's technique for multi-step conversational testing.",
-  },
-];
-
-const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];
+const availableStrategies = ALL_STRATEGIES.map((id) => ({
+  id,
+  name: displayNameOverrides[id] || id,
+  description: strategyDescriptions[id],
+}));
 
 const getStrategyId = (strategy: RedteamStrategy): string => {
   return typeof strategy === 'string' ? strategy : strategy.id;
@@ -161,9 +113,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                   <Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography variant="subtitle1">{strategy.name}</Typography>
-                      {DEFAULT_STRATEGIES.includes(strategy.id) && (
-                        <Chip label="Recommended" size="small" color="default" />
-                      )}
+                      {DEFAULT_STRATEGIES.includes(
+                        strategy.id as (typeof DEFAULT_STRATEGIES)[number],
+                      ) && <Chip label="Recommended" size="small" color="default" />}
                     </Box>
                     <Typography variant="body2" color="text.secondary">
                       {strategy.description}
