@@ -40,13 +40,7 @@ async function generateCompositePrompts(
     await async.forEachOfLimit(batches, concurrency, async (batch, index) => {
       const payload = {
         task: 'jailbreak:composite',
-        testCases: batch,
-        injectVar,
-        config: {
-          ...config,
-          ...(config.modelFamily && { modelFamily: config.modelFamily }),
-          ...(config.n && { n: config.n }),
-        },
+        prompt: batch[0].vars?.[injectVar],
       };
 
       const { data } = await fetchWithCache(
@@ -73,7 +67,7 @@ async function generateCompositePrompts(
           `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
         );
 
-        return data.modifiedPrompts[i].map((modifiedPrompt: string) => ({
+        return data.modifiedPrompts.map((modifiedPrompt: string) => ({
           ...testCase,
           prompt: modifiedPrompt,
           assert: testCase.assert?.map((assertion) => ({

@@ -378,7 +378,7 @@ For example:
 ```yaml
 defaultTest:
   options:
-    transformVars: '{ ...vars, sessionId: "{{context.uuid}}" }'
+    transformVars: '{ ...vars, sessionId: context.uuid }'
 ```
 
 Now you can use the `sessionId` variable in your HTTP target config:

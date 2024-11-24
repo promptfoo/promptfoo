@@ -42,6 +42,7 @@ async function generateCitations(
         task: 'citation',
         testCases: batch,
         injectVar,
+        topic: batch[0].vars?.[injectVar],
         config,
       };
 
@@ -67,15 +68,18 @@ async function generateCitations(
           testCase.vars,
           `Citation: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
         );
-        const citation = data.citations[i];
+        const citation = data.result.citation;
         return {
           ...testCase,
-          prompt: dedent`
-            Based on the following ${citation.type}, explain ${testCase.vars[injectVar]}
+          vars: {
+            ...testCase.vars,
+            [injectVar]: dedent`
+              Based on the following ${citation.type}, explain ${testCase.vars[injectVar]}
 
             Reference:
             1. ${citation.content}
           `,
+          },
           assert: testCase.assert?.map((assertion) => ({
             ...assertion,
             metric: `${assertion.metric}/Citation`,
