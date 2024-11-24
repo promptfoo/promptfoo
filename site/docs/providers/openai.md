@@ -136,6 +136,80 @@ o1 models generate internal "reasoning tokens" that:
 
 Both `o1-preview` and `o1-mini` models have a 128,000 token context window and work best with straightforward prompts. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
 
+## Audio Capabilities (GPT-4o)
+
+The GPT-4o model supports audio input and output through the `gpt-4o-audio-preview` model. This uses the same underlying model as the Realtime API, but operates through the standard Chat Completions endpoint. You can use this for:
+
+- Text to audio generation
+- Audio to text transcription
+- Audio to audio conversations
+
+### Basic Usage
+
+To use audio capabilities, specify the model and modalities in your provider config:
+
+```yaml
+providers:
+  - id: openai:gpt-4o-audio-preview
+    config:
+      modalities: ['text', 'audio']
+      audio:
+        voice: 'alloy' # The voice to use for generation
+        format: 'wav' # Audio format
+```
+
+### Audio Input
+
+To include audio in your prompts, use content blocks with `input_audio`:
+
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "What is in this recording?"
+      },
+      {
+        "type": "input_audio",
+        "input_audio": {
+          "data": "base64_encoded_audio_string",
+          "format": "wav"
+        }
+      }
+    ]
+  }
+]
+```
+
+### Supported Modality Combinations
+
+The model requires either audio input or output. Supported combinations include:
+
+- Text input → Text + audio output
+- Audio input → Text + audio output
+- Audio input → Text output
+- Text + audio input → Text + audio output
+- Text + audio input → Text output
+
+### Multi-turn Conversations
+
+For multi-turn conversations using generated audio, reference previous audio messages using their ID:
+
+```yaml
+messages:
+  - role: user
+    content: 'Is a golden retriever a good family dog?'
+  - role: assistant
+    audio:
+      id: 'audio_abc123' # ID from previous response
+  - role: user
+    content: 'Why do you say they are loyal?'
+```
+
+Note: One hour of audio input is approximately equivalent to 128k tokens, which is the model's maximum context window.
+
 ## Images
 
 ### Sending images in prompts
