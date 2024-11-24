@@ -804,6 +804,13 @@
               "type": "string",
               "description": "Language of tests ot generate for this plugin"
             },
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Names of people, brands, or organizations related to your LLM application"
+            },
             "plugins": {
               "type": "array",
               "items": {

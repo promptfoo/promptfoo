@@ -138,6 +138,10 @@ export const RedteamConfigSchema = z
       .describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
     language: z.string().optional().describe('Language of tests ot generate for this plugin'),
+    entities: z
+      .array(z.string())
+      .optional()
+      .describe('Names of people, brands, or organizations related to your LLM application'),
     plugins: z
       .array(RedteamPluginSchema)
       .describe('Plugins to use for redteam generation')
