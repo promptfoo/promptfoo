@@ -228,16 +228,41 @@ function failApiCall(err: any) {
   };
 }
 
+// Add new interface for detailed token usage
+interface TokenUsageDetails {
+  cached_tokens?: number;
+  audio_tokens?: number;
+  text_tokens?: number;
+  image_tokens?: number;
+  reasoning_tokens?: number;
+  accepted_prediction_tokens?: number;
+  rejected_prediction_tokens?: number;
+}
+
+interface DetailedTokenUsage extends TokenUsage {
+  prompt_tokens_details?: TokenUsageDetails;
+  completion_tokens_details?: TokenUsageDetails;
+}
+
+// Update the getTokenUsage function
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
     } else {
-      return {
+      const usage: Partial<DetailedTokenUsage> = {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
         completion: data.usage.completion_tokens || 0,
       };
+
+      // Add detailed token breakdowns if available
+      if (data.usage.prompt_tokens_details || data.usage.completion_tokens_details) {
+        usage.prompt_tokens_details = data.usage.prompt_tokens_details;
+        usage.completion_tokens_details = data.usage.completion_tokens_details;
+      }
+
+      return usage;
     }
   }
   return {};
@@ -648,7 +673,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       if (message.audio) {
         return {
-          output: message.content || '',
+          output: message.audio.transcript || '', // Use transcript if available
           audio: {
             data: message.audio.data,
             id: message.audio.id,
