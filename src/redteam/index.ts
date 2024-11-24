@@ -202,17 +202,7 @@ export async function synthesize({
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
-  let progressBar: cliProgress.SingleBar | null = null;
-  if (process.env.LOG_LEVEL !== 'debug' && getLogLevel() !== 'debug') {
-    progressBar = new cliProgress.SingleBar(
-      {
-        format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
-      },
-      cliProgress.Presets.shades_classic,
-    );
-    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
-  }
-
+  // Expand plugins first
   for (const [category, categoryPlugins] of Object.entries(categories)) {
     const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
@@ -250,9 +240,42 @@ export async function synthesize({
     }
   });
 
-  plugins = expandedPlugins;
+  plugins = [...new Set(expandedPlugins)]
+    .filter((p) => !Object.keys(categories).includes(p.id))
+    .sort();
 
-  plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
+  // Validate all plugins upfront
+  logger.debug('Validating plugins...');
+  for (const plugin of plugins) {
+    const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
+    if (!registeredPlugin) {
+      if (!plugin.id.startsWith('file://')) {
+        logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
+        continue;
+      }
+    } else if (registeredPlugin.validate) {
+      try {
+        registeredPlugin.validate({
+          language,
+          ...resolvePluginConfig(plugin.config),
+        });
+      } catch (error) {
+        throw new Error(`Validation failed for plugin ${plugin.id}: ${error}`);
+      }
+    }
+  }
+
+  // Start the progress bar
+  let progressBar: cliProgress.SingleBar | null = null;
+  if (process.env.LOG_LEVEL !== 'debug' && getLogLevel() !== 'debug') {
+    progressBar = new cliProgress.SingleBar(
+      {
+        format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
+      },
+      cliProgress.Presets.shades_classic,
+    );
+    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
+  }
 
   progressBar?.increment(1, { task: 'Extracting system purpose' });
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
@@ -263,16 +286,6 @@ export async function synthesize({
     : await extractEntities(redteamProvider, prompts);
 
   logger.debug(`System purpose: ${purpose}`);
-
-  for (const plugin of plugins) {
-    const { validate } = Plugins.find((p) => p.key === plugin.id) || {};
-    if (validate) {
-      validate({
-        language,
-        ...resolvePluginConfig(plugin.config),
-      });
-    }
-  }
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
