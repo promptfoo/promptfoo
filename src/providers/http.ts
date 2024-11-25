@@ -259,6 +259,31 @@ export async function createRequestParser(
   );
 }
 
+export function determineRequestBody(
+  contentType: boolean,
+  parsedPrompt: any,
+  configBody: Record<string, any> | any[] | string | undefined,
+  vars: Record<string, any>,
+): Record<string, any> | any[] | string {
+  if (contentType) {
+    // For JSON content type
+    if (typeof parsedPrompt === 'object' && parsedPrompt !== null) {
+      // If parser returned an object, merge it with config body
+      return Object.assign({}, configBody || {}, parsedPrompt);
+    }
+    // Otherwise process the config body with parsed prompt
+    return processJsonBody(configBody as Record<string, any> | any[], {
+      ...vars,
+      prompt: parsedPrompt,
+    });
+  }
+  // For non-JSON content type, process as text
+  return processTextBody(configBody as string, {
+    ...vars,
+    prompt: parsedPrompt,
+  });
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -353,33 +378,11 @@ export class HttpProvider implements ApiProvider {
     // Transform prompt using request parser
     const parsedPrompt = await (await this.requestParser)(prompt);
 
-    // Determine body based on content type and parsed prompt
-    let body: Record<string, any> | any[] | string;
-    if (contentTypeIsJson(headers)) {
-      // For JSON content type
-      if (typeof parsedPrompt === 'object' && parsedPrompt !== null) {
-        // If parser returned an object, merge it with config body
-        body = Object.assign({}, this.config.body || {}, parsedPrompt);
-      } else {
-        // Otherwise process the config body with parsed prompt
-        body = processJsonBody(this.config.body as Record<string, any> | any[], {
-          ...vars,
-          prompt: parsedPrompt,
-        });
-      }
-    } else {
-      // For non-JSON content type, process as text
-      body = processTextBody(this.config.body as string, {
-        ...vars,
-        prompt: parsedPrompt,
-      });
-    }
-
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
       headers,
-      body,
+      body: determineRequestBody(contentTypeIsJson(headers), parsedPrompt, this.config.body, vars),
       queryParams: this.config.queryParams
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [

@@ -7,6 +7,7 @@ import {
   createRequestParser,
   createResponseParser,
   processJsonBody,
+  determineRequestBody,
 } from '../../src/providers/http';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
@@ -1024,5 +1025,81 @@ describe('createRequestParser', () => {
     await expect(createRequestParser(123 as any)).rejects.toThrow(
       'Unsupported request parser type: number',
     );
+  });
+});
+
+describe('determineRequestBody', () => {
+  it('should merge parsed prompt object with config body when content type is JSON', () => {
+    const result = determineRequestBody(
+      true,
+      { promptField: 'test value' },
+      { configField: 'config value' },
+      { vars: 'not used in this case' },
+    );
+
+    expect(result).toEqual({
+      promptField: 'test value',
+      configField: 'config value',
+    });
+  });
+
+  it('should process JSON body with variables when parsed prompt is not an object', () => {
+    const result = determineRequestBody(
+      true,
+      'test prompt',
+      { message: '{{ prompt }}' },
+      { prompt: 'test prompt' },
+    );
+
+    expect(result).toEqual({
+      message: 'test prompt',
+    });
+  });
+
+  it('should process text body when content type is not JSON', () => {
+    const result = determineRequestBody(false, 'test prompt', 'Message: {{ prompt }}', {
+      prompt: 'test prompt',
+    });
+
+    expect(result).toBe('Message: test prompt');
+  });
+
+  it('should handle nested JSON structures', () => {
+    const result = determineRequestBody(
+      true,
+      'test prompt',
+      {
+        outer: {
+          inner: '{{ prompt }}',
+          static: 'value',
+        },
+        array: ['{{ prompt }}', 'static'],
+      },
+      { prompt: 'test prompt' },
+    );
+
+    expect(result).toEqual({
+      outer: {
+        inner: 'test prompt',
+        static: 'value',
+      },
+      array: ['test prompt', 'static'],
+    });
+  });
+
+  it('should handle undefined config body with object prompt', () => {
+    const result = determineRequestBody(true, { message: 'test prompt' }, undefined, {});
+
+    expect(result).toEqual({
+      message: 'test prompt',
+    });
+  });
+
+  it('should handle array config body', () => {
+    const result = determineRequestBody(true, 'test prompt', ['static', '{{ prompt }}'], {
+      prompt: 'test prompt',
+    });
+
+    expect(result).toEqual(['static', 'test prompt']);
   });
 });
