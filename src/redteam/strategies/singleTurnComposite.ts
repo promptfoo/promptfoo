@@ -11,7 +11,7 @@ import { neverGenerateRemote } from '../util';
 async function generateCompositePrompts(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: Record<string, any> & { n?: number; modelFamily?: string },
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -39,6 +39,8 @@ async function generateCompositePrompts(
       const payload = {
         task: 'jailbreak:composite',
         prompt: testCase.vars[injectVar],
+        ...(config.n && { n: config.n }),
+        ...(config.modelFamily && { modelFamily: config.modelFamily }),
       };
 
       const { data } = await fetchWithCache(

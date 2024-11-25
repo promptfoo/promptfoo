@@ -88,4 +88,4 @@ For more information about LLM vulnerabilities and red teaming strategies, see:
 
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/)
 - [Jailbreak Iterative](/docs/red-team/strategies/jailbreak/)
-- [Jailbreak Tree Strategy](/docs/red-team/strategies/jailbreak-tree/)
+- [Jailbreak Tree Strategy](/docs/red-team/strategies/tree/)
