@@ -87,5 +87,5 @@ The composite approach is often more effective than single techniques because:
 For more information about LLM vulnerabilities and red teaming strategies, see:
 
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/)
-- [Jailbreak Iterative](/docs/red-team/strategies/jailbreak/)
+- [Jailbreak Iterative](/docs/red-team/strategies/iterative/)
 - [Jailbreak Tree Strategy](/docs/red-team/strategies/tree/)

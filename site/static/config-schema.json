@@ -1081,6 +1081,7 @@
                           "citation",
                           "crescendo",
                           "goat",
+                          "jailbreak:composite",
                           "jailbreak:tree",
                           "leetspeak",
                           "math-prompt",
@@ -1113,7 +1114,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, prompt-injection\nSupports basic, default, jailbreak, prompt-injection, ascii-smuggling, base64, citation, crescendo, goat, jailbreak:tree, leetspeak, math-prompt, multilingual, rot13",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, prompt-injection\nSupports basic, default, jailbreak, prompt-injection, ascii-smuggling, base64, citation, crescendo, goat, jailbreak:composite, jailbreak:tree, leetspeak, math-prompt, multilingual, rot13",
               "default": [
                 "default"
               ]
