@@ -26,7 +26,11 @@ type WithNumTests = {
 export type RedteamPluginObject = ConfigurableObject & WithNumTests;
 export type RedteamPlugin = string | RedteamPluginObject;
 
-export type RedteamStrategyObject = ConfigurableObject;
+export type RedteamStrategyObject = ConfigurableObject & {
+  config?: StrategyConfig & {
+    plugins?: RedteamPluginObject['id'][];
+  };
+};
 export type RedteamStrategy = string | RedteamStrategyObject;
 
 export interface PluginActionParams {
