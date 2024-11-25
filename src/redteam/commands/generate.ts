@@ -98,13 +98,41 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
   });
   await telemetry.send();
 
-  let plugins =
-    redteamConfig?.plugins && redteamConfig.plugins.length > 0
-      ? redteamConfig.plugins
-      : Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
-          id: plugin,
-          numTests: options.numTests ?? redteamConfig?.numTests,
-        }));
+  let plugins;
+
+  // If plugins are defined in the config file
+  if (redteamConfig?.plugins && redteamConfig.plugins.length > 0) {
+    plugins = redteamConfig.plugins.map((plugin) => {
+      // Base configuration that all plugins will have
+      const pluginConfig: {
+        id: string;
+        numTests: number | undefined;
+        config?: Record<string, any>;
+      } = {
+        // Handle both string-style ('pluginName') and object-style ({ id: 'pluginName' }) plugins
+        id: typeof plugin === 'string' ? plugin : plugin.id,
+        // Use plugin-specific numTests if available, otherwise fall back to global settings
+        numTests:
+          (typeof plugin === 'object' && plugin.numTests) ||
+          options.numTests ||
+          redteamConfig?.numTests,
+      };
+
+      // If plugin has additional config options, include them
+      if (typeof plugin === 'object' && plugin.config) {
+        pluginConfig.config = plugin.config;
+      }
+
+      return pluginConfig;
+    });
+  } else {
+    // If no plugins specified, use default plugins
+    plugins = Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
+      id: plugin,
+      numTests: options.numTests ?? redteamConfig?.numTests,
+    }));
+  }
+
   // override plugins with command line options
   if (Array.isArray(options.plugins) && options.plugins.length > 0) {
     plugins = options.plugins.map((plugin) => ({
