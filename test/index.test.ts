@@ -55,6 +55,7 @@ describe('index.ts exports', () => {
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',
+    'ResultFailureReason',
     'ScenarioSchema',
     'SpecialAssertionTypesSchema',
     'TestCaseSchema',
@@ -63,6 +64,7 @@ describe('index.ts exports', () => {
     'TestCaseWithVarsFileSchema',
     'TestSuiteConfigSchema',
     'TestSuiteSchema',
+    'TestSuiteConfigSchema',
     'UnifiedConfigSchema',
     'VarsSchema',
   ];
