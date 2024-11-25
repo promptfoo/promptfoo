@@ -124,7 +124,6 @@ function pluginMatchesStrategyTargets(pluginId: string, targetPlugins?: string[]
     return true; // If no targets specified, strategy applies to all plugins
   }
 
-  console.log('checking', pluginId, targetPlugins);
 
   return targetPlugins.some((target) => {
     // Direct match
