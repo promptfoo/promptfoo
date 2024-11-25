@@ -14,33 +14,31 @@ async function generateCompositePrompts(
   config: Record<string, any>,
 ): Promise<TestCase[]> {
   try {
-    const batchSize = 8;
     const concurrency = 10;
-    const batches = [];
-    for (let i = 0; i < testCases.length; i += batchSize) {
-      batches.push(testCases.slice(i, i + batchSize));
-    }
-
     let allResults: TestCase[] = [];
-    let processedBatches = 0;
 
     let progressBar: SingleBar | undefined;
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
         {
           format:
-            'Composite Jailbreak Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} batches',
+            'Composite Jailbreak Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
         },
         Presets.shades_classic,
       );
-      progressBar.start(batches.length, 0);
+      progressBar.start(testCases.length, 0);
     }
 
-    await async.forEachOfLimit(batches, concurrency, async (batch, index) => {
+    await async.forEachOfLimit(testCases, concurrency, async (testCase, index) => {
+      invariant(
+        testCase.vars,
+        `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
+      );
+
       const payload = {
         task: 'jailbreak:composite',
-        prompt: batch[0].vars?.[injectVar],
+        prompt: testCase.vars[injectVar],
       };
 
       const { data } = await fetchWithCache(
@@ -56,38 +54,30 @@ async function generateCompositePrompts(
       );
 
       logger.debug(
-        `Got composite jailbreak generation result for batch ${Number(index) + 1}: ${JSON.stringify(
+        `Got composite jailbreak generation result for case ${Number(index) + 1}: ${JSON.stringify(
           data,
         )}`,
       );
 
-      const compositeTestCases = batch.flatMap((testCase, i) => {
-        invariant(
-          testCase.vars,
-          `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
-        );
-
-        return data.modifiedPrompts.map((modifiedPrompt: string) => ({
-          ...testCase,
-          prompt: modifiedPrompt,
-          assert: testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: `${assertion.metric}/Composite`,
-          })),
-          metadata: {
-            ...testCase.metadata,
-            strategy: 'jailbreak:composite',
-          },
-        }));
-      });
+      const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => ({
+        ...testCase,
+        prompt: modifiedPrompt,
+        assert: testCase.assert?.map((assertion) => ({
+          ...assertion,
+          metric: `${assertion.metric}/Composite`,
+        })),
+        metadata: {
+          ...testCase.metadata,
+          strategy: 'jailbreak:composite',
+        },
+      }));
 
       allResults = allResults.concat(compositeTestCases);
 
-      processedBatches++;
       if (progressBar) {
         progressBar.increment(1);
       } else {
-        logger.debug(`Processed batch ${processedBatches} of ${batches.length}`);
+        logger.debug(`Processed case ${Number(index) + 1} of ${testCases.length}`);
       }
     });
 
