@@ -34,6 +34,8 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:hate': 'Hate',
   'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
+  'harmful:misinformation-disinformation':
+    'Misinformation & Disinformation - Harmful lies and propaganda',
   'harmful:non-violent-crime': 'Non-Violent Crimes',
   'harmful:self-harm': 'Self-Harm',
   'harmful:sex-crime': 'Sex Crimes',
@@ -73,8 +75,6 @@ export type RedTeamProviderHarmPlugin = keyof typeof REDTEAM_PROVIDER_HARM_PLUGI
 export const HARM_PLUGINS = {
   ...UNALIGNED_PROVIDER_HARM_PLUGINS,
   ...REDTEAM_PROVIDER_HARM_PLUGINS,
-  'harmful:misinformation-disinformation':
-    'Misinformation & Disinformation - Harmful lies and propaganda',
 } as const;
 export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
