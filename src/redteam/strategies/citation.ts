@@ -14,11 +14,11 @@ async function generateCitations(
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
+  let progressBar: SingleBar | undefined;
   try {
     const concurrency = 10;
     const allResults: TestCase[] = [];
 
-    let progressBar: SingleBar | undefined;
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
         {
@@ -96,6 +96,9 @@ async function generateCitations(
 
     return allResults;
   } catch (error) {
+    if (progressBar) {
+      progressBar.stop();
+    }
     logger.error(`Error in remote citation generation: ${error}`);
     return [];
   }

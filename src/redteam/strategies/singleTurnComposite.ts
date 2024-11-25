@@ -13,11 +13,11 @@ async function generateCompositePrompts(
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
+  let progressBar: SingleBar | undefined;
   try {
     const concurrency = 10;
     let allResults: TestCase[] = [];
 
-    let progressBar: SingleBar | undefined;
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
         {
@@ -87,6 +87,9 @@ async function generateCompositePrompts(
 
     return allResults;
   } catch (error) {
+    if (progressBar) {
+      progressBar.stop();
+    }
     logger.error(`Error in composite generation: ${error}`);
     return [];
   }
