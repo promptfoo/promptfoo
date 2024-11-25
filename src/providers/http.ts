@@ -25,9 +25,10 @@ interface HttpProviderConfig {
   headers?: Record<string, string>;
   body?: Record<string, any> | string | any[];
   queryParams?: Record<string, string>;
+  requestParser?: string | Function;
   responseParser?: string | Function;
-  sessionParser?: string | Function;
   request?: string;
+  sessionParser?: string | Function;
 }
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
@@ -210,17 +211,66 @@ function parseRawRequest(input: string) {
   }
 }
 
+export async function createRequestParser(
+  parser: string | Function | undefined,
+): Promise<(prompt: string) => any> {
+  if (!parser) {
+    return (prompt) => prompt;
+  }
+
+  if (typeof parser === 'function') {
+    return (prompt) => parser(prompt);
+  }
+
+  if (typeof parser === 'string') {
+    if (parser.startsWith('file://')) {
+      let filename = parser.slice('file://'.length);
+      let functionName: string | undefined;
+      if (filename.includes(':')) {
+        const splits = filename.split(':');
+        if (splits[0] && isJavascriptFile(splits[0])) {
+          [filename, functionName] = splits;
+        }
+      }
+      const requiredModule = await importModule(
+        path.resolve(cliState.basePath || '', filename),
+        functionName,
+      );
+      if (typeof requiredModule === 'function') {
+        return requiredModule;
+      }
+      throw new Error(
+        `Request parser malformed: ${filename} must export a function or have a default export as a function`,
+      );
+    }
+    // Handle string template
+    return (prompt) => {
+      const rendered = nunjucks.renderString(parser, { prompt });
+      try {
+        return JSON.parse(rendered);
+      } catch {
+        return rendered;
+      }
+    };
+  }
+
+  throw new Error(
+    `Unsupported request parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+  );
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
   private responseParser: Promise<(data: any, text: string) => ProviderResponse>;
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
-
+  private requestParser: Promise<(prompt: string) => any>;
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config;
     this.url = this.config.url || url;
     this.responseParser = createResponseParser(this.config.responseParser);
     this.sessionParser = createSessionParser(this.config.sessionParser);
+    this.requestParser = createRequestParser(this.config.requestParser);
 
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;

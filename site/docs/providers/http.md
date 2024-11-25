@@ -394,6 +394,73 @@ providers:
         user_message: '{{prompt}}'
 ```
 
+## Request Parser
+
+The request parser transforms your prompt before sending it to the API. This allows you to:
+
+- Format prompts into specific message structures
+- Add metadata or context
+- Handle multi-turn conversations
+- Preprocess prompts for specific API requirements
+
+### Basic Usage
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/chat'
+      requestParser: '{"message": "{{prompt}}"}'
+      body:
+        user_message: '{{prompt}}'
+```
+
+### Parser Types
+
+#### String Template
+
+Use Nunjucks templates to transform the prompt:
+
+```yaml
+requestParser: '{"text": "{{prompt}}"}'
+```
+
+#### JavaScript Function
+
+Define a function that transforms the prompt:
+
+```yaml
+requestParser: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() })
+```
+
+#### File-based Parser
+
+Load a parser from an external file:
+
+```yaml
+requestParser: 'file://parsers/request.js'
+```
+
+Example parser file (parsers/request.js):
+
+```javascript
+module.exports = (prompt) => {
+  return {
+    text: prompt,
+    metadata: {
+      timestamp: Date.now(),
+      version: '1.0',
+    },
+  };
+};
+```
+
+You can also specify a specific function to use:
+
+```yaml
+requestParser: 'file://parsers/request.js:transformRequest'
+```
+
 ## Reference
 
 Supported config options:
