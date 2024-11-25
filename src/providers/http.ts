@@ -350,14 +350,24 @@ export class HttpProvider implements ApiProvider {
     const headers = this.getHeaders(defaultHeaders, vars);
     this.validateContentTypeAndBody(headers, this.config.body);
 
+    const parsedPrompt = await (await this.requestParser)(prompt);
+    const body = contentTypeIsJson(headers)
+      ? typeof parsedPrompt === 'object' && parsedPrompt !== null
+        ? Object.assign({}, this.config.body || {}, parsedPrompt)
+        : processJsonBody(this.config.body as Record<string, any> | any[], {
+            ...vars,
+            prompt: parsedPrompt,
+          })
+      : processTextBody(this.config.body as string, {
+          ...vars,
+          prompt: parsedPrompt,
+        });
+
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
       headers,
-      // We validate the content type and body with this.validateContentTypeAndBody
-      body: contentTypeIsJson(headers)
-        ? processJsonBody(this.config.body as Record<string, any> | any[], vars)
-        : processTextBody(this.config.body as string, vars),
+      body,
       queryParams: this.config.queryParams
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
