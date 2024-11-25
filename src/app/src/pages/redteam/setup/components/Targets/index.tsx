@@ -549,7 +549,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          disabled={missingFields.length > 0 || (testingEnabled && !hasTestedTarget)}
+          disabled={missingFields.length > 0 /*|| (testingEnabled && !hasTestedTarget)*/}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },
