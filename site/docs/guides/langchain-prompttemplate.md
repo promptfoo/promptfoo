@@ -1,4 +1,4 @@
-# Use LangChain PromptTemplate with PromptFoo
+# Using LangChain PromptTemplate with PromptFoo
 
 LangChain PromptTemplate is commonly used to format prompts with injecting variables. PromptFoo allows you to evaluate and test your prompts systematically. Combining the two can streamline your workflow, enabling you to test the prompts that use LangChain PromptTemplate in application code directly within PromptFoo.
 
@@ -55,6 +55,7 @@ export async function evaluatePrompt(prompt: string): Promise<EvaluationResult> 
 
 ```
 
+
 ## Testing with PromptFoo
 
 To make the evaluation of prompts more seamless, the prompts can be loaded directly to PromptFoo tests. This way whenever in the application the prompts are updated, the tests can evaluate the most up to date prompt.
@@ -88,6 +89,7 @@ ${vars.vars.prompt}
 }
 ```
 
+
 In PromptFoo test, load the prompt. PromptFoo tests will pass variables in a vars object. In this vars object the variables are accessible as vars.vars. Example above shows accessing prompt as vars.vars.prompt.
 
 ```yaml
@@ -113,10 +115,13 @@ Do this by setting the environment variable:
 export PROMPTFOO_DISABLE_TEMPLATING=true
 ```
 
+
 An example of formatting issues between Nunjucks and LangChain PromptTemplate:
 
 - {{…}} with LangChain PromptTemplate marks escaping the curly brace and {…} is used for substitution
 - {{…}} with PromptFoo is used for substitution
+
+
 
 Finally, change how variables are passed to the prompt in application code. 
 
@@ -136,5 +141,6 @@ export async function evaluatePrompt(prompt: string): Promise<EvaluationResult> 
 }
 
 ```
+
 
 In conclusion, this setup allows to load most up to date prompts from the application code and test them continuously. In addition, the changes in formatting now allow for integration with LangChain PromptTemplate.
