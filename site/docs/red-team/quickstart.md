@@ -65,8 +65,6 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 The `setup` command will open a web UI that asks questions to help you configure your red teaming project.
 
-## Configuring your redteam
-
 Start by providing some details about the target application. The more details we provide, the more tailored the generated test cases will be.
 
 At a minimum, be sure to fill out the **Purpose** field with a description of your application.
@@ -111,7 +109,7 @@ Save the file as `promptfooconfig.yaml`. Then, navigate to the directory where y
 If you don't want to use the UI to start a red team, you can use the `init` command instead:
 
 ```sh
-promptfoo redteam init
+promptfoo redteam init --no-gui
 ```
 
 :::
