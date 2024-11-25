@@ -2,7 +2,7 @@
 
 ## Introduction
 
-[Chatbase](https://www.chatbase.co) is a platform for building custom AI chatbots that can be embedded into websites for customer support, lead generation, and user engagement. These chatbots use RAG (Retrieval Augmented Generation) to access your organization's knowledge base and maintain conversations with users. Whether deployed internally or externally, they present unique security challenges.
+[Chatbase](https://www.chatbase.co) is a platform for building custom AI chatbots that can be embedded into websites for customer support, lead generation, and user engagement. These chatbots use RAG (Retrieval Augmented Generation) to access your organization's knowledge base and maintain conversations with users. Whether deployed internally or externally, they present unique security challenges that require thorough testing.
 
 ## Multi-turn vs Single-turn Testing
 
@@ -12,32 +12,34 @@ Many LLM applications process each query independently, treating every interacti
 
 ### Multi-turn Systems (Like Chatbase)
 
-Modern conversational AI, including Chatbase, maintains context throughout the interaction. When users ask follow-up questions, the system understands the context from previous messages, enabling natural dialogue. This state is managed through a `conversationId` that links messages together. While this enables sophisticated interactions and better user experience, it introduces security challenges. Attackers might try to manipulate the conversation context across multiple messages, either building false premises or attempting to extract sensitive information. These attacks are harder to detect, but promptfoo's multi-turn testing strategies can help identify vulnerabilities.
+Modern conversational AI, including Chatbase, maintains context throughout the interaction. When users ask follow-up questions, the system understands the context from previous messages, enabling natural dialogue. This state is managed through a `conversationId` that links messages together. While this enables sophisticated interactions and better user experience, it introduces security challenges. Attackers might try to manipulate the conversation context across multiple messages, either building false premises or attempting to extract sensitive information.
 
 ## Initial Setup
 
 ### Prerequisites
 
 - Node.js 18+
+- promptfoo CLI (`npm install -g promptfoo`)
 - Chatbase API credentials
-  - API Bearer Token
-  - Chatbot ID
+  - API Bearer Token (from your Chatbase dashboard)
+  - Chatbot ID (found in your bot's settings)
 
 ### Basic Configuration
 
 First, initialize the red team testing environment:
 
 ```bash
-npx promptfoo@latest redteam init
+promptfoo redteam init
 ```
 
-This launches a setup UI for configuring your Chatbase target, plugins, and strategies. After configuration, you'll be able to download a configuration file. The Chatbase target configuration is very important and should look similar to this:
+This launches a setup UI for configuring your Chatbase target, plugins, and test strategies. After configuration, you'll receive a configuration file. The Chatbase target configuration is crucial and should look similar to this:
 
 ```yaml
 targets:
-  - id: 'https://www.chatbase.co/api/v1/chat'
+  - id: 'http'
     config:
       method: 'POST'
+      url: 'https://www.chatbase.co/api/v1/chat'
       headers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer YOUR_API_TOKEN'
@@ -51,7 +53,7 @@ targets:
           'conversationId': '{{conversationId}}',
         }
       responseParser: 'json.text'
-      requestParser: '{ messages: [{ role: "user", content: prompt }] }'
+      requestParser: '[{ role: "user", content: prompt }]'
 defaultTest:
   options:
     transformVars: '{ ...vars, conversationId: context.uuid }'
@@ -65,7 +67,9 @@ Make sure to set both the `requestParser` and `responseParser` to the correct va
 `context.uuid` generates a random UUID for each conversation allowing Chatbase to track the conversation state across multiple messages.
 :::
 
-Enable promptfoo's multi-turn strategies `goat` and `crescendo` in your strategy configuration. You should set `stateless` to `false` for both strategies.
+### Strategy Configuration
+
+Enable promptfoo's multi-turn strategies in your `promptfooconfig.yaml` file.
 
 ```yaml
 strategies:
@@ -79,15 +83,21 @@ strategies:
 
 ## Test Execution
 
-Run your tests:
-
 ```bash
 # Generate test cases
-npx promptfoo@latest redteam generate
+promptfoo redteam generate
 
 # Execute evaluation
-npx promptfoo@latest redteam eval
+promptfoo redteam eval
 
-# View results
-npx promptfoo@latest view
+# View detailed results in the web UI
+promptfoo view
 ```
+
+## Troubleshooting
+
+Common issues and solutions:
+
+- If tests fail to connect, verify your API credentials
+- If the message content is garbled, verify your request parser and response parser are correct
+- For RAG-specific issues, ensure your knowledge base is properly configured
