@@ -19,7 +19,7 @@ import {
   DEFAULT_STRATEGIES,
   ALL_STRATEGIES,
   strategyDescriptions,
-  displayNameOverrides,
+  strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -31,7 +31,7 @@ interface StrategiesProps {
 
 const availableStrategies = ALL_STRATEGIES.map((id) => ({
   id,
-  name: displayNameOverrides[id] || id,
+  name: strategyDisplayNames[id] || id,
   description: strategyDescriptions[id],
 }));
 
