@@ -15,7 +15,7 @@ import { Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
 import { loadRedteamProvider } from './providers/shared';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
-import type { SynthesizeOptions } from './types';
+import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
 
 /**
  * Determines the status of test generation based on requested and generated counts.
@@ -118,12 +118,16 @@ const formatTestCount = (numTests: number): string =>
 
 /**
  * Checks if a plugin matches any of the strategy's target plugins
+ * @param pluginId - The ID of the plugin to check
+ * @param targetPlugins - Optional array of plugin IDs to match against
  */
-function pluginMatchesStrategyTargets(pluginId: string, targetPlugins?: string[]): boolean {
+function pluginMatchesStrategyTargets(
+  pluginId: RedteamPluginObject['id'],
+  targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
+): boolean {
   if (!targetPlugins || targetPlugins.length === 0) {
     return true; // If no targets specified, strategy applies to all plugins
   }
-
 
   return targetPlugins.some((target) => {
     // Direct match
