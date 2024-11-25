@@ -76,6 +76,31 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should read CSV file with BOM (Byte Order Mark) and return test cases', async () => {
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValue(
+        '\uFEFFvar1,var2,__expected\nvalue1,value2,expected1\nvalue3,value4,expected2',
+      );
+    const result = await readStandaloneTestsFile('test.csv');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'), 'utf-8');
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
+  });
+
   it('should read JSON file and return test cases', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify([
