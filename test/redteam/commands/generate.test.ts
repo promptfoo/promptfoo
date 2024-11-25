@@ -2,7 +2,7 @@ import fs from 'fs';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
-import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
+import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
 import * as configModule from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/manage';
 
@@ -198,6 +198,75 @@ describe('doGenerateRedteam', () => {
         }),
       }),
       'redteam.yaml',
+    );
+  });
+
+  it('should properly handle numTests for both string and object-style plugins', async () => {
+    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        providers: [],
+      },
+      config: {
+        redteam: {
+          numTests: 1, // Global setting
+          plugins: [
+            'contracts' as unknown as RedteamPluginObject, // String-style plugin
+            { id: 'competitors' }, // Object-style plugin without override
+            { id: 'overreliance', numTests: 3 }, // Object-style plugin with override
+          ],
+          strategies: [],
+        },
+      },
+    });
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      }),
+    );
+
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      force: true,
+      purpose: 'Test purpose',
+      config: 'config.yaml',
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(synthesize).toHaveBeenCalledTimes(1);
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        language: undefined,
+        numTests: 1,
+        plugins: [
+          expect.objectContaining({ id: 'competitors', numTests: 1 }), // Should inherit global numTests
+          expect.objectContaining({ id: 'contracts', numTests: 1 }), // Should inherit global numTests
+          expect.objectContaining({ id: 'overreliance', numTests: 3 }), // Should use its own numTests
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+      }),
     );
   });
 });

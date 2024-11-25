@@ -80,7 +80,7 @@ export async function readStandaloneTestsFile(
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'csv tests file - local',
     });
-    rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true });
+    rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true, bom: true });
   } else if (fileExtension === 'json') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'json tests file',
