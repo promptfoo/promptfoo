@@ -350,18 +350,30 @@ export class HttpProvider implements ApiProvider {
     const headers = this.getHeaders(defaultHeaders, vars);
     this.validateContentTypeAndBody(headers, this.config.body);
 
+    // Transform prompt using request parser
     const parsedPrompt = await (await this.requestParser)(prompt);
-    const body = contentTypeIsJson(headers)
-      ? typeof parsedPrompt === 'object' && parsedPrompt !== null
-        ? Object.assign({}, this.config.body || {}, parsedPrompt)
-        : processJsonBody(this.config.body as Record<string, any> | any[], {
-            ...vars,
-            prompt: parsedPrompt,
-          })
-      : processTextBody(this.config.body as string, {
+
+    // Determine body based on content type and parsed prompt
+    let body: Record<string, any> | any[] | string;
+    if (contentTypeIsJson(headers)) {
+      // For JSON content type
+      if (typeof parsedPrompt === 'object' && parsedPrompt !== null) {
+        // If parser returned an object, merge it with config body
+        body = Object.assign({}, this.config.body || {}, parsedPrompt);
+      } else {
+        // Otherwise process the config body with parsed prompt
+        body = processJsonBody(this.config.body as Record<string, any> | any[], {
           ...vars,
           prompt: parsedPrompt,
         });
+      }
+    } else {
+      // For non-JSON content type, process as text
+      body = processTextBody(this.config.body as string, {
+        ...vars,
+        prompt: parsedPrompt,
+      });
+    }
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
