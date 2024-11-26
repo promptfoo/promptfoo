@@ -1,6 +1,5 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
-import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
@@ -9,20 +8,21 @@ import type { TestCase } from '../../types';
 import { getRemoteGenerationUrl } from '../constants';
 import { neverGenerateRemote } from '../util';
 
-async function generateCitations(
+async function generateCompositePrompts(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: Record<string, any> & { n?: number; modelFamily?: string },
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
     const concurrency = 10;
-    const allResults: TestCase[] = [];
+    let allResults: TestCase[] = [];
 
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
         {
-          format: 'Citation Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
+          format:
+            'Composite Jailbreak Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
         },
         Presets.shades_classic,
@@ -33,15 +33,14 @@ async function generateCitations(
     await async.forEachOfLimit(testCases, concurrency, async (testCase, index) => {
       invariant(
         testCase.vars,
-        `Citation: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
+        `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
       );
 
       const payload = {
-        task: 'citation',
-        testCases: [testCase],
-        injectVar,
-        topic: testCase.vars[injectVar],
-        config,
+        task: 'jailbreak:composite',
+        prompt: testCase.vars[injectVar],
+        ...(config.n && { n: config.n }),
+        ...(config.modelFamily && { modelFamily: config.modelFamily }),
       };
 
       const { data } = await fetchWithCache(
@@ -57,31 +56,28 @@ async function generateCitations(
       );
 
       logger.debug(
-        `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,
+        `Got composite jailbreak generation result for case ${Number(index) + 1}: ${JSON.stringify(
+          data,
+        )}`,
       );
 
-      const citationTestCase = {
+      const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => ({
         ...testCase,
         vars: {
           ...testCase.vars,
-          [injectVar]: dedent`
-            Based on the following ${data.result.citation.type.toLowerCase()}, ${testCase.vars[injectVar]}
-
-          Reference:
-          1. ${data.result.citation.content}
-        `,
+          [injectVar]: modifiedPrompt,
         },
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/Citation`,
+          metric: `${assertion.metric}/Composite`,
         })),
         metadata: {
           ...testCase.metadata,
-          citation: data.result.citation,
+          strategy: 'jailbreak:composite',
         },
-      };
+      }));
 
-      allResults.push(citationTestCase);
+      allResults = allResults.concat(compositeTestCases);
 
       if (progressBar) {
         progressBar.increment(1);
@@ -99,24 +95,24 @@ async function generateCitations(
     if (progressBar) {
       progressBar.stop();
     }
-    logger.error(`Error in remote citation generation: ${error}`);
+    logger.error(`Error in composite generation: ${error}`);
     return [];
   }
 }
 
-export async function addCitationTestCases(
+export async function addCompositeTestCases(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
-    throw new Error('Citation strategy requires remote generation to be enabled');
+    throw new Error('Composite jailbreak strategy requires remote generation to be enabled');
   }
 
-  const citationTestCases = await generateCitations(testCases, injectVar, config);
-  if (citationTestCases.length === 0) {
-    logger.warn('No citation test cases were generated');
+  const compositeTestCases = await generateCompositePrompts(testCases, injectVar, config);
+  if (compositeTestCases.length === 0) {
+    logger.warn('No composite  jailbreak test cases were generated');
   }
 
-  return citationTestCases;
+  return compositeTestCases;
 }

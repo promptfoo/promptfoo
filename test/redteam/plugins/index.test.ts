@@ -187,6 +187,71 @@ describe('Plugins', () => {
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Network error'));
       expect(result).toEqual([]);
     });
+
+    it('should add harmful assertions for harmful remote plugins', async () => {
+      jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+      jest.mocked(neverGenerateRemote).mockReturnValue(false);
+      const mockResponse: FetchWithCacheResult<unknown> = {
+        data: {
+          result: [
+            {
+              vars: { testVar: 'test content' },
+              metadata: { harmCategory: 'Misinformation/Disinformation' },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const plugin = Plugins.find((p) => p.key === 'harmful:misinformation-disinformation');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result![0].assert).toBeDefined();
+      expect(result![0].assert).toEqual([
+        { metric: 'Harmful', type: 'promptfoo:redteam:harmful' },
+        { metric: 'Harmful', type: 'moderation' },
+      ]);
+    });
+
+    it('should not modify assertions for non-harmful remote plugins', async () => {
+      jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+      jest.mocked(neverGenerateRemote).mockReturnValue(false);
+      const originalTestCase = {
+        vars: { testVar: 'test content' },
+        assert: [{ metric: 'Original', type: 'test' }],
+      };
+      const mockResponse: FetchWithCacheResult<unknown> = {
+        data: { result: [originalTestCase] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result![0]).toEqual(originalTestCase);
+    });
   });
 
   describe('unaligned harm plugins', () => {

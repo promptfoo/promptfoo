@@ -148,6 +148,22 @@ export async function fetchWithRetries(
 
       return response;
     } catch (error) {
+      let errorMessage;
+      if (error instanceof Error) {
+        // Extract as much detail as possible from the error
+        errorMessage = `${error.name}: ${error.message}`;
+        if ('cause' in error) {
+          errorMessage += ` (Cause: ${error.cause})`;
+        }
+        if ('code' in error) {
+          // Node.js system errors often have error codes
+          errorMessage += ` (Code: ${error.code})`;
+        }
+      } else {
+        errorMessage = String(error);
+      }
+
+      logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
       lastError = error;
       const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
       await sleep(waitTime);
