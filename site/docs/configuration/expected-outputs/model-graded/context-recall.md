@@ -54,7 +54,7 @@ defaultTest:
   options:
     provider:
       text:
-        id: openai:gpt-4
+        id: openai:gpt-4o
       embedding:
         id: openai:text-embedding-ada-002
 ```

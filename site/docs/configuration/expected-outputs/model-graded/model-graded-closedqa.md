@@ -34,7 +34,7 @@ Similar to `llm-rubric` but with a more focused evaluation approach specifically
 
 ```yaml
 providers:
-  - openai:gpt-4
+  - openai:gpt-4o
 prompts:
   - file://prompts/customer_service.txt
 tests:

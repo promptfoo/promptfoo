@@ -44,7 +44,7 @@ assert:
 
 ```yaml
 providers:
-  - openai:gpt-4
+  - openai:gpt-4o
 prompts:
   - file://prompts/capitals.txt
 tests:

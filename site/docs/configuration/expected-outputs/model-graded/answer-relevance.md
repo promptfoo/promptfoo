@@ -41,7 +41,7 @@ Example using prompt text:
 prompts:
   - 'What is the capital of {{country}}?'
 providers:
-  - openai:gpt-4
+  - openai:gpt-4o
 tests:
   - vars:
       country: France
@@ -59,7 +59,7 @@ defaultTest:
   options:
     provider:
       text:
-        id: openai:gpt-4
+        id: openai:gpt-4o
       embedding:
         id: openai:text-embedding-ada-002
 ```

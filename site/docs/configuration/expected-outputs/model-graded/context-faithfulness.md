@@ -57,7 +57,7 @@ defaultTest:
   options:
     provider:
       text:
-        id: openai:gpt-4
+        id: openai:gpt-4o
         config:
           temperature: 0
 ```

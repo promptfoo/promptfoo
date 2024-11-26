@@ -82,7 +82,7 @@ prompts:
     Respond to this query: {{query}}
     Here is some context that you can use to write your response: {{context}}
 providers:
-  - openai:gpt-4
+  - openai:gpt-4o
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -130,7 +130,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
 
 providers:
-  - openai:gpt-4
+  - openai:gpt-4o
 
 tests:
   - vars:
@@ -200,7 +200,7 @@ defaultTest:
   options:
     provider:
       text:
-        id: azureopenai:chat:gpt-4-deployment
+        id: azureopenai:chat:gpt-4o-deployment
         config:
           apiHost: xxx.openai.azure.com
       embedding:

@@ -31,7 +31,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
 
 providers:
-  - openai:gpt-4
+  - openai:gpt-4o
 
 tests:
   - vars:
