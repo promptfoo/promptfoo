@@ -5,6 +5,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+import type { HarmPlugin } from '../constants';
 import { PII_PLUGINS, REDTEAM_PROVIDER_HARM_PLUGINS, getRemoteGenerationUrl } from '../constants';
 import { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../constants';
 import { neverGenerateRemote, shouldGenerateRemote } from '../util';
@@ -15,6 +16,7 @@ import { DebugAccessPlugin } from './debugAccess';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { AlignedHarmfulPlugin } from './harmful/aligned';
+import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
@@ -181,7 +183,14 @@ function createRemotePlugin<T extends PluginConfig>(
       if (neverGenerateRemote()) {
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }
-      return fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      const testCases: TestCase[] = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      if (key.startsWith('harmful:')) {
+        return testCases.map((testCase) => ({
+          ...testCase,
+          assert: getHarmfulAssertions(key as HarmPlugin),
+        }));
+      }
+      return testCases;
     },
   };
 }
@@ -190,6 +199,7 @@ const remotePlugins: PluginFactory[] = [
   'bfla',
   'bola',
   'competitors',
+  'harmful:misinformation-disinformation',
   'hijacking',
   'religion',
   'ssrf',
