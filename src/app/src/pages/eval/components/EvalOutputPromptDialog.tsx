@@ -32,6 +32,8 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
     return null;
   }
 
+  const hasMetrics = gradingResults.some((result) => result?.assertion?.metric);
+
   const toggleExpand = (index: number) => {
     setExpandedValues((prev) => ({ ...prev, [index]: !prev[index] }));
   };
@@ -43,6 +45,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
         <Table>
           <TableHead>
             <TableRow>
+              {hasMetrics && <TableCell style={{ fontWeight: 'bold' }}>Metric</TableCell>}
               <TableCell style={{ fontWeight: 'bold' }}>Pass</TableCell>
               <TableCell style={{ fontWeight: 'bold' }}>Score</TableCell>
               <TableCell style={{ fontWeight: 'bold' }}>Type</TableCell>
@@ -65,6 +68,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
               return (
                 <TableRow key={i}>
+                  {hasMetrics && <TableCell>{result.assertion?.metric || ''}</TableCell>}
                   <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
                   <TableCell>{result.score?.toFixed(2)}</TableCell>
                   <TableCell>{result.assertion?.type || ''}</TableCell>
