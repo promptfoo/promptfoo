@@ -58,9 +58,9 @@ export async function evaluatePrompt(prompt: string): Promise<EvaluationResult> 
 
 ## Testing with Promptfoo
 
-To make the evaluation of prompts more seamless, the prompts can be loaded directly to Promptfoo tests. This way whenever in the application the prompts are updated, the tests can evaluate the most up to date prompt.
+To make the evaluation of prompts more seamless, the prompts can be loaded directly into Promptfoo tests. This way, whenever the prompts are updated in the application, the tests can evaluate the most up-to-date prompt.
 
-Change the prompt to a function that can be loaded in Promptfoo configuration file, as described in loading [prompt functions documentation](https://www.promptfoo.dev/docs/configuration/parameters/). Change how the substitution of variables is done to regular JS substitution.
+Change the prompt to a function that can be loaded in the Promptfoo configuration file, as described in the [prompt functions documentation](https://www.promptfoo.dev/docs/configuration/parameters/). Change how the substitution of variables is done to regular JS substitution.
 
 ```tsx
 export function toneEvaluationInstructions(vars): string {
@@ -89,7 +89,7 @@ ${vars.vars.prompt}
 }
 ```
 
-In Promptfoo test, load the prompt. Promptfoo tests will pass variables in a vars object. In this vars object the variables are accessible as vars.vars. Example above shows accessing prompt as vars.vars.prompt.
+In Promptfoo tests, load the prompt. Promptfoo tests will pass variables in a vars object. In this vars object, the variables are accessible as vars.vars. The example above shows accessing prompt as vars.vars.prompt.
 
 ```yaml
 prompts:
@@ -137,4 +137,4 @@ export async function evaluatePrompt(prompt: string): Promise<EvaluationResult> 
 }
 ```
 
-In conclusion, this setup allows to load most up to date prompts from the application code and test them continuously. In addition, the changes in formatting now allow for integration with LangChain PromptTemplate.
+In conclusion, this setup allows you to load the most up-to-date prompts from your application code, test them continuously, and integrate with LangChain PromptTemplate by properly handling the formatting differences between the two systems. For more information, see the [LangChain PromptTemplate documentation](https://python.langchain.com/api_reference/core/prompts/langchain_core.prompts.prompt.PromptTemplate.html) and [Promptfoo's prompt functions guide](https://www.promptfoo.dev/docs/configuration/parameters/).
