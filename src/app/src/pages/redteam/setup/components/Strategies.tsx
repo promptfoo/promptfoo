@@ -31,7 +31,7 @@ interface StrategiesProps {
   onBack: () => void;
 }
 
-const availableStrategies = ALL_STRATEGIES.map((id) => ({
+const availableStrategies = ALL_STRATEGIES.filter((id) => id !== 'default').map((id) => ({
   id,
   name: strategyDisplayNames[id] || id,
   description: strategyDescriptions[id],
