@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import React from 'react';
-import type { AssertionType, GradingResult } from '@/types';
+import type { AssertionType, GradingResult } from '@promptfoo/types';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
