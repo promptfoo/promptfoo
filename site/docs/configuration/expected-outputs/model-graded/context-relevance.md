@@ -24,8 +24,8 @@ The assertion requires two variables in your test:
 Under the hood, `context-relevance` evaluates:
 
 1. The semantic similarity between the query and context
-2. The proportion of relevant sentences in the context needed to answer the query
-3. Whether the context contains information necessary to address the query
+2. Whether the context contains information necessary to address the query
+3. The relevance of each context segment to the query intent
 
 Example configuration:
 

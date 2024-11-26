@@ -17,8 +17,9 @@ assert:
 Under the hood, `select-best`:
 
 1. Collects all outputs from a single test case
-2. Uses an LLM to evaluate which output best matches the given criteria
-3. Marks the winning output as PASS (score: 1.0) and others as FAIL (score: 0.0)
+2. Uses an LLM to compare outputs against the specified criteria
+3. Performs pairwise comparisons when needed for complex evaluations
+4. Marks the winning output as PASS (1.0) and others as FAIL (0.0)
 
 ### Example Configuration
 
@@ -77,6 +78,15 @@ defaultTest:
 
       Analyze each output and return the index (0-based) of the best output.
 ```
+
+### Scoring Methodology
+
+Unlike `llm-rubric` which provides nuanced scoring between 0-1, `select-best` uses a binary scoring system:
+
+- Winner: score = 1.0 (PASS)
+- Others: score = 0.0 (FAIL)
+
+For more granular comparison, consider using multiple `llm-rubric` assertions with specific criteria.
 
 ### References
 

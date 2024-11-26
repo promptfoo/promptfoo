@@ -71,3 +71,7 @@ defaultTest:
 - Based on [OpenAI's factuality evaluation](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml)
 - See [factuality evaluation guide](/docs/guides/factuality-eval) for detailed usage
 - See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more configuration options
+
+### Comparison to other graders
+
+While `llm-rubric` provides general-purpose grading and `model-graded-closedqa` handles binary criteria, `factuality` is specifically designed for comparing outputs against reference answers using OpenAI's categorical evaluation framework.

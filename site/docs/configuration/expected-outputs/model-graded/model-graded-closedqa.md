@@ -1,6 +1,13 @@
 # Model Graded Closed QA
 
-The `model-graded-closedqa` assertion type evaluates whether an LLM's output meets specific criteria, using OpenAI's closed-ended question-answering evaluation methodology.
+The `model-graded-closedqa` assertion type evaluates whether an LLM's output meets specific criteria, using OpenAI's closed-ended question-answering evaluation methodology. While similar to `llm-rubric`, this evaluator is specifically optimized for yes/no criteria checking rather than nuanced scoring.
+
+### Key differences from llm-rubric
+
+- Focused on binary pass/fail evaluation
+- Uses OpenAI's official closedqa prompt template
+- Better suited for clear, objective criteria
+- Less flexible but potentially more consistent for simple checks
 
 ### How to use it
 
