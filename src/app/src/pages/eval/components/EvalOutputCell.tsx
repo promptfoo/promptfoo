@@ -20,7 +20,7 @@ function scoreToString(score: number | null) {
   return `(${score.toFixed(2)})`;
 }
 
-interface EvalOutputCellProps {
+export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
@@ -454,6 +454,21 @@ function EvalOutputCell({
   }
 
   const scoreString = scoreToString(output.score);
+
+  const getCombinedContextText = () => {
+    if (!output.gradingResult?.componentResults) {
+      return output.text;
+    }
+
+    return output.gradingResult.componentResults
+      .map((result, index) => {
+        const displayName = result.assertion?.metric || result.assertion?.type || 'unknown';
+        const value = result.assertion?.value || '';
+        return `Assertion ${index + 1} (${displayName}): ${value}`;
+      })
+      .join('\n\n');
+  };
+
   return (
     <div className="cell" style={cellStyle}>
       {showPassFail && (
@@ -501,7 +516,7 @@ function EvalOutputCell({
       )}
       <CommentDialog
         open={commentDialogOpen}
-        contextText={output.text}
+        contextText={getCombinedContextText()}
         commentText={commentText}
         onClose={handleCommentClose}
         onSave={handleCommentSave}
