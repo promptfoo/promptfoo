@@ -4,7 +4,7 @@ import { startServer } from '../../server/server';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { setConfigDirectoryPath } from '../../util/config/manage';
-import { BrowserBehavior } from '../../util/server';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 
 export function redteamSetupCommand(program: Command) {
   program
@@ -33,8 +33,14 @@ export function redteamSetupCommand(program: Command) {
           setConfigDirectoryPath(directory);
         }
 
+        const isRunning = await checkServerRunning();
         const browserBehavior = BrowserBehavior.OPEN_TO_REDTEAM_CREATE;
-        await startServer(cmdObj.port, browserBehavior, cmdObj.filterDescription);
+
+        if (isRunning) {
+          await openBrowser(browserBehavior);
+        } else {
+          await startServer(cmdObj.port, browserBehavior, cmdObj.filterDescription);
+        }
       },
     );
 }
