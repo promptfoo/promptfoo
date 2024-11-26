@@ -372,6 +372,9 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
 export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
+export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
+export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
+
 export const ADDITIONAL_STRATEGIES = [
   'ascii-smuggling',
   'base64',

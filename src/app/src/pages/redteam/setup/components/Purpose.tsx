@@ -9,6 +9,7 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { alpha } from '@mui/material/styles';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Prompts from './Prompts';
 
@@ -32,9 +33,29 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
         Application Details
       </Typography>
-      <Alert severity="info">
-        The more information you provide, the better the redteam attacks will be and the more
-        accurate the results.
+      <Alert
+        severity="info"
+        sx={{
+          '& .MuiAlert-icon': {
+            color: 'info.main',
+          },
+          backgroundColor: (theme) =>
+            theme.palette.mode === 'dark'
+              ? alpha(theme.palette.info.main, 0.1)
+              : alpha(theme.palette.info.main, 0.05),
+          border: (theme) =>
+            `1px solid ${
+              theme.palette.mode === 'dark'
+                ? alpha(theme.palette.info.main, 0.3)
+                : alpha(theme.palette.info.main, 0.2)
+            }`,
+          '& .MuiAlert-message': {
+            color: 'text.primary',
+          },
+        }}
+      >
+        The more information you provide, the better the redteam attacks will be. You can leave
+        fields blank if they're not relevant, and you'll be able to revise information later.
       </Alert>
 
       <Box>
