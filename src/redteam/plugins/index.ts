@@ -190,6 +190,7 @@ const remotePlugins: PluginFactory[] = [
   'bfla',
   'bola',
   'competitors',
+  'harmful:misinformation-disinformation',
   'hijacking',
   'religion',
   'ssrf',
