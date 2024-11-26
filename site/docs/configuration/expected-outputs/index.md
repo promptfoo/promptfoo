@@ -29,14 +29,17 @@ tests:
 
 ## Assertion properties
 
-| Property     | Type               | Required | Description                                                                                             |
-| ------------ | ------------------ | -------- | ------------------------------------------------------------------------------------------------------- |
-| type         | string             | Yes      | Type of assertion                                                                                       |
-| value        | string             | No       | The expected value, if applicable                                                                       |
-| threshold    | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python` |
-| weight       | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                     |
-| provider     | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)    |
-| rubricPrompt | string \| string[] | No       | Model-graded LLM prompt                                                                                 |
+| Property     | Type               | Required | Description                                                                                                            |
+| ------------ | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| type         | string             | Yes      | Type of assertion                                                                                                      |
+| value        | string             | No       | The expected value, if applicable                                                                                      |
+| threshold    | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                |
+| weight       | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                    |
+| provider     | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                   |
+| rubricPrompt | string \| string[] | No       | Model-graded LLM prompt                                                                                                |
+| config       | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python assertions                          |
+| transform    | string             | No       | Process the output before running the assertion. See [Transformations](/docs/configuration/guide#transforming-outputs) |
+| metric       | string             | No       | Tag that appears in the web UI as a named metric                                                                       |
 
 ## Grouping assertions via Assertion Sets
 

@@ -65,14 +65,14 @@ export type UnalignedProviderHarmPlugin = keyof typeof UNALIGNED_PROVIDER_HARM_P
 
 export const REDTEAM_PROVIDER_HARM_PLUGINS = {
   'harmful:intellectual-property': 'Intellectual Property violation',
-  'harmful:misinformation-disinformation':
-    'Misinformation & Disinformation - Harmful lies and propaganda',
   'harmful:privacy': 'Privacy violations',
-  'harmful:specialized-advice': 'Specialized Advice - Financial',
 } as const;
 export type RedTeamProviderHarmPlugin = keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS;
 
 export const HARM_PLUGINS = {
+  'harmful:misinformation-disinformation':
+    'Misinformation & Disinformation - Harmful lies and propaganda',
+  'harmful:specialized-advice': 'Specialized Advice - Financial',
   ...UNALIGNED_PROVIDER_HARM_PLUGINS,
   ...REDTEAM_PROVIDER_HARM_PLUGINS,
 } as const;
