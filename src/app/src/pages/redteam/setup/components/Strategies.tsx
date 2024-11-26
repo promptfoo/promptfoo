@@ -114,23 +114,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             </Box>
           </Typography>
           <Typography variant="body2" color="text.secondary" paragraph>
-            • <strong>Multi-turn strategies</strong>{' '}
-            <Chip
-              size="small"
-              label="Multi-turn"
-              color="secondary"
-              sx={{
-                ml: 1,
-                backgroundColor: (theme) =>
-                  theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.secondary.main, 0.1)
-                    : alpha(theme.palette.secondary.main, 0.1),
-                color: 'secondary.main',
-                borderColor: 'secondary.main',
-                border: 1,
-              }}
-            />{' '}
-            simulate realistic conversations through multiple exchanges. These are essential for:
+            • <strong>Multi-turn strategies</strong> simulate realistic conversations through
+            multiple exchanges. These are ideal for:
             <Box component="ul" sx={{ mt: 1, mb: 2 }}>
               <li>Chatbots and conversational agents</li>
               <li>Systems that maintain conversation history</li>
@@ -138,17 +123,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             </Box>
           </Typography>
         </Box>
-        <Alert severity="info" sx={{ mb: 2 }}>
-          <Typography variant="body2">
-            <strong>Cost vs. Coverage Trade-off:</strong> Multi-turn strategies provide deeper
-            security testing by simulating realistic user interactions, but use more API calls
-            (typically 3-10x more). Choose based on your application type:
-          </Typography>
-          <Box component="ul" sx={{ mt: 1, mb: 0 }}>
-            <li>For chatbots: Use multi-turn strategies for comprehensive testing</li>
-            <li>For simple completion APIs: Single-turn strategies are more cost-effective</li>
-          </Box>
-        </Alert>
       </Paper>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
