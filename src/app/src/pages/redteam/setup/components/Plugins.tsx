@@ -79,6 +79,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   });
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   const [debouncedPlugins] = useDebounce(
     useMemo(
@@ -279,12 +280,75 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     if (pluginsToShow.length === 0) {
       return null;
     }
+
+    const isExpanded = expandedCategories.has(category);
+
     return (
-      <Accordion key={category} defaultExpanded>
+      <Accordion
+        key={category}
+        expanded={isExpanded}
+        onChange={(event, expanded) => {
+          setExpandedCategories((prev) => {
+            const newSet = new Set(prev);
+            if (expanded) {
+              newSet.add(category);
+            } else {
+              newSet.delete(category);
+            }
+            return newSet;
+          });
+        }}
+      >
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-            {category}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+            <Typography variant="h6" sx={{ fontWeight: 'medium', flex: 1 }}>
+              {category}
+            </Typography>
+            {isExpanded && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 2,
+                  mr: 2,
+                  '& > *': {
+                    color: 'primary.main',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    textDecoration: 'none',
+                    '&:hover': {
+                      textDecoration: 'underline',
+                    },
+                  },
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Box
+                  component="span"
+                  onClick={() => {
+                    pluginsToShow.forEach((plugin) => {
+                      if (!selectedPlugins.has(plugin)) {
+                        handlePluginToggle(plugin);
+                      }
+                    });
+                  }}
+                >
+                  Select all
+                </Box>
+                <Box
+                  component="span"
+                  onClick={() => {
+                    pluginsToShow.forEach((plugin) => {
+                      if (selectedPlugins.has(plugin)) {
+                        handlePluginToggle(plugin);
+                      }
+                    });
+                  }}
+                >
+                  Select none
+                </Box>
+              </Box>
+            )}
+          </Box>
         </AccordionSummary>
         <AccordionDetails>
           <Grid container spacing={2}>
