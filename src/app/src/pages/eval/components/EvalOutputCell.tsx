@@ -20,7 +20,7 @@ function scoreToString(score: number | null) {
   return `(${score.toFixed(2)})`;
 }
 
-interface EvalOutputCellProps {
+export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
