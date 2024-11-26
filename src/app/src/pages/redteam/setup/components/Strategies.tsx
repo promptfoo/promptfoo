@@ -2,18 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import { Alert } from '@mui/material';
-import Box from '@mui/material/Box';
+import { Alert, Paper, Box, Typography, Chip } from '@mui/material';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
-import Chip from '@mui/material/Chip';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
-import Paper from '@mui/material/Paper';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { alpha } from '@mui/material/styles';
 import {
@@ -97,6 +93,63 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
         Strategy Configuration
       </Typography>
+
+      <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          About Testing Strategies
+        </Typography>
+        <Typography variant="body2" color="text.secondary" paragraph>
+          LLM applications typically interact with users in one of two ways: single-turn (one-shot)
+          or multi-turn (conversational) interactions. Your choice of testing strategy should match
+          your application's interaction model.
+        </Typography>
+        <Box sx={{ ml: 2, mb: 2 }}>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            • <strong>Single-turn strategies</strong> test individual prompts in isolation. These
+            are ideal for:
+            <Box component="ul" sx={{ mt: 1, mb: 2 }}>
+              <li>Systems where each prompt is independent</li>
+              <li>API endpoints (e.g., text classification, content generation)</li>
+              <li>Completion tasks (e.g., code generation, text summarization)</li>
+            </Box>
+          </Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            • <strong>Multi-turn strategies</strong>{' '}
+            <Chip
+              size="small"
+              label="Multi-turn"
+              color="secondary"
+              sx={{
+                ml: 1,
+                backgroundColor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? alpha(theme.palette.secondary.main, 0.1)
+                    : alpha(theme.palette.secondary.main, 0.1),
+                color: 'secondary.main',
+                borderColor: 'secondary.main',
+                border: 1,
+              }}
+            />{' '}
+            simulate realistic conversations through multiple exchanges. These are essential for:
+            <Box component="ul" sx={{ mt: 1, mb: 2 }}>
+              <li>Chatbots and conversational agents</li>
+              <li>Systems that maintain conversation history</li>
+              <li>Applications where context builds over time</li>
+            </Box>
+          </Typography>
+        </Box>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Typography variant="body2">
+            <strong>Cost vs. Coverage Trade-off:</strong> Multi-turn strategies provide deeper
+            security testing by simulating realistic user interactions, but use more API calls
+            (typically 3-10x more). Choose based on your application type:
+          </Typography>
+          <Box component="ul" sx={{ mt: 1, mb: 0 }}>
+            <li>For chatbots: Use multi-turn strategies for comprehensive testing</li>
+            <li>For simple completion APIs: Single-turn strategies are more cost-effective</li>
+          </Box>
+        </Alert>
+      </Paper>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {availableStrategies.map((strategy) => (
