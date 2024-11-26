@@ -15,11 +15,13 @@ import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 import {
   DEFAULT_STRATEGIES,
   ALL_STRATEGIES,
   strategyDescriptions,
   strategyDisplayNames,
+  MULTI_TURN_STRATEGIES,
 } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -116,6 +118,24 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                       {DEFAULT_STRATEGIES.includes(
                         strategy.id as (typeof DEFAULT_STRATEGIES)[number],
                       ) && <Chip label="Recommended" size="small" color="default" />}
+                      {MULTI_TURN_STRATEGIES.includes(
+                        strategy.id as (typeof MULTI_TURN_STRATEGIES)[number],
+                      ) && (
+                        <Chip
+                          label="Multi-turn"
+                          size="small"
+                          color="secondary"
+                          sx={{
+                            backgroundColor: (theme) =>
+                              theme.palette.mode === 'dark'
+                                ? alpha(theme.palette.secondary.main, 0.1)
+                                : alpha(theme.palette.secondary.main, 0.1),
+                            color: 'secondary.main',
+                            borderColor: 'secondary.main',
+                            border: 1,
+                          }}
+                        />
+                      )}
                     </Box>
                     <Typography variant="body2" color="text.secondary">
                       {strategy.description}
