@@ -63,7 +63,10 @@ async function generateCompositePrompts(
 
       const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => ({
         ...testCase,
-        prompt: modifiedPrompt,
+        vars: {
+          ...testCase.vars,
+          [injectVar]: modifiedPrompt,
+        },
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
           metric: `${assertion.metric}/Composite`,
