@@ -51,7 +51,7 @@ export default class GoatProvider implements ApiProvider {
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
 
-    const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] | null = [];
+    const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] = [];
     const totalTokenUsage = {
       total: 0,
       prompt: 0,
