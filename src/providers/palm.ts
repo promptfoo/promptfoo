@@ -1,7 +1,8 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse, CallApiContextParams } from '../types';
+import type { ApiProvider, ProviderResponse, CallApiContextParams } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { CHAT_MODELS } from './googleShared';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';

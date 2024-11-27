@@ -176,11 +176,28 @@ describe('TestSuiteConfigSchema', () => {
   for (const file of configFiles) {
     it(`should validate ${path.relative(rootDir, file)}`, async () => {
       const configContent = fs.readFileSync(file, 'utf8');
-      const config = yaml.load(configContent);
-      // Redteam has some aliases that are not part of validation.
-      // https://promptfoo.slack.com/archives/C075591T82G/p1726543510276649?thread_ts=1726459997.469519&cid=C075591T82G
-      // One day once we've moved these aliases into the zod validator, we can remove this.
-      const result = TestSuiteConfigSchema.safeParse(config);
+      const config = yaml.load(configContent) as Record<string, unknown>;
+      const extendedSchema = TestSuiteConfigSchema.extend({
+        targets: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
+        providers: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
+        ...(typeof config.redteam !== 'undefined' && {
+          prompts: z.optional(TestSuiteConfigSchema.shape.prompts),
+        }),
+      }).refine(
+        (data) => {
+          const hasTargets = Boolean(data.targets);
+          const hasProviders = Boolean(data.providers);
+          return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+        },
+        {
+          message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+        },
+      );
+
+      const result = extendedSchema.safeParse(config);
+      if (!result.success) {
+        console.error(`Validation failed for ${file}:`, result.error);
+      }
       expect(result.success).toBe(true);
     });
   }

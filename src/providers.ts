@@ -66,6 +66,7 @@ import {
   ReplicateProvider,
 } from './providers/replicate';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
+import { SequenceProvider } from './providers/sequence';
 import { SimulatedUser } from './providers/simulatedUser';
 import { createTogetherAiProvider } from './providers/togetherai';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
@@ -79,24 +80,16 @@ import RedteamGoatProvider from './redteam/providers/goat';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
-import type { TestSuiteConfig } from './types';
-import type {
-  ApiProvider,
-  EnvOverrides,
-  ProviderOptions,
-  ProviderOptionsMap,
-} from './types/providers';
+import type { LoadApiProviderContext, TestSuiteConfig } from './types';
+import type { EnvOverrides } from './types/env';
+import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from './types/providers';
 import { isJavascriptFile } from './util/file';
 import { getNunjucksEngine } from './util/templates';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
   providerPath: string,
-  context: {
-    options?: ProviderOptions;
-    basePath?: string;
-    env?: EnvOverrides;
-  } = {},
+  context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
@@ -476,6 +469,8 @@ export async function loadApiProvider(
     ret = new RedteamIterativeTreeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:simulated-user') {
     ret = new SimulatedUser(providerOptions);
+  } else if (providerPath === 'sequence') {
+    ret = new SequenceProvider(providerOptions);
   } else if (providerPath.startsWith('groq:')) {
     const modelName = providerPath.split(':')[1];
     ret = new GroqProvider(modelName, providerOptions);

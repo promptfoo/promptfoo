@@ -16,10 +16,10 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { sleep } from '../util/time';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase, calculateCost } from './shared';

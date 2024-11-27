@@ -50,6 +50,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
         providerResponse: result.raw,
         parsedResponse: result.output,
         error: result.error,
+        headers: result.metadata?.headers,
       }),
     });
     if (!response.ok) {

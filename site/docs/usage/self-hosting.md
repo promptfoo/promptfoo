@@ -105,3 +105,48 @@ sharing:
   apiBaseUrl: http://localhost:3000
   appBaseUrl: http://localhost:3000
 ```
+
+## Specifications
+
+Promptfoo comes in two parts:
+
+- A client tool for running evals and interacting with the Promptfoo API.
+- A web server that stores and analyzes results, serves dashboards, enables sharing, and provides a UI for viewing reports from other users.
+
+### Client
+
+The Promptfoo client is a Node.js application that runs on all modern operating systems. It can be run on a laptop or personal computer, in a CI/CD pipeline, or on a server.
+
+#### Requirements
+
+- **Operating System**: Linux, MacOS, Windows (Linux recommended for server installations)
+- **CPU**: 2+ CPU cores, 2.0GHz or faster recommended
+- **GPU**: Not required
+- **RAM**: 4 GB
+- **Storage**: 10 GB
+- **Dependencies**:
+  - **Node.js**: Version 18 or newer
+  - **Package Manager**: npm (comes with Node.js)
+
+### Server
+
+The Promptfoo server is a Node.js application that runs on a server. It can be run in a Docker container or as a standalone Node.js application.
+
+Note that the server is _optional_ for running evals or red teams with Promptfoo. You can run evals locally or in a CI/CD pipeline without running the server.
+
+#### Requirements
+
+Docker Environment
+
+- **Docker Engine**: 20.10 or newer
+- **Docker Compose**: 2.x or newer
+
+Results Server Host
+
+- **OS**: Anything capable of running Docker (Kubernetes, Azure Container Instances, etc.)
+- **CPU**: 4+ cores
+- **RAM**: 8GB minimum (16GB recommended)
+- **Storage**:
+  - 100GB+ for container volumes and database
+  - Device mapper or overlay2 storage driver recommended
+  - SSD storage recommended for database volumes

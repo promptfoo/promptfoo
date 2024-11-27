@@ -23,7 +23,7 @@ This is a remote-only strategy and requires an connection to promptfoo's free gr
 :::
 
 :::warning
-If your system maintains a conversation history and only expects the latest message to be sent, set `stateless: false`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#maintaining-session-ids-with-an-http-provider-and-multi-turn-redteam-attacks-like-goat-and-crescendo)
+If your system maintains a conversation history and only expects the latest message to be sent, set `stateless: false`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
 
 ## How It Works

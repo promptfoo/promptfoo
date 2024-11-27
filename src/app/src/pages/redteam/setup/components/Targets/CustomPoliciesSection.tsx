@@ -13,7 +13,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useDebounce } from 'use-debounce';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 
 interface PolicyInstance {
   id: string;

@@ -25,6 +25,9 @@ export interface ProviderOptions {
   id: string;
   label?: string;
   config: {
+    // Custom provider config can have anything
+    [key: string]: any;
+
     type?: 'http' | 'websocket' | 'browser';
     // HTTP/WebSocket specific options
     url?: string;
@@ -37,6 +40,7 @@ export interface ProviderOptions {
     headless?: boolean;
     timeoutMs?: number;
     responseParser?: string;
+    sessionParser?: string;
     cookies?:
       | Array<{
           name: string;

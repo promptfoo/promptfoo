@@ -94,7 +94,7 @@ tests:
 ```
 
 :::tip
-To learn more about assertions, see docs on configuring [expected outputs](/docs/configuration/expected-outputs).
+To learn more about assertions, see docs on configuring [assertions and metrics](/docs/configuration/expected-outputs).
 :::
 
 ## Import providers from separate files
@@ -184,7 +184,21 @@ tests:
       context: file://fetch_from_vector_database.py
 ```
 
-This is useful when testing vector databases like Pinecone, Chroma, Milvus, etc.
+Scripted vars are useful when testing vector databases like Pinecone, Chroma, Milvus, etc. You can communicate directly with the database to fetch the context you need.
+
+PDFs are also supported and can be used to extract text from a document:
+
+```yaml
+tests:
+  - vars:
+      paper: file://pdfs/arxiv_1.pdf
+```
+
+Note that you must install the `pdf-parse` package to use PDFs as variables:
+
+```
+npm install pdf-parse
+```
 
 ### Javascript variables
 

@@ -10,7 +10,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
-import type { EnvOverrides } from './types';
+import type { EnvOverrides } from './types/env';
 import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

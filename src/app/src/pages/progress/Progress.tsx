@@ -163,7 +163,7 @@ export default function Cols() {
   return (
     <Box paddingX={2}>
       <Box display="flex" justifyContent="space-between" alignItems="center">
-        <h2>Progress summary</h2>
+        <h2>Eval History</h2>
         <div>
           <Button
             id="export-button"

@@ -198,7 +198,7 @@ If you're looking to customize your usage, you have a wide set of parameters at 
 | `-r, --providers <name or path...>` | One of: openai:chat, openai:completion, openai:model-name, localai:chat:model-name, localai:completion:model-name. See [API providers][providers-docs]                                 |
 | `-o, --output <path>`               | Path to [output file](https://www.promptfoo.dev/docs/configuration/parameters#output-file) (csv, json, yaml, html)                                                                     |
 | `--tests <path>`                    | Path to [external test file](https://www.promptfoo.dev/docs/configurationexpected-outputsassertions#load-an-external-tests-file)                                                       |
-| `-c, --config <paths>`              | Path to one or more [configuration files](https://www.promptfoo.dev/docs/configuration/guide). `promptfooconfig.js/json/yaml` is automatically loaded if present                       |
+| `-c, --config <paths>`              | Path to one or more [configuration files](https://www.promptfoo.dev/docs/configuration/guide). `promptfooconfig.yaml` is automatically loaded if present                               |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                 |
 | `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                                                                                                            |
 | `--prompt-prefix <path>`            | This prefix is prepended to every prompt                                                                                                                                               |
@@ -332,7 +332,7 @@ See the full example [here](https://github.com/promptfoo/promptfoo/tree/main/exa
 ## Configuration
 
 - **[Main guide](https://www.promptfoo.dev/docs/configuration/guide)**: Learn about how to configure your YAML file, setup prompt files, etc.
-- **[Configuring test cases](https://www.promptfoo.dev/docs/configuration/expected-outputs)**: Learn more about how to configure expected outputs and test assertions.
+- **[Configuring test cases](https://www.promptfoo.dev/docs/configuration/expected-outputs)**: Learn more about how to configure assertions and metrics.
 
 ## Installation
 

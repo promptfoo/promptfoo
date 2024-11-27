@@ -33,7 +33,7 @@ This strategy is relatively high cost. We recommend running it on a smaller numb
 :::
 
 :::warning
-If your system maintains a conversation history and only expects the latest message to be sent, set `stateless: false`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#maintaining-session-ids-with-an-http-provider-and-multi-turn-redteam-attacks-like-goat-and-crescendo)
+If your system maintains a conversation history and only expects the latest message to be sent, set `stateless: false`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
 
 ## How It Works

@@ -10,9 +10,9 @@ import type {
   ProviderResponse,
   CallApiContextParams,
   CallApiOptionsParams,
-  EnvOverrides,
   TokenUsage,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {

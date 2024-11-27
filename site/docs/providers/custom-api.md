@@ -1,8 +1,11 @@
 ---
 sidebar_position: 50
+sidebar_label: Custom Javascript
 ---
 
-# Custom Javascript
+# Javascript Provider
+
+Promptfoo supports custom Javascript for integrations that go beyond single API calls (see also [HTTP API](/docs/providers/http/), [Python](/docs/providers/python/), [Browser](/docs/providers/browser/), and [Custom Script](/docs/providers/custom-script/)).
 
 To create a custom API provider, implement the `ApiProvider` interface in a separate module. Here is the interface:
 
