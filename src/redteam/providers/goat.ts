@@ -77,7 +77,6 @@ export default class GoatProvider implements ApiProvider {
           method: 'POST',
         });
         const data = await response.json();
-        logger.debug(`GOAT turn ${turn} response: ${JSON.stringify(data)}`);
         messages.push(data.message);
         if (data.tokenUsage) {
           totalTokenUsage.total += data.tokenUsage.total || 0;
