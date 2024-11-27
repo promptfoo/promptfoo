@@ -12,6 +12,22 @@ Each component is designed to be modular and reusable. We're building a framewor
 For usage details, see the [quickstart guide](/docs/red-team/quickstart).
 
 ```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'darkMode': false,
+    'primaryColor': '#e1f5fe',
+    'primaryBorderColor': '#01579b',
+    'secondaryColor': '#f3e5f5',
+    'secondaryBorderColor': '#4a148c',
+    'tertiaryColor': '#e8f5e9',
+    'tertiaryBorderColor': '#1b5e20',
+    'quaternaryColor': '#fff3e0',
+    'quaternaryBorderColor': '#e65100',
+    'fontFamily': 'system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,Cantarell,"Noto Sans",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji"'
+  }
+}}%%
+
 graph TB
     %% Configuration Layer
     subgraph Configuration
@@ -61,11 +77,26 @@ graph TB
 
     Responses --> Report
 
-    %% Styling
-    classDef configNode fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef genNode fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    classDef targetNode fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    classDef evalNode fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    %% Styling for light/dark mode compatibility
+    classDef configNode fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000
+    classDef genNode fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000
+    classDef targetNode fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#000
+    classDef evalNode fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+
+    %% Dark mode overrides
+    %%{init: {
+      'themeVariables': {
+        'darkMode': true,
+        'primaryColor': '#1a365d',
+        'primaryBorderColor': '#90cdf4',
+        'secondaryColor': '#322659',
+        'secondaryBorderColor': '#d6bcfa',
+        'tertiaryColor': '#1c4532',
+        'tertiaryBorderColor': '#9ae6b4',
+        'quaternaryColor': '#744210',
+        'quaternaryBorderColor': '#fbd38d'
+      }
+    }}%%
 
     class Config,Purpose configNode
     class Plugins,Strategies,Probes genNode
