@@ -96,10 +96,12 @@ export default class GoatProvider implements ApiProvider {
           ? JSON.stringify(messages)
           : await renderPrompt(
               context.prompt,
-              { ...context.vars, [this.injectVar]: messages[messages.length - 1].content },
+              { ...context.vars, [this.injectVar]: messages[messages.length - 1]?.content },
               context.filters,
               targetProvider,
             );
+
+        logger.debug(`GOAT turn ${turn} target prompt: ${targetPrompt}`);
         const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
         logger.debug(`GOAT turn ${turn} target response: ${JSON.stringify(targetResponse)}`);
 
@@ -115,7 +117,10 @@ export default class GoatProvider implements ApiProvider {
           `Expected target response output to be set, but got: ${JSON.stringify(targetResponse)}`,
         );
         messages.push({
-          content: targetResponse.output,
+          content:
+            typeof targetResponse.output === 'string'
+              ? targetResponse.output
+              : JSON.stringify(targetResponse.output),
           role: 'assistant',
         });
 
