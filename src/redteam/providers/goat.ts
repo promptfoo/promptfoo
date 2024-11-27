@@ -51,7 +51,7 @@ export default class GoatProvider implements ApiProvider {
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
 
-    const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] = [];
+    const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] | null = [];
     const totalTokenUsage = {
       total: 0,
       prompt: 0,
@@ -77,6 +77,7 @@ export default class GoatProvider implements ApiProvider {
           method: 'POST',
         });
         const data = await response.json();
+        logger.debug(`GOAT turn ${turn} response: ${JSON.stringify(data)}`);
         messages.push(data.message);
         if (data.tokenUsage) {
           totalTokenUsage.total += data.tokenUsage.total || 0;
@@ -96,10 +97,12 @@ export default class GoatProvider implements ApiProvider {
           ? JSON.stringify(messages)
           : await renderPrompt(
               context.prompt,
-              { ...context.vars, [this.injectVar]: messages[messages.length - 1].content },
+              { ...context.vars, [this.injectVar]: messages[messages.length - 1]?.content },
               context.filters,
               targetProvider,
             );
+
+        logger.debug(`GOAT turn ${turn} target prompt: ${targetPrompt}`);
         const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
         logger.debug(`GOAT turn ${turn} target response: ${JSON.stringify(targetResponse)}`);
 
