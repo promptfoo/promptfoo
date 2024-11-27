@@ -473,6 +473,7 @@ export async function getSummaryOfLatestEvals(
       description: evalsTable.description,
       numTests: sql`COUNT(DISTINCT ${evalResultsTable.testIdx})`.as('numTests'),
       datasetId: evalsToDatasetsTable.datasetId,
+      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
@@ -494,6 +495,7 @@ export async function getSummaryOfLatestEvals(
     description: result.description,
     numTests: (result.numTests as number) || 0,
     datasetId: result.datasetId,
+    isRedteam: result.isRedteam,
   }));
 
   const endTime = performance.now();

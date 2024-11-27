@@ -9,6 +9,8 @@ export function getStrategyIdFromMetric(metric: string): string | null {
   if (metricSuffix) {
     if (metricSuffix === 'Base64') {
       return 'base64';
+    } else if (metricSuffix === 'Citation') {
+      return 'citation';
     } else if (metricSuffix === 'Crescendo') {
       return 'crescendo';
     } else if (metricSuffix === 'GOAT') {

@@ -15,6 +15,7 @@ import {
   ProviderOptionsSchema,
   ProvidersSchema,
 } from '../validators/providers';
+import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
@@ -24,6 +25,7 @@ export * from './prompts';
 export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
+export type { EnvOverrides } from './env';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -752,7 +754,7 @@ export const TestSuiteConfigSchema = z.object({
   metadata: MetadataSchema.optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: z.custom<RedteamFileConfig>().optional(),
+  redteam: RedteamConfigSchema.optional(),
 
   // Write results to disk so they can be viewed in web viewer
   writeLatestResults: z.boolean().optional(),

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import AppIcon from '@mui/icons-material/Apps';
@@ -28,7 +29,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import Plugins from './components/Plugins';
-import Prompts from './components/Prompts';
+import Purpose from './components/Purpose';
 import Review from './components/Review';
 import Setup from './components/Setup';
 import Strategies from './components/Strategies';
@@ -204,6 +205,7 @@ interface SavedConfig {
 export default function RedTeamSetupPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { recordEvent } = useTelemetry();
 
   // Get initial tab from URL hash or default to first page
   const [value, setValue] = useState(() => {
@@ -274,6 +276,12 @@ export default function RedTeamSetupPage() {
   };
 
   const handleSaveConfig = async () => {
+    recordEvent('feature_used', {
+      feature: 'redteam_config_save',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
     try {
       const response = await callApi('/configs', {
         method: 'POST',
@@ -305,6 +313,7 @@ export default function RedTeamSetupPage() {
   };
 
   const loadConfigs = async () => {
+    recordEvent('feature_used', { feature: 'redteam_config_load' });
     try {
       const response = await callApi('/configs?type=redteam');
       const data = await response.json();
@@ -364,15 +373,15 @@ export default function RedTeamSetupPage() {
                 sx={{ width: 200 }}
               >
                 <StyledTab
-                  icon={<TargetIcon />}
-                  iconPosition="start"
-                  label="Targets"
-                  {...a11yProps(0)}
-                />
-                <StyledTab
                   icon={<AppIcon />}
                   iconPosition="start"
                   label="Application"
+                  {...a11yProps(0)}
+                />
+                <StyledTab
+                  icon={<TargetIcon />}
+                  iconPosition="start"
+                  label="Targets"
                   {...a11yProps(1)}
                 />
                 <StyledTab
@@ -420,10 +429,10 @@ export default function RedTeamSetupPage() {
         </OuterSidebarContainer>
         <TabContent>
           <CustomTabPanel value={value} index={0}>
-            <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
+            <Purpose onNext={handleNext} onBack={handleBack} />
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>
-            <Prompts onNext={handleNext} onBack={handleBack} />
+            <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
           </CustomTabPanel>
           <CustomTabPanel value={value} index={2}>
             <Plugins onNext={handleNext} onBack={handleBack} />

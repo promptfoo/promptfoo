@@ -23,7 +23,7 @@ This is a remote-only strategy and requires an connection to promptfoo's free gr
 :::
 
 :::warning
-By default, GOAT sends the entire conversation history with each turn. Set `stateless: false` if you're using any custom providers which just requires the last message. If your provider requires a sessionId or cookie ensure you're setting that up in your provider config.
+If your system maintains a conversation history and only expects the latest message to be sent, set `stateless: false`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
 
 ## How It Works

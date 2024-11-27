@@ -290,7 +290,10 @@ const App: React.FC = () => {
       <Stack spacing={4} pb={8} pt={2}>
         <Card className="report-header" sx={{ position: 'relative' }}>
           <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
-            <ReportDownloadButton evalDescription={evalData.config.description || evalId} />
+            <ReportDownloadButton
+              evalDescription={evalData.config.description || evalId}
+              evalData={evalData}
+            />
             <ReportSettingsDialogButton />
           </Box>
           <Typography variant="h4">

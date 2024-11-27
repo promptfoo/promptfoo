@@ -307,4 +307,4 @@ There are many examples available in the [`examples/` directory](https://github.
 
 The above examples create a table of outputs that can be manually reviewed. By setting up assertions, you can automatically grade outputs on a pass/fail basis.
 
-For more information on automatically assessing outputs, see [Expected Outputs](/docs/configuration/expected-outputs).
+For more information on automatically assessing outputs, see [Assertions & Metrics](/docs/configuration/expected-outputs).

@@ -23,7 +23,9 @@ A clear and concise description of what you expected to happen.
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
 
-**System information (please complete the following information):**
+**System information:**
+
+If possible, please output the results of `promptfoo debug` and paste the output here.
 
 - Promptfoo version:
 

@@ -8,11 +8,11 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  EnvOverrides,
   ModerationFlag,
   ProviderModerationResponse,
   ProviderResponse,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { safeJsonStringify } from '../util/json';
 import { parseChatPrompt } from './shared';
 

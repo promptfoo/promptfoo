@@ -11,8 +11,9 @@ The provider config gives you a way to construct the HTTP request and extract th
 
 ```yaml
 providers:
-  - id: 'https://example.com/generate'
+  - id: https
     config:
+      url: 'https://example.com/generate'
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
@@ -25,8 +26,9 @@ The placeholder variable `{{prompt}}` will be replaced by the final prompt for t
 
 ```yaml
 providers:
-  - id: 'https://example.com/generateTranslation'
+  - id: https
     config:
+      url: 'https://example.com/generateTranslation'
       body:
         prompt: '{{prompt}}'
         model: '{{model}}'
@@ -46,6 +48,7 @@ tests:
 providers:
   - id: https
     config:
+      url: 'https://example.com/generateTranslation'
       body:
         model: '{{model}}'
         translate: '{{language}}'
@@ -120,8 +123,9 @@ Nested objects are supported and should be passed to the `dump` function.
 
 ```yaml
 providers:
-  - id: 'https://example.com/generateTranslation'
+  - id: https
     config:
+      url: 'https://example.com/generateTranslation'
       body:
         // highlight-start
         messages: '{{messages | dump}}'
@@ -152,8 +156,9 @@ For example, this `responseParser` configuration:
 
 ```yaml
 providers:
-  - id: 'https://example.com/openai-compatible/chat/completions'
+  - id: https
     config:
+      url: 'https://example.com/openai-compatible/chat/completions'
       # ...
       responseParser: 'json.choices[0].message.content'
 ```
@@ -195,8 +200,9 @@ For example, this `responseParser` configuration:
 
 ```yaml
 providers:
-  - id: 'https://example.com/api'
+  - id: https
     config:
+      url: 'https://example.com/api'
       # ...
       responseParser: 'text.slice(11)'
 ```
@@ -213,8 +219,9 @@ Query parameters can be specified in the provider config using the `queryParams`
 
 ```yaml
 providers:
-  - id: 'https://example.com/search'
+  - id: https
     config:
+      url: 'https://example.com/search'
       // highlight-start
       method: 'GET'
       queryParams:
@@ -231,8 +238,9 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 {
   // ...
   providers: [{
-    id: 'https://example.com/generate',
+    id: 'https',
     config: {
+      url: 'https://example.com/generate',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -262,8 +270,9 @@ You can use a string containing a JavaScript expression to extract data from the
 
 ```yaml
 providers:
-  - id: 'https://example.com/api'
+  - id: https
     config:
+      url: 'https://example.com/api'
       responseParser: 'json.choices[0].message.content'
 ```
 
@@ -279,8 +288,9 @@ When using promptfoo as a Node.js library, you can provide a function as the res
 ```javascript
 {
   providers: [{
-    id: 'https://example.com/generate',
+    id: 'https',
     config: {
+      url: 'https://example.com/generate',
       responseParser: (json, text) => {
         // Custom parsing logic
         return json.choices[0].message.content;
@@ -296,8 +306,9 @@ You can use a JavaScript file as a response parser by specifying the file path w
 
 ```yaml
 providers:
-  - id: 'https://example.com/api'
+  - id: https
     config:
+      url: 'https://example.com/api'
       responseParser: 'file://path/to/parser.js'
 ```
 
@@ -321,12 +332,67 @@ You can also specify a function name to be imported from a file:
 
 ```yaml
 providers:
-  - id: 'https://example.com/api'
+  - id: https
     config:
+      url: 'https://example.com/api'
       responseParser: 'file://path/to/parser.js:parseResponse'
 ```
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
+
+## Server-side session management
+
+When using an HTTP provider with multi-turn redteam attacks like GOAT and Crescendo, you may need to maintain session IDs between rounds. The HTTP provider will automatically extract the session ID from the response headers and store it in the `vars` object.
+
+Create a session parser that extracts the session ID from the response headers and returns it. All of the same formats of response parsers are supported.
+
+The input to the session parser is an object with a `headers` field, which contains the response headers.
+
+`{ headers: Record<string, string> }`
+
+Simple header parser:
+
+```yaml
+sessionParser: 'set-cookie'
+```
+
+The parser can take a string, file or function like the response parser. If you just include a string, it will be treated as a field on the `headers` object.
+
+Then you need to set the session ID in the `vars` object for the next round:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      headers:
+        'Cookie': '{{sessionId}}'
+```
+
+## Client-side session management
+
+If you want the Promptfoo client to send a unique session or conversation ID with each test case, you can add a `transformVars` option to your Promptfoo or redteam config. This is useful for multi-turn evals or multi-turn redteam attacks where the provider maintains a conversation state.
+
+For example:
+
+```yaml
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+```
+
+Now you can use the `sessionId` variable in your HTTP target config:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      headers:
+        'x-promptfoo-session': '{{sessionId}}'
+      body:
+        user_message: '{{prompt}}'
+```
 
 ## Reference
 

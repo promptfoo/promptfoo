@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
@@ -21,12 +22,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import {
-  COLLECTIONS,
   HARM_PLUGINS,
-  PII_PLUGINS,
-  BASE_PLUGINS,
-  ADDITIONAL_PLUGINS,
-  CONFIG_REQUIRED_PLUGINS,
   DEFAULT_PLUGINS,
   ALL_PLUGINS,
   NIST_AI_RMF_MAPPING,
@@ -37,13 +33,14 @@ import {
   subCategoryDescriptions,
   categoryAliases,
   type Plugin,
+  riskCategories,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
-import { CustomPoliciesSection } from './CustomPoliciesSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
+import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
 
 interface PluginsProps {
   onNext: () => void;
@@ -63,6 +60,7 @@ const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
+  const { recordEvent } = useTelemetry();
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
@@ -81,6 +79,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   });
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   const [debouncedPlugins] = useDebounce(
     useMemo(
@@ -102,6 +101,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     ),
     1000,
   );
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
+  }, []);
 
   useEffect(() => {
     if (debouncedPlugins) {
@@ -149,6 +152,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     name: string;
     plugins: Set<Plugin> | ReadonlySet<Plugin>;
   }) => {
+    recordEvent('feature_used', {
+      feature: 'redteam_config_plugins_preset_selected',
+      preset: preset.name,
+    });
     if (preset.name === 'Custom') {
       setIsCustomMode(true);
     } else {
@@ -273,12 +280,75 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     if (pluginsToShow.length === 0) {
       return null;
     }
+
+    const isExpanded = expandedCategories.has(category);
+
     return (
-      <Accordion key={category} defaultExpanded>
+      <Accordion
+        key={category}
+        expanded={isExpanded}
+        onChange={(event, expanded) => {
+          setExpandedCategories((prev) => {
+            const newSet = new Set(prev);
+            if (expanded) {
+              newSet.add(category);
+            } else {
+              newSet.delete(category);
+            }
+            return newSet;
+          });
+        }}
+      >
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-            {category}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+            <Typography variant="h6" sx={{ fontWeight: 'medium', flex: 1 }}>
+              {category}
+            </Typography>
+            {isExpanded && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 2,
+                  mr: 2,
+                  '& > *': {
+                    color: 'primary.main',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    textDecoration: 'none',
+                    '&:hover': {
+                      textDecoration: 'underline',
+                    },
+                  },
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Box
+                  component="span"
+                  onClick={() => {
+                    pluginsToShow.forEach((plugin) => {
+                      if (!selectedPlugins.has(plugin)) {
+                        handlePluginToggle(plugin);
+                      }
+                    });
+                  }}
+                >
+                  Select all
+                </Box>
+                <Box
+                  component="span"
+                  onClick={() => {
+                    pluginsToShow.forEach((plugin) => {
+                      if (selectedPlugins.has(plugin)) {
+                        handlePluginToggle(plugin);
+                      }
+                    });
+                  }}
+                >
+                  Select none
+                </Box>
+              </Box>
+            )}
+          </Box>
         </AccordionSummary>
         <AccordionDetails>
           <Grid container spacing={2}>
@@ -429,12 +499,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               sx={{ mb: 3 }}
             />
             <Box sx={{ mb: 3 }}>
-              {renderPluginCategory('Collections', COLLECTIONS)}
-              {renderPluginCategory('Harm Plugins', Object.keys(HARM_PLUGINS) as Plugin[])}
-              {renderPluginCategory('PII Plugins', PII_PLUGINS)}
-              {renderPluginCategory('Base Plugins', BASE_PLUGINS)}
-              {renderPluginCategory('Additional Plugins', ADDITIONAL_PLUGINS)}
-              {renderPluginCategory('Custom Plugins', CONFIG_REQUIRED_PLUGINS)}
+              {Object.entries(riskCategories).map(([category, plugins]) =>
+                renderPluginCategory(category, plugins),
+              )}
             </Box>
           </>
         ) : (

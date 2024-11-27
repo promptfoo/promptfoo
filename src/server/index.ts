@@ -1,4 +1,6 @@
-import { BrowserBehavior, startServer } from './server';
+import { DEFAULT_PORT } from '../constants';
+import { BrowserBehavior } from '../util/server';
+import { startServer } from './server';
 
 // start server
-startServer(Number.parseInt(process.env.API_PORT || '15500'), BrowserBehavior.SKIP);
+startServer(DEFAULT_PORT, BrowserBehavior.SKIP);

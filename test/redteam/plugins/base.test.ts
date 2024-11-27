@@ -351,6 +351,15 @@ describe('RedteamPluginBase', () => {
         { prompt: 'Valid prompt 3' },
       ]);
     });
+
+    it('should strip leading and trailing asterisks but leave ones in the middle', () => {
+      const input = 'Prompt: ** Leading asterisk\nPrompt: Trailing * middle * asterisk *';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { prompt: 'Leading asterisk' },
+        { prompt: 'Trailing * middle * asterisk' },
+      ]);
+    });
   });
 });
 

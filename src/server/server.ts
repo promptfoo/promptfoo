@@ -1,19 +1,18 @@
 import compression from 'compression';
 import cors from 'cors';
 import debounce from 'debounce';
+import dedent from 'dedent';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type { Stats } from 'fs';
 import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
-import readline from 'node:readline';
-import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
-import { VERSION } from '../constants';
+import { VERSION, DEFAULT_PORT } from '../constants';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
@@ -32,6 +31,8 @@ import {
   getLatestEval,
   getStandaloneEvals,
 } from '../util';
+import { BrowserBehavior } from '../util/server';
+import { openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { providersRouter } from './routes/providers';
@@ -40,13 +41,6 @@ import { userRouter } from './routes/user';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
-
-export enum BrowserBehavior {
-  ASK = 0,
-  OPEN = 1,
-  SKIP = 2,
-  OPEN_TO_REPORT = 3,
-}
 
 export function createApp() {
   const app = express();
@@ -73,7 +67,6 @@ export function createApp() {
         return {
           ...meta,
           label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
-          isRedTeam: meta.isRedteam,
         };
       }),
     });
@@ -181,7 +174,7 @@ export function createApp() {
 }
 
 export function startServer(
-  port = 15500,
+  port = DEFAULT_PORT,
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
 ) {
@@ -215,42 +208,19 @@ export function startServer(
     .listen(port, () => {
       const url = `http://localhost:${port}`;
       logger.info(`Server running at ${url} and monitoring for new evals.`);
-
-      const openUrl = async () => {
-        try {
-          logger.info('Press Ctrl+C to stop the server');
-          if (browserBehavior === BrowserBehavior.OPEN_TO_REPORT) {
-            await opener(`${url}/report`);
-          } else {
-            await opener(url);
-          }
-        } catch (err) {
-          logger.error(`Failed to open browser: ${String(err)}`);
-        }
-      };
-
-      if (
-        browserBehavior === BrowserBehavior.OPEN ||
-        browserBehavior === BrowserBehavior.OPEN_TO_REPORT
-      ) {
-        openUrl();
-      } else if (browserBehavior === BrowserBehavior.ASK) {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-        rl.question('Open URL in browser? (y/N): ', async (answer) => {
-          if (answer.toLowerCase().startsWith('y')) {
-            openUrl();
-          }
-          rl.close();
-        });
-      }
+      openBrowser(browserBehavior, port).catch((err) => {
+        logger.error(`Failed to handle browser behavior: ${err}`);
+      });
     })
     .on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
         logger.error(
-          `Unable to start server on port ${port}. It's currently in use. Check for existing promptfoo instances.`,
+          dedent`Port ${port} is already in use. Do you have another Promptfoo instance running?
+
+          To resolve this:
+            1. Check if another promptfoo instance is running (try 'ps aux | grep promptfoo')
+            2. Kill the process using the port: 'lsof -i :${port}' then 'kill <PID>'
+            3. Or specify a different port with --port <number>`,
         );
         process.exit(1);
       } else {

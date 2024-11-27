@@ -105,6 +105,7 @@ const defaultMockResponse = {
   statusText: 'OK',
   headers: {
     get: jest.fn().mockReturnValue(null),
+    entries: jest.fn().mockReturnValue([]),
   },
 };
 
