@@ -96,7 +96,7 @@ export default class GoatProvider implements ApiProvider {
           ? JSON.stringify(messages)
           : await renderPrompt(
               context.prompt,
-              { ...context.vars, [this.injectVar]: messages[messages.length - 1]?.content },
+              { ...context.vars, [this.injectVar]: messages[messages.length - 1].content },
               context.filters,
               targetProvider,
             );
