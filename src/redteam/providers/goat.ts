@@ -118,7 +118,10 @@ export default class GoatProvider implements ApiProvider {
           `Expected target response output to be set, but got: ${JSON.stringify(targetResponse)}`,
         );
         messages.push({
-          content: targetResponse.output,
+          content:
+            typeof targetResponse.output === 'string'
+              ? targetResponse.output
+              : JSON.stringify(targetResponse.output),
           role: 'assistant',
         });
 
