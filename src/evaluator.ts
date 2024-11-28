@@ -614,6 +614,10 @@ class Evaluator {
       }
     }
 
+    // Fill in more of the eval record.  This should come BEFORE we run the
+    // evals, so if there's a problem, we still have the prompts.
+    await this.evalRecord.addPrompts(prompts);
+
     // Actually run the eval
     let numComplete = 0;
 
@@ -876,8 +880,6 @@ class Evaluator {
         }
       }
     }
-
-    await this.evalRecord.addPrompts(prompts);
 
     // Finish up
     if (multibar) {
