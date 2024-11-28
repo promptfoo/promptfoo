@@ -1,4 +1,5 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { Severity, Plugin } from './constants';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
@@ -71,6 +72,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
 
 export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
+  severity?: Record<Plugin, Severity>;
 }
 
 export interface SynthesizeOptions extends CommonOptions {

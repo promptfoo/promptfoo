@@ -550,6 +550,10 @@ export const severityDisplayNames: Record<Severity, string> = {
   [Severity.Low]: 'Low',
 };
 
+/*
+ * Default severity values for each plugin.
+ * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
+ */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
   bfla: Severity.High,
@@ -870,3 +874,12 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   rot13: 'ROT13 Encoding',
 };
+
+export function getRiskCategorySeverityMap(
+  overrides?: Record<Plugin, Severity>,
+): Record<Plugin, Severity> {
+  return {
+    ...riskCategorySeverityMap,
+    ...(overrides || {}),
+  };
+}

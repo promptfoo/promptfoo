@@ -370,7 +370,10 @@ const App: React.FC = () => {
             )}
           </Box>
         </Card>
-        <Overview categoryStats={categoryStats} />
+        <Overview
+          categoryStats={categoryStats}
+          severityOverrides={evalData.config.redteam?.severity}
+        />
         <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
         <StrategyStats strategyStats={strategyStats} />
         <RiskCategories
@@ -379,7 +382,11 @@ const App: React.FC = () => {
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
         />
-        <TestSuites evalId={evalId} categoryStats={categoryStats} />
+        <TestSuites
+          evalId={evalId}
+          categoryStats={categoryStats}
+          severityOverrides={evalData.config.redteam?.severity}
+        />
       </Stack>
       <Modal
         open={isPromptModalOpen}
