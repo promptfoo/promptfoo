@@ -52,6 +52,11 @@ export function shareCommand(program: Command) {
           }
         }
         invariant(eval_, 'No eval found');
+        if (eval_.prompts.length === 0) {
+          // FIXME(ian): Handle this on the server side.
+          logger.error(`Eval ${eval_.id} did not complete successfully, so it cannot be shared.`);
+          process.exit(1);
+        }
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
           await createPublicUrl(eval_, cmdObj.showAuth);
         } else {
