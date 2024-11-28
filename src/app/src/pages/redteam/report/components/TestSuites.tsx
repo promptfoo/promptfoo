@@ -20,17 +20,18 @@ import {
   getRiskCategorySeverityMap,
   type Plugin,
 } from '@promptfoo/redteam/constants';
+import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
 interface TestSuitesProps {
   evalId: string;
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
-  severityOverrides: Record<Plugin, Severity> | undefined;
+  plugins: RedteamPluginObject[];
 }
 
 const getSubCategoryStats = (
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,
-  severityOverrides: Record<Plugin, Severity> | undefined,
+  plugins: RedteamPluginObject[],
 ) => {
   const subCategoryStats = [];
   for (const subCategories of Object.values(riskCategories)) {
@@ -51,7 +52,7 @@ const getSubCategoryStats = (
               100
             ).toFixed(1) + '%'
           : 'N/A',
-        severity: getRiskCategorySeverityMap(severityOverrides)[subCategory as Plugin] || 'Unknown',
+        severity: getRiskCategorySeverityMap(plugins)[subCategory as Plugin] || 'Unknown',
       });
     }
   }
@@ -66,8 +67,8 @@ const getSubCategoryStats = (
   });
 };
 
-const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, severityOverrides }) => {
-  const subCategoryStats = getSubCategoryStats(categoryStats, severityOverrides).filter(
+const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins }) => {
+  const subCategoryStats = getSubCategoryStats(categoryStats, plugins).filter(
     (subCategory) => subCategory.passRate !== 'N/A',
   );
   const [page, setPage] = React.useState(0);

@@ -370,10 +370,7 @@ const App: React.FC = () => {
             )}
           </Box>
         </Card>
-        <Overview
-          categoryStats={categoryStats}
-          severityOverrides={evalData.config.redteam?.severity}
-        />
+        <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
         <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
         <StrategyStats strategyStats={strategyStats} />
         <RiskCategories
@@ -385,7 +382,7 @@ const App: React.FC = () => {
         <TestSuites
           evalId={evalId}
           categoryStats={categoryStats}
-          severityOverrides={evalData.config.redteam?.severity}
+          plugins={evalData.config.redteam.plugins || []}
         />
       </Stack>
       <Modal

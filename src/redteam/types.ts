@@ -11,6 +11,7 @@ export type PluginConfig = RedteamObjectConfig & {
     score: number;
     reason: string;
   }[];
+  severity?: Severity;
 };
 export type StrategyConfig = RedteamObjectConfig;
 
@@ -24,7 +25,10 @@ type WithNumTests = {
 };
 
 // Derived types
-export type RedteamPluginObject = ConfigurableObject & WithNumTests;
+export type RedteamPluginObject = ConfigurableObject &
+  WithNumTests & {
+    severity?: Severity;
+  };
 export type RedteamPlugin = string | RedteamPluginObject;
 
 export type RedteamStrategyObject = ConfigurableObject & {

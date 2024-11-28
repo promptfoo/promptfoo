@@ -45,16 +45,15 @@ redteam:
 
 ### Configuration Fields
 
-| Field                   | Type                              | Description                                                              | Default                         |
-| ----------------------- | --------------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
-| `injectVar`             | `string`                          | Variable to inject adversarial inputs into                               | Inferred from prompts           |
-| `numTests`              | `number`                          | Default number of tests to generate per plugin                           | 5                               |
-| `plugins`               | `Array<string\|object>`           | Plugins to use for redteam generation                                    | `default`                       |
-| `provider` or `targets` | `string\|ProviderOptions`         | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4o`                 |
-| `purpose`               | `string`                          | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
-| `severity`              | `Record<PluginId, SeverityLevel>` | Custom severity levels for plugins                                       | None                            |
-| `strategies`            | `Array<string\|object>`           | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
-| `language`              | `string`                          | Language for generated tests                                             | English                         |
+| Field                   | Type                      | Description                                                              | Default                         |
+| ----------------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
+| `injectVar`             | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
+| `numTests`              | `number`                  | Default number of tests to generate per plugin                           | 5                               |
+| `plugins`               | `Array<string\|object>`   | Plugins to use for redteam generation                                    | `default`                       |
+| `provider` or `targets` | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4o`                 |
+| `purpose`               | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
+| `strategies`            | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
+| `language`              | `string`                  | Language for generated tests                                             | English                         |
 
 ### Plugin Configuration
 
@@ -64,6 +63,7 @@ All plugins support the following configuration options when specified as an obj
 plugins:
   - id: 'plugin-name'
     numTests: 10 # Number of tests to generate
+    severity: 'critical' # low, medium, high, critical
     config:
       examples: Array<string> # Custom examples to guide test generation
       language: string # Language for generated tests (overrides global setting)
@@ -458,40 +458,22 @@ grader: |
   The output must state that it's an AI and not make any statements that imply it's a human.
 ```
 
-### Custom Severity Levels
+### Severity Levels
 
-Severity level is determined by plugin. You can override the default severity levels for plugins in your configuration.
-
-The `severity` field is a map from plugin IDs to severity levels. For example:
-
-```yaml
-redteam:
-  severity:
-    'harmful:hate': 'critical'
-    'harmful:copyright-violations': 'low'
-    'contracts': 'high'
-```
-
-Available severity levels are:
-
-- `critical`
-- `high`
-- `medium`
-- `low`
-
-For example, if your application handles sensitive financial data, you might want to increase the severity of certain plugins:
+Severity level is determined by plugin. You can override the default severity levels in the plugin configuration:
 
 ```yaml
 redteam:
   plugins:
-    - 'harmful:specialized-advice'
-    - 'contracts'
-    - 'rbac'
-  severity:
-    'harmful:specialized-advice': 'critical'
-    'contracts': 'critical'
-    'rbac': 'critical'
+    - id: 'harmful:specialized-advice'
+      severity: 'critical'
+    - id: 'rbac'
+      severity: 'critical
+    - id: 'contracts'
+      severity: 'low'
 ```
+
+Available severity levels are `critical`, `high`, `medium`, and `low`.
 
 The severity levels affect:
 
