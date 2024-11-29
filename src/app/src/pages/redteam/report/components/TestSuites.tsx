@@ -17,9 +17,9 @@ import {
   riskCategories,
   Severity,
   subCategoryDescriptions,
-  getRiskCategorySeverityMap,
   type Plugin,
 } from '@promptfoo/redteam/constants';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/shared';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 

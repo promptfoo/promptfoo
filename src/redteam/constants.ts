@@ -1,5 +1,4 @@
 import { getEnvString } from '../envars';
-import type { RedteamPluginObject } from './types';
 
 export function getRemoteGenerationUrl(): string {
   return getEnvString('PROMPTFOO_REMOTE_GENERATION_URL', 'https://api.promptfoo.dev/v1/generate');
@@ -875,23 +874,3 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   rot13: 'ROT13 Encoding',
 };
-
-export function getRiskCategorySeverityMap(
-  plugins?: RedteamPluginObject[],
-): Record<Plugin, Severity> {
-  const overrides =
-    plugins?.reduce(
-      (acc, plugin) => {
-        if (plugin.severity) {
-          acc[plugin.id as Plugin] = plugin.severity;
-        }
-        return acc;
-      },
-      {} as Record<Plugin, Severity>,
-    ) || {};
-
-  return {
-    ...riskCategorySeverityMap,
-    ...overrides,
-  };
-}
