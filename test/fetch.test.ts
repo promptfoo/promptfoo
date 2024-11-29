@@ -10,6 +10,7 @@ import {
 } from '../src/fetch';
 import logger from '../src/logger';
 import { sleep } from '../src/util/time';
+import { createMockResponse } from './util/utils';
 
 jest.mock('../src/util/time', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
@@ -27,29 +28,6 @@ jest.mock('../src/fetch', () => ({
   ...jest.requireActual('../src/fetch'),
   sleep: jest.fn(),
 }));
-
-function createMockResponse(options: Partial<Response> = {}): Response {
-  return {
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    headers: new Headers(),
-    redirected: false,
-    type: 'basic',
-    url: 'https://example.com',
-    json: () => Promise.resolve({}),
-    text: () => Promise.resolve(''),
-    blob: () => Promise.resolve(new Blob()),
-    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-    formData: () => Promise.resolve(new FormData()),
-    bodyUsed: false,
-    body: null,
-    clone() {
-      return createMockResponse(this);
-    },
-    ...options,
-  };
-}
 
 describe('fetchWithProxy', () => {
   beforeEach(() => {

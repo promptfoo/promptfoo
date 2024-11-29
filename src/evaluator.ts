@@ -1,6 +1,7 @@
 import async from 'async';
 import chalk from 'chalk';
 import type { MultiBar, SingleBar } from 'cli-progress';
+import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
@@ -30,7 +31,7 @@ import type {
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { sleep } from './util/time';
-import { transform, TransformInputType } from './util/transform';
+import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -123,6 +124,7 @@ class Evaluator {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
       },
     };
     this.conversations = {};
@@ -305,6 +307,7 @@ class Evaluator {
           this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
           this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
           this.stats.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
+          this.stats.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
         }
         ret.response = processedResponse;
         ret.gradingResult = checkResult;
@@ -316,6 +319,7 @@ class Evaluator {
         this.stats.tokenUsage.prompt += response.tokenUsage.prompt || 0;
         this.stats.tokenUsage.completion += response.tokenUsage.completion || 0;
         this.stats.tokenUsage.cached += response.tokenUsage.cached || 0;
+        this.stats.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
       }
 
       if (ret.success) {
@@ -424,6 +428,7 @@ class Evaluator {
               prompt: 0,
               completion: 0,
               cached: 0,
+              numRequests: 0,
             },
             namedScores: {},
             namedScoresCount: {},
@@ -504,12 +509,14 @@ class Evaluator {
         const inputTransformForIndividualTest = testCase.options?.transformVars;
         const inputTransform = inputTransformForIndividualTest || inputTransformDefault;
         if (inputTransform) {
+          const transformContext: TransformContext = {
+            prompt: {},
+            uuid: randomUUID(),
+          };
           const transformedVars = await transform(
             inputTransform,
             testCase.vars,
-            {
-              prompt: {},
-            },
+            transformContext,
             true,
             TransformInputType.VARS,
           );
@@ -694,6 +701,8 @@ class Evaluator {
         (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
       metrics.tokenUsage.total =
         (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
+      metrics.tokenUsage.numRequests =
+        (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
       metrics.cost += row.cost || 0;
 
       await runExtensionHook(testSuite.extensions, 'afterEach', {
@@ -906,7 +915,8 @@ class Evaluator {
       hasAnyPass: this.evalRecord.prompts.some(
         (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
       ),
-      isRedteam: Boolean(testSuite.redteam),
+      // FIXME(ian): Does this work?  I think redteam is only on the config, not testSuite.
+      // isRedteam: Boolean(testSuite.redteam),
     });
     return this.evalRecord;
   }

@@ -409,6 +409,7 @@ export default class Eval {
         completion: 0,
         prompt: 0,
         total: 0,
+        numRequests: 0,
       },
     };
 
@@ -419,6 +420,7 @@ export default class Eval {
       stats.tokenUsage.cached += prompt.metrics?.tokenUsage.cached || 0;
       stats.tokenUsage.completion += prompt.metrics?.tokenUsage.completion || 0;
       stats.tokenUsage.total += prompt.metrics?.tokenUsage.total || 0;
+      stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
     }
 
     return {
@@ -471,6 +473,7 @@ export async function getSummaryOfLatestEvals(
       description: evalsTable.description,
       numTests: sql`COUNT(DISTINCT ${evalResultsTable.testIdx})`.as('numTests'),
       datasetId: evalsToDatasetsTable.datasetId,
+      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
@@ -492,6 +495,7 @@ export async function getSummaryOfLatestEvals(
     description: result.description,
     numTests: (result.numTests as number) || 0,
     datasetId: result.datasetId,
+    isRedteam: result.isRedteam,
   }));
 
   const endTime = performance.now();

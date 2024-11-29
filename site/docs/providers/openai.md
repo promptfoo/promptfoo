@@ -117,6 +117,25 @@ interface OpenAiConfig {
 }
 ```
 
+## o1 Series Models (Beta)
+
+The o1 series models handle tokens differently than other OpenAI models. While standard models use `max_tokens` to control output length, o1 models use `max_completion_tokens` to control both reasoning and output tokens:
+
+```yaml
+providers:
+  - id: openai:o1-preview
+    config:
+      max_completion_tokens: 25000 # Can also be set via OPENAI_MAX_COMPLETION_TOKENS env var
+```
+
+o1 models generate internal "reasoning tokens" that:
+
+- Are not visible in the output
+- Count towards token usage and billing
+- Occupy space in the context window
+
+Both `o1-preview` and `o1-mini` models have a 128,000 token context window and work best with straightforward prompts. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
+
 ## Images
 
 ### Sending images in prompts

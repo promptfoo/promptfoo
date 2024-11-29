@@ -170,6 +170,14 @@ function ResultsTable({
   invariant(table, 'Table should be defined');
   const { head, body } = table;
 
+  const [lightboxOpen, setLightboxOpen] = React.useState(false);
+  const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+
+  const toggleLightbox = (url?: string) => {
+    setLightboxImage(url || null);
+    setLightboxOpen(!lightboxOpen);
+  };
+
   const handleRating = React.useCallback(
     async (
       rowIndex: number,
@@ -725,6 +733,46 @@ function ResultsTable({
                     colBorderDrawn = true;
                   }
                   const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
+
+                  let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
+                  const value = cell.getValue();
+                  if (
+                    typeof value === 'string' &&
+                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
+                      value.match(/^\/[0-9A-Za-z+/]{4}.*/))
+                  ) {
+                    const imgSrc = value.startsWith('data:')
+                      ? value
+                      : `data:image/jpeg;base64,${value}`;
+                    cellContent = (
+                      <>
+                        <img
+                          src={imgSrc}
+                          alt="Base64 encoded image"
+                          style={{
+                            maxWidth: '100%',
+                            height: 'auto',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => toggleLightbox(imgSrc)}
+                        />
+                        {lightboxOpen && lightboxImage === imgSrc && (
+                          <div className="lightbox" onClick={() => toggleLightbox()}>
+                            <img
+                              src={lightboxImage}
+                              alt="Lightbox"
+                              style={{
+                                maxWidth: '90%',
+                                maxHeight: '90vh',
+                                objectFit: 'contain',
+                              }}
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
+                  }
+
                   return (
                     <td
                       key={cell.id}
@@ -735,7 +783,7 @@ function ResultsTable({
                         shouldDrawRowBorder ? 'first-prompt-row' : ''
                       } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {cellContent}
                     </td>
                   );
                 })}

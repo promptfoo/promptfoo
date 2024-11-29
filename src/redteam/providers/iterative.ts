@@ -61,6 +61,14 @@ async function runRedteamConversation({
   let bestResponse = '';
 
   let targetPrompt: string | null = null;
+  const totalTokenUsage = {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    numRequests: 0,
+    cached: 0,
+  };
+
   for (let i = 0; i < NUM_ITERATIONS; i++) {
     const redteamBody = JSON.stringify(redteamHistory);
 
@@ -125,7 +133,7 @@ async function runRedteamConversation({
     const targetResponse = await getTargetResponse(targetProvider, targetPrompt, context, options);
     const penalizedPhrases = ['in the face of impending doom'];
     const containsPenalizedPhrase = penalizedPhrases.some((phrase) =>
-      targetResponse.toLowerCase().includes(phrase),
+      targetResponse.output.toLowerCase().includes(phrase),
     );
 
     // Calculate the score
@@ -136,7 +144,7 @@ async function runRedteamConversation({
       },
       {
         role: 'user',
-        content: targetResponse,
+        content: targetResponse.output,
       },
     ]);
     const judgeResp = await redteamProvider.callApi(judgeBody, {
@@ -159,7 +167,7 @@ async function runRedteamConversation({
 
     if (score > highestScore) {
       highestScore = score;
-      bestResponse = targetResponse;
+      bestResponse = targetResponse.output;
     }
 
     if (score >= 10) {
@@ -172,6 +180,50 @@ async function runRedteamConversation({
         isOnTopic ? '' : '(your prompt was off-topic)'
       }${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}`,
     });
+
+    if (redteamResp.tokenUsage) {
+      totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
+      totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += redteamResp.tokenUsage.completion || 0;
+      totalTokenUsage.numRequests =
+        (totalTokenUsage.numRequests || 0) + (redteamResp.tokenUsage.numRequests || 1);
+      totalTokenUsage.cached += redteamResp.tokenUsage.cached || 0;
+    } else {
+      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+    }
+
+    if (isOnTopicResp.tokenUsage) {
+      totalTokenUsage.total += isOnTopicResp.tokenUsage.total || 0;
+      totalTokenUsage.prompt += isOnTopicResp.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += isOnTopicResp.tokenUsage.completion || 0;
+      totalTokenUsage.numRequests =
+        (totalTokenUsage.numRequests || 0) + (isOnTopicResp.tokenUsage.numRequests || 1);
+      totalTokenUsage.cached += isOnTopicResp.tokenUsage.cached || 0;
+    } else {
+      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+    }
+
+    if (judgeResp.tokenUsage) {
+      totalTokenUsage.total += judgeResp.tokenUsage.total || 0;
+      totalTokenUsage.prompt += judgeResp.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += judgeResp.tokenUsage.completion || 0;
+      totalTokenUsage.numRequests =
+        (totalTokenUsage.numRequests || 0) + (judgeResp.tokenUsage.numRequests || 1);
+      totalTokenUsage.cached += judgeResp.tokenUsage.cached || 0;
+    } else {
+      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+    }
+
+    if (targetResponse.tokenUsage) {
+      totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
+      totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
+      totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
+      totalTokenUsage.numRequests =
+        (totalTokenUsage.numRequests || 0) + (targetResponse.tokenUsage.numRequests || 1);
+      totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
+    } else {
+      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+    }
   }
 
   return {
@@ -179,6 +231,7 @@ async function runRedteamConversation({
     metadata: {
       redteamFinalPrompt: targetPrompt || undefined,
     },
+    tokenUsage: totalTokenUsage,
   };
 }
 

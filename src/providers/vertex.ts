@@ -7,11 +7,11 @@ import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
-  EnvOverrides,
   ProviderResponse,
   ProviderEmbeddingResponse,
   TokenUsage,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';

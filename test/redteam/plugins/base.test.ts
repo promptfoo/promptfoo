@@ -1,7 +1,10 @@
 import dedent from 'dedent';
 import { matchesLlmRubric } from '../../../src/matchers';
-import { RedteamPluginBase } from '../../../src/redteam/plugins/base';
-import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
+import {
+  parseGeneratedPrompts,
+  RedteamGraderBase,
+  RedteamPluginBase,
+} from '../../../src/redteam/plugins/base';
 import type { ApiProvider, Assertion } from '../../../src/types';
 import type { AtomicTestCase, GradingResult } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
@@ -231,57 +234,51 @@ describe('RedteamPluginBase', () => {
   });
 
   describe('parseGeneratedPrompts', () => {
-    let testPlugin: TestPlugin;
-
-    beforeEach(() => {
-      testPlugin = new TestPlugin(provider, 'test purpose', 'testVar', { language: 'English' });
-    });
-
     it('should parse simple prompts correctly', () => {
       const input = 'Prompt: Hello world\nPrompt: How are you?';
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([{ prompt: 'Hello world' }, { prompt: 'How are you?' }]);
     });
 
     it('should handle prompts with quotation marks', () => {
       const input = 'Prompt: "Hello world"\nPrompt: "How are you?"';
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([{ prompt: 'Hello world' }, { prompt: 'How are you?' }]);
     });
 
     it('should ignore lines without "Prompt:"', () => {
       const input = 'Prompt: Valid prompt\nInvalid line\nPrompt: Another valid prompt';
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([{ prompt: 'Valid prompt' }, { prompt: 'Another valid prompt' }]);
     });
 
     it('should handle prompts with numbers', () => {
       const input = 'Prompt: 1. First prompt\nPrompt: 2. Second prompt';
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([{ prompt: 'First prompt' }, { prompt: 'Second prompt' }]);
     });
 
     it('should handle prompts with colons', () => {
       const input = 'Prompt: Hello: World\nPrompt: Question: How are you?';
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([{ prompt: 'Hello: World' }, { prompt: 'Question: How are you?' }]);
     });
 
     it('should handle empty input', () => {
       const input = '';
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([]);
     });
 
     it('should handle input with only invalid lines', () => {
       const input = 'Invalid line 1\nInvalid line 2';
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([]);
     });
 
     it('should trim whitespace from prompts', () => {
       const input = 'Prompt:    Whitespace at start and end    \nPrompt:\tTabbed prompt\t';
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
         { prompt: 'Whitespace at start and end' },
         { prompt: 'Tabbed prompt' },
@@ -290,7 +287,7 @@ describe('RedteamPluginBase', () => {
 
     it('should handle prompts with multiple lines', () => {
       const input = 'Prompt: First line\nSecond line\nPrompt: Another prompt';
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([{ prompt: 'First line' }, { prompt: 'Another prompt' }]);
     });
 
@@ -304,7 +301,7 @@ describe('RedteamPluginBase', () => {
         6. Prompt: Sixth item
         7) Prompt: Seventh item
       `;
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
         { prompt: 'First item' },
         { prompt: 'Second item' },
@@ -323,7 +320,7 @@ describe('RedteamPluginBase', () => {
         Prompt: 'Single quoted "double nested" prompt'
         Prompt: "Double quoted 'single nested' prompt"
       `;
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
         { prompt: 'Outer "inner "nested" quote"' },
         { prompt: "Outer 'inner 'nested' quote'" },
@@ -334,7 +331,7 @@ describe('RedteamPluginBase', () => {
 
     it('should handle prompts with multiple spaces between words', () => {
       const input = 'Prompt: Multiple    spaces    between    words';
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([{ prompt: 'Multiple    spaces    between    words' }]);
     });
 
@@ -347,11 +344,20 @@ describe('RedteamPluginBase', () => {
         Prompt without colon
         Prompt: Valid prompt 3
       `;
-      const result = testPlugin['parseGeneratedPrompts'](input);
+      const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
         { prompt: 'Valid prompt 1' },
         { prompt: 'Valid prompt 2' },
         { prompt: 'Valid prompt 3' },
+      ]);
+    });
+
+    it('should strip leading and trailing asterisks but leave ones in the middle', () => {
+      const input = 'Prompt: ** Leading asterisk\nPrompt: Trailing * middle * asterisk *';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { prompt: 'Leading asterisk' },
+        { prompt: 'Trailing * middle * asterisk' },
       ]);
     });
   });
@@ -377,7 +383,13 @@ describe('RedteamGraderBase', () => {
   it('should throw an error if test is missing purpose metadata', async () => {
     const testWithoutPurpose = { ...mockTest, metadata: {} };
     await expect(
-      grader.getResult('prompt', 'output', testWithoutPurpose, undefined /* provider */, undefined),
+      grader.getResult(
+        'prompt',
+        'output',
+        testWithoutPurpose,
+        undefined /* provider */,
+        undefined /* renderedValue */,
+      ),
     ).rejects.toThrow('Test is missing purpose metadata');
   });
 
@@ -394,7 +406,7 @@ describe('RedteamGraderBase', () => {
       'test output',
       mockTest,
       undefined /* provider */,
-      undefined,
+      undefined /* renderedValue */,
     );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
@@ -417,12 +429,77 @@ describe('RedteamGraderBase', () => {
       'test output',
       mockTest,
       undefined /* provider */,
-      undefined,
+      undefined /* renderedValue */,
     );
 
     expect(result).toEqual({
       grade: mockResult,
       rubric: 'Test rubric for test-purpose with harm category test-harm',
+    });
+  });
+
+  describe('grader examples', () => {
+    it('should append grader examples to rubric when present', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithExamples = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'meow', pass: true, score: 1, reason: 'Example 1' },
+              { output: 'woof', pass: false, score: 0, reason: 'Example 2' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithExamples,
+        undefined /* provider */,
+        undefined /* renderedValue */,
+      );
+
+      expect(result.rubric).toBe(
+        'Test rubric for test-purpose with harm category test-harm\n\n' +
+          'EXAMPLE OUTPUT: {"output":"meow","pass":true,"score":1,"reason":"Example 1"}\n' +
+          'EXAMPLE OUTPUT: {"output":"woof","pass":false,"score":0,"reason":"Example 2"}',
+      );
+    });
+
+    it('should not append grader examples when not present', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithoutExamples = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {},
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithoutExamples,
+        undefined /* provider */,
+        undefined /* renderedValue */,
+      );
+
+      expect(result.rubric).toBe('Test rubric for test-purpose with harm category test-harm');
     });
   });
 

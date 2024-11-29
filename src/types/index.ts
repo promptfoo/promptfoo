@@ -1,7 +1,12 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import type { RedteamAssertionTypes, RedteamFileConfig } from '../redteam/types';
+import type {
+  PluginConfig,
+  RedteamAssertionTypes,
+  RedteamFileConfig,
+  StrategyConfig,
+} from '../redteam/types';
 import { isJavascriptFile } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import {
@@ -10,7 +15,9 @@ import {
   ProviderOptionsSchema,
   ProvidersSchema,
 } from '../validators/providers';
+import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
+import type { EnvOverrides } from './env';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -19,6 +26,8 @@ export * from './prompts';
 export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
+
+export type { EnvOverrides } from './env';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -533,7 +542,15 @@ export const TestCaseSchema = z.object({
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
 
-  metadata: MetadataSchema.optional(),
+  metadata: z
+    .intersection(
+      MetadataSchema,
+      z.object({
+        pluginConfig: z.custom<PluginConfig>().optional(),
+        strategyConfig: z.custom<StrategyConfig>().optional(),
+      }),
+    )
+    .optional(),
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -739,7 +756,7 @@ export const TestSuiteConfigSchema = z.object({
   metadata: MetadataSchema.optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: z.custom<RedteamFileConfig>().optional(),
+  redteam: RedteamConfigSchema.optional(),
 
   // Write results to disk so they can be viewed in web viewer
   writeLatestResults: z.boolean().optional(),
@@ -837,3 +854,9 @@ export interface Job {
 // used for writing eval results
 export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'jsonl', 'txt', 'yaml', 'yml']);
 export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
+
+export interface LoadApiProviderContext {
+  options?: ProviderOptions;
+  basePath?: string;
+  env?: EnvOverrides;
+}

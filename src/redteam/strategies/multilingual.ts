@@ -131,7 +131,11 @@ export async function addMultilingual(
   }
 
   for (const testCase of testCases) {
-    const originalText = String(testCase.vars![injectVar]);
+    invariant(
+      testCase.vars,
+      `Multilingual: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
+    );
+    const originalText = String(testCase.vars[injectVar]);
 
     for (const lang of languages) {
       const translatedText = await translate(originalText, lang);

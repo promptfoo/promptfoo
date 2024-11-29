@@ -5,9 +5,9 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  EnvOverrides,
   ProviderResponse,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 

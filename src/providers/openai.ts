@@ -8,13 +8,13 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  EnvOverrides,
   ModerationFlag,
   ProviderEmbeddingResponse,
   ProviderModerationResponse,
   ProviderResponse,
   TokenUsage,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
@@ -38,7 +38,7 @@ const OPENAI_CHAT_MODELS = [
       output: 12 / 1e6,
     },
   })),
-  ...['gpt-4o', 'gpt-4o-2024-08-06'].map((model) => ({
+  ...['gpt-4o', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06'].map((model) => ({
     id: model,
     cost: {
       input: 2.5 / 1e6,

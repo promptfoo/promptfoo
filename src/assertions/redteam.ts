@@ -12,8 +12,8 @@ export const handleRedteam = async ({
   renderedValue,
 }: AssertionParams): Promise<GradingResult> => {
   const grader = getGraderById(assertion.type);
-  invariant(grader, `Unknown promptfoo grader: ${baseType}`);
-  invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
+  invariant(grader, `Unknown grader: ${baseType}`);
+  invariant(prompt, `Grader ${baseType} must have a prompt`);
   const { grade, rubric, suggestions } = await grader.getResult(
     prompt,
     outputString,

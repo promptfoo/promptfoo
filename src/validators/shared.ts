@@ -5,6 +5,7 @@ export const TokenUsageSchema = z.object({
   completion: z.number().optional(),
   prompt: z.number().optional(),
   total: z.number().optional(),
+  numRequests: z.number().optional(),
 });
 
 export const NunjucksFilterMapSchema = z.record(

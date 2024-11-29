@@ -219,7 +219,6 @@ export async function runAssertion({
     valueFromScript,
   };
 
-  // Map assertion types to their handler functions>
   const assertionHandlers: Record<
     BaseAssertionTypes,
     (params: AssertionParams) => GradingResult | Promise<GradingResult>
@@ -266,13 +265,23 @@ export async function runAssertion({
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
   if (handler) {
-    return handler(assertionParams);
+    const result = await handler(assertionParams);
+
+    // If weight is 0, treat this as a metric-only assertion that can't fail
+    if (assertion.weight === 0) {
+      return {
+        ...result,
+        pass: true, // Force pass for weight=0 assertions
+      };
+    }
+
+    return result;
   }
 
   if (baseType.startsWith('promptfoo:redteam:')) {
     return handleRedteam(assertionParams);
   }
-  throw new Error('Unknown assertion type: ' + assertion.type);
+  throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
 export async function runAssertions({

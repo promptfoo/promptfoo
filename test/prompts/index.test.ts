@@ -257,53 +257,73 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('should read a .yaml file', async () => {
-    const yamlContent = dedent`
+  const yamlContent = dedent`
     - role: user
       content:
         - type: text
           text: "What's in this image?"
         - type: image_url
           image_url:
-            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-    `;
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(yamlContent);
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-    await expect(readPrompts('prompts.yaml')).resolves.toEqual([
+            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"`;
+
+  it('should read a .yaml file', async () => {
+    const expectedJson = JSON.stringify([
       {
-        raw: yamlContent,
-        label: `prompts.yaml: ${yamlContent}`,
+        role: 'user',
+        content: [
+          { type: 'text', text: "What's in this image?" },
+          {
+            type: 'image_url',
+            image_url: {
+              url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg',
+            },
+          },
+        ],
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(yamlContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    await expect(readPrompts('prompts.yaml')).resolves.toEqual([
+      {
+        raw: expectedJson,
+        label: expect.stringContaining(
+          'prompts.yaml: [{"role":"user","content":[{"type":"text","text":"What\'s in this image?"}',
+        ),
+        config: undefined,
+      },
+    ]);
   });
 
   it('should read a .yml file', async () => {
-    const ymlContent = dedent`
-    - role: user
-      content:
-        - type: text
-          text: "What's in this image?"
-        - type: image_url
-          image_url:
-            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-    `;
-    jest.mocked(fs.readFileSync).mockReturnValue(ymlContent);
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-    await expect(
-      readPrompts([
-        {
-          id: 'prompts.yml',
-          label: 'image-summary',
-        },
-      ]),
-    ).resolves.toEqual([
+    const expectedJson = JSON.stringify([
       {
-        raw: ymlContent,
-        label: `image-summary`,
+        role: 'user',
+        content: [
+          { type: 'text', text: "What's in this image?" },
+          {
+            type: 'image_url',
+            image_url: {
+              url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg',
+            },
+          },
+        ],
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(yamlContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    await expect(readPrompts('image-summary.yml')).resolves.toEqual([
+      {
+        raw: expectedJson,
+        label: expect.stringContaining(
+          'image-summary.yml: [{"role":"user","content":[{"type":"text","text":"What\'s in this image?"}',
+        ),
+        config: undefined,
+      },
+    ]);
   });
 
   it('should read a .py prompt object array', async () => {

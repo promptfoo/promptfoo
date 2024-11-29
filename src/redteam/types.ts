@@ -2,7 +2,15 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
-export type PluginConfig = RedteamObjectConfig & { examples?: string[] };
+export type PluginConfig = RedteamObjectConfig & {
+  examples?: string[];
+  graderExamples?: {
+    output: string;
+    pass: boolean;
+    score: number;
+    reason: string;
+  }[];
+};
 export type StrategyConfig = RedteamObjectConfig;
 
 type ConfigurableObject = {
@@ -18,7 +26,11 @@ type WithNumTests = {
 export type RedteamPluginObject = ConfigurableObject & WithNumTests;
 export type RedteamPlugin = string | RedteamPluginObject;
 
-export type RedteamStrategyObject = ConfigurableObject;
+export type RedteamStrategyObject = ConfigurableObject & {
+  config?: StrategyConfig & {
+    plugins?: RedteamPluginObject['id'][];
+  };
+};
 export type RedteamStrategy = string | RedteamStrategyObject;
 
 export interface PluginActionParams {

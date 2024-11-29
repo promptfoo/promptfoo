@@ -14,8 +14,8 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
 import { loadRedteamProvider } from './providers/shared';
-import { Strategies, validateStrategies } from './strategies';
-import type { SynthesizeOptions } from './types';
+import { loadStrategy, Strategies, validateStrategies } from './strategies';
+import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
 
 /**
  * Determines the status of test generation based on requested and generated counts.
@@ -117,6 +117,34 @@ const formatTestCount = (numTests: number): string =>
   numTests === 1 ? '1 test' : `${numTests} tests`;
 
 /**
+ * Checks if a plugin matches any of the strategy's target plugins
+ * @param pluginId - The ID of the plugin to check
+ * @param targetPlugins - Optional array of plugin IDs to match against
+ */
+function pluginMatchesStrategyTargets(
+  pluginId: RedteamPluginObject['id'],
+  targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
+): boolean {
+  if (!targetPlugins || targetPlugins.length === 0) {
+    return true; // If no targets specified, strategy applies to all plugins
+  }
+
+  return targetPlugins.some((target) => {
+    // Direct match
+    if (target === pluginId) {
+      return true;
+    }
+
+    // Category match (e.g. 'harmful' matches 'harmful:hate')
+    if (pluginId.startsWith(`${target}:`)) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
+/**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
@@ -202,17 +230,7 @@ export async function synthesize({
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
-  let progressBar: cliProgress.SingleBar | null = null;
-  if (process.env.LOG_LEVEL !== 'debug' && getLogLevel() !== 'debug') {
-    progressBar = new cliProgress.SingleBar(
-      {
-        format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
-      },
-      cliProgress.Presets.shades_classic,
-    );
-    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
-  }
-
+  // Expand plugins first
   for (const [category, categoryPlugins] of Object.entries(categories)) {
     const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
@@ -250,9 +268,42 @@ export async function synthesize({
     }
   });
 
-  plugins = expandedPlugins;
+  plugins = [...new Set(expandedPlugins)]
+    .filter((p) => !Object.keys(categories).includes(p.id))
+    .sort();
 
-  plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
+  // Validate all plugins upfront
+  logger.debug('Validating plugins...');
+  for (const plugin of plugins) {
+    const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
+    if (!registeredPlugin) {
+      if (!plugin.id.startsWith('file://')) {
+        logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
+        continue;
+      }
+    } else if (registeredPlugin.validate) {
+      try {
+        registeredPlugin.validate({
+          language,
+          ...resolvePluginConfig(plugin.config),
+        });
+      } catch (error) {
+        throw new Error(`Validation failed for plugin ${plugin.id}: ${error}`);
+      }
+    }
+  }
+
+  // Start the progress bar
+  let progressBar: cliProgress.SingleBar | null = null;
+  if (process.env.LOG_LEVEL !== 'debug' && getLogLevel() !== 'debug') {
+    progressBar = new cliProgress.SingleBar(
+      {
+        format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
+      },
+      cliProgress.Presets.shades_classic,
+    );
+    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
+  }
 
   progressBar?.increment(1, { task: 'Extracting system purpose' });
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
@@ -263,16 +314,6 @@ export async function synthesize({
     : await extractEntities(redteamProvider, prompts);
 
   logger.debug(`System purpose: ${purpose}`);
-
-  for (const plugin of plugins) {
-    const { validate } = Plugins.find((p) => p.key === plugin.id) || {};
-    if (validate) {
-      validate({
-        language,
-        ...resolvePluginConfig(plugin.config),
-      });
-    }
-  }
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
@@ -295,16 +336,20 @@ export async function synthesize({
       if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
         logger.warn(`Failed to generate tests for ${plugin.id}`);
         pluginTests = [];
+      } else {
+        testCases.push(
+          ...pluginTests.map((t) => ({
+            ...t,
+            metadata: {
+              ...(t?.metadata || {}),
+              pluginId: plugin.id,
+              pluginConfig: resolvePluginConfig(plugin.config),
+            },
+          })),
+        );
       }
-      testCases.push(
-        ...pluginTests.map((t) => ({
-          ...t,
-          metadata: {
-            ...(t.metadata || {}),
-            pluginId: plugin.id,
-          },
-        })),
-      );
+
+      pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
       progressBar?.increment(plugin.numTests);
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
       pluginResults[plugin.id] = {
@@ -321,6 +366,7 @@ export async function synthesize({
             metadata: {
               ...(t.metadata || {}),
               pluginId: plugin.id,
+              pluginConfig: resolvePluginConfig(plugin.config),
             },
           })),
         );
@@ -342,7 +388,16 @@ export async function synthesize({
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
   if (strategies.length > 0) {
     const existingTestCount = testCases.length;
-    const totalStrategyTests = existingTestCount * strategies.length;
+    let totalStrategyTests = 0;
+
+    // Calculate total expected tests based on plugin-strategy matches
+    strategies.forEach((strategy) => {
+      const targetPlugins = strategy.config?.plugins;
+      const matchingTests = testCases.filter((t) =>
+        pluginMatchesStrategyTargets(t.metadata?.pluginId || '', targetPlugins),
+      );
+      totalStrategyTests += matchingTests.length;
+    });
 
     logger.info(
       chalk.bold(
@@ -353,18 +408,35 @@ export async function synthesize({
         `\n• Total expected tests: ${chalk.cyan(existingTestCount + totalStrategyTests)}`,
     );
 
-    for (const { key, action } of Strategies) {
-      const strategy = strategies.find((s) => s.id === key);
-      if (!strategy) {
-        continue;
+    for (const strategy of strategies) {
+      progressBar?.update({ task: `Applying strategy: ${strategy.id}` });
+      logger.debug(`Generating ${strategy.id} tests`);
+
+      let strategyAction;
+      if (strategy.id.startsWith('file://')) {
+        const loadedStrategy = await loadStrategy(strategy.id);
+        strategyAction = loadedStrategy.action;
+      } else {
+        const builtinStrategy = Strategies.find((s) => s.id === strategy.id);
+        if (!builtinStrategy) {
+          logger.warn(`Strategy ${strategy.id} not registered, skipping`);
+          continue;
+        }
+        strategyAction = builtinStrategy.action;
       }
-      progressBar?.update({ task: `Applying strategy: ${key}` });
-      logger.debug(`Generating ${key} tests`);
-      const strategyTestCases: TestCase[] = await action(
-        testCases,
+
+      // Filter test cases based on plugin targets
+      const targetPlugins = strategy.config?.plugins;
+      const applicableTestCases = testCases.filter((t) =>
+        pluginMatchesStrategyTargets(t.metadata?.pluginId || '', targetPlugins),
+      );
+
+      const strategyTestCases: TestCase[] = await strategyAction(
+        applicableTestCases,
         injectVar,
         strategy.config || {},
       );
+
       try {
         newTestCases.push(
           ...strategyTestCases
@@ -373,16 +445,18 @@ export async function synthesize({
               ...t,
               metadata: {
                 ...(t?.metadata || {}),
-                pluginId: t?.metadata?.pluginId || null,
                 strategyId: strategy.id,
+                ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
+                ...(t?.metadata?.pluginConfig && { pluginConfig: t.metadata.pluginConfig }),
+                ...(strategy.config && { strategyConfig: strategy.config }),
               },
             })),
         );
       } catch (e) {
-        logger.warn(`Strategy ${key} did not return valid test cases: ${e}`);
+        logger.warn(`Strategy ${strategy.id} did not return valid test cases: ${e}`);
       }
-      strategyResults[key] = {
-        requested: testCases.length,
+      strategyResults[strategy.id] = {
+        requested: applicableTestCases.length,
         generated: strategyTestCases.length,
       };
     }

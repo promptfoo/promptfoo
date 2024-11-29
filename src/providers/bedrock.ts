@@ -1,18 +1,19 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
 import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
+import telemetry from '../telemetry';
 import type {
   ApiProvider,
   ApiEmbeddingProvider,
-  EnvOverrides,
   ProviderResponse,
   ProviderEmbeddingResponse,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
@@ -23,6 +24,9 @@ interface BedrockOptions {
   region?: string;
   secretAccessKey?: string;
   sessionToken?: string;
+  guardrailIdentifier?: string;
+  guardrailVersion?: string;
+  trace?: Trace;
 }
 
 export interface TextGenerationOptions {
@@ -701,6 +705,13 @@ export abstract class AwsBedrockGenericProvider {
     this.modelName = modelName;
     this.config = config || {};
     this.id = id ? () => id : this.id;
+
+    if (this.config.guardrailIdentifier) {
+      telemetry.recordAndSendOnce('feature_used', {
+        feature: 'guardrail',
+        provider: 'bedrock',
+      });
+    }
   }
 
   id(): string {
@@ -813,8 +824,14 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     const bedrockInstance = await this.getBedrockInstance();
     let response;
     try {
+      // https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel
       response = await bedrockInstance.invokeModel({
         modelId: this.modelName,
+        ...(this.config.guardrailIdentifier
+          ? { guardrailIdentifier: this.config.guardrailIdentifier }
+          : {}),
+        ...(this.config.guardrailVersion ? { guardrailVersion: this.config.guardrailVersion } : {}),
+        ...(this.config.trace ? { trace: this.config.trace } : {}),
         accept: 'application/json',
         contentType: 'application/json',
         body: JSON.stringify(params),

@@ -23,12 +23,17 @@ strategies:
     config:
       maxTurns: 5
       maxBacktracks: 5
+      stateless: true # Sends the entire conversation history with each turn (Default), set to False if you're using any custom providers
 ```
 
 Increasing the number of turns and backtracks will make the strategy more aggressive, but it will also take longer to complete and cost more.
 
 :::danger
 This strategy is relatively high cost. We recommend running it on a smaller number of tests and plugins, with a cheaper provider, or prefer a simpler [iterative](iterative.md) strategy.
+:::
+
+:::warning
+If your system maintains a conversation history and only expects the latest message to be sent, set `stateless: false`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
 
 ## How It Works

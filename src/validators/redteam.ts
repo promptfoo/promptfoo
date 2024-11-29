@@ -17,6 +17,7 @@ import {
   type Plugin,
 } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
+import { isJavascriptFile } from '../util/file';
 import { ProviderSchema } from '../validators/providers';
 
 /**
@@ -50,13 +51,27 @@ export const RedteamPluginSchema = z.union([
   RedteamPluginObjectSchema,
 ]);
 
+const strategyIdSchema = z
+  .union([
+    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]),
+    z.string().refine(
+      (value) => {
+        console.error(value);
+        return value.startsWith('file://') && isJavascriptFile(value);
+      },
+      {
+        message: 'Strategy must be a valid file:// path to a .js/.ts file',
+      },
+    ),
+  ])
+  .describe('Name of the strategy');
 /**
  * Schema for individual redteam strategies
  */
 export const RedteamStrategySchema = z.union([
-  z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
+  strategyIdSchema,
   z.object({
-    id: z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
+    id: strategyIdSchema,
     config: z.record(z.unknown()).optional().describe('Strategy-specific configuration'),
   }),
 ]);
@@ -123,6 +138,10 @@ export const RedteamConfigSchema = z
       .describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
     language: z.string().optional().describe('Language of tests ot generate for this plugin'),
+    entities: z
+      .array(z.string())
+      .optional()
+      .describe('Names of people, brands, or organizations related to your LLM application'),
     plugins: z
       .array(RedteamPluginSchema)
       .describe('Plugins to use for redteam generation')
@@ -278,5 +297,6 @@ function assert<T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
 assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>>();
+
 // TODO: Why is this never?
 // assert<TypeEqualityGuard<RedteamPluginObject, z.infer<typeof RedteamPluginObjectSchema>>>();

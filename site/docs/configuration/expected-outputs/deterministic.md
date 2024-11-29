@@ -16,6 +16,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-xml](#contains-xml)                                   | output contains valid xml                                          |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
+| [f-score](#f-score)                                             | F-score is above a threshold                                       |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
 | [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
@@ -675,3 +676,53 @@ tests:
       - type: bleu
         value: '{{expected}}'
 ```
+
+### F-Score
+
+F-score (also F1 score) is a measure of accuracy that considers both precision and recall. It is the harmonic mean of precision and recall, providing a single score that balances both metrics. The score ranges from 0 (worst) to 1 (best).
+
+F-score uses the [named metrics](/docs/configuration/expected-outputs/#defining-named-metrics) and [derived metrics](/docs/configuration/expected-outputs/#creating-derived-metrics) features.
+
+To calculate F-score, you first need to track the base classification metrics. We can do this using JavaScript assertions, for example:
+
+```yaml
+assert:
+  # Track true positives, false positives, etc
+  - type: javascript
+    value: "output.sentiment === 'positive' && context.vars.sentiment === 'positive' ? 1 : 0"
+    metric: true_positives
+    weight: 0
+
+  - type: javascript
+    value: "output.sentiment === 'positive' && context.vars.sentiment === 'negative' ? 1 : 0"
+    metric: false_positives
+    weight: 0
+
+  - type: javascript
+    value: "output.sentiment === 'negative' && context.vars.sentiment === 'positive' ? 1 : 0"
+    metric: false_negatives
+    weight: 0
+```
+
+Then define derived metrics to calculate precision, recall and F-score:
+
+```yaml
+derivedMetrics:
+  # Precision = TP / (TP + FP)
+  - name: precision
+    value: true_positives / (true_positives + false_positives)
+
+  # Recall = TP / (TP + FN)
+  - name: recall
+    value: true_positives / (true_positives + false_negatives)
+
+  # F1 Score = 2 * (precision * recall) / (precision + recall)
+  - name: f1_score
+    value: 2 * true_positives / (2 * true_positives + false_positives + false_negatives)
+```
+
+The F-score will be calculated automatically after the evaluation completes. A score closer to 1 indicates better performance.
+
+This is particularly useful for evaluating classification tasks like sentiment analysis, where you want to measure both the precision (accuracy of positive predictions) and recall (ability to find all positive cases).
+
+See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete example.
