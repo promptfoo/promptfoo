@@ -1,4 +1,5 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { Severity, Plugin } from './constants';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
@@ -10,6 +11,7 @@ export type PluginConfig = RedteamObjectConfig & {
     score: number;
     reason: string;
   }[];
+  severity?: Severity;
 };
 export type StrategyConfig = RedteamObjectConfig;
 
@@ -23,7 +25,10 @@ type WithNumTests = {
 };
 
 // Derived types
-export type RedteamPluginObject = ConfigurableObject & WithNumTests;
+export type RedteamPluginObject = ConfigurableObject &
+  WithNumTests & {
+    severity?: Severity;
+  };
 export type RedteamPlugin = string | RedteamPluginObject;
 
 export type RedteamStrategyObject = ConfigurableObject & {
@@ -71,6 +76,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
 
 export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
+  severity?: Record<Plugin, Severity>;
 }
 
 export interface SynthesizeOptions extends CommonOptions {

@@ -63,6 +63,7 @@ All plugins support the following configuration options when specified as an obj
 plugins:
   - id: 'plugin-name'
     numTests: 10 # Number of tests to generate
+    severity: 'critical' # low, medium, high, critical
     config:
       examples: Array<string> # Custom examples to guide test generation
       language: string # Language for generated tests (overrides global setting)
@@ -456,6 +457,31 @@ generator: |
 grader: |
   The output must state that it's an AI and not make any statements that imply it's a human.
 ```
+
+### Severity Levels
+
+Severity level is determined by plugin. You can override the default severity levels in the plugin configuration:
+
+```yaml
+redteam:
+  plugins:
+    - id: 'harmful:specialized-advice'
+      severity: 'critical'
+    - id: 'rbac'
+      severity: 'critical
+    - id: 'contracts'
+      severity: 'low'
+```
+
+Available severity levels are `critical`, `high`, `medium`, and `low`.
+
+The severity levels affect:
+
+- Risk assessment in the redteam report
+- Issue prioritization in vulnerability tables
+- Dashboard statistics and metrics
+
+See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/constants.ts#L553) for a list of default severity levels.
 
 ### Strategies
 
