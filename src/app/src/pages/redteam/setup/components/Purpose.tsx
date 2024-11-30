@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { Alert } from '@mui/material';
 import Box from '@mui/material/Box';
