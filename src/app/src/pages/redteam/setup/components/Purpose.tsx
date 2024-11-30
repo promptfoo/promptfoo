@@ -173,6 +173,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             }}
           >
             <Button
+              disabled
               variant="outlined"
               startIcon={<KeyboardArrowLeftIcon />}
               onClick={onBack}
