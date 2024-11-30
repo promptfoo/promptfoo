@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -12,36 +12,54 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useStore as useResultsViewStore } from './store';
 
-const MemoizedSlider = React.memo(
+const MemoizedRangeSlider = React.memo(
   ({
     value,
     onChange,
     onChangeCommitted,
+    min,
+    max,
+    label,
+    unlimited,
   }: {
     value: number;
     onChange: (event: Event | React.SyntheticEvent, value: number | number[]) => void;
-    onChangeCommitted: (event: Event | React.SyntheticEvent, value: number | number[]) => void;
-  }) => (
-    <Slider
-      min={25}
-      max={1001}
-      value={value}
-      onChange={onChange}
-      onChangeCommitted={onChangeCommitted}
-      marks={[
-        { value: 25, label: '25' },
-        { value: 1001, label: 'Unlimited' },
-      ]}
-      sx={{
-        '& .MuiSlider-markLabel[data-index="0"]': {
-          transform: 'translateX(0%)',
-        },
-        '& .MuiSlider-markLabel[data-index="1"]': {
-          transform: 'translateX(-100%)',
-        },
-      }}
-    />
-  ),
+    onChangeCommitted?: (event: Event | React.SyntheticEvent, value: number | number[]) => void;
+    min: number;
+    max: number;
+    label: string;
+    unlimited?: boolean;
+  }) => {
+    const displayValue = unlimited && value === max ? 'Unlimited' : value;
+    const marks = [
+      { value: min, label: String(min) },
+      { value: max, label: unlimited ? 'Unlimited' : String(max) },
+    ];
+
+    return (
+      <Box maxWidth="sm">
+        <Typography mt={2}>
+          {label}: {displayValue}
+        </Typography>
+        <Slider
+          min={min}
+          max={max}
+          value={value}
+          onChange={onChange}
+          onChangeCommitted={onChangeCommitted}
+          marks={marks}
+          sx={{
+            '& .MuiSlider-markLabel[data-index="0"]': {
+              transform: 'translateX(0%)',
+            },
+            '& .MuiSlider-markLabel[data-index="1"]': {
+              transform: 'translateX(-100%)',
+            },
+          }}
+        />
+      </Box>
+    );
+  },
 );
 
 interface SettingsModalProps {
@@ -67,6 +85,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
     setShowPassFail,
     stickyHeader,
     setStickyHeader,
+    maxImageWidth,
+    setMaxImageWidth,
+    maxImageHeight,
+    setMaxImageHeight,
   } = useResultsViewStore();
 
   const [localMaxTextLength, setLocalMaxTextLength] = useState(
@@ -86,11 +108,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
       setMaxTextLength(newValue);
     },
     [setMaxTextLength],
-  );
-
-  const maxTextLengthDisplay = useMemo(
-    () => (localMaxTextLength === 1001 ? 'Unlimited' : localMaxTextLength),
-    [localMaxTextLength],
   );
 
   return (
@@ -191,14 +208,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
             />
           </Tooltip>
         </Box>
-        <Box maxWidth="sm">
-          <Typography mt={2}>Max text length: {maxTextLengthDisplay}</Typography>
-          <MemoizedSlider
-            value={localMaxTextLength}
-            onChange={handleSliderChange}
-            onChangeCommitted={handleSliderChangeCommitted}
-          />
-        </Box>
+        <MemoizedRangeSlider
+          value={localMaxTextLength}
+          onChange={handleSliderChange}
+          onChangeCommitted={handleSliderChangeCommitted}
+          min={25}
+          max={1001}
+          label="Max text length"
+          unlimited
+        />
+        <MemoizedRangeSlider
+          value={maxImageWidth}
+          onChange={(_, value) => setMaxImageWidth(value as number)}
+          min={100}
+          max={1000}
+          label="Max image width (px)"
+        />
+        <MemoizedRangeSlider
+          value={maxImageHeight}
+          onChange={(_, value) => setMaxImageHeight(value as number)}
+          min={100}
+          max={1000}
+          label="Max image height (px)"
+        />
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>

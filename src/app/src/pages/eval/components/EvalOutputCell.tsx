@@ -44,7 +44,8 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail } = useResultsViewStore();
+  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
+    useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -472,7 +473,16 @@ function EvalOutputCell({
   };
 
   return (
-    <div className="cell" style={cellStyle}>
+    <div
+      className="cell"
+      style={
+        {
+          ...cellStyle,
+          '--max-image-width': `${maxImageWidth}px`,
+          '--max-image-height': `${maxImageHeight}px`,
+        } as React.CSSProperties
+      }
+    >
       {showPassFail && (
         <>
           {output.pass ? (
