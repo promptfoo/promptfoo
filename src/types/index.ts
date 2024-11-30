@@ -276,7 +276,7 @@ export interface EvaluateSummaryV2 {
 
 export interface ResultSuggestion {
   type: string;
-  action: 'replace-prompt';
+  action: 'replace-prompt' | 'pre-filter' | 'post-filter' | 'note';
   value: string;
 }
 
