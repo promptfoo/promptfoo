@@ -589,6 +589,7 @@ function ResultsTable({
             cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => {
               const output = getOutput(info.row.index, idx);
               return output ? (
+                // hmm
                 <EvalOutputCell
                   output={output}
                   maxTextLength={maxTextLength}
@@ -781,7 +782,7 @@ function ResultsTable({
                       }}
                       className={`${isMetadataCol ? 'variable' : ''} ${
                         shouldDrawRowBorder ? 'first-prompt-row' : ''
-                      } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
+                      } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
                     >
                       {cellContent}
                     </td>
