@@ -589,7 +589,6 @@ function ResultsTable({
             cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => {
               const output = getOutput(info.row.index, idx);
               return output ? (
-                // hmm
                 <EvalOutputCell
                   output={output}
                   maxTextLength={maxTextLength}
