@@ -333,7 +333,7 @@ const App: React.FC = () => {
                   <>
                     <strong>Depth:</strong>{' '}
                     {(
-                      selectedPrompt.metrics?.tokenUsage.numRequests || tableData.length
+                      selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
                     ).toLocaleString()}{' '}
                     probes
                   </>
