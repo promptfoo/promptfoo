@@ -165,7 +165,8 @@ table.results-table,
   font-size: 1.25rem;
 }
 
-.results-table tr:hover .cell-actions {
+.results-table .first-prompt-col:hover .cell-actions,
+.results-table .second-prompt-column:hover .cell-actions {
   visibility: visible;
 }
 

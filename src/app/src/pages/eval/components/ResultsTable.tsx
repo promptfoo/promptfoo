@@ -781,7 +781,7 @@ function ResultsTable({
                       }}
                       className={`${isMetadataCol ? 'variable' : ''} ${
                         shouldDrawRowBorder ? 'first-prompt-row' : ''
-                      } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
+                      } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
                     >
                       {cellContent}
                     </td>
