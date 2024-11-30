@@ -15,10 +15,9 @@ import Prompts from './Prompts';
 
 interface PromptsProps {
   onNext: () => void;
-  onBack: () => void;
 }
 
-export default function Purpose({ onNext, onBack }: PromptsProps) {
+export default function Purpose({ onNext }: PromptsProps) {
   const { config, updateApplicationDefinition } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
 
@@ -167,22 +166,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
           <Box
             sx={{
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent: 'flex-end',
               alignItems: 'center',
               mt: 4,
             }}
           >
-            <Button
-              variant="outlined"
-              startIcon={<KeyboardArrowLeftIcon />}
-              onClick={onBack}
-              sx={{
-                px: 4,
-                py: 1,
-              }}
-            >
-              Back
-            </Button>
             <Button
               variant="contained"
               endIcon={<KeyboardArrowRightIcon />}

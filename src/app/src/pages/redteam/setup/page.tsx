@@ -429,10 +429,10 @@ export default function RedTeamSetupPage() {
         </OuterSidebarContainer>
         <TabContent>
           <CustomTabPanel value={value} index={0}>
-            <Purpose onNext={handleNext} onBack={handleBack} />
+            <Purpose onNext={handleNext} />
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>
-            <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
+            <Targets onNext={handleNext} onBack={handleBack} setupModalOpen={setupModalOpen} />
           </CustomTabPanel>
           <CustomTabPanel value={value} index={2}>
             <Plugins onNext={handleNext} onBack={handleBack} />
