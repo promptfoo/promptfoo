@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
@@ -11,6 +12,10 @@ import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 import { useStore as useResultsViewStore } from './store';
+
+type CSSPropertiesWithCustomVars = React.CSSProperties & {
+  [key: `--${string}`]: string | number;
+};
 
 function scoreToString(score: number | null) {
   if (score === null || score === 0 || score === 1) {
@@ -395,10 +400,16 @@ function EvalOutputCell({
     </div>
   );
 
-  const cellStyle: Record<string, string> = {};
-  if (output.gradingResult?.comment === '!highlight') {
-    cellStyle.backgroundColor = '#ffffeb';
-  }
+  const cellStyle = useMemo(() => {
+    const base =
+      output.gradingResult?.comment === '!highlight' ? { backgroundColor: '#ffffeb' } : {};
+
+    return {
+      ...base,
+      '--max-image-width': `${maxImageWidth}px`,
+      '--max-image-height': `${maxImageHeight}px`,
+    } as CSSPropertiesWithCustomVars;
+  }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
 
   // Pass/fail badge creation
   let passCount = 0;
@@ -473,16 +484,7 @@ function EvalOutputCell({
   };
 
   return (
-    <div
-      className="cell"
-      style={
-        {
-          ...cellStyle,
-          '--max-image-width': `${maxImageWidth}px`,
-          '--max-image-height': `${maxImageHeight}px`,
-        } as React.CSSProperties
-      }
-    >
+    <div className="cell" style={cellStyle}>
       {showPassFail && (
         <>
           {output.pass ? (
