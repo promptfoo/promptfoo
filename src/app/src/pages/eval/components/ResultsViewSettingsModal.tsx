@@ -31,13 +31,9 @@ const MemoizedRangeSlider = React.memo(
     unlimited?: boolean;
     onChangeCommitted?: (value: number) => void;
   }) => {
-    // Local state for smooth sliding
     const [localValue, setLocalValue] = useState(value);
-
-    // Debounced value that triggers the actual store update
     const [debouncedValue] = useDebounce(localValue, 150);
 
-    // Effect to trigger onChange when debounced value changes
     useEffect(() => {
       if (debouncedValue !== value) {
         onChange(debouncedValue);

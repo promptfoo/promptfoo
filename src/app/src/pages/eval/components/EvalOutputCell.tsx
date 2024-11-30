@@ -400,7 +400,6 @@ function EvalOutputCell({
     </div>
   );
 
-  // Memoize the style object to prevent unnecessary re-renders
   const cellStyle = useMemo(() => {
     const base =
       output.gradingResult?.comment === '!highlight' ? { backgroundColor: '#ffffeb' } : {};
