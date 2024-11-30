@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -10,44 +10,71 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Slider from '@mui/material/Slider';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { useDebounce } from 'use-debounce';
 import { useStore as useResultsViewStore } from './store';
 
 const MemoizedRangeSlider = React.memo(
   ({
     value,
     onChange,
-    onChangeCommitted,
     min,
     max,
     label,
     unlimited,
+    onChangeCommitted,
   }: {
     value: number;
-    onChange: (event: Event | React.SyntheticEvent, value: number | number[]) => void;
-    onChangeCommitted?: (event: Event | React.SyntheticEvent, value: number | number[]) => void;
+    onChange: (value: number) => void;
     min: number;
     max: number;
     label: string;
     unlimited?: boolean;
+    onChangeCommitted?: (value: number) => void;
   }) => {
-    const displayValue = unlimited && value === max ? 'Unlimited' : value;
-    const marks = [
-      { value: min, label: String(min) },
-      { value: max, label: unlimited ? 'Unlimited' : String(max) },
-    ];
+    // Local state for smooth sliding
+    const [localValue, setLocalValue] = useState(value);
+
+    // Debounced value that triggers the actual store update
+    const [debouncedValue] = useDebounce(localValue, 150);
+
+    // Effect to trigger onChange when debounced value changes
+    useEffect(() => {
+      if (debouncedValue !== value) {
+        onChange(debouncedValue);
+      }
+    }, [debouncedValue, onChange, value]);
+
+    const handleChange = useCallback(
+      (_: Event | React.SyntheticEvent, newValue: number | number[]) => {
+        setLocalValue(newValue as number);
+      },
+      [],
+    );
+
+    const handleChangeCommitted = useCallback(
+      (_: Event | React.SyntheticEvent, value: number | number[]) => {
+        if (onChangeCommitted) {
+          onChangeCommitted(value as number);
+        }
+      },
+      [onChangeCommitted],
+    );
 
     return (
       <Box maxWidth="sm">
         <Typography mt={2}>
-          {label}: {displayValue}
+          {label}: {unlimited && localValue === max ? 'Unlimited' : localValue}
         </Typography>
         <Slider
           min={min}
           max={max}
-          value={value}
-          onChange={onChange}
-          onChangeCommitted={onChangeCommitted}
-          marks={marks}
+          value={localValue}
+          onChange={handleChange}
+          onChangeCommitted={onChangeCommitted ? handleChangeCommitted : undefined}
+          marks={[
+            { value: min, label: String(min) },
+            { value: max, label: unlimited ? 'Unlimited' : String(max) },
+          ]}
           sx={{
             '& .MuiSlider-markLabel[data-index="0"]': {
               transform: 'translateX(0%)',
@@ -95,16 +122,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
     maxTextLength === Number.POSITIVE_INFINITY ? 1001 : maxTextLength,
   );
 
-  const handleSliderChange = useCallback(
-    (_event: Event | React.SyntheticEvent, value: number | number[]) => {
-      setLocalMaxTextLength(value as number);
-    },
-    [],
-  );
+  const handleSliderChange = useCallback((value: number) => {
+    setLocalMaxTextLength(value);
+  }, []);
 
   const handleSliderChangeCommitted = useCallback(
-    (_event: Event | React.SyntheticEvent, value: number | number[]) => {
-      const newValue = value === 1001 ? Number.POSITIVE_INFINITY : (value as number);
+    (value: number) => {
+      const newValue = value === 1001 ? Number.POSITIVE_INFINITY : value;
       setMaxTextLength(newValue);
     },
     [setMaxTextLength],
@@ -219,14 +243,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
         />
         <MemoizedRangeSlider
           value={maxImageWidth}
-          onChange={(_, value) => setMaxImageWidth(value as number)}
+          onChange={setMaxImageWidth}
           min={100}
           max={1000}
           label="Max image width (px)"
         />
         <MemoizedRangeSlider
           value={maxImageHeight}
-          onChange={(_, value) => setMaxImageHeight(value as number)}
+          onChange={setMaxImageHeight}
           min={100}
           max={1000}
           label="Max image height (px)"
