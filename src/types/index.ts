@@ -383,11 +383,20 @@ type NotPrefixed<T extends string> = `not-${T}`;
 // and selects the highest scoring one after all other assertions have completed.
 export type SpecialAssertionTypes = 'select-best' | 'human';
 
-export type AssertionType =
-  | BaseAssertionTypes
-  | NotPrefixed<BaseAssertionTypes>
-  | SpecialAssertionTypes
-  | RedteamAssertionTypes;
+export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human']);
+
+export const NotPrefixedAssertionTypesSchema = BaseAssertionTypesSchema.transform(
+  (baseType) => `not-${baseType}` as NotPrefixed<BaseAssertionTypes>,
+);
+
+export const AssertionTypeSchema = z.union([
+  BaseAssertionTypesSchema,
+  NotPrefixedAssertionTypesSchema,
+  SpecialAssertionTypesSchema,
+  z.custom<RedteamAssertionTypes>(),
+]);
+
+export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
@@ -406,7 +415,7 @@ export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
-  type: z.custom<AssertionType>(),
+  type: AssertionTypeSchema,
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
