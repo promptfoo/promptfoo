@@ -790,7 +790,6 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         if (functionCallsWithCallbacks.length === 0) {
           break;
         }
-        // console.log("procesando run", run.thread_id);
         const threadId = run.thread_id;
 
         logger.debug(
