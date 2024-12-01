@@ -425,7 +425,7 @@ export function evalCommand(
     // Core configuration
     .option(
       '-c, --config <paths...>',
-      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
+      'Path to configuration file. Automatically loads promptfooconfig.yaml',
     )
     .option('--env-file, --env-path <path>', 'Path to .env file')
 

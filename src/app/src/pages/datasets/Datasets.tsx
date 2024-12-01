@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
@@ -29,6 +29,7 @@ export default function Datasets() {
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogTestCaseIndex, setDialogTestCaseIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const hasShownPopup = useRef(false);
 
   const handleSort = (field: string) => {
     const order = sortField === field && sortOrder === 'asc' ? 'desc' : 'asc';
@@ -64,11 +65,15 @@ export default function Datasets() {
   };
 
   useEffect(() => {
+    if (hasShownPopup.current) {
+      return;
+    }
     const testCaseId = searchParams.get('id');
     if (testCaseId) {
       const testCaseIndex = testCases.findIndex((testCase) => testCase.id.startsWith(testCaseId));
       if (testCaseIndex !== -1) {
         handleClickOpen(testCaseIndex);
+        hasShownPopup.current = true;
       }
     }
   }, [testCases, searchParams]);

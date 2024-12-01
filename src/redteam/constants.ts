@@ -550,6 +550,10 @@ export const severityDisplayNames: Record<Severity, string> = {
   [Severity.Low]: 'Low',
 };
 
+/*
+ * Default severity values for each plugin.
+ * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
+ */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
   bfla: Severity.High,

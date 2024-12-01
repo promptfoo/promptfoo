@@ -64,10 +64,11 @@ export default function SuggestionsDialog({
   };
 
   const getActionTitle = (action: string) => {
-    console.log('action', action);
     switch (action) {
       case 'replace-prompt':
         return 'Modify prompt';
+      case 'note':
+        return 'Recommendation';
       default:
         return 'Suggestion';
     }
@@ -96,6 +97,93 @@ export default function SuggestionsDialog({
             "Defending Against Indirect Prompt Injection Attacks With Spotlighting"
           </a>
           . Encoding helps improve LLMs' ability to distinguish between multiple sources of input.
+        </Typography>
+      );
+    }
+    if (type === 'constitutional-politics') {
+      return (
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          This suggestion adds a policy statement to the system prompt instructing the assistant to
+          avoid expressing political opinions or making political statements. This approach is based
+          on strategies from research on{' '}
+          <a href="https://arxiv.org/abs/2212.08073" target="_blank" rel="noopener noreferrer">
+            "Constitutional AI"
+          </a>
+          , which involves embedding policies directly into prompts to guide assistant behavior.
+        </Typography>
+      );
+    }
+    if (type === 'access-control') {
+      return (
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          This issue requires enforcing proper access control at the API or application logic layer.
+          Prompt modifications alone cannot mitigate Broken Function Level Authorization (BFLA)
+          vulnerabilities.
+        </Typography>
+      );
+    }
+    if (type === 'constitutional-imitation') {
+      return (
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          This suggestion adds a policy statement to the system prompt instructing the assistant to
+          avoid imitating or impersonating entities while still allowing factual information. This
+          approach is based on strategies from research on{' '}
+          <a href="https://arxiv.org/abs/2212.08073" target="_blank" rel="noopener noreferrer">
+            "Constitutional AI"
+          </a>
+          , which involves embedding policies directly into prompts to guide assistant behavior.
+        </Typography>
+      );
+    }
+    if (type === 'constitutional-competition') {
+      return (
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          This suggestion adds a policy statement to the system prompt providing guidelines for
+          discussing competitors based on Constitutional AI principles. The policy enforces either
+          neutral, factual discussion or complete avoidance of competitor mentions, depending on
+          configuration. This approach is based on research on{' '}
+          <a href="https://arxiv.org/abs/2212.08073" target="_blank" rel="noopener noreferrer">
+            "Constitutional AI"
+          </a>
+          , which involves embedding policies directly into prompts to guide assistant behavior.
+        </Typography>
+      );
+    }
+    if (type === 'constitutional-delegation') {
+      return (
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          This suggestion adds clear role boundaries and delegation requirements to prevent the
+          assistant from making unauthorized commitments or agreements. This approach combines
+          <a href="https://arxiv.org/abs/2212.08073" target="_blank" rel="noopener noreferrer">
+            "Constitutional AI"
+          </a>{' '}
+          principles with explicit delegation rules.
+        </Typography>
+      );
+    }
+    if (type === 'structured-validation') {
+      return (
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          This suggestion implements a structured validation framework based on the
+          Chain-of-Verification approach described in{' '}
+          <a href="https://arxiv.org/abs/2306.00024" target="_blank" rel="noopener noreferrer">
+            "Self-Verification Improves Few-Shot Clinical Reasoning"
+          </a>
+          . This methodology helps prevent overreliance on incorrect assumptions while maintaining
+          helpful interactions through systematic verification steps.
+        </Typography>
+      );
+    }
+    if (type === 'constitutional-religion') {
+      return (
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          This suggestion adds guidelines for maintaining strict neutrality based on the Principle
+          of Neutrality described in{' '}
+          <a href="https://arxiv.org/abs/2310.07521" target="_blank" rel="noopener noreferrer">
+            "Constitutional AI: A Survey on Constitutional AI"
+          </a>
+          . It ensures factual, balanced information while avoiding theological interpretations
+          through academically-grounded principles.
         </Typography>
       );
     }
@@ -136,76 +224,78 @@ export default function SuggestionsDialog({
                   {getActionTitle(suggestion.action || '')}
                 </Typography>
                 {getExplanation(suggestion.type)}
-                <Accordion
-                  sx={{
-                    boxShadow: 'none',
-                  }}
-                >
-                  <AccordionSummary
-                    expandIcon={<ExpandMoreIcon />}
+                {suggestion.action === 'replace-prompt' && (
+                  <Accordion
                     sx={{
-                      px: 1,
-                      py: 0,
+                      boxShadow: 'none',
                     }}
                   >
-                    <Typography variant="body2">View suggested prompt</Typography>
-                  </AccordionSummary>
-                  <AccordionDetails
-                    sx={{
-                      px: 1,
-                      py: 0,
-                      position: 'relative',
-                      '&:hover .copy-icon': {
-                        display: 'block',
-                      },
-                    }}
-                  >
-                    <Box
-                      component="pre"
+                    <AccordionSummary
+                      expandIcon={<ExpandMoreIcon />}
                       sx={{
-                        fontFamily: 'monospace',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        p: 0,
-                        pr: 6,
-                        fontSize: '0.875rem',
+                        px: 1,
+                        py: 0,
                       }}
                     >
-                      {suggestion.value}
-                    </Box>
-                    <IconButton
-                      onClick={() => handleCopy(suggestion.value, index)}
-                      className="copy-icon"
+                      <Typography variant="body2">View suggested prompt</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails
                       sx={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        backgroundColor: theme.palette.background.paper,
-                        display: 'none', // Initially hide the button
-                        '&:hover': {
-                          backgroundColor: theme.palette.action.hover,
+                        px: 1,
+                        py: 0,
+                        position: 'relative',
+                        '&:hover .copy-icon': {
+                          display: 'block',
                         },
                       }}
                     >
-                      <ContentCopyIcon fontSize="small" />
-                    </IconButton>
-                    {copiedIndex === index && (
-                      <Typography
-                        variant="caption"
+                      <Box
+                        component="pre"
                         sx={{
-                          position: 'absolute',
-                          top: 14,
-                          right: 48,
-                          backgroundColor: theme.palette.background.paper,
-                          padding: '2px 4px',
-                          borderRadius: 1,
+                          fontFamily: 'monospace',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          p: 0,
+                          pr: 6,
+                          fontSize: '0.875rem',
                         }}
                       >
-                        Copied!
-                      </Typography>
-                    )}
-                  </AccordionDetails>
-                </Accordion>
+                        {suggestion.value}
+                      </Box>
+                      <IconButton
+                        onClick={() => handleCopy(suggestion.value, index)}
+                        className="copy-icon"
+                        sx={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          backgroundColor: theme.palette.background.paper,
+                          display: 'none', // Initially hide the button
+                          '&:hover': {
+                            backgroundColor: theme.palette.action.hover,
+                          },
+                        }}
+                      >
+                        <ContentCopyIcon fontSize="small" />
+                      </IconButton>
+                      {copiedIndex === index && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            position: 'absolute',
+                            top: 14,
+                            right: 48,
+                            backgroundColor: theme.palette.background.paper,
+                            padding: '2px 4px',
+                            borderRadius: 1,
+                          }}
+                        >
+                          Copied!
+                        </Typography>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+                )}
               </CardContent>
             </Card>
           ))}

@@ -15,14 +15,23 @@ import {
   categoryAliases,
   displayNameOverrides,
   riskCategories,
-  riskCategorySeverityMap,
   Severity,
   subCategoryDescriptions,
+  type Plugin,
 } from '@promptfoo/redteam/constants';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/shared';
+import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
+
+interface TestSuitesProps {
+  evalId: string;
+  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  plugins: RedteamPluginObject[];
+}
 
 const getSubCategoryStats = (
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,
+  plugins: RedteamPluginObject[],
 ) => {
   const subCategoryStats = [];
   for (const subCategories of Object.values(riskCategories)) {
@@ -43,31 +52,23 @@ const getSubCategoryStats = (
               100
             ).toFixed(1) + '%'
           : 'N/A',
-        severity:
-          riskCategorySeverityMap[subCategory as keyof typeof riskCategorySeverityMap] || 'Unknown',
+        severity: getRiskCategorySeverityMap(plugins)[subCategory as Plugin] || 'Unknown',
       });
     }
   }
-  return (
-    subCategoryStats
-      //.filter((subCategory) => subCategory.passRate !== 'N/A')
-      .sort((a, b) => {
-        if (a.passRate === 'N/A') {
-          return 1;
-        }
-        if (b.passRate === 'N/A') {
-          return -1;
-        }
-        return Number.parseFloat(a.passRate) - Number.parseFloat(b.passRate);
-      })
-  );
+  return subCategoryStats.sort((a, b) => {
+    if (a.passRate === 'N/A') {
+      return 1;
+    }
+    if (b.passRate === 'N/A') {
+      return -1;
+    }
+    return Number.parseFloat(a.passRate) - Number.parseFloat(b.passRate);
+  });
 };
 
-const TestSuites: React.FC<{
-  evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
-}> = ({ evalId, categoryStats }) => {
-  const subCategoryStats = getSubCategoryStats(categoryStats).filter(
+const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins }) => {
+  const subCategoryStats = getSubCategoryStats(categoryStats, plugins).filter(
     (subCategory) => subCategory.passRate !== 'N/A',
   );
   const [page, setPage] = React.useState(0);

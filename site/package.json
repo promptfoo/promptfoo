@@ -17,14 +17,15 @@
   },
   "dependencies": {
     "@calcom/embed-react": "^1.5.1",
-    "@docusaurus/core": "^3.6.0",
-    "@docusaurus/plugin-content-docs": "^3.6.0",
-    "@docusaurus/plugin-google-gtag": "^3.6.0",
-    "@docusaurus/preset-classic": "^3.6.0",
-    "@docusaurus/theme-search-algolia": "^3.6.0",
+    "@docusaurus/core": "^3.6.3",
+    "@docusaurus/plugin-content-docs": "^3.6.3",
+    "@docusaurus/plugin-google-gtag": "^3.6.3",
+    "@docusaurus/preset-classic": "^3.6.3",
+    "@docusaurus/theme-mermaid": "^3.6.3",
+    "@docusaurus/theme-search-algolia": "^3.6.3",
     "@mdx-js/react": "^3.1.0",
     "@monaco-editor/react": "^4.6.0",
-    "@mui/icons-material": "^6.1.8",
+    "@mui/icons-material": "^6.1.9",
     "@segment/ajv-human-errors": "^2.14.0",
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
@@ -37,9 +38,9 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.6.0",
+    "@docusaurus/module-type-aliases": "^3.6.3",
     "@tsconfig/docusaurus": "^2.0.3",
-    "typescript": "^5.6.3"
+    "typescript": "^5.7.2"
   },
   "browserslist": {
     "production": [

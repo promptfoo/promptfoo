@@ -123,8 +123,8 @@ table.results-table,
 }
 
 .results-table tr .cell img {
-  max-width: 256px;
-  max-height: 256px;
+  max-width: var(--max-image-width, 256px);
+  max-height: var(--max-image-height, 256px);
   cursor: zoom-in;
 }
 
@@ -165,7 +165,8 @@ table.results-table,
   font-size: 1.25rem;
 }
 
-.results-table tr:hover .cell-actions {
+.results-table .first-prompt-col:hover .cell-actions,
+.results-table .second-prompt-column:hover .cell-actions {
   visibility: visible;
 }
 

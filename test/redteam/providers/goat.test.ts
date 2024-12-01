@@ -81,4 +81,36 @@ describe('RedteamGoatProvider', () => {
       }),
     );
   });
+
+  it('should stringify non-string target provider responses', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const objectResponse = { foo: 'bar', baz: 123 };
+    const targetProvider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: async () =>
+        Promise.resolve({
+          output: objectResponse,
+          tokenUsage: {},
+        }) as ProviderResponse,
+    };
+
+    const prompt: Prompt = {
+      raw: 'test prompt',
+      label: 'test',
+    };
+
+    const context: CallApiContextParams = {
+      originalProvider: targetProvider,
+      vars: { goal: 'test goal' },
+      prompt,
+    };
+
+    const result = await provider.callApi('test prompt', context);
+    const messages = JSON.parse(result.metadata?.messages);
+    expect(messages[messages.length - 1].content).toBe(JSON.stringify(objectResponse));
+  });
 });
