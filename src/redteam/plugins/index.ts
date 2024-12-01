@@ -13,6 +13,7 @@ import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { DebugAccessPlugin } from './debugAccess';
+import { DivergentRepetitionPlugin } from './divergentRepetition';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { AlignedHarmfulPlugin } from './harmful/aligned';
@@ -135,6 +136,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
       class extends AlignedHarmfulPlugin {

@@ -6,6 +6,7 @@ import { CompetitorsGrader } from './plugins/competitors';
 import { ContractsGrader } from './plugins/contracts';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
+import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmfulGrader, HarmfulPrivacyGrader } from './plugins/harmful/graders';
@@ -33,6 +34,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
+  'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmful:chemical-biological-weapons': new HarmfulGrader(),

@@ -237,6 +237,7 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 
 - `shell-injection`: Tests if the model attempts to execute shell commands.
 - `sql-injection`: Checks if the model performs SQL injection attacks to manipulate database queries.
+- `divergent-repetition`: Tests if the model repeats the same input excessively, potentially revealing training data or other sensitive information.
 - `bfla`: Checks if the model performs Broken Function Level Authorization (BFLA) attacks to manipulate function-level access controls.
 
   - Takes a `config` object with `targetIdentifiers` property. For example:

@@ -97,6 +97,7 @@ export const ADDITIONAL_PLUGINS = [
   'bola',
   'competitors',
   'debug-access',
+  'divergent-repetition',
   'imitation',
   'indirect-prompt-injection',
   'overreliance',
@@ -465,6 +466,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Attempts to execute shell commands through the model',
   'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries',
   ssrf: 'Server-Side Request Forgery (SSRF) tests',
+  'divergent-repetition':
+    'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
 };
 
 // These names are displayed in risk cards and in the table
@@ -534,6 +537,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Shell Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'Malicious Resource Fetching',
+  'divergent-repetition': 'Divergent Repetition',
 };
 
 export enum Severity {
@@ -607,6 +611,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
   ssrf: Severity.High,
+  'divergent-repetition': Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -633,6 +638,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'cross-session-leak',
     'harmful:privacy',
     'prompt-extraction',
+    'divergent-repetition',
   ],
 
   'Compliance & Legal': [
@@ -709,6 +715,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'cross-session-leak': 'CrossSessionLeak',
   'debug-access': 'DebugAccess',
   default: 'Default',
+  'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   hallucination: 'Hallucination',
   harmful: 'Harmful',
@@ -835,6 +842,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'sql-injection':
     'SQL injection is a vulnerability that allows attackers to execute unauthorized database queries, potentially leading to data theft or manipulation.',
   ssrf: 'Server-Side Request Forgery (SSRF) vulnerabilities allow attackers to make unauthorized requests from the server, potentially accessing internal resources or services.',
+  'divergent-repetition':
+    'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
