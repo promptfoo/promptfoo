@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Config, ProviderOptions } from '../types';
@@ -30,8 +31,6 @@ export const DEFAULT_HTTP_TARGET: ProviderOptions = {
 export const PROMPT_EXAMPLE =
   'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}';
 
-export const DEFAULT_PURPOSE = 'Assist users with planning affordable trips to Europe';
-
 const defaultConfig: Config = {
   description: 'My Red Team Configuration',
   prompts: ['{{prompt}}'],
@@ -52,7 +51,41 @@ const defaultConfig: Config = {
 };
 
 const applicationDefinitionToPurpose = (applicationDefinition: Config['applicationDefinition']) => {
-  return `The purpose of the redteam application is to ${applicationDefinition.purpose} \n\n You are ${applicationDefinition.redteamUser}. \n\n You have access to: ${applicationDefinition.accessToData}\n\n You do not have access to: ${applicationDefinition.forbiddenData} \n\n You can take the following actions: ${applicationDefinition.accessToActions}\n\n You should not take the following actions: ${applicationDefinition.forbiddenActions} \n\n The LLM agent has access to these systems: ${applicationDefinition.connectedSystems} \n\n `;
+  const sections = [];
+
+  if (applicationDefinition.purpose) {
+    sections.push(`The objective of the application is to ${applicationDefinition.purpose}`);
+  }
+
+  if (applicationDefinition.redteamUser) {
+    sections.push(`You are ${applicationDefinition.redteamUser}`);
+  }
+
+  if (applicationDefinition.accessToData) {
+    sections.push(`You have access to: ${applicationDefinition.accessToData}`);
+  }
+
+  if (applicationDefinition.forbiddenData) {
+    sections.push(`You do not have access to: ${applicationDefinition.forbiddenData}`);
+  }
+
+  if (applicationDefinition.accessToActions) {
+    sections.push(`You can take the following actions: ${applicationDefinition.accessToActions}`);
+  }
+
+  if (applicationDefinition.forbiddenActions) {
+    sections.push(
+      `You should not take the following actions: ${applicationDefinition.forbiddenActions}`,
+    );
+  }
+
+  if (applicationDefinition.connectedSystems) {
+    sections.push(
+      `The LLM agent has access to these systems: ${applicationDefinition.connectedSystems}`,
+    );
+  }
+
+  return sections.join('\n\n');
 };
 
 export const useRedTeamConfig = create<RedTeamConfigState>()(

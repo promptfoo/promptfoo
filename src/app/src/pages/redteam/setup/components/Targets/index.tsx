@@ -16,11 +16,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import {
-  DEFAULT_HTTP_TARGET,
-  DEFAULT_PURPOSE,
-  useRedTeamConfig,
-} from '../../hooks/useRedTeamConfig';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
@@ -154,7 +150,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         config: { temperature: 0.5 },
       });
       setRawConfigJson(JSON.stringify({ temperature: 0.5 }, null, 2));
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'javascript' || value === 'python') {
       const filePath =
         value === 'javascript'
@@ -165,7 +160,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         config: {},
         label: currentLabel,
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'http') {
       setSelectedTarget({
         ...DEFAULT_HTTP_TARGET,
@@ -198,14 +192,12 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           ],
         },
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else {
       setSelectedTarget({
         id: value,
         config: {},
         label: currentLabel,
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     }
   };
 
