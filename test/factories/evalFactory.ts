@@ -31,6 +31,7 @@ export default class EvalFactory {
           score: 1,
           testPassCount: 1,
           testFailCount: 1,
+          testErrorCount: 0,
           assertPassCount: 1,
           assertFailCount: 1,
           totalLatencyMs: 200,

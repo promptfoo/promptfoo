@@ -120,6 +120,7 @@ class Evaluator {
     this.stats = {
       successes: 0,
       failures: 0,
+      errors: 0,
       tokenUsage: {
         total: 0,
         prompt: 0,
@@ -327,6 +328,8 @@ class Evaluator {
 
       if (ret.success) {
         this.stats.successes++;
+      } else if (ret.failureReason === ResultFailureReason.ERROR) {
+        this.stats.errors++;
       } else {
         this.stats.failures++;
       }
@@ -338,7 +341,7 @@ class Evaluator {
 
       return ret;
     } catch (err) {
-      this.stats.failures++;
+      this.stats.errors++;
       return {
         ...setup,
         error: String(err) + '\n\n' + (err as Error).stack,
@@ -424,6 +427,7 @@ class Evaluator {
             score: 0,
             testPassCount: 0,
             testFailCount: 0,
+            testErrorCount: 0,
             assertPassCount: 0,
             assertFailCount: 0,
             totalLatencyMs: 0,
@@ -691,7 +695,13 @@ class Evaluator {
         }
       }
       metrics.testPassCount += row.success ? 1 : 0;
-      metrics.testFailCount += row.success ? 0 : 1;
+      if (!row.success) {
+        if (row.failureReason === ResultFailureReason.ERROR) {
+          metrics.testErrorCount += 1;
+        } else {
+          metrics.testFailCount += 1;
+        }
+      }
       metrics.assertPassCount +=
         row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
       metrics.assertFailCount +=
@@ -899,7 +909,11 @@ class Evaluator {
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
       numTests: prompts.reduce(
-        (acc, p) => acc + (p.metrics?.testPassCount || 0) + (p.metrics?.testFailCount || 0),
+        (acc, p) =>
+          acc +
+          (p.metrics?.testPassCount || 0) +
+          (p.metrics?.testFailCount || 0) +
+          (p.metrics?.testErrorCount || 0),
         0,
       ),
       numVars: varNames.size,
