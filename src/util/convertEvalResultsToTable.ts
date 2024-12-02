@@ -11,6 +11,7 @@ export class PromptMetrics {
   score: number;
   testPassCount: number;
   testFailCount: number;
+  testErrorCount: number;
   assertPassCount: number;
   assertFailCount: number;
   totalLatencyMs: number;
@@ -23,6 +24,7 @@ export class PromptMetrics {
     this.score = 0;
     this.testPassCount = 0;
     this.testFailCount = 0;
+    this.testErrorCount = 0;
     this.assertPassCount = 0;
     this.assertFailCount = 0;
     this.totalLatencyMs = 0;

@@ -160,6 +160,7 @@ const PromptMetricsSchema = z.object({
   score: z.number(),
   testPassCount: z.number(),
   testFailCount: z.number(),
+  testErrorCount: z.number(),
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
@@ -266,6 +267,7 @@ export interface EvaluateTable {
 export interface EvaluateStats {
   successes: number;
   failures: number;
+  errors: number;
   tokenUsage: Required<TokenUsage>;
 }
 
