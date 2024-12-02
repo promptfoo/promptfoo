@@ -22,6 +22,7 @@ import {
   type ResultLightweightWithLabel,
   type EvaluateSummaryV2,
   isProviderOptions,
+  ResultFailureReason,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import FrameworkCompliance from './FrameworkCompliance';
@@ -95,7 +96,11 @@ const App: React.FC = () => {
         console.warn(`Could not get failures for plugin ${pluginId}`);
         return;
       }
-      if (pluginId && !result.gradingResult?.pass) {
+      if (
+        pluginId &&
+        !result.gradingResult?.pass &&
+        result.failureReason !== ResultFailureReason.ERROR
+      ) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
