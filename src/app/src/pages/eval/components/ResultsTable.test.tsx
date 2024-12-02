@@ -90,13 +90,7 @@ describe('ResultsTable Metrics Display', () => {
   it('displays total cost with correct formatting', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Total Cost:')).toBeInTheDocument();
-    expect(screen.getByText('$1.2')).toBeInTheDocument();
-  });
-
-  it('displays average cost with correct calculation', () => {
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByText('Avg Cost:')).toBeInTheDocument();
-    expect(screen.getByText('$0.12')).toBeInTheDocument();
+    expect(screen.getByText('$1.23')).toBeInTheDocument();
   });
 
   it('displays total tokens with correct formatting', () => {
@@ -114,7 +108,6 @@ describe('ResultsTable Metrics Display', () => {
   it('hides metrics when showStats is false', () => {
     renderWithProviders(<ResultsTable {...defaultProps} showStats={false} />);
     expect(screen.queryByText('Total Cost:')).not.toBeInTheDocument();
-    expect(screen.queryByText('Avg Cost:')).not.toBeInTheDocument();
     expect(screen.queryByText('Total Tokens:')).not.toBeInTheDocument();
     expect(screen.queryByText('Avg Tokens:')).not.toBeInTheDocument();
   });
@@ -154,7 +147,6 @@ describe('ResultsTable Metrics Display', () => {
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.queryByText('Total Cost:')).not.toBeInTheDocument();
-    expect(screen.queryByText('Avg Cost:')).not.toBeInTheDocument();
     expect(screen.queryByText('Total Tokens:')).not.toBeInTheDocument();
     expect(screen.queryByText('Avg Tokens:')).not.toBeInTheDocument();
   });
