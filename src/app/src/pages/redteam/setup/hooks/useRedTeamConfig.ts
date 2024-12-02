@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Config, ProviderOptions } from '../types';
