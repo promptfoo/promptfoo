@@ -488,10 +488,15 @@ function ResultsTable({
                     <div>
                       <strong>Total Cost:</strong>{' '}
                       <Tooltip
-                        title={`Average: $${(prompt.metrics.cost / body.length).toPrecision(2)} per test`}
+                        title={`Average: $${Intl.NumberFormat(undefined, {
+                          minimumFractionDigits: 2,
+                        }).format(prompt.metrics.cost / body.length)} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
-                          ${prompt.metrics.cost.toPrecision(2)}
+                          $
+                          {Intl.NumberFormat(undefined, {
+                            minimumFractionDigits: 2,
+                          }).format(prompt.metrics.cost)}
                         </span>
                       </Tooltip>
                     </div>
@@ -505,12 +510,6 @@ function ResultsTable({
                     </div>
                   ) : null}
 
-                  {prompt.metrics?.cost ? (
-                    <div>
-                      <strong>Avg Cost:</strong> $
-                      {(prompt.metrics.cost / body.length).toPrecision(2)}
-                    </div>
-                  ) : null}
                   {prompt.metrics?.tokenUsage?.total ? (
                     <div>
                       <strong>Avg Tokens:</strong>{' '}
