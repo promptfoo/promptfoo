@@ -479,9 +479,46 @@ function ResultsTable({
 
               const details = showStats ? (
                 <div className="prompt-detail">
+                  {/* Totals Section */}
                   {numAsserts[idx] ? (
                     <div>
                       <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
+                    </div>
+                  ) : null}
+                  {prompt.metrics?.cost ? (
+                    <div>
+                      <strong>Total Cost:</strong>{' '}
+                      <Tooltip
+                        title={`Average: $${(prompt.metrics.cost / body.length).toPrecision(2)} per test`}
+                      >
+                        <span style={{ cursor: 'help' }}>
+                          ${prompt.metrics.cost.toPrecision(2)}
+                        </span>
+                      </Tooltip>
+                    </div>
+                  ) : null}
+                  {prompt.metrics?.tokenUsage?.total ? (
+                    <div>
+                      <strong>Total Tokens:</strong>{' '}
+                      {Intl.NumberFormat(undefined, {
+                        maximumFractionDigits: 0,
+                      }).format(prompt.metrics.tokenUsage.total)}
+                    </div>
+                  ) : null}
+
+                  {/* Averages Section */}
+                  {prompt.metrics?.cost ? (
+                    <div>
+                      <strong>Avg Cost:</strong> $
+                      {(prompt.metrics.cost / body.length).toPrecision(2)}
+                    </div>
+                  ) : null}
+                  {prompt.metrics?.tokenUsage?.total ? (
+                    <div>
+                      <strong>Avg Tokens:</strong>{' '}
+                      {Intl.NumberFormat(undefined, {
+                        maximumFractionDigits: 0,
+                      }).format(prompt.metrics.tokenUsage.total / body.length)}
                     </div>
                   ) : null}
                   {prompt.metrics?.totalLatencyMs ? (
@@ -491,14 +528,6 @@ function ResultsTable({
                         maximumFractionDigits: 0,
                       }).format(prompt.metrics.totalLatencyMs / body.length)}{' '}
                       ms
-                    </div>
-                  ) : null}
-                  {prompt.metrics?.tokenUsage?.total ? (
-                    <div>
-                      <strong>Avg Tokens:</strong>{' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / body.length)}
                     </div>
                   ) : null}
                   {prompt.metrics?.totalLatencyMs && prompt.metrics?.tokenUsage?.completion ? (
@@ -512,11 +541,6 @@ function ResultsTable({
                               (prompt.metrics.totalLatencyMs / 1000),
                           )
                         : '0'}
-                    </div>
-                  ) : null}
-                  {prompt.metrics?.cost ? (
-                    <div>
-                      <strong>Cost:</strong> ${prompt.metrics.cost.toPrecision(2)}
                     </div>
                   ) : null}
                 </div>
