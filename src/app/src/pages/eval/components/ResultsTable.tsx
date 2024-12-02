@@ -479,7 +479,6 @@ function ResultsTable({
 
               const details = showStats ? (
                 <div className="prompt-detail">
-                  {/* Totals Section */}
                   {numAsserts[idx] ? (
                     <div>
                       <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
@@ -506,7 +505,6 @@ function ResultsTable({
                     </div>
                   ) : null}
 
-                  {/* Averages Section */}
                   {prompt.metrics?.cost ? (
                     <div>
                       <strong>Avg Cost:</strong> $
