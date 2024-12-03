@@ -1,4 +1,6 @@
-import promptfoo from '../../dist/src/index.js';
+import promptfoo from 'promptfoo';
+
+// import promptfoo from '../../dist/src/index.js';
 
 export default class CustomApiProvider {
   #providerId;

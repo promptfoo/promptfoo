@@ -1,5 +1,8 @@
-import promptfoo from '../../dist/src/index.js';
-import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../src/types/providers';
+import promptfoo from 'promptfoo';
+import type { ApiProvider, ProviderOptions, ProviderResponse } from 'promptfoo';
+
+// import promptfoo from '../../dist/src/index.js';
+// import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../src/types/providers';
 
 export default class CustomApiProvider implements ApiProvider {
   protected providerId: string;
