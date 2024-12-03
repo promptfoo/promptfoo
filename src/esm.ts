@@ -16,9 +16,12 @@ export function getDirectory(): string {
 }
 
 export async function importModule(modulePath: string, functionName?: string) {
-  // This is some hacky shit. It prevents typescript from transpiling `import` to `require`, which breaks mjs imports.
+  if (modulePath.endsWith('.ts') || modulePath.endsWith('.mjs')) {
+    // @ts-ignore: It actually works
+    await import('tsx/cjs');
+  }
   const resolvedPath = pathToFileURL(path.resolve(modulePath));
-  const importedModule = await eval(`import('${resolvedPath}')`);
+  const importedModule = await import(resolvedPath.toString());
   const mod = importedModule?.default?.default || importedModule?.default || importedModule;
   if (functionName) {
     return mod[functionName];
