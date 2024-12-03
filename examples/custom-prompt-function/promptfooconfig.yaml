@@ -31,8 +31,12 @@ prompts:
   - file://prompt.jsonl
 
   - id: file://prompt_chat.js
-    label: prompt_chat
+    label: prompt_chat (js)
   - file://prompt_chat.js
+
+  - id: file://prompt_chat.ts
+    label: prompt_chat (ts)
+  - file://prompt_chat.ts
 
   - id: file://prompt_string.js
     label: prompt_string
