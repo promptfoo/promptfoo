@@ -6,9 +6,13 @@ import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
 import type { HarmPlugin } from '../constants';
-import { PII_PLUGINS, REDTEAM_PROVIDER_HARM_PLUGINS, getRemoteGenerationUrl } from '../constants';
+import { PII_PLUGINS, REDTEAM_PROVIDER_HARM_PLUGINS } from '../constants';
 import { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../constants';
-import { neverGenerateRemote, shouldGenerateRemote } from '../util';
+import {
+  neverGenerateRemote,
+  shouldGenerateRemote,
+  getRemoteGenerationUrl,
+} from '../remoteGeneration';
 import { type RedteamPluginBase } from './base';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';

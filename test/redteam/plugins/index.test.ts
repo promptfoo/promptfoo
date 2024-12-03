@@ -8,7 +8,7 @@ import {
   PII_PLUGINS,
 } from '../../../src/redteam/constants';
 import { Plugins } from '../../../src/redteam/plugins';
-import { shouldGenerateRemote, neverGenerateRemote } from '../../../src/redteam/util';
+import { shouldGenerateRemote, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/cache');

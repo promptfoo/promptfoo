@@ -11,8 +11,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import { getRemoteGenerationUrl } from '../constants';
-import { neverGenerateRemote } from '../util';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 export default class GoatProvider implements ApiProvider {
   private maxTurns: number;

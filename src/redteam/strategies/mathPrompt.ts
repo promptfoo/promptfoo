@@ -6,9 +6,8 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
-import { getRemoteGenerationUrl } from '../constants';
 import { loadRedteamProvider } from '../providers/shared';
-import { shouldGenerateRemote } from '../util';
+import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
 const DEFAULT_MATH_CONCEPTS = ['set theory', 'group theory', 'abstract algebra'];
 

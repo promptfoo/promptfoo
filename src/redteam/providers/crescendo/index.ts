@@ -15,7 +15,8 @@ import type {
 } from '../../../types';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
-import { isBasicRefusal, shouldGenerateRemote } from '../../util';
+import { shouldGenerateRemote } from '../../remoteGeneration';
+import { isBasicRefusal } from '../../util';
 import { getTargetResponse, loadRedteamProvider, type TargetResponse } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
