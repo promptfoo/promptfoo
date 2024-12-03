@@ -73,39 +73,145 @@ interface AzureCompletionOptions {
 }
 
 const AZURE_MODELS = [
+  // o1 Preview Models
+  {
+    id: 'o1-preview',
+    cost: {
+      input: 16.50 / 1000000,
+      output: 66 / 1000000,
+    },
+  },
+  {
+    id: 'o1-mini',
+    cost: {
+      input: 3.30 / 1000000,
+      output: 13.20 / 1000000,
+    },
+  },
+  // GPT-4o Realtime Preview
+  {
+    id: 'gpt-4o-realtime-preview',
+    cost: {
+      input: 5 / 1000000,
+      output: 20 / 1000000,
+      audioInput: 100 / 1000000,
+      audioOutput: 200 / 1000000,
+    },
+  },
+  // GPT-4o Models
   {
     id: 'gpt-4o-2024-08-06',
     cost: {
-      input: 2.5 / 1000000,
+      input: 2.50 / 1000000,
       output: 10 / 1000000,
     },
   },
   {
-    id: 'gpt-4o',
+    id: 'gpt-4o-2024-05-13',
     cost: {
       input: 5 / 1000000,
       output: 15 / 1000000,
     },
   },
   {
-    id: 'gpt-4o-mini',
+    id: 'gpt-4o-mini-2024-07-18',
     cost: {
       input: 0.15 / 1000000,
-      output: 0.6 / 1000000,
+      output: 0.60 / 1000000,
+    },
+  },
+  // Base Models
+  {
+    id: 'babbage-002',
+    cost: {
+      input: 0.0004 / 1000000,
+      output: 0.0004 / 1000000,
     },
   },
   {
-    id: 'gpt-3.5-turbo-0125',
+    id: 'davinci-002',
     cost: {
-      input: 0.5 / 1000000,
-      output: 1.5 / 1000000,
+      input: 0.002 / 1000000,
+      output: 0.002 / 1000000,
+    },
+  },
+  // Embedding Models
+  {
+    id: 'text-embedding-ada-002',
+    cost: {
+      input: 0.0001 / 1000000,
+      output: 0.0001 / 1000000,
     },
   },
   {
-    id: 'gpt-3.5-turbo-instruct',
+    id: 'text-embedding-3-large',
     cost: {
-      input: 1.5 / 1000000,
+      input: 0.00013 / 1000000,
+      output: 0.00013 / 1000000,
+    },
+  },
+  {
+    id: 'text-embedding-3-small',
+    cost: {
+      input: 0.00002 / 1000000,
+      output: 0.00002 / 1000000,
+    },
+  },
+  // Legacy Language Models
+  {
+    id: 'gpt-35-turbo-0301',
+    cost: {
+      input: 1.50 / 1000000,
       output: 2 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-35-turbo-0613',
+    cost: {
+      input: 1.50 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-35-turbo-16k-0613',
+    cost: {
+      input: 3 / 1000000,
+      output: 4 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-35-turbo-1106',
+    cost: {
+      input: 1 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-35-turbo-0125',
+    cost: {
+      input: 0.50 / 1000000,
+      output: 1.50 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-35-turbo-instruct',
+    cost: {
+      input: 1.50 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-4-turbo',
+    cost: {
+      input: 10 / 1000000,
+      output: 30 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-4-vision',
+    cost: {
+      input: 10 / 1000000,
+      output: 30 / 1000000,
     },
   },
   {
@@ -120,63 +226,6 @@ const AZURE_MODELS = [
     cost: {
       input: 60 / 1000000,
       output: 120 / 1000000,
-    },
-  },
-  {
-    id: 'babbage-002',
-    cost: {
-      input: 0.4 / 1000000,
-      output: 0.4 / 1000000,
-    },
-  },
-  {
-    id: 'davinci-002',
-    cost: {
-      input: 2 / 1000000,
-      output: 2 / 1000000,
-    },
-  },
-  {
-    id: 'text-embedding-ada-002',
-    cost: {
-      input: 0.1 / 1000000,
-      output: 0.1 / 1000000,
-    },
-  },
-  {
-    id: 'text-embedding-3-large',
-    cost: {
-      input: 0.13 / 1000000,
-      output: 0.13 / 1000000,
-    },
-  },
-  {
-    id: 'text-embedding-3-small',
-    cost: {
-      input: 0.02 / 1000000,
-      output: 0.02 / 1000000,
-    },
-  },
-  // Legacy models
-  {
-    id: 'gpt-3.5-turbo-0301',
-    cost: {
-      input: 2 / 1000000,
-      output: 2 / 1000000,
-    },
-  },
-  {
-    id: 'gpt-3.5-turbo-0613',
-    cost: {
-      input: 1.5 / 1000000,
-      output: 2 / 1000000,
-    },
-  },
-  {
-    id: 'gpt-3.5-turbo-1106',
-    cost: {
-      input: 1 / 1000000,
-      output: 2 / 1000000,
     },
   },
 ];

@@ -222,6 +222,8 @@ export class HttpProvider implements ApiProvider {
     this.responseParser = createResponseParser(this.config.responseParser);
     this.sessionParser = createSessionParser(this.config.sessionParser);
 
+    logger.error(`Launching HTTP provider with config: ${safeJsonStringify(this.config)}`);
+
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
