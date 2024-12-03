@@ -200,7 +200,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               />
             </RadioGroup>
 
-            {!config.target.config.sessionParser && (
+            {!config.target.config.sessionParser && !isStateless && (
               <Alert severity="warning">
                 Your system is stateful but you don't have session handling setup. Please return to
                 your Target setup to configure it.
