@@ -58,7 +58,7 @@ describe('Entities Extractor', () => {
 
     expect(result).toEqual(['Apple', 'Google']);
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/v1/generate',
+      'https://api.promptfoo.app/task',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({

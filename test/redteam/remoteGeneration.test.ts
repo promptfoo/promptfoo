@@ -7,11 +7,13 @@ import {
   shouldGenerateRemote,
 } from '../../src/redteam/remoteGeneration';
 
+jest.mock('../../src/envars');
+jest.mock('../../src/globalConfig/globalConfig');
+jest.mock('../../src/envars');
+jest.mock('../../src/cliState', () => ({
+  remote: undefined,
+}));
 describe('shouldGenerateRemote', () => {
-  jest.mock('../../src/envars');
-  jest.mock('../../src/cliState', () => ({
-    remote: undefined,
-  }));
   beforeEach(() => {
     jest.resetAllMocks();
     cliState.remote = undefined;
@@ -66,14 +68,12 @@ describe('neverGenerateRemote', () => {
 });
 
 describe('getRemoteGenerationUrl', () => {
-  jest.mock('../../src/envars');
-  jest.mock('../../src/globalConfig/globalConfig');
   beforeEach(() => {
     jest.resetAllMocks();
   });
 
   it('should return env URL + /task when PROMPTFOO_REMOTE_GENERATION_URL is set', () => {
-    jest.mocked(getEnvString).mockReturnValue('https://custom.api.com');
+    jest.mocked(getEnvString).mockReturnValue('https://custom.api.com/task');
     expect(getRemoteGenerationUrl()).toBe('https://custom.api.com/task');
   });
 

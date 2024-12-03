@@ -13,9 +13,10 @@ import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');
-jest.mock('../../../src/redteam/util', () => ({
+jest.mock('../../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
+  getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
 }));
 jest.mock('../../../src/cliState', () => ({
   __esModule: true,
