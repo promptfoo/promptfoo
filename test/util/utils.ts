@@ -27,7 +27,6 @@ export function createMockResponse(options: Partial<Response> = {}): Response {
     blob: () => Promise.resolve(new Blob()),
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
     formData: () => Promise.resolve(new FormData()),
-    // @ts-expect-error
     bytes: () => Promise.resolve(new Uint8Array()),
     bodyUsed: false,
     body: null,
@@ -35,6 +34,6 @@ export function createMockResponse(options: Partial<Response> = {}): Response {
       return createMockResponse(this);
     },
     ...options,
-  };
+  } as Response;
   return mockResponse;
 }
