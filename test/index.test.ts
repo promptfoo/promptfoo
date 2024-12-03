@@ -64,7 +64,6 @@ describe('index.ts exports', () => {
     'TestCaseWithVarsFileSchema',
     'TestSuiteConfigSchema',
     'TestSuiteSchema',
-    'TestSuiteConfigSchema',
     'UnifiedConfigSchema',
     'VarsSchema',
   ];
