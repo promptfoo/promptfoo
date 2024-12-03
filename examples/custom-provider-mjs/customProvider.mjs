@@ -1,17 +1,21 @@
-// const promptfoo = require('../../dist/src/index.js').default;
-const promptfoo = require('promptfoo').default;
+import promptfoo from 'promptfoo';
 
-class CustomApiProvider {
+// import promptfoo from '../../dist/src/index.js';
+
+export default class CustomApiProvider {
+  #providerId;
+  config;
+
   constructor(options) {
     // The caller may override Provider ID (e.g. when using multiple instances of the same provider)
-    this.providerId = options.id || 'custom provider';
+    this.#providerId = options.id || 'custom provider';
 
     // The config object contains any options passed to the provider in the config file.
     this.config = options.config;
   }
 
   id() {
-    return this.providerId;
+    return this.#providerId;
   }
 
   async callApi(prompt) {
@@ -41,7 +45,7 @@ class CustomApiProvider {
       10_000 /* 10 second timeout */,
     );
 
-    const ret = {
+    return {
       output: data.choices[0].message.content,
       tokenUsage: {
         total: data.usage.total_tokens,
@@ -49,8 +53,5 @@ class CustomApiProvider {
         completion: data.usage.completion_tokens,
       },
     };
-    return ret;
   }
 }
-
-module.exports = CustomApiProvider;

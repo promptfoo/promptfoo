@@ -1,0 +1,3 @@
+Rephrase this in French: {{body}}
+---
+Rephrase this like a pirate: {{body}}

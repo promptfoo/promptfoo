@@ -1,8 +1,14 @@
-// const promptfoo = require('../../dist/src/index.js').default;
-const promptfoo = require('promptfoo').default;
+import promptfoo from 'promptfoo';
+import type { ApiProvider, ProviderOptions, ProviderResponse } from 'promptfoo';
 
-class CustomApiProvider {
-  constructor(options) {
+// import promptfoo from '../../dist/src/index.js';
+// import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../src/types/providers';
+
+export default class CustomApiProvider implements ApiProvider {
+  protected providerId: string;
+  public config: any;
+
+  constructor(options: ProviderOptions) {
     // The caller may override Provider ID (e.g. when using multiple instances of the same provider)
     this.providerId = options.id || 'custom provider';
 
@@ -10,11 +16,11 @@ class CustomApiProvider {
     this.config = options.config;
   }
 
-  id() {
+  id(): string {
     return this.providerId;
   }
 
-  async callApi(prompt) {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
       model: 'gpt-4o-mini',
       messages: [
@@ -41,7 +47,7 @@ class CustomApiProvider {
       10_000 /* 10 second timeout */,
     );
 
-    const ret = {
+    const ret: ProviderResponse = {
       output: data.choices[0].message.content,
       tokenUsage: {
         total: data.usage.total_tokens,
@@ -52,5 +58,3 @@ class CustomApiProvider {
     return ret;
   }
 }
-
-module.exports = CustomApiProvider;
