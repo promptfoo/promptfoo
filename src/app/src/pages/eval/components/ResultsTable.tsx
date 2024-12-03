@@ -489,13 +489,15 @@ function ResultsTable({
                       <strong>Total Cost:</strong>{' '}
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
-                          minimumFractionDigits: 2,
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: prompt.metrics.cost / body.length >= 1 ? 2 : 4,
                         }).format(prompt.metrics.cost / body.length)} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
                           {Intl.NumberFormat(undefined, {
                             minimumFractionDigits: 2,
+                            maximumFractionDigits: prompt.metrics.cost >= 1 ? 2 : 4,
                           }).format(prompt.metrics.cost)}
                         </span>
                       </Tooltip>
