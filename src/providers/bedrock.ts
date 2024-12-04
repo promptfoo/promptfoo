@@ -15,7 +15,7 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
-import { novaOutputFromMessage, novaParseMessages } from './amazon';
+import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
 
