@@ -28,6 +28,7 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
+import yaml from 'js-yaml';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
 import Review from './components/Review';
@@ -35,8 +36,9 @@ import Setup from './components/Setup';
 import Strategies from './components/Strategies';
 import Targets from './components/Targets';
 import YamlPreview from './components/YamlPreview';
-import { useRedTeamConfig } from './hooks/useRedTeamConfig';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
+import type { Config } from './types';
 import './page.css';
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
@@ -202,6 +204,15 @@ interface SavedConfig {
   updatedAt: string;
 }
 
+const readFileAsText = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+};
+
 export default function RedTeamSetupPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -359,6 +370,52 @@ export default function RedTeamSetupPage() {
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const content = await readFileAsText(file);
+      const yamlConfig = yaml.load(content) as any;
+
+      // Map the YAML structure to our expected Config format
+      const mappedConfig: Config = {
+        description: yamlConfig.description || 'My Red Team Configuration',
+        prompts: yamlConfig.prompts || ['{{prompt}}'],
+        target: yamlConfig.targets?.[0] || yamlConfig.providers?.[0] || DEFAULT_HTTP_TARGET,
+        plugins: yamlConfig.redteam?.plugins || ['default'],
+        strategies: yamlConfig.redteam?.strategies || [],
+        purpose: yamlConfig.redteam?.purpose || '',
+        entities: yamlConfig.redteam?.entities || [],
+        applicationDefinition: {
+          purpose: yamlConfig.redteam?.purpose || '',
+          // We could potentially parse these from redteam.purpose if it follows a specific format.
+          redteamUser: '',
+          accessToData: '',
+          forbiddenData: '',
+          accessToActions: '',
+          forbiddenActions: '',
+          connectedSystems: '',
+        },
+      };
+
+      setFullConfig(mappedConfig);
+      toast.showToast('Configuration loaded successfully', 'success');
+      setLoadDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to load configuration file', error);
+      toast.showToast(
+        error instanceof Error ? error.message : 'Failed to load configuration file',
+        'error',
+      );
+    }
+
+    // Reset the input
+    event.target.value = '';
+  };
+
   return (
     <Root>
       <Content>
@@ -510,6 +567,23 @@ export default function RedTeamSetupPage() {
       >
         <DialogTitle>Load Configuration</DialogTitle>
         <DialogContent>
+          <Box sx={{ mb: 2 }}>
+            <input
+              accept=".yml,.yaml"
+              style={{ display: 'none' }}
+              id="yaml-file-upload"
+              type="file"
+              onChange={handleFileUpload}
+            />
+            <label htmlFor="yaml-file-upload">
+              <Button variant="outlined" component="span" fullWidth sx={{ mb: 2 }}>
+                Upload YAML File
+              </Button>
+            </label>
+          </Box>
+          <Typography variant="subtitle2" sx={{ mb: 2 }}>
+            Or choose a saved configuration:
+          </Typography>
           {savedConfigs.length === 0 ? (
             <Box sx={{ py: 4, textAlign: 'center' }}>
               <Typography color="text.secondary">No saved configurations found</Typography>
