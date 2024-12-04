@@ -57,7 +57,6 @@ export async function readVarsFiles(
       Object.assign(ret, yamlData);
     }
   }
-
   return ret;
 }
 
