@@ -27,7 +27,6 @@ export function createMockResponse(options: Partial<Response> = {}): Response {
     blob: () => Promise.resolve(new Blob()),
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
     formData: () => Promise.resolve(new FormData()),
-    bytes: () => Promise.resolve(new Uint8Array()),
     bodyUsed: false,
     body: null,
     clone() {
