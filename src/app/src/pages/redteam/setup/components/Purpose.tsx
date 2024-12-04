@@ -89,9 +89,22 @@ export default function Purpose({ onNext }: PromptsProps) {
 
           <Box>
             <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-              Access
+              External System Access
             </Typography>
-            <Typography variant="body1">What data does the user have access to?</Typography>
+            <Typography sx={{ mt: 2 }} variant="body1">
+              What external systems are connected to this application?
+            </Typography>
+            <TextField
+              fullWidth
+              value={config.applicationDefinition.connectedSystems}
+              onChange={(e) => updateApplicationDefinition('connectedSystems', e.target.value)}
+              multiline
+              rows={2}
+              placeholder="e.g. A CRM system for managing customer relationships. Flight booking system. Internal company knowledge base."
+            />
+            <Typography sx={{ mt: 2 }} variant="body1">
+              What data is available to the LLM from connected systems that the user has access to?
+            </Typography>
             <TextField
               fullWidth
               value={config.applicationDefinition.accessToData}
@@ -102,7 +115,8 @@ export default function Purpose({ onNext }: PromptsProps) {
             />
 
             <Typography sx={{ mt: 2 }} variant="body1">
-              What data exists in the system that the user shouldn't have access to?
+              What data is available to the LLM from connected systems that the user shouldn't have
+              access to?
             </Typography>
             <TextField
               fullWidth
@@ -114,7 +128,7 @@ export default function Purpose({ onNext }: PromptsProps) {
             />
 
             <Typography sx={{ mt: 2 }} variant="body1">
-              What actions can the user take?
+              What actions can the user take on connected systems?
             </Typography>
             <TextField
               fullWidth
@@ -126,7 +140,7 @@ export default function Purpose({ onNext }: PromptsProps) {
             />
 
             <Typography sx={{ mt: 2 }} variant="body1">
-              What actions shouldn't the user be able to take?
+              What actions shouldn't the user be able to take on connected systems?
             </Typography>
             <TextField
               fullWidth
@@ -135,23 +149,6 @@ export default function Purpose({ onNext }: PromptsProps) {
               multiline
               rows={2}
               placeholder="e.g. Update other users' profile, cancel other users' flights."
-            />
-          </Box>
-
-          <Box>
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-              Connected Systems
-            </Typography>
-            <Typography sx={{ mt: 2 }} variant="body1">
-              What other systems are connected to this one?
-            </Typography>
-            <TextField
-              fullWidth
-              value={config.applicationDefinition.connectedSystems}
-              onChange={(e) => updateApplicationDefinition('connectedSystems', e.target.value)}
-              multiline
-              rows={2}
-              placeholder="e.g. A CRM system for managing customer relationships. Flight booking system. Internal company knowledge base."
             />
           </Box>
         </Stack>
