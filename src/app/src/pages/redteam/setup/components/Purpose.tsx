@@ -78,7 +78,7 @@ export default function Purpose({ onNext }: PromptsProps) {
 
           <Box>
             <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-              Describe the user the redteam application is impersonating
+              Describe the user the redteamer is impersonating
             </Typography>
             <TextField
               fullWidth
