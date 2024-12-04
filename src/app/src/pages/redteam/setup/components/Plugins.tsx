@@ -282,6 +282,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     const isExpanded = expandedCategories.has(category);
+    const selectedCount = pluginsToShow.filter((plugin) => selectedPlugins.has(plugin)).length;
 
     return (
       <Accordion
@@ -302,7 +303,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
             <Typography variant="h6" sx={{ fontWeight: 'medium', flex: 1 }}>
-              {category}
+              {category} ({selectedCount}/{pluginsToShow.length})
             </Typography>
             {isExpanded && (
               <Box
