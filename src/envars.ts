@@ -14,6 +14,7 @@ export type EnvVars = {
   PROMPTFOO_CACHE_TTL?: number;
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
   PROMPTFOO_CONFIG_DIR?: string;
+  PROMPTFOO_CSV_DELIMITER?: string;
   PROMPTFOO_DELAY_MS?: number;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
