@@ -4,7 +4,7 @@ import { getEnvString } from '../envars';
 import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
-import { getRemoteGenerationUrl } from '../redteam/constants';
+import { getRemoteGenerationUrl } from '../redteam/remoteGeneration';
 import type {
   ApiProvider,
   ProviderResponse,

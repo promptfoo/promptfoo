@@ -16,7 +16,7 @@ import {
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
-import { shouldGenerateRemote } from './redteam/util';
+import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import type {
   ApiClassificationProvider,

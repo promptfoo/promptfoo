@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import type { ApiProvider } from '../../types';
-import { shouldGenerateRemote } from '../util';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type { RedTeamTask } from './util';
 import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 

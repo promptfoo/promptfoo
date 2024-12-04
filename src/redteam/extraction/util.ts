@@ -7,7 +7,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
-import { getRemoteGenerationUrl } from '../constants';
+import { getRemoteGenerationUrl } from '../remoteGeneration';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),

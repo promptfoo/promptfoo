@@ -25,9 +25,9 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../constants';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
 import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
-import { shouldGenerateRemote } from '../util';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
