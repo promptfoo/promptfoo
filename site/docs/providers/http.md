@@ -394,9 +394,9 @@ providers:
         user_message: '{{prompt}}'
 ```
 
-## Request Parser
+## Request Transform
 
-The request parser transforms your prompt before sending it to the API. This allows you to:
+The request transform modifies your prompt before sending it to the API. This allows you to:
 
 - Format prompts into specific message structures
 - Add metadata or context
@@ -410,19 +410,19 @@ providers:
   - id: https
     config:
       url: 'https://api.example.com/chat'
-      requestParser: '{"message": "{{prompt}}"}'
+      requestTransform: '{"message": "{{prompt}}"}'
       body:
         user_message: '{{prompt}}'
 ```
 
-### Parser Types
+### Transform Types
 
 #### String Template
 
 Use Nunjucks templates to transform the prompt:
 
 ```yaml
-requestParser: '{"text": "{{prompt}}"}'
+requestTransform: '{"text": "{{prompt}}"}'
 ```
 
 #### JavaScript Function
@@ -430,18 +430,18 @@ requestParser: '{"text": "{{prompt}}"}'
 Define a function that transforms the prompt:
 
 ```yaml
-requestParser: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() })
+requestTransform: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() })
 ```
 
-#### File-based Parser
+#### File-based Transform
 
-Load a parser from an external file:
+Load a transform from an external file:
 
 ```yaml
-requestParser: 'file://parsers/request.js'
+requestTransform: 'file://transforms/request.js'
 ```
 
-Example parser file (parsers/request.js):
+Example transform file (transforms/request.js):
 
 ```javascript
 module.exports = (prompt) => {
@@ -458,22 +458,23 @@ module.exports = (prompt) => {
 You can also specify a specific function to use:
 
 ```yaml
-requestParser: 'file://parsers/request.js:transformRequest'
+requestTransform: 'file://transforms/request.js:transformRequest'
 ```
 
 ## Reference
 
 Supported config options:
 
-| Option         | Type                     | Description                                                                                                                                                                             |
-| -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url            | string                   | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                                 |
-| request        | string                   | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                       |
-| method         | string                   | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                                                                                             |
-| headers        | Record\<string, string\> | Key-value pairs of HTTP headers to include in the request.                                                                                                                              |
-| body           | Record\<string, any\>    | The request body. For POST requests, this will be sent as JSON.                                                                                                                         |
-| queryParams    | Record\<string, string\> | Key-value pairs of query parameters to append to the URL.                                                                                                                               |
-| responseParser | string \| Function       | A function, a string representation of a function, or a file path (prefixed with `file://`) to parse the response. If not provided, the entire response will be returned as the output. |
+| Option           | Type                     | Description                                                                                                       |
+| ---------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| url              | string                   | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.           |
+| request          | string                   | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options. |
+| method           | string                   | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                       |
+| headers          | Record\<string, string\> | Key-value pairs of HTTP headers to include in the request.                                                        |
+| body             | Record\<string, any\>    | The request body. For POST requests, this will be sent as JSON.                                                   |
+| queryParams      | Record\<string, string\> | Key-value pairs of query parameters to append to the URL.                                                         |
+| requestTransform | string \| Function       | A function, string template, or file path to transform the prompt before sending.                                 |
+| responseParser   | string \| Function       | A function, string expression, or file path to parse the response.                                                |
 
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 

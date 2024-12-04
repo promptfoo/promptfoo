@@ -25,7 +25,7 @@ interface HttpProviderConfig {
   headers?: Record<string, string>;
   body?: Record<string, any> | string | any[];
   queryParams?: Record<string, string>;
-  requestParser?: string | Function;
+  requestTransform?: string | Function;
   responseParser?: string | Function;
   request?: string;
   sessionParser?: string | Function;
@@ -211,20 +211,20 @@ function parseRawRequest(input: string) {
   }
 }
 
-export async function createRequestParser(
-  parser: string | Function | undefined,
+export async function createRequestTransform(
+  transform: string | Function | undefined,
 ): Promise<(prompt: string) => any> {
-  if (!parser) {
+  if (!transform) {
     return (prompt) => prompt;
   }
 
-  if (typeof parser === 'function') {
-    return (prompt) => parser(prompt);
+  if (typeof transform === 'function') {
+    return (prompt) => transform(prompt);
   }
 
-  if (typeof parser === 'string') {
-    if (parser.startsWith('file://')) {
-      let filename = parser.slice('file://'.length);
+  if (typeof transform === 'string') {
+    if (transform.startsWith('file://')) {
+      let filename = transform.slice('file://'.length);
       let functionName: string | undefined;
       if (filename.includes(':')) {
         const splits = filename.split(':');
@@ -240,12 +240,12 @@ export async function createRequestParser(
         return requiredModule;
       }
       throw new Error(
-        `Request parser malformed: ${filename} must export a function or have a default export as a function`,
+        `Request transform malformed: ${filename} must export a function or have a default export as a function`,
       );
     }
     // Handle string template
     return (prompt) => {
-      const rendered = nunjucks.renderString(parser, { prompt });
+      const rendered = nunjucks.renderString(transform, { prompt });
       try {
         return JSON.parse(rendered);
       } catch {
@@ -255,7 +255,7 @@ export async function createRequestParser(
   }
 
   throw new Error(
-    `Unsupported request parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+    `Unsupported request transform type: ${typeof transform}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
   );
 }
 
@@ -289,13 +289,13 @@ export class HttpProvider implements ApiProvider {
   config: HttpProviderConfig;
   private responseParser: Promise<(data: any, text: string) => ProviderResponse>;
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
-  private requestParser: Promise<(prompt: string) => any>;
+  private requestTransform: Promise<(prompt: string) => any>;
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config;
     this.url = this.config.url || url;
     this.responseParser = createResponseParser(this.config.responseParser);
     this.sessionParser = createSessionParser(this.config.sessionParser);
-    this.requestParser = createRequestParser(this.config.requestParser);
+    this.requestTransform = createRequestTransform(this.config.requestTransform);
 
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
@@ -375,14 +375,19 @@ export class HttpProvider implements ApiProvider {
     const headers = this.getHeaders(defaultHeaders, vars);
     this.validateContentTypeAndBody(headers, this.config.body);
 
-    // Transform prompt using request parser
-    const parsedPrompt = await (await this.requestParser)(prompt);
+    // Transform prompt using request transform
+    const transformedPrompt = await (await this.requestTransform)(prompt);
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
       headers,
-      body: determineRequestBody(contentTypeIsJson(headers), parsedPrompt, this.config.body, vars),
+      body: determineRequestBody(
+        contentTypeIsJson(headers),
+        transformedPrompt,
+        this.config.body,
+        vars,
+      ),
       queryParams: this.config.queryParams
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [

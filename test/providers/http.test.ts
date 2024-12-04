@@ -3,11 +3,11 @@ import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import {
-  HttpProvider,
-  createRequestParser,
+  createRequestTransform,
   createResponseParser,
-  processJsonBody,
   determineRequestBody,
+  HttpProvider,
+  processJsonBody,
 } from '../../src/providers/http';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
@@ -965,27 +965,27 @@ describe('HttpProvider', () => {
   });
 });
 
-describe('createRequestParser', () => {
-  it('should return identity function when no parser specified', async () => {
-    const parser = await createRequestParser(undefined);
-    const result = await parser('test prompt');
+describe('createRequestTransform', () => {
+  it('should return identity function when no transform specified', async () => {
+    const transform = await createRequestTransform(undefined);
+    const result = await transform('test prompt');
     expect(result).toBe('test prompt');
   });
 
   it('should handle string templates', async () => {
-    const parser = await createRequestParser('{"text": "{{prompt}}"}');
-    const result = await parser('hello');
+    const transform = await createRequestTransform('{"text": "{{prompt}}"}');
+    const result = await transform('hello');
     expect(result).toEqual({
       text: 'hello',
     });
   });
 
-  it('should handle file-based parsers', async () => {
-    const mockParser = jest.fn((prompt) => prompt.toUpperCase());
-    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+  it('should handle file-based transforms', async () => {
+    const mockTransform = jest.fn((prompt) => prompt.toUpperCase());
+    jest.mocked(importModule).mockResolvedValueOnce(mockTransform);
 
-    const parser = await createRequestParser('file://parsers/custom.js');
-    const result = await parser('test');
+    const transform = await createRequestTransform('file://parsers/custom.js');
+    const result = await transform('test');
 
     expect(importModule).toHaveBeenCalledWith(
       path.resolve('/mock/base/path', 'parsers/custom.js'),
@@ -994,36 +994,9 @@ describe('createRequestParser', () => {
     expect(result).toBe('TEST');
   });
 
-  it('should handle file-based parsers with specific function', async () => {
-    const mockParser = jest.fn((prompt) => prompt.toUpperCase());
-    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
-
-    const parser = await createRequestParser('file://parsers/custom.js:transformRequest');
-    const result = await parser('test');
-
-    expect(importModule).toHaveBeenCalledWith(
-      path.resolve('/mock/base/path', 'parsers/custom.js'),
-      'transformRequest',
-    );
-    expect(result).toBe('TEST');
-  });
-
-  it('should handle function parsers', async () => {
-    const customParser = (prompt: string) => ({
-      text: prompt,
-      timestamp: 123,
-    });
-    const parser = await createRequestParser(customParser);
-    const result = await parser('test');
-    expect(result).toEqual({
-      text: 'test',
-      timestamp: 123,
-    });
-  });
-
-  it('should throw error for unsupported parser type', async () => {
-    await expect(createRequestParser(123 as any)).rejects.toThrow(
-      'Unsupported request parser type: number',
+  it('should throw error for unsupported transform type', async () => {
+    await expect(createRequestTransform(123 as any)).rejects.toThrow(
+      'Unsupported request transform type: number',
     );
   });
 });
