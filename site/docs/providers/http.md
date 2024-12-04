@@ -5,9 +5,9 @@ sidebar_label: HTTP API
 
 # HTTP/HTTPS API
 
-Setting provider id to a URL sends an HTTP request to the endpoint. This is a general-purpose way to use any HTTP endpoint for inference.
+Setting the provider ID to a URL sends an HTTP request to the endpoint. This provides a general-purpose way to use any HTTP endpoint for inference.
 
-The provider config gives you a way to construct the HTTP request and extract the inference result from the response.
+The provider configuration allows you to construct the HTTP request and extract the inference result from the response.
 
 ```yaml
 providers:
@@ -19,10 +19,10 @@ providers:
         'Content-Type': 'application/json'
       body:
         myPrompt: '{{prompt}}'
-      transformResponse: 'json.output' # extract the "output" field from the response
+      transformResponse: 'json.output' # Extract the "output" field from the response
 ```
 
-The placeholder variable `{{prompt}}` will be replaced by the final prompt for the test case. You can also reference test variables as you construct the request:
+The placeholder variable `{{prompt}}` will be replaced with the final prompt for the test case. You can also reference test variables as you construct the request:
 
 ```yaml
 providers:
@@ -148,71 +148,6 @@ tests:
 
 Note that any valid JSON string within `body` will be converted to a JSON object.
 
-## Parsing a JSON response
-
-By default, the entire response is returned as the output. If your API responds with a JSON object and you want to pick out a specific value, use the `transformResponse` property to set a Javascript snippet that manipulates the provided `json` object.
-
-For example, this `transformResponse` configuration:
-
-```yaml
-providers:
-  - id: https
-    config:
-      url: 'https://example.com/openai-compatible/chat/completions'
-      # ...
-      transformResponse: 'json.choices[0].message.content'
-```
-
-Extracts the message content from this response:
-
-```json
-{
-  "id": "chatcmpl-abc123",
-  "object": "chat.completion",
-  "created": 1677858242,
-  "model": "gpt-4o-mini",
-  "usage": {
-    "prompt_tokens": 13,
-    "completion_tokens": 7,
-    "total_tokens": 20
-  },
-  "choices": [
-    {
-      "message": {
-        "role": "assistant",
-        // highlight-start
-        "content": "\n\nThis is a test!"
-        // highlight-end
-      },
-      "logprobs": null,
-      "finish_reason": "stop",
-      "index": 0
-    }
-  ]
-}
-```
-
-## Parsing a text response
-
-If your API responds with a text response, you can use the `transformResponse` property to set a Javascript snippet that manipulates the provided `text` object.
-
-For example, this `transformResponse` configuration:
-
-```yaml
-providers:
-  - id: https
-    config:
-      url: 'https://example.com/api'
-      # ...
-      transformResponse: 'text.slice(11)'
-```
-
-Extracts the message content "hello world" from this response:
-
-```
-Assistant: hello world
-```
-
 ## Query parameters
 
 Query parameters can be specified in the provider config using the `queryParams` field. These will be appended to the URL as GET parameters.
@@ -264,7 +199,74 @@ You can override this behavior by specifying a `transformResponse` in the provid
 2. A function
 3. A file path (prefixed with `file://`) to a JavaScript module
 
-### String parser
+### Parsing a JSON response
+
+By default, the entire response is returned as the output. If your API responds with a JSON object and you want to pick out a specific value, use the `transformResponse` property to set a Javascript snippet that manipulates the provided `json` object.
+
+For example, this `transformResponse` configuration:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/openai-compatible/chat/completions'
+      # ...
+      transformResponse: 'json.choices[0].message.content'
+```
+
+Extracts the message content from this response:
+
+```json
+{
+  "id": "chatcmpl-abc123",
+  "object": "chat.completion",
+  "created": 1677858242,
+  "model": "gpt-4o-mini",
+  "usage": {
+    "prompt_tokens": 13,
+    "completion_tokens": 7,
+    "total_tokens": 20
+  },
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        // highlight-start
+        "content": "\n\nThis is a test!"
+        // highlight-end
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "index": 0
+    }
+  ]
+}
+```
+
+### Parsing a text response
+
+If your API responds with a text response, you can use the `transformResponse` property to set a Javascript snippet that manipulates the provided `text` object.
+
+For example, this `transformResponse` configuration:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      # ...
+      transformResponse: 'text.slice(11)'
+```
+
+Extracts the message content "hello world" from this response:
+
+```
+Assistant: hello world
+```
+
+### Response Parser Types
+
+#### String parser
 
 You can use a string containing a JavaScript expression to extract data from the response:
 
@@ -281,7 +283,7 @@ This expression will be evaluated with two variables available:
 - `json`: The parsed JSON response (if the response is valid JSON)
 - `text`: The raw text response
 
-### Function parser
+#### Function parser
 
 When using promptfoo as a Node.js library, you can provide a function as the response parser:
 
@@ -300,7 +302,7 @@ When using promptfoo as a Node.js library, you can provide a function as the res
 }
 ```
 
-### File-based parser
+#### File-based parser
 
 You can use a JavaScript file as a response parser by specifying the file path with the `file://` prefix. The file path is resolved relative to the directory containing the promptfoo configuration file.
 
@@ -340,68 +342,13 @@ providers:
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
 
-## Server-side session management
-
-When using an HTTP provider with multi-turn redteam attacks like GOAT and Crescendo, you may need to maintain session IDs between rounds. The HTTP provider will automatically extract the session ID from the response headers and store it in the `vars` object.
-
-Create a session parser that extracts the session ID from the response headers and returns it. All of the same formats of response parsers are supported.
-
-The input to the session parser is an object with a `headers` field, which contains the response headers.
-
-`{ headers: Record<string, string> }`
-
-Simple header parser:
-
-```yaml
-sessionParser: 'set-cookie'
-```
-
-The parser can take a string, file or function like the response parser. If you just include a string, it will be treated as a field on the `headers` object.
-
-Then you need to set the session ID in the `vars` object for the next round:
-
-```yaml
-providers:
-  - id: https
-    config:
-      url: 'https://example.com/api'
-      headers:
-        'Cookie': '{{sessionId}}'
-```
-
-## Client-side session management
-
-If you want the Promptfoo client to send a unique session or conversation ID with each test case, you can add a `transformVars` option to your Promptfoo or redteam config. This is useful for multi-turn evals or multi-turn redteam attacks where the provider maintains a conversation state.
-
-For example:
-
-```yaml
-defaultTest:
-  options:
-    transformVars: '{ ...vars, sessionId: context.uuid }'
-```
-
-Now you can use the `sessionId` variable in your HTTP target config:
-
-```yaml
-providers:
-  - id: https
-    config:
-      url: 'https://example.com/api'
-      headers:
-        'x-promptfoo-session': '{{sessionId}}'
-      body:
-        user_message: '{{prompt}}'
-```
-
 ## Request Transform
 
-The request transform modifies your prompt before sending it to the API. This allows you to:
+Request transform modifies your prompt after it is rendered but before it is sent to a provider API. This allows you to:
 
 - Format prompts into specific message structures
 - Add metadata or context
-- Handle multi-turn conversations
-- Preprocess prompts for specific API requirements
+- Handle nuanced message formats for multi-turn conversations
 
 ### Basic Usage
 
@@ -461,20 +408,76 @@ You can also specify a specific function to use:
 transformRequest: 'file://transforms/request.js:transformRequest'
 ```
 
+## Session management
+
+### Server-side session management
+
+When using an HTTP provider with multi-turn redteam attacks like GOAT and Crescendo, you may need to maintain session IDs between rounds. The HTTP provider will automatically extract the session ID from the response headers and store it in the `vars` object.
+
+Create a session parser that extracts the session ID from the response headers and returns it. All of the same formats of response parsers are supported.
+
+The input to the session parser is an object with a `headers` field, which contains the response headers.
+
+`{ headers: Record<string, string> }`
+
+Simple header parser:
+
+```yaml
+sessionParser: 'set-cookie'
+```
+
+The parser can take a string, file or function like the response parser. If you just include a string, it will be treated as a field on the `headers` object.
+
+Then you need to set the session ID in the `vars` object for the next round:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      headers:
+        'Cookie': '{{sessionId}}'
+```
+
+### Client-side session management
+
+If you want the Promptfoo client to send a unique session or conversation ID with each test case, you can add a `transformVars` option to your Promptfoo or redteam config. This is useful for multi-turn evals or multi-turn redteam attacks where the provider maintains a conversation state.
+
+For example:
+
+```yaml
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+```
+
+Now you can use the `sessionId` variable in your HTTP target config:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      headers:
+        'x-promptfoo-session': '{{sessionId}}'
+      body:
+        user_message: '{{prompt}}'
+```
+
 ## Reference
 
 Supported config options:
 
-| Option            | Type                     | Description                                                                                                       |
-| ----------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| url               | string                   | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.           |
-| request           | string                   | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options. |
-| method            | string                   | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                       |
-| headers           | Record\<string, string\> | Key-value pairs of HTTP headers to include in the request.                                                        |
-| body              | Record\<string, any\>    | The request body. For POST requests, this will be sent as JSON.                                                   |
-| queryParams       | Record\<string, string\> | Key-value pairs of query parameters to append to the URL.                                                         |
-| transformRequest  | string \| Function       | A function, string template, or file path to transform the prompt before sending.                                 |
-| transformResponse | string \| Function       | A function, string expression, or file path to parse the response.                                                |
+| Option            | Type                     | Description                                                                                                                                                                         |
+| ----------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| url               | string                   | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                             |
+| request           | string                   | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
+| method            | string                   | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                                                                                         |
+| headers           | Record\<string, string\> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
+| body              | Record\<string, any\>    | The request body. For POST requests, this will be sent as JSON.                                                                                                                     |
+| queryParams       | Record\<string, string\> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
+| transformRequest  | string \| Function       | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
+| transformResponse | string \| Function       | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
