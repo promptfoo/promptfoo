@@ -2,7 +2,7 @@
 
 ## Introduction
 
-[Chatbase](https://www.chatbase.co) is a platform for building custom AI chatbots that can be embedded into websites for customer support, lead generation, and user engagement. These chatbots use RAG to access your organization's knowledge base and maintain conversations with users.
+[Chatbase](https://www.chatbase.co) is a platform for building custom AI chatbots that can be embedded into websites for customer support, lead generation, and user engagement. These chatbots use RAG (Retrieval-Augmented Generation) to access your organization's knowledge base and maintain conversations with users.
 
 ## Multi-turn vs Single-turn Testing
 
@@ -24,19 +24,19 @@ In Promptfoo, this state is managed through a `conversationId` that links messag
 
 - Node.js 18+
 - promptfoo CLI (`npm install -g promptfoo`)
-- Chatbase API credentials
+- Chatbase API credentials:
   - API Bearer Token (from your Chatbase dashboard)
   - Chatbot ID (found in your bot's settings)
 
 ### Basic Configuration
 
-First, initialize the red team testing environment:
+1. Initialize the red team testing environment:
 
 ```bash
 promptfoo redteam init
 ```
 
-This launches a setup UI for configuring your Chatbase target, plugins, and test strategies. After configuration, you'll receive a configuration file. The Chatbase target configuration is crucial and should look similar to this:
+2. Configure your Chatbase target in the setup UI. Your configuration file should look similar to this:
 
 ```yaml
 targets:
@@ -57,23 +57,25 @@ targets:
           'conversationId': '{{conversationId}}',
         }
       responseParser: 'json.text'
-      requestParser: '[{ role: "user", content: prompt }]'
+      requestTransform: '[{ role: "user", content: prompt }]'
 defaultTest:
   options:
     transformVars: '{ ...vars, conversationId: context.uuid }'
 ```
 
-:::note
-Make sure to set both the `requestParser` and `responseParser` to the correct values for your chatbot. Because Chatbase is OpenAI compatible, the request parser is used to format the request body as a list of messages. The response parser is used to parse the response body as JSON.
-:::
+:::important Configuration Notes
 
-:::note
-`context.uuid` generates a random UUID for each conversation allowing Chatbase to track the conversation state across multiple messages.
-:::
+1. Configure both the `requestTransform` and `responseParser` for your chatbot:
+
+   - `requestTransform`: Formats the request as OpenAI-compatible messages
+   - `responseParser`: Extracts the response text from the JSON body
+
+2. The `context.uuid` generates a unique conversation ID for each test, enabling Chatbase to track conversation state across multiple messages.
+   :::
 
 ### Strategy Configuration
 
-Enable promptfoo's multi-turn strategies in your `promptfooconfig.yaml` file.
+Enable multi-turn testing strategies in your `promptfooconfig.yaml`:
 
 ```yaml
 strategies:
@@ -87,6 +89,8 @@ strategies:
 
 ## Test Execution
 
+Run your tests with these commands:
+
 ```bash
 # Generate test cases
 promptfoo redteam generate
@@ -98,10 +102,15 @@ promptfoo redteam eval
 promptfoo view
 ```
 
-## Troubleshooting
+## Common issues and solutions
 
-Common issues and solutions:
+If you encounter issues:
 
-- If tests fail to connect, verify your API credentials
-- If the message content is garbled, verify your request parser and response parser are correct
-- For RAG-specific issues, ensure your knowledge base is properly configured
+1. If tests fail to connect, verify your API credentials
+2. If the message content is garbled, verify your request parser and response parser are correct.
+
+## Additional Resources
+
+- [Chatbase API Documentation](https://www.chatbase.co/docs)
+- [Promptfoo HTTP Provider Guide](/docs/providers/http)
+- [Multi-turn Testing Strategies](/docs/guides/strategies)
