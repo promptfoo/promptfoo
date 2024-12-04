@@ -631,7 +631,7 @@ targets:
         'Content-Type': 'application/json'
       body:
         myPrompt: '{{prompt}}'
-      responseParser: 'json.output'
+      transformResponse: 'json.output'
 ```
 
 Or, let's say you have a raw HTTP request exported from a tool like Burp Suite. Put it in a file called `request.txt`:

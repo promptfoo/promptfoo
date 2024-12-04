@@ -56,8 +56,8 @@ targets:
           'model': 'gpt-4o-mini',
           'conversationId': '{{conversationId}}',
         }
-      responseParser: 'json.text'
-      requestTransform: '[{ role: "user", content: prompt }]'
+      transformResponse: 'json.text'
+      transformRequest: '[{ role: "user", content: prompt }]'
 defaultTest:
   options:
     transformVars: '{ ...vars, conversationId: context.uuid }'
@@ -65,10 +65,10 @@ defaultTest:
 
 :::important Configuration Notes
 
-1. Configure both the `requestTransform` and `responseParser` for your chatbot:
+1. Configure both the `transformRequest` and `transformResponse` for your chatbot:
 
-   - `requestTransform`: Formats the request as OpenAI-compatible messages
-   - `responseParser`: Extracts the response text from the JSON body
+   - `transformRequest`: Formats the request as OpenAI-compatible messages
+   - `transformResponse`: Extracts the response text from the JSON body
 
 2. The `context.uuid` generates a unique conversation ID for each test, enabling Chatbase to track conversation state across multiple messages.
    :::

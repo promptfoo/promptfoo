@@ -39,7 +39,7 @@ export interface ProviderOptions {
     steps?: BrowserStep[];
     headless?: boolean;
     timeoutMs?: number;
-    responseParser?: string;
+    transformResponse?: string;
     sessionParser?: string;
     cookies?:
       | Array<{

@@ -19,7 +19,7 @@ providers:
         'Content-Type': 'application/json'
       body:
         myPrompt: '{{prompt}}'
-      responseParser: 'json.output' # extract the "output" field from the response
+      transformResponse: 'json.output' # extract the "output" field from the response
 ```
 
 The placeholder variable `{{prompt}}` will be replaced by the final prompt for the test case. You can also reference test variables as you construct the request:
@@ -86,14 +86,14 @@ providers:
           "prompt": "{{prompt}}",
           "max_tokens": 100
         }
-      responseParser: 'json.content' # extract the "content" field from the response
+      transformResponse: 'json.content' # extract the "content" field from the response
 ```
 
 In this example:
 
 1. The `request` property contains a raw HTTP request, including the method, path, headers, and body.
 2. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
-3. The `responseParser` property is used to extract the desired information from the JSON response.
+3. The `transformResponse` property is used to extract the desired information from the JSON response.
 
 You can also load the raw request from an external file using the `file://` prefix:
 
@@ -102,7 +102,7 @@ providers:
   - id: https
     config:
       request: file://path/to/request.txt
-      responseParser: 'json.text'
+      transformResponse: 'json.text'
 ```
 
 This path is relative to the directory containing the Promptfoo config file.
@@ -150,9 +150,9 @@ Note that any valid JSON string within `body` will be converted to a JSON object
 
 ## Parsing a JSON response
 
-By default, the entire response is returned as the output. If your API responds with a JSON object and you want to pick out a specific value, use the `responseParser` property to set a Javascript snippet that manipulates the provided `json` object.
+By default, the entire response is returned as the output. If your API responds with a JSON object and you want to pick out a specific value, use the `transformResponse` property to set a Javascript snippet that manipulates the provided `json` object.
 
-For example, this `responseParser` configuration:
+For example, this `transformResponse` configuration:
 
 ```yaml
 providers:
@@ -160,7 +160,7 @@ providers:
     config:
       url: 'https://example.com/openai-compatible/chat/completions'
       # ...
-      responseParser: 'json.choices[0].message.content'
+      transformResponse: 'json.choices[0].message.content'
 ```
 
 Extracts the message content from this response:
@@ -194,9 +194,9 @@ Extracts the message content from this response:
 
 ## Parsing a text response
 
-If your API responds with a text response, you can use the `responseParser` property to set a Javascript snippet that manipulates the provided `text` object.
+If your API responds with a text response, you can use the `transformResponse` property to set a Javascript snippet that manipulates the provided `text` object.
 
-For example, this `responseParser` configuration:
+For example, this `transformResponse` configuration:
 
 ```yaml
 providers:
@@ -204,7 +204,7 @@ providers:
     config:
       url: 'https://example.com/api'
       # ...
-      responseParser: 'text.slice(11)'
+      transformResponse: 'text.slice(11)'
 ```
 
 Extracts the message content "hello world" from this response:
@@ -248,7 +248,7 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
       body: {
         foo: '{{bar}}',
       },
-      responseParser: (json) => json.output,
+      transformResponse: (json) => json.output,
     }
   }],
 }
@@ -256,9 +256,9 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 
 ## Response parser
 
-The `responseParser` option allows you to extract and transform the API response. If no `responseParser` is specified, the provider will attempt to parse the response as JSON. If JSON parsing fails, it will return the raw text response.
+The `transformResponse` option allows you to extract and transform the API response. If no `transformResponse` is specified, the provider will attempt to parse the response as JSON. If JSON parsing fails, it will return the raw text response.
 
-You can override this behavior by specifying a `responseParser` in the provider config. The `responseParser` can be one of the following:
+You can override this behavior by specifying a `transformResponse` in the provider config. The `transformResponse` can be one of the following:
 
 1. A string containing a JavaScript expression
 2. A function
@@ -273,7 +273,7 @@ providers:
   - id: https
     config:
       url: 'https://example.com/api'
-      responseParser: 'json.choices[0].message.content'
+      transformResponse: 'json.choices[0].message.content'
 ```
 
 This expression will be evaluated with two variables available:
@@ -291,7 +291,7 @@ When using promptfoo as a Node.js library, you can provide a function as the res
     id: 'https',
     config: {
       url: 'https://example.com/generate',
-      responseParser: (json, text) => {
+      transformResponse: (json, text) => {
         // Custom parsing logic
         return json.choices[0].message.content;
       },
@@ -309,7 +309,7 @@ providers:
   - id: https
     config:
       url: 'https://example.com/api'
-      responseParser: 'file://path/to/parser.js'
+      transformResponse: 'file://path/to/parser.js'
 ```
 
 The parser file should export a function that takes two arguments (`json` and `text`) and returns the parsed output. For example:
@@ -335,7 +335,7 @@ providers:
   - id: https
     config:
       url: 'https://example.com/api'
-      responseParser: 'file://path/to/parser.js:parseResponse'
+      transformResponse: 'file://path/to/parser.js:parseResponse'
 ```
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
@@ -410,7 +410,7 @@ providers:
   - id: https
     config:
       url: 'https://api.example.com/chat'
-      requestTransform: '{"message": "{{prompt}}"}'
+      transformRequest: '{"message": "{{prompt}}"}'
       body:
         user_message: '{{prompt}}'
 ```
@@ -422,7 +422,7 @@ providers:
 Use Nunjucks templates to transform the prompt:
 
 ```yaml
-requestTransform: '{"text": "{{prompt}}"}'
+transformRequest: '{"text": "{{prompt}}"}'
 ```
 
 #### JavaScript Function
@@ -430,7 +430,7 @@ requestTransform: '{"text": "{{prompt}}"}'
 Define a function that transforms the prompt:
 
 ```yaml
-requestTransform: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() })
+transformRequest: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() })
 ```
 
 #### File-based Transform
@@ -438,7 +438,7 @@ requestTransform: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now
 Load a transform from an external file:
 
 ```yaml
-requestTransform: 'file://transforms/request.js'
+transformRequest: 'file://transforms/request.js'
 ```
 
 Example transform file (transforms/request.js):
@@ -458,23 +458,23 @@ module.exports = (prompt) => {
 You can also specify a specific function to use:
 
 ```yaml
-requestTransform: 'file://transforms/request.js:transformRequest'
+transformRequest: 'file://transforms/request.js:transformRequest'
 ```
 
 ## Reference
 
 Supported config options:
 
-| Option           | Type                     | Description                                                                                                       |
-| ---------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| url              | string                   | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.           |
-| request          | string                   | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options. |
-| method           | string                   | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                       |
-| headers          | Record\<string, string\> | Key-value pairs of HTTP headers to include in the request.                                                        |
-| body             | Record\<string, any\>    | The request body. For POST requests, this will be sent as JSON.                                                   |
-| queryParams      | Record\<string, string\> | Key-value pairs of query parameters to append to the URL.                                                         |
-| requestTransform | string \| Function       | A function, string template, or file path to transform the prompt before sending.                                 |
-| responseParser   | string \| Function       | A function, string expression, or file path to parse the response.                                                |
+| Option            | Type                     | Description                                                                                                       |
+| ----------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| url               | string                   | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.           |
+| request           | string                   | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options. |
+| method            | string                   | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                       |
+| headers           | Record\<string, string\> | Key-value pairs of HTTP headers to include in the request.                                                        |
+| body              | Record\<string, any\>    | The request body. For POST requests, this will be sent as JSON.                                                   |
+| queryParams       | Record\<string, string\> | Key-value pairs of query parameters to append to the URL.                                                         |
+| transformRequest  | string \| Function       | A function, string template, or file path to transform the prompt before sending.                                 |
+| transformResponse | string \| Function       | A function, string expression, or file path to parse the response.                                                |
 
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 

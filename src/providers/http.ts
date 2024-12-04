@@ -20,15 +20,19 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 const nunjucks = getNunjucksEngine();
 
 interface HttpProviderConfig {
-  url?: string;
-  method?: string;
-  headers?: Record<string, string>;
   body?: Record<string, any> | string | any[];
+  headers?: Record<string, string>;
+  method?: string;
   queryParams?: Record<string, string>;
-  requestTransform?: string | Function;
-  responseParser?: string | Function;
   request?: string;
   sessionParser?: string | Function;
+  transformRequest?: string | Function;
+  transformResponse?: string | Function;
+  url?: string;
+  /**
+   * @deprecated
+   */
+  responseParser?: string | Function;
 }
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
@@ -82,7 +86,7 @@ export async function createSessionParser(
   );
 }
 
-export async function createResponseParser(
+export async function createTransformResponse(
   parser: string | Function | undefined,
 ): Promise<(data: any, text: string) => ProviderResponse> {
   if (!parser) {
@@ -211,7 +215,7 @@ function parseRawRequest(input: string) {
   }
 }
 
-export async function createRequestTransform(
+export async function createTransformRequest(
   transform: string | Function | undefined,
 ): Promise<(prompt: string) => any> {
   if (!transform) {
@@ -287,15 +291,17 @@ export function determineRequestBody(
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  private responseParser: Promise<(data: any, text: string) => ProviderResponse>;
+  private transformResponse: Promise<(data: any, text: string) => ProviderResponse>;
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
-  private requestTransform: Promise<(prompt: string) => any>;
+  private transformRequest: Promise<(prompt: string) => any>;
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config;
     this.url = this.config.url || url;
-    this.responseParser = createResponseParser(this.config.responseParser);
+    this.transformResponse = createTransformResponse(
+      this.config.transformResponse || this.config.responseParser,
+    );
     this.sessionParser = createSessionParser(this.config.sessionParser);
-    this.requestTransform = createRequestTransform(this.config.requestTransform);
+    this.transformRequest = createTransformRequest(this.config.transformRequest);
 
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
@@ -376,7 +382,7 @@ export class HttpProvider implements ApiProvider {
     this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
-    const transformedPrompt = await (await this.requestTransform)(prompt);
+    const transformedPrompt = await (await this.transformRequest)(prompt);
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
@@ -396,7 +402,7 @@ export class HttpProvider implements ApiProvider {
             ]),
           )
         : undefined,
-      responseParser: this.config.responseParser,
+      transformResponse: this.config.transformResponse || this.config.responseParser,
     };
 
     const method = renderedConfig.method || 'POST';
@@ -451,13 +457,16 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
     try {
-      const parsedOutput = (await this.responseParser)(parsedData, rawText);
+      const parsedOutput = (await this.transformResponse)(parsedData, rawText);
       ret.output = parsedOutput.output || parsedOutput;
       try {
-        ret.sessionId =
+        const sessionId =
           response.headers && this.sessionParser !== null
             ? (await this.sessionParser)({ headers: response.headers })
             : undefined;
+        if (sessionId) {
+          ret.sessionId = sessionId;
+        }
       } catch (err) {
         logger.error(
           `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)}`,
@@ -512,7 +521,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     try {
-      const parsedOutput = (await this.responseParser)(parsedData, rawText);
+      const parsedOutput = (await this.transformResponse)(parsedData, rawText);
       return {
         output: parsedOutput.output || parsedOutput,
       };

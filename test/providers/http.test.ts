@@ -3,8 +3,8 @@ import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import {
-  createRequestTransform,
-  createResponseParser,
+  createTransformRequest,
+  createTransformResponse,
   determineRequestBody,
   HttpProvider,
   processJsonBody,
@@ -53,7 +53,7 @@ describe('HttpProvider', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: { key: '{{ prompt }}' },
-        responseParser: (data: any) => data.result,
+        transformResponse: (data: any) => data.result,
       },
     });
     const mockResponse = {
@@ -85,7 +85,7 @@ describe('HttpProvider', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: { key: 'value' },
-        responseParser: (data: any) => data.result,
+        transformResponse: (data: any) => data.result,
       },
     });
     const mockError = new Error('Network error');
@@ -104,7 +104,7 @@ describe('HttpProvider', () => {
         headers: { Authorization: 'Bearer token' },
         body: { key: '{{ prompt }}' },
         queryParams: { foo: 'bar' },
-        responseParser: (data: any) => data,
+        transformResponse: (data: any) => data,
       },
     });
     const mockResponse = {
@@ -140,7 +140,7 @@ describe('HttpProvider', () => {
       provider = new HttpProvider(mockUrl, {
         config: {
           body: { key: '{{ prompt }}' },
-          responseParser: parser,
+          transformResponse: parser,
         },
       });
       const mockResponse = {
@@ -162,7 +162,7 @@ describe('HttpProvider', () => {
         method: 'POST',
         headers: { 'X-Custom-Header': '{{ prompt | upper }}' },
         body: { key: '{{ prompt }}' },
-        responseParser: (data: any) => data,
+        transformResponse: (data: any) => data,
       },
     });
     const mockResponse = {
@@ -216,7 +216,7 @@ describe('HttpProvider', () => {
           q: '{{ prompt }}',
           foo: 'bar',
         },
-        responseParser: (data: any) => data,
+        transformResponse: (data: any) => data,
       },
     });
     const mockResponse = {
@@ -249,7 +249,7 @@ describe('HttpProvider', () => {
       const provider = new HttpProvider('http', {
         config: {
           request: rawRequest,
-          responseParser: (data: any) => data,
+          transformResponse: (data: any) => data,
         },
       });
 
@@ -289,7 +289,7 @@ describe('HttpProvider', () => {
       const provider = new HttpProvider('https', {
         config: {
           request: rawRequest,
-          responseParser: (data: any) => data,
+          transformResponse: (data: any) => data,
         },
       });
 
@@ -330,7 +330,7 @@ describe('HttpProvider', () => {
       const provider = new HttpProvider('https', {
         config: {
           request: filePath,
-          responseParser: (data: any) => data,
+          transformResponse: (data: any) => data,
         },
       });
 
@@ -434,13 +434,13 @@ describe('HttpProvider', () => {
     });
   });
 
-  describe('createResponseParser', () => {
+  describe('createtransformResponse', () => {
     it('should handle function parser', async () => {
       const functionParser = (data: any) => data.result;
       const provider = new HttpProvider(mockUrl, {
         config: {
           body: { key: 'value' },
-          responseParser: functionParser,
+          transformResponse: functionParser,
         },
       });
 
@@ -460,7 +460,7 @@ describe('HttpProvider', () => {
       const mockParser = jest.fn((data, text) => text.toUpperCase());
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
-      const parser = await createResponseParser('file://custom-parser.js');
+      const parser = await createTransformResponse('file://custom-parser.js');
       const result = parser({ customField: 'parsed' }, 'parsed');
       expect(importModule).toHaveBeenCalledWith(
         path.resolve('/mock/base/path', 'custom-parser.js'),
@@ -470,7 +470,7 @@ describe('HttpProvider', () => {
     });
 
     it('should throw error for unsupported parser type', async () => {
-      await expect(createResponseParser(123 as any)).rejects.toThrow(
+      await expect(createTransformResponse(123 as any)).rejects.toThrow(
         "Unsupported response parser type: number. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.",
       );
     });
@@ -479,7 +479,7 @@ describe('HttpProvider', () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           body: { key: 'value' },
-          responseParser: 'json.result',
+          transformResponse: 'json.result',
         },
       });
 
@@ -499,7 +499,7 @@ describe('HttpProvider', () => {
       const mockParser = jest.fn((data, text) => data.specificField);
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
-      const parser = await createResponseParser('file://custom-parser.js:parseResponse');
+      const parser = await createTransformResponse('file://custom-parser.js:parseResponse');
       const result = parser({ specificField: 'parsed' }, '');
       expect(importModule).toHaveBeenCalledWith(
         path.resolve('/mock/base/path', 'custom-parser.js'),
@@ -511,13 +511,13 @@ describe('HttpProvider', () => {
     it('should throw error for malformed file:// parser', async () => {
       jest.mocked(importModule).mockResolvedValueOnce({});
 
-      await expect(createResponseParser('file://invalid-parser.js')).rejects.toThrow(
+      await expect(createTransformResponse('file://invalid-parser.js')).rejects.toThrow(
         /Response parser malformed: .*invalid-parser\.js must export a function or have a default export as a function/,
       );
     });
 
     it('should return default parser when no parser is provided', async () => {
-      const parser = await createResponseParser(undefined);
+      const parser = await createTransformResponse(undefined);
       const result = parser({ key: 'value' }, 'raw text');
       expect(result.output).toEqual({ key: 'value' });
     });
@@ -526,7 +526,7 @@ describe('HttpProvider', () => {
       const mockParser = jest.fn((data) => data.defaultField);
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
-      const parser = await createResponseParser('file://default-parser.js');
+      const parser = await createTransformResponse('file://default-parser.js');
       const result = parser({ defaultField: 'parsed' }, '');
 
       expect(result).toBe('parsed');
@@ -559,7 +559,7 @@ describe('HttpProvider', () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         body: { key: 'value' },
-        responseParser: (json: any, text: string) => ({ custom: json.result }),
+        transformResponse: (json: any, text: string) => ({ custom: json.result }),
       },
     });
 
@@ -963,17 +963,86 @@ describe('HttpProvider', () => {
       );
     });
   });
+
+  describe('deprecated responseParser handling', () => {
+    it('should use responseParser when transformResponse is not set', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+          responseParser: (data: any) => ({ chat_history: data.result }),
+        },
+      });
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+
+      expect(result).toEqual({ output: { chat_history: 'success' } });
+    });
+
+    it('should prefer transformResponse over responseParser when both are set', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+          responseParser: (data: any) => ({ chat_history: 'from responseParser' }),
+          transformResponse: (data: any) => ({ chat_history: 'from transformResponse' }),
+        },
+      });
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+
+      expect(result).toEqual({ output: { chat_history: 'from transformResponse' } });
+    });
+
+    it('should handle string-based responseParser when transformResponse is not set', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+          responseParser: 'json.result',
+        },
+      });
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+
+      expect(result).toEqual({ output: 'success' });
+    });
+  });
 });
 
-describe('createRequestTransform', () => {
+describe('createTransformRequest', () => {
   it('should return identity function when no transform specified', async () => {
-    const transform = await createRequestTransform(undefined);
+    const transform = await createTransformRequest(undefined);
     const result = await transform('test prompt');
     expect(result).toBe('test prompt');
   });
 
   it('should handle string templates', async () => {
-    const transform = await createRequestTransform('{"text": "{{prompt}}"}');
+    const transform = await createTransformRequest('{"text": "{{prompt}}"}');
     const result = await transform('hello');
     expect(result).toEqual({
       text: 'hello',
@@ -984,7 +1053,7 @@ describe('createRequestTransform', () => {
     const mockTransform = jest.fn((prompt) => prompt.toUpperCase());
     jest.mocked(importModule).mockResolvedValueOnce(mockTransform);
 
-    const transform = await createRequestTransform('file://parsers/custom.js');
+    const transform = await createTransformRequest('file://parsers/custom.js');
     const result = await transform('test');
 
     expect(importModule).toHaveBeenCalledWith(
@@ -995,7 +1064,7 @@ describe('createRequestTransform', () => {
   });
 
   it('should throw error for unsupported transform type', async () => {
-    await expect(createRequestTransform(123 as any)).rejects.toThrow(
+    await expect(createTransformRequest(123 as any)).rejects.toThrow(
       'Unsupported request transform type: number',
     );
   });

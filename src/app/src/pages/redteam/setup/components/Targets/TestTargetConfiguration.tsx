@@ -24,7 +24,7 @@ interface TestTargetConfigurationProps {
   handleTestTarget: () => void;
   selectedTarget: ProviderOptions;
   testResult: any;
-  requiresResponseParser: (target: ProviderOptions) => boolean;
+  requiresTransformResponse: (target: ProviderOptions) => boolean;
   updateCustomTarget: (field: string, value: any) => void;
   hasTestedTarget: boolean;
 }
@@ -34,9 +34,8 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   handleTestTarget,
   selectedTarget,
   testResult,
-  requiresResponseParser,
+  requiresTransformResponse,
   updateCustomTarget,
-  hasTestedTarget,
 }) => {
   const theme = useTheme();
 
@@ -194,7 +193,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
         </Box>
       )}
 
-      {requiresResponseParser(selectedTarget) && (
+      {requiresTransformResponse(selectedTarget) && (
         <Box mt={4}>
           <Typography variant="h6" gutterBottom>
             Configure Response Parser
@@ -203,9 +202,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
             <TextField
               fullWidth
               label="Response Parser"
-              value={selectedTarget.config.responseParser}
+              value={selectedTarget.config.transformResponse}
               placeholder="Optional: A JavaScript expression to parse the response. E.g. json.choices[0].message.content"
-              onChange={(e) => updateCustomTarget('responseParser', e.target.value)}
+              onChange={(e) => updateCustomTarget('transformResponse', e.target.value)}
               margin="normal"
               InputLabelProps={{
                 shrink: true,
