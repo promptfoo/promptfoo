@@ -113,4 +113,4 @@ If you encounter issues:
 
 - [Chatbase API Documentation](https://www.chatbase.co/docs)
 - [Promptfoo HTTP Provider Guide](/docs/providers/http)
-- [Multi-turn Testing Strategies](/docs/guides/strategies)
+- [Multi-turn Testing Strategies](/docs/red-team/strategies/multi-turn)
