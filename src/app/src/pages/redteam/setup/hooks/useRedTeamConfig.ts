@@ -34,7 +34,7 @@ const defaultConfig: Config = {
   description: 'My Red Team Configuration',
   prompts: ['{{prompt}}'],
   target: DEFAULT_HTTP_TARGET,
-  plugins: ['default'],
+  plugins: [],
   strategies: ['jailbreak', 'prompt-injection'],
   purpose: '',
   entities: [],
