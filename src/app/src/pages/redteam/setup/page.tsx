@@ -408,7 +408,6 @@ export default function RedTeamSetupPage() {
         },
       };
 
-      console.log('Mapped config:', mappedConfig);
       setFullConfig(mappedConfig);
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
