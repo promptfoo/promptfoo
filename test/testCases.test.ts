@@ -50,7 +50,6 @@ jest.mock('../src/googleSheets', () => ({
 }));
 jest.mock('../src/logger');
 
-// Mock the envars module
 jest.mock('../src/envars', () => ({
   ...jest.requireActual('../src/envars'),
   getEnvBool: jest.fn(),
