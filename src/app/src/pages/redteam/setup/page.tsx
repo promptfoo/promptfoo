@@ -385,7 +385,7 @@ export default function RedTeamSetupPage() {
         description: yamlConfig.description || 'My Red Team Configuration',
         prompts: yamlConfig.prompts || ['{{prompt}}'],
         // Map target from targets array if it exists
-        target: yamlConfig.targets?.[0] || DEFAULT_HTTP_TARGET,
+        target: yamlConfig.targets?.[0] || yamlConfig.providers?.[0] || DEFAULT_HTTP_TARGET,
         // Map plugins from redteam.plugins, falling back to default
         plugins: yamlConfig.redteam?.plugins || ['default'],
         // Map strategies from redteam.strategies
