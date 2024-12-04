@@ -384,27 +384,20 @@ export default function RedTeamSetupPage() {
       const mappedConfig: Config = {
         description: yamlConfig.description || 'My Red Team Configuration',
         prompts: yamlConfig.prompts || ['{{prompt}}'],
-        // Map target from targets array if it exists
         target: yamlConfig.targets?.[0] || yamlConfig.providers?.[0] || DEFAULT_HTTP_TARGET,
-        // Map plugins from redteam.plugins, falling back to default
         plugins: yamlConfig.redteam?.plugins || ['default'],
-        // Map strategies from redteam.strategies
-        strategies: (yamlConfig.redteam?.strategies || []).map((s: any) =>
-          typeof s === 'string' ? s : s.id,
-        ),
-        // Map purpose from redteam.purpose
+        strategies: yamlConfig.redteam?.strategies || [],
         purpose: yamlConfig.redteam?.purpose || '',
-        entities: [], // Default empty array as it's not in the YAML
+        entities: yamlConfig.redteam?.entities || [],
         applicationDefinition: {
           purpose: yamlConfig.redteam?.purpose || '',
+          // We could potentially parse these from redteam.purpose if it follows a specific format.
           redteamUser: '',
           accessToData: '',
           forbiddenData: '',
           accessToActions: '',
           forbiddenActions: '',
           connectedSystems: '',
-          // We could potentially parse these from redteam.purpose if it follows
-          // a specific format, but for now we'll leave them empty
         },
       };
 
