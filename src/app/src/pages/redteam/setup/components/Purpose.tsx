@@ -10,7 +10,6 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import Prompts from './Prompts';
 
 interface PromptsProps {
   onNext: () => void;
@@ -154,10 +153,6 @@ export default function Purpose({ onNext }: PromptsProps) {
               rows={2}
               placeholder="e.g. A CRM system for managing customer relationships. Flight booking system. Internal company knowledge base."
             />
-          </Box>
-
-          <Box>
-            <Prompts />
           </Box>
         </Stack>
 
