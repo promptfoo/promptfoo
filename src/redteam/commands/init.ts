@@ -570,7 +570,7 @@ export async function redteamInit(directory: string | undefined) {
           });
           writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
         } catch (err) {
-          logger.error(`Error saving consent: ${(err as Error).message}`);
+          logger.debug(`Failed to save consent: ${(err as Error).message}`);
         }
       }
     }

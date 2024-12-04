@@ -209,7 +209,9 @@ export default function Review() {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={12}>
                 <Typography variant="subtitle2">Purpose</Typography>
-                <Typography variant="body2">{config.purpose || 'Not specified'}</Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {config.purpose || 'Not specified'}
+                </Typography>
               </Grid>
             </Grid>
           </Paper>

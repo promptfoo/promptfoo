@@ -54,6 +54,7 @@ providers:
 | [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                               | Compatible with OpenAI syntax                   |
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                              | `watsonx:ibm/granite-13b-chat-v2`               |
 | [X.AI](./xai.md)                                    | X.AI's models                              | `xai:grok-2`                                    |
+| [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers   | Compatible with OpenAI syntax                   |
 
 ## Provider Syntax
 

@@ -1,4 +1,5 @@
-const promptfoo = require('../../dist/src/index.js').default;
+// const promptfoo = require('../../dist/src/index.js').default;
+const promptfoo = require('promptfoo').default;
 
 class CustomApiProvider {
   constructor(options) {

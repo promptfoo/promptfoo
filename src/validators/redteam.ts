@@ -56,7 +56,6 @@ const strategyIdSchema = z
     z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]),
     z.string().refine(
       (value) => {
-        console.error(value);
         return value.startsWith('file://') && isJavascriptFile(value);
       },
       {

@@ -37,7 +37,7 @@ jest.mock('../src/cliState');
 jest.mock('../src/remoteGrading', () => ({
   doRemoteGrading: jest.fn(),
 }));
-jest.mock('../src/redteam/util', () => ({
+jest.mock('../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(true),
 }));
 jest.mock('proxy-agent', () => ({

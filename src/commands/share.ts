@@ -52,6 +52,11 @@ export function shareCommand(program: Command) {
           }
         }
         invariant(eval_, 'No eval found');
+        if (eval_.prompts.length === 0) {
+          // FIXME(ian): Handle this on the server side.
+          logger.error(`Eval ${eval_.id} did not complete successfully, so it cannot be shared.`);
+          process.exit(1);
+        }
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
           await createPublicUrl(eval_, cmdObj.showAuth);
         } else {
@@ -60,13 +65,13 @@ export function shareCommand(program: Command) {
             output: process.stdout,
           });
 
-          const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
-          const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
           if (cloudConfig.isEnabled()) {
             logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
             await createPublicUrl(eval_, cmdObj.showAuth);
             process.exit(0);
           } else {
+            const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
+            const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
             reader.question(
               `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
               async function (answer: string) {

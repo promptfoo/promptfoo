@@ -333,7 +333,7 @@ const App: React.FC = () => {
                   <>
                     <strong>Depth:</strong>{' '}
                     {(
-                      selectedPrompt.metrics?.tokenUsage.numRequests || tableData.length
+                      selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
                     ).toLocaleString()}{' '}
                     probes
                   </>
@@ -370,7 +370,7 @@ const App: React.FC = () => {
             )}
           </Box>
         </Card>
-        <Overview categoryStats={categoryStats} />
+        <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
         <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
         <StrategyStats strategyStats={strategyStats} />
         <RiskCategories
@@ -379,7 +379,11 @@ const App: React.FC = () => {
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
         />
-        <TestSuites evalId={evalId} categoryStats={categoryStats} />
+        <TestSuites
+          evalId={evalId}
+          categoryStats={categoryStats}
+          plugins={evalData.config.redteam.plugins || []}
+        />
       </Stack>
       <Modal
         open={isPromptModalOpen}

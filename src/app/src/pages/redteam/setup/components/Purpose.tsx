@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { Alert } from '@mui/material';
 import Box from '@mui/material/Box';
@@ -9,15 +8,14 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { alpha } from '@mui/material/styles';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import Prompts from './Prompts';
 
 interface PromptsProps {
   onNext: () => void;
-  onBack: () => void;
 }
 
-export default function Purpose({ onNext, onBack }: PromptsProps) {
+export default function Purpose({ onNext }: PromptsProps) {
   const { config, updateApplicationDefinition } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
 
@@ -32,9 +30,29 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
         Application Details
       </Typography>
-      <Alert severity="info">
-        The more information you provide, the better the redteam attacks will be and the more
-        accurate the results.
+      <Alert
+        severity="info"
+        sx={{
+          '& .MuiAlert-icon': {
+            color: 'info.main',
+          },
+          backgroundColor: (theme) =>
+            theme.palette.mode === 'dark'
+              ? alpha(theme.palette.info.main, 0.1)
+              : alpha(theme.palette.info.main, 0.05),
+          border: (theme) =>
+            `1px solid ${
+              theme.palette.mode === 'dark'
+                ? alpha(theme.palette.info.main, 0.3)
+                : alpha(theme.palette.info.main, 0.2)
+            }`,
+          '& .MuiAlert-message': {
+            color: 'text.primary',
+          },
+        }}
+      >
+        The more information you provide, the better the redteam attacks will be. You can leave
+        fields blank if they're not relevant, and you'll be able to revise information later.
       </Alert>
 
       <Box>
@@ -59,7 +77,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
 
           <Box>
             <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-              Describe the user the redteam application is impersonating
+              Describe the user the redteamer is impersonating
             </Typography>
             <TextField
               fullWidth
@@ -71,9 +89,22 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
 
           <Box>
             <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-              Access
+              External System Access
             </Typography>
-            <Typography variant="body1">What data does the user have access to?</Typography>
+            <Typography sx={{ mt: 2 }} variant="body1">
+              What external systems are connected to this application?
+            </Typography>
+            <TextField
+              fullWidth
+              value={config.applicationDefinition.connectedSystems}
+              onChange={(e) => updateApplicationDefinition('connectedSystems', e.target.value)}
+              multiline
+              rows={2}
+              placeholder="e.g. A CRM system for managing customer relationships. Flight booking system. Internal company knowledge base."
+            />
+            <Typography sx={{ mt: 2 }} variant="body1">
+              What data is available to the LLM from connected systems that the user has access to?
+            </Typography>
             <TextField
               fullWidth
               value={config.applicationDefinition.accessToData}
@@ -84,7 +115,8 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             />
 
             <Typography sx={{ mt: 2 }} variant="body1">
-              What data exists in the system that the user shouldn't have access to?
+              What data is available to the LLM from connected systems that the user shouldn't have
+              access to?
             </Typography>
             <TextField
               fullWidth
@@ -96,7 +128,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             />
 
             <Typography sx={{ mt: 2 }} variant="body1">
-              What actions can the user take?
+              What actions can the user take on connected systems?
             </Typography>
             <TextField
               fullWidth
@@ -108,7 +140,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             />
 
             <Typography sx={{ mt: 2 }} variant="body1">
-              What actions shouldn't the user be able to take?
+              What actions shouldn't the user be able to take on connected systems?
             </Typography>
             <TextField
               fullWidth
@@ -119,49 +151,17 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
               placeholder="e.g. Update other users' profile, cancel other users' flights."
             />
           </Box>
-
-          <Box>
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-              Connected Systems
-            </Typography>
-            <Typography sx={{ mt: 2 }} variant="body1">
-              What other systems are connected to this one?
-            </Typography>
-            <TextField
-              fullWidth
-              value={config.applicationDefinition.connectedSystems}
-              onChange={(e) => updateApplicationDefinition('connectedSystems', e.target.value)}
-              multiline
-              rows={2}
-              placeholder="e.g. A CRM system for managing customer relationships. Flight booking system. Internal company knowledge base."
-            />
-          </Box>
-
-          <Box>
-            <Prompts />
-          </Box>
         </Stack>
 
         <Grid item xs={12}>
           <Box
             sx={{
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent: 'flex-end',
               alignItems: 'center',
               mt: 4,
             }}
           >
-            <Button
-              variant="outlined"
-              startIcon={<KeyboardArrowLeftIcon />}
-              onClick={onBack}
-              sx={{
-                px: 4,
-                py: 1,
-              }}
-            >
-              Back
-            </Button>
             <Button
               variant="contained"
               endIcon={<KeyboardArrowRightIcon />}

@@ -25,9 +25,9 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../constants';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
 import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
-import { shouldGenerateRemote } from '../util';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -216,7 +216,9 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
       redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
       metadata: {
         ...(existingYaml.metadata || {}),
-        ...(configPath ? { configHash: getConfigHash(configPath) } : {}),
+        ...(configPath && redteamTests.length > 0
+          ? { configHash: getConfigHash(configPath) }
+          : { configHash: 'force-regenerate' }),
       },
     };
     writePromptfooConfig(updatedYaml, options.output);

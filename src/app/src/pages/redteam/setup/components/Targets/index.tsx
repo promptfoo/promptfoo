@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
+import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -15,11 +16,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import {
-  DEFAULT_HTTP_TARGET,
-  DEFAULT_PURPOSE,
-  useRedTeamConfig,
-} from '../../hooks/useRedTeamConfig';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
@@ -30,6 +27,7 @@ import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 interface TargetsProps {
   onNext: () => void;
+  onBack: () => void;
   setupModalOpen: boolean;
 }
 
@@ -74,7 +72,7 @@ const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
+export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const selectedTarget = config.target || DEFAULT_HTTP_TARGET;
@@ -152,7 +150,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         config: { temperature: 0.5 },
       });
       setRawConfigJson(JSON.stringify({ temperature: 0.5 }, null, 2));
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'javascript' || value === 'python') {
       const filePath =
         value === 'javascript'
@@ -163,7 +160,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         config: {},
         label: currentLabel,
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'http') {
       setSelectedTarget({
         ...DEFAULT_HTTP_TARGET,
@@ -196,14 +192,12 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           ],
         },
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else {
       setSelectedTarget({
         id: value,
         config: {},
         label: currentLabel,
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     }
   };
 
@@ -546,6 +540,17 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           </Alert>
         )}
         <Button
+          variant="outlined"
+          startIcon={<KeyboardArrowLeftIcon />}
+          onClick={onBack}
+          sx={{
+            px: 4,
+            py: 1,
+          }}
+        >
+          Back
+        </Button>
+        <Button
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
@@ -557,6 +562,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
             px: 4,
             py: 1,
             minWidth: '150px',
+            ml: 2,
           }}
         >
           Next

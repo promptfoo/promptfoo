@@ -9,7 +9,7 @@ import * as path from 'path';
 import { parse as parsePath } from 'path';
 import invariant from 'tiny-invariant';
 import { testCaseFromCsvRow } from './csv';
-import { getEnvBool } from './envars';
+import { getEnvBool, getEnvString } from './envars';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
@@ -57,7 +57,6 @@ export async function readVarsFiles(
       Object.assign(ret, yamlData);
     }
   }
-
   return ret;
 }
 
@@ -80,7 +79,12 @@ export async function readStandaloneTestsFile(
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'csv tests file - local',
     });
-    rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true, bom: true });
+    const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
+    rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), {
+      columns: true,
+      bom: true,
+      delimiter,
+    });
   } else if (fileExtension === 'json') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'json tests file',

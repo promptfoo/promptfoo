@@ -97,6 +97,12 @@ jest.mock('../../src/logger', () => ({
   warn: jest.fn(),
 }));
 
+jest.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+  neverGenerateRemote: jest.fn().mockReturnValue(false),
+  getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
+}));
+
 const mockFetch = jest.mocked(jest.fn());
 global.fetch = mockFetch;
 

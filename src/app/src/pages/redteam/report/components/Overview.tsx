@@ -6,18 +6,20 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import {
   Severity,
-  riskCategorySeverityMap,
   severityDisplayNames,
   type Plugin as PluginType,
 } from '@promptfoo/redteam/constants';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/shared';
+import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import { useReportStore } from './store';
 import './Overview.css';
 
 interface OverviewProps {
   categoryStats: Record<PluginType, { pass: number; total: number }>;
+  plugins: RedteamPluginObject[];
 }
 
-const Overview: React.FC<OverviewProps> = ({ categoryStats }) => {
+const Overview: React.FC<OverviewProps> = ({ categoryStats, plugins }) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const severityCounts = Object.values(Severity).reduce(
@@ -26,7 +28,7 @@ const Overview: React.FC<OverviewProps> = ({ categoryStats }) => {
         const stats = categoryStats[category as PluginType];
         const passRate = stats.pass / stats.total;
         if (
-          riskCategorySeverityMap[category as PluginType] === severity &&
+          getRiskCategorySeverityMap(plugins)[category as PluginType] === severity &&
           passRate < pluginPassRateThreshold
         ) {
           return count + 1;
