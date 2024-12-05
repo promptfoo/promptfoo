@@ -35,7 +35,7 @@ interface HttpProviderConfig {
   responseParser?: string | Function;
 }
 
-function contentTypeIsJson(headers: Record<string, string> | undefined) {
+function contentTypeIsJson(headers: Record<string, string> | undefined): boolean {
   if (!headers) {
     return false;
   }
@@ -267,29 +267,30 @@ export async function createTransformRequest(
 }
 
 export function determineRequestBody(
-  contentType: boolean,
+  typeIsJson: boolean,
   parsedPrompt: any,
   configBody: Record<string, any> | any[] | string | undefined,
   vars: Record<string, any>,
 ): Record<string, any> | any[] | string {
-  // Handle object prompts for JSON content type
   const processedPrompt =
     typeof parsedPrompt === 'object' ? JSON.stringify(parsedPrompt) : parsedPrompt;
 
-  if (contentType) {
-    // For JSON content type
-    if (typeof processedPrompt === 'object' && processedPrompt !== null) {
-      // If parser returned an object, merge it with config body
-      return Object.assign({}, configBody || {}, processedPrompt);
-    }
-    // Otherwise process the config body with parsed prompt
-    return processJsonBody(configBody as Record<string, any> | any[], {
-      ...vars,
-      prompt: processedPrompt,
-    });
+  if (!typeIsJson) {
+    // For non-JSON content type, process as text
+    return processTextBody(configBody as string, { ...vars, prompt: processedPrompt });
   }
-  // For non-JSON content type, process as text
-  return processTextBody(configBody as string, {
+
+  // For JSON content type
+  if (typeof processedPrompt === 'object' && processedPrompt !== null) {
+    // Merge parsed prompt object with config body
+    return {
+      ...(typeof configBody === 'object' ? configBody : {}),
+      ...processedPrompt,
+    };
+  }
+
+  // Process config body with parsed prompt
+  return processJsonBody(configBody as Record<string, any> | any[], {
     ...vars,
     prompt: processedPrompt,
   });
