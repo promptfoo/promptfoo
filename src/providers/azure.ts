@@ -573,14 +573,22 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // Add support for structured outputs via response_format
     const responseFormat = config.response_format
       ? {
-          response_format: {
-            type: config.response_format.type,
-            json_schema: {
-              name: config.response_format.json_schema.name,
-              schema: config.response_format.json_schema.schema,
-              strict: config.response_format.json_schema.strict,
-            },
-          },
+          response_format: maybeLoadFromExternalFile(
+            renderVarsInObject(
+              {
+                type: config.response_format.type,
+                json_schema:
+                  config.response_format.type === 'json_schema'
+                    ? {
+                        name: config.response_format.json_schema.name,
+                        schema: config.response_format.json_schema.schema,
+                        strict: config.response_format.json_schema.strict,
+                      }
+                    : undefined,
+              },
+              context?.vars,
+            ),
+          ),
         }
       : {};
 
@@ -643,24 +651,26 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             this.deploymentName
           }/chat/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`;
 
-      // Make the fetch request directly to handle non-JSON responses
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...this.authHeaders,
+      // Restore caching while keeping better error handling
+      const { response, cached: isCached } = await fetchWithCache(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.authHeaders,
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+        REQUEST_TIMEOUT_MS,
+      );
 
-      // Get the raw text first
+      cached = isCached;
       const responseText = await response.text();
 
-      // Try to parse as JSON if possible
       try {
         data = JSON.parse(responseText);
       } catch (parseError) {
-        // If it's not JSON, return the raw text in the error
         return {
           error: `API returned non-JSON response (status ${response.status}): ${responseText}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
         };
@@ -688,7 +698,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
       // Handle structured output
       let output = message.content;
-      if (this.config.response_format?.type === 'json_schema' && typeof output === 'string') {
+      if (output == null) {
+        // Restore tool_calls and function_call handling
+        output = message.tool_calls ?? message.function_call;
+      } else if (
+        this.config.response_format?.type === 'json_schema' &&
+        typeof output === 'string'
+      ) {
         try {
           output = JSON.parse(output);
         } catch (err) {
