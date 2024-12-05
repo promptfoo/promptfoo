@@ -40,8 +40,69 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   const theme = useTheme();
 
   return (
-    <Box mt={4}>
-      <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+    <Box>
+      {requiresTransformResponse(selectedTarget) && (
+        <Box>
+          <Typography variant="h6" gutterBottom>
+            Configure Response Parser
+          </Typography>
+          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+            <TextField
+              fullWidth
+              label="Response Parser"
+              value={selectedTarget.config.transformResponse}
+              placeholder="Optional: A JavaScript expression to parse the response. E.g. json.choices[0].message.content"
+              onChange={(e) => updateCustomTarget('transformResponse', e.target.value)}
+              margin="normal"
+              InputLabelProps={{
+                shrink: true,
+              }}
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Optionally, configure a response parser to extract a specific part of the HTTP
+              response. See{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
+                target="_blank"
+              >
+                docs
+              </a>{' '}
+              for more information.
+            </Typography>
+          </Box>
+          <Box mt={4}>
+            <Typography variant="h6" gutterBottom>
+              Configure Session Header
+            </Typography>
+            <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+              <TextField
+                fullWidth
+                label="Session Header"
+                value={selectedTarget.config.sessionParser}
+                placeholder="Optional: Enter the name of the header that contains the session ID"
+                onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
+                margin="normal"
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Optionally, configure a session parser to extract the session ID from the HTTP
+                response headers. This is only needed for stateful systems. See{' '}
+                <a
+                  href="https://www.promptfoo.dev/docs/providers/http/#session-management"
+                  target="_blank"
+                >
+                  docs
+                </a>{' '}
+                for more information.
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      <Stack direction="row" alignItems="center" spacing={2} my={4}>
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           Test Target Configuration
         </Typography>
@@ -160,7 +221,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     wordBreak: 'break-word',
                   }}
                 >
-                  {testResult.providerResponse?.sessionId}
+                  {testResult.providerResponse?.sessionId || '(No session ID found)'}
                 </pre>
               </Paper>
             </AccordionDetails>
@@ -190,53 +251,6 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               </Paper>
             </Box>
           )}
-        </Box>
-      )}
-
-      {requiresTransformResponse(selectedTarget) && (
-        <Box mt={4}>
-          <Typography variant="h6" gutterBottom>
-            Configure Response Parser
-          </Typography>
-          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-            <TextField
-              fullWidth
-              label="Response Parser"
-              value={selectedTarget.config.transformResponse}
-              placeholder="Optional: A JavaScript expression to parse the response. E.g. json.choices[0].message.content"
-              onChange={(e) => updateCustomTarget('transformResponse', e.target.value)}
-              margin="normal"
-              InputLabelProps={{
-                shrink: true,
-              }}
-            />
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Based on the test response above, configure how to extract the relevant content from
-              the response.
-            </Typography>
-          </Box>
-          <Box mt={4}>
-            <Typography variant="h6" gutterBottom>
-              Configure Session Parser
-            </Typography>
-            <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-              <TextField
-                fullWidth
-                label="Session Parser"
-                value={selectedTarget.config.sessionParser}
-                placeholder="Optional: Enter the name of the header that contains the session ID"
-                onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
-                margin="normal"
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Based on the test response above, configure how to extract the session ID from the
-                headers. This is only needed for stateful systems.
-              </Typography>
-            </Box>
-          </Box>
         </Box>
       )}
     </Box>
