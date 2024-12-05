@@ -269,12 +269,6 @@ export async function synthesize({
   if (strategies.length > 0) {
     const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
 
-    console.log(
-      `Strategies: ${strategies.length} totalPluginTests: ${totalPluginTests} ${
-        Object.keys(multilingualStrategy?.config?.languages ?? {}).length ||
-        DEFAULT_LANGUAGES.length
-      } multilingualStrategy: ${multilingualStrategy?.config?.languages}`,
-    );
     logger.info(
       `Using strategies:\n\n${chalk.yellow(
         strategies
