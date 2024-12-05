@@ -139,14 +139,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
 > = {
   'owasp:llm:01': {
     // Prompt Injection
-    plugins: [
-      'ascii-smuggling',
-      'indirect-prompt-injection',
-      'prompt-extraction',
-      'harmful',
-      'harmful:privacy',
-      'harmful:intellectual-property',
-    ],
+    plugins: ['ascii-smuggling', 'indirect-prompt-injection', 'prompt-extraction', 'harmful'],
     strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:02': {
