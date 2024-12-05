@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
+import logger from '../../src/logger';
 import {
   createTransformRequest,
   createTransformResponse,
@@ -725,7 +726,7 @@ describe('HttpProvider', () => {
     });
 
     await expect(provider.callApi('test prompt')).rejects.toThrow(
-      'Content-Type is not application/json, but body is an object or array',
+      'Expected body to be a string when content type is not application/json',
     );
   });
 
@@ -1143,5 +1144,195 @@ describe('determineRequestBody', () => {
     });
 
     expect(result).toEqual(['static', 'test prompt']);
+  });
+});
+
+describe('HttpProvider content type validation', () => {
+  const mockUrl = 'http://example.com/api';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should validate content type and body after request transformation', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain' },
+        body: 'initial body',
+        transformRequest: (prompt: string) => ({ transformed: prompt }),
+      },
+    });
+
+    jest
+      .mocked(fetchWithCache)
+      .mockRejectedValueOnce(
+        new Error('Content-Type is not application/json, but body is an object or array'),
+      );
+
+    const result = await provider.callApi('test prompt');
+    expect(result).toEqual({
+      error:
+        'HTTP call error: Error: Content-Type is not application/json, but body is an object or array',
+    });
+  });
+
+  it('should not throw when content type matches transformed body type', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { initial: 'value' },
+        transformRequest: (prompt: string) => ({ transformed: prompt }),
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ initial: 'value' }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+    );
+  });
+
+  it('should include debug information and response status in response when debug is true', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 201,
+      statusText: 'Created',
+      cached: false,
+      headers: { 'x-custom': 'test' },
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test prompt', {
+      debug: true,
+      vars: {},
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result).toEqual({
+      output: { result: 'success' },
+      raw: JSON.stringify({ result: 'success' }),
+      metadata: {
+        headers: { 'x-custom': 'test' },
+      },
+    });
+  });
+
+  it('should not warn when content-type is application/json and body is string if body is rendered to JSON', async () => {
+    const mockWarn = jest.spyOn(logger, 'warn');
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{{prompt}}',
+        transformRequest: (prompt: string) => ({ messages: [{ role: 'user', content: prompt }] }),
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: 'test prompt' }] }),
+      },
+      expect.any(Number),
+      'text',
+      undefined,
+    );
+    expect(mockWarn).not.toHaveBeenCalled();
+  });
+
+  it('should handle transformed request body with content type validation', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { original: 'value' },
+        // ignored because body is not {{ var }}
+        transformRequest: (prompt: string) => ({ transformed: prompt, merged: true }),
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          original: 'value',
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+    );
+  });
+
+  it('should warn but not throw when content-type is application/json and body is string', async () => {
+    const mockWarn = jest.spyOn(logger, 'warn');
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: 'string body',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.stringContaining('Content-Type is application/json, but body is a string'),
+    );
   });
 });

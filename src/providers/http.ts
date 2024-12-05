@@ -382,10 +382,9 @@ export class HttpProvider implements ApiProvider {
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
-
     const body = determineRequestBody(
       contentTypeIsJson(headers),
-      transformedPrompt,
+      typeof transformedPrompt === 'object' ? JSON.stringify(transformedPrompt) : transformedPrompt,
       this.config.body,
       vars,
     );
