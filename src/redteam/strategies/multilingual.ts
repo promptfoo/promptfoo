@@ -143,11 +143,17 @@ export async function addMultilingual(
         ...testCase,
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/Multilingual-${lang.toUpperCase()}`,
+          metric: assertion.type?.startsWith('promptfoo:redteam:')
+            ? `${assertion.type?.split(':').pop() || assertion.metric}/Multilingual-${lang.toUpperCase()}`
+            : assertion.metric,
         })),
         vars: {
           ...testCase.vars,
           [injectVar]: translatedText,
+        },
+        metadata: {
+          ...testCase.metadata,
+          ...(testCase.metadata?.harmCategory && { harmCategory: testCase.metadata.harmCategory }),
         },
       });
 
