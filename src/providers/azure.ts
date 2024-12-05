@@ -65,7 +65,22 @@ interface AzureCompletionOptions {
     };
   }[];
   tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
-  response_format?: { type: 'json_object' };
+  response_format?:
+    | { type: 'json_object' }
+    | {
+        type: 'json_schema';
+        json_schema: {
+          name: string;
+          strict: boolean;
+          schema: {
+            type: 'object';
+            properties: Record<string, any>;
+            required?: string[];
+            additionalProperties: false;
+            $defs?: Record<string, any>;
+          };
+        };
+      };
   stop?: string[];
   seed?: number;
 
@@ -555,6 +570,20 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
 
+    // Add support for structured outputs via response_format
+    const responseFormat = config.response_format
+      ? {
+          response_format: {
+            type: config.response_format.type,
+            json_schema: {
+              name: config.response_format.json_schema.name,
+              schema: config.response_format.json_schema.schema,
+              strict: config.response_format.json_schema.strict,
+            },
+          },
+        }
+      : {};
+
     const body = {
       model: this.deploymentName,
       messages,
@@ -578,19 +607,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
       ...(config.dataSources ? { dataSources: config.dataSources } : {}),
-      ...(config.response_format
-        ? {
-            response_format: maybeLoadFromExternalFile(
-              renderVarsInObject(config.response_format, context?.vars),
-            ),
-          }
-        : {}),
+      ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
       ...(config.passthrough || {}),
     };
 
-    return body;
+    return { body, config };
   }
 
   async callApi(
@@ -605,7 +628,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throwConfigurationError('Azure API host must be set.');
     }
 
-    const body = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;
@@ -620,21 +643,31 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             this.deploymentName
           }/chat/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`;
 
-      ({ data, cached } = (await fetchWithCache(
-        url,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...this.authHeaders,
-          },
-          body: JSON.stringify(body),
+      // Make the fetch request directly to handle non-JSON responses
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.authHeaders,
         },
-        REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
+        body: JSON.stringify(body),
+      });
+
+      // Get the raw text first
+      const responseText = await response.text();
+
+      // Try to parse as JSON if possible
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        // If it's not JSON, return the raw text in the error
+        return {
+          error: `API returned non-JSON response (status ${response.status}): ${responseText}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
+        };
+      }
     } catch (err) {
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
 
@@ -652,15 +685,21 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               choice.message.role === 'assistant',
           )?.message
         : data.choices[0].message;
-      const output =
-        message.content == null
-          ? message.tool_calls == null
-            ? message.function_call
-            : message.tool_calls
-          : message.content;
+
+      // Handle structured output
+      let output = message.content;
+      if (this.config.response_format?.type === 'json_schema' && typeof output === 'string') {
+        try {
+          output = JSON.parse(output);
+        } catch (err) {
+          logger.error(`Failed to parse JSON output: ${err}`);
+        }
+      }
+
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
+
       return {
         output,
         tokenUsage: cached
