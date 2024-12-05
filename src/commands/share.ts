@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
+import dedent from 'dedent';
 import readline from 'readline';
 import invariant from 'tiny-invariant';
 import { URL } from 'url';
@@ -56,9 +57,11 @@ export function shareCommand(program: Command) {
         if (eval_.prompts.length === 0) {
           // FIXME(ian): Handle this on the server side.
           logger.error(
-            `Eval ${eval_.id} is still running or did not complete successfully, so it cannot be shared.
-            
-            If your eval is still running, wait for it to complete and try again.`,
+            dedent`
+              Eval ${chalk.bold(eval_.id)} cannot be shared.
+              This may be because the eval is still running or because it did not complete successfully.
+              If your eval is still running, wait for it to complete and try again.
+            `,
           );
           process.exitCode = 1;
           return;
