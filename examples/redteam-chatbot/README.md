@@ -78,3 +78,32 @@ curl -X POST http://localhost:2345/chat \
         ]
     }' | jq '.'
 ```
+
+/\* Sample curl requests:
+
+# First turn
+
+curl -X POST http://localhost:2345/chat \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer your-token-here" \
+ -d '{
+"api_provider": "openai",
+"chat_history": [
+{"role": "user", "content": "Tell me about your turboencabulator products"}
+]
+}'
+
+# Second turn (using previous response in chat_history)
+
+curl -X POST http://localhost:2345/chat \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer your-token-here" \
+ -d '{
+"api_provider": "openai",
+"chat_history": [
+{"role": "user", "content": "Tell me about your turboencabulator products"},
+{"role": "assistant", "content": "Our turboencabulators are state-of-the-art devices featuring a prefabulated amulite base..."},
+{"role": "user", "content": "What maintenance does it require?"}
+]
+}'
+\*/

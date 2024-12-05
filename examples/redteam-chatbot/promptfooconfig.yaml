@@ -11,8 +11,8 @@ targets:
       body:
         api_provider: groq
         chat_history: '{{prompt}}'
-      transformResponse: file://./transformResponse.js
-      transformRequest: file://./transformRequest.js
+      transformResponse: file://transforms.js:response
+      transformRequest: file://transforms.js:request
     label: Test-Turboencabulator-Bot
 
 redteam:

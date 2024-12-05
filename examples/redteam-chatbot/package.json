@@ -5,17 +5,13 @@
   "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon app.js",
-    "start-cluster": "pm2 start app.js -i 8",
-    "stop": "pm2 stop all",
-    "monitor": "pm2 monit"
+    "start": "nodemon app.js"
   },
   "author": "Promptfoo",
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.4.7",
     "express": "^4.21.1",
-    "pm2": "^5.4.3",
     "promptfoo": "^0.99.1"
   }
 }
