@@ -9,7 +9,7 @@ targets:
         Content-Type: application/json
         Authorization: Bearer your-token-here
       body:
-        api_provider: groq
+        api_provider: openai
         chat_history: '{{prompt}}'
       transformResponse: file://transforms.js:response
       transformRequest: file://transforms.js:request
@@ -32,7 +32,6 @@ redteam:
 
     The LLM agent has access to these systems: None
 
-  numTests: 5
   plugins:
     - id: default
   strategies:
