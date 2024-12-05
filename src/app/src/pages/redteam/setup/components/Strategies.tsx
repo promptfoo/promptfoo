@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { Alert, Paper, Box, Typography, Chip } from '@mui/material';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import { useTheme } from '@mui/material/styles';
@@ -21,6 +23,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import StrategyConfigDialog from './StrategyConfigDialog';
 
 interface StrategiesProps {
   onNext: () => void;
@@ -37,6 +40,9 @@ const getStrategyId = (strategy: RedteamStrategy): string => {
   return typeof strategy === 'string' ? strategy : strategy.id;
 };
 
+// Add this constant at the top of the file to track which strategies have config options
+const CONFIGURABLE_STRATEGIES = ['multilingual'] as const;
+
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
@@ -49,6 +55,17 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       ) as RedteamStrategy[],
   );
   const [isStateless, setIsStateless] = useState<boolean>(true);
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [selectedConfigStrategy, setSelectedConfigStrategy] = useState<string | null>(null);
+  const [strategyConfig, setStrategyConfig] = useState<Record<string, any>>(() => {
+    const initialConfig: Record<string, any> = {};
+    config.strategies.forEach((strategy) => {
+      if (typeof strategy === 'object' && strategy.config) {
+        initialConfig[strategy.id] = strategy.config;
+      }
+    });
+    return initialConfig;
+  });
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
@@ -81,10 +98,43 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       });
     }
 
+    setSelectedStrategies((prev) => {
+      if (prev.some((strategy) => getStrategyId(strategy) === strategyId)) {
+        // Remove strategy
+        return prev.filter((strategy) => getStrategyId(strategy) !== strategyId);
+      } else {
+        // Add strategy with any existing config
+        const config = strategyConfig[strategyId];
+        const newStrategy: RedteamStrategy = config
+          ? { id: strategyId, config }
+          : { id: strategyId };
+        return [...prev, newStrategy];
+      }
+    });
+  };
+
+  const handleConfigClick = (strategyId: string) => {
+    setSelectedConfigStrategy(strategyId);
+    setConfigDialogOpen(true);
+  };
+
+  const updateStrategyConfig = (strategyId: string, newConfig: Record<string, any>) => {
+    setStrategyConfig((prev) => ({
+      ...prev,
+      [strategyId]: newConfig,
+    }));
+
     setSelectedStrategies((prev) =>
-      prev.some((strategy) => getStrategyId(strategy) === strategyId)
-        ? prev.filter((strategy) => getStrategyId(strategy) !== strategyId)
-        : [...prev, { id: strategyId }],
+      prev.map((strategy) => {
+        const id = getStrategyId(strategy);
+        if (id === strategyId) {
+          return {
+            id: strategyId,
+            config: { ...newConfig }, // Make sure to spread the config to create a new object
+          };
+        }
+        return strategy;
+      }),
     );
   };
 
@@ -140,8 +190,39 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                 }
                 label={
                   <Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        position: 'relative',
+                        pr: 4, // Add padding to the right to make room for the icon
+                      }}
+                    >
                       <Typography variant="subtitle1">{strategy.name}</Typography>
+                      {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
+                        CONFIGURABLE_STRATEGIES.includes(
+                          strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
+                        ) && (
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConfigClick(strategy.id);
+                            }}
+                            sx={{
+                              position: 'absolute',
+                              right: 0,
+                              opacity: 0.6,
+                              '&:hover': {
+                                opacity: 1,
+                                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                              },
+                            }}
+                          >
+                            <SettingsOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        )}
                       {DEFAULT_STRATEGIES.includes(
                         strategy.id as (typeof DEFAULT_STRATEGIES)[number],
                       ) && <Chip label="Recommended" size="small" color="default" />}
@@ -236,6 +317,19 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           Next
         </Button>
       </Box>
+
+      <StrategyConfigDialog
+        open={configDialogOpen}
+        strategy={selectedConfigStrategy}
+        config={selectedConfigStrategy ? strategyConfig[selectedConfigStrategy] || {} : {}}
+        onClose={() => {
+          setConfigDialogOpen(false);
+          setSelectedConfigStrategy(null);
+        }}
+        onSave={(strategy: string, newConfig: Record<string, any>) => {
+          updateStrategyConfig(strategy, newConfig);
+        }}
+      />
     </Box>
   );
 }
