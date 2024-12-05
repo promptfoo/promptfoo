@@ -8,7 +8,9 @@ targets:
       headers:
         Content-Type: application/json
         Authorization: Bearer your-token-here
-      body: '{{prompt}}'
+      body:
+        api_provider: groq
+        chat_history: '{{prompt}}'
       transformResponse: file://./transformResponse.js
       transformRequest: file://./transformRequest.js
     label: Test-Turboencabulator-Bot
@@ -30,7 +32,7 @@ redteam:
 
     The LLM agent has access to these systems: None
 
-  numTests: 1
+  numTests: 5
   plugins:
     - id: default
   strategies:

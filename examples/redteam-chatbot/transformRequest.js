@@ -1,33 +1,11 @@
 module.exports = (prompt) => {
-  if (typeof prompt === 'string') {
-    try {
-      const messages = JSON.parse(prompt);
-      if (Array.isArray(messages)) {
-        if (
-          !messages.every(
-            (message) =>
-              message.role &&
-              message.content &&
-              typeof message.content === 'string' &&
-              typeof message.role === 'string',
-          )
-        ) {
-          throw new Error(`Invalid chat history: ${JSON.stringify(messages)}`);
-        }
-        return {
-          api_provider: 'groq',
-          chat_history: messages,
-        };
-      }
-    } catch {}
+  // Most plugins return a string which we need to convert to OpenAI format.
+  // Multi-turn strategies like GOAT and Crescendo return the entire chat
+  // history in OpenAI format. We can just return the string as is.
+  try {
+    JSON.parse(prompt); // Throws error if prompt is not valid JSON
+    return prompt;
+  } catch {
+    return JSON.stringify([{ role: 'user', content: prompt }]);
   }
-  return {
-    api_provider: 'groq',
-    chat_history: [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-  };
 };
