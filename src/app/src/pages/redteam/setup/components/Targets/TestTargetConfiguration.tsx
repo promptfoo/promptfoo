@@ -41,6 +41,52 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 
   return (
     <Box mt={4}>
+      {requiresTransformResponse(selectedTarget) && (
+        <Box>
+          <Typography variant="h6" gutterBottom>
+            Configure Response Parser
+          </Typography>
+          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+            <TextField
+              fullWidth
+              label="Response Parser"
+              value={selectedTarget.config.transformResponse}
+              placeholder="Optional: A JavaScript expression to parse the response. E.g. json.choices[0].message.content"
+              onChange={(e) => updateCustomTarget('transformResponse', e.target.value)}
+              margin="normal"
+              InputLabelProps={{
+                shrink: true,
+              }}
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Based on the test response above, configure how to extract the relevant content from
+              the response.
+            </Typography>
+          </Box>
+          <Box mt={4} mb={2}>
+            <Typography variant="h6" gutterBottom>
+              Configure Session Parser
+            </Typography>
+            <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+              <TextField
+                fullWidth
+                label="Session Parser"
+                value={selectedTarget.config.sessionParser}
+                placeholder="Optional: Enter the name of the header that contains the session ID"
+                onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
+                margin="normal"
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Based on the test response above, configure how to extract the session ID from the
+                headers. This is only needed for stateful systems.
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+      )}
       <Stack direction="row" alignItems="center" spacing={2} mb={2}>
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           Test Target Configuration
@@ -65,6 +111,31 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
       {testResult && (
         <Box mt={2}>
           <Alert severity={testResult.success ? 'success' : 'error'}>{testResult.message}</Alert>
+          {testResult.suggestions && (
+            <Box mt={2}>
+              <Typography variant="subtitle1" gutterBottom>
+                Suggestions:
+              </Typography>
+              <Paper
+                elevation={1}
+                sx={{
+                  p: 2,
+                  bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                }}
+              >
+                <List>
+                  {testResult.suggestions.map((suggestion: string, index: number) => (
+                    <ListItem key={index}>
+                      <ListItemIcon>
+                        <InfoIcon color="primary" />
+                      </ListItemIcon>
+                      <ListItemText primary={suggestion} />
+                    </ListItem>
+                  ))}
+                </List>
+              </Paper>
+            </Box>
+          )}
           <Accordion sx={{ mt: 2 }} expanded>
             <AccordionSummary
               expandIcon={<ExpandMoreIcon />}
@@ -165,78 +236,6 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               </Paper>
             </AccordionDetails>
           </Accordion>
-          {testResult.suggestions && (
-            <Box mt={2}>
-              <Typography variant="subtitle1" gutterBottom>
-                Suggestions:
-              </Typography>
-              <Paper
-                elevation={1}
-                sx={{
-                  p: 2,
-                  bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
-                }}
-              >
-                <List>
-                  {testResult.suggestions.map((suggestion: string, index: number) => (
-                    <ListItem key={index}>
-                      <ListItemIcon>
-                        <InfoIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText primary={suggestion} />
-                    </ListItem>
-                  ))}
-                </List>
-              </Paper>
-            </Box>
-          )}
-        </Box>
-      )}
-
-      {requiresTransformResponse(selectedTarget) && (
-        <Box mt={4}>
-          <Typography variant="h6" gutterBottom>
-            Configure Response Parser
-          </Typography>
-          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-            <TextField
-              fullWidth
-              label="Response Parser"
-              value={selectedTarget.config.transformResponse}
-              placeholder="Optional: A JavaScript expression to parse the response. E.g. json.choices[0].message.content"
-              onChange={(e) => updateCustomTarget('transformResponse', e.target.value)}
-              margin="normal"
-              InputLabelProps={{
-                shrink: true,
-              }}
-            />
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Based on the test response above, configure how to extract the relevant content from
-              the response.
-            </Typography>
-          </Box>
-          <Box mt={4}>
-            <Typography variant="h6" gutterBottom>
-              Configure Session Parser
-            </Typography>
-            <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-              <TextField
-                fullWidth
-                label="Session Parser"
-                value={selectedTarget.config.sessionParser}
-                placeholder="Optional: Enter the name of the header that contains the session ID"
-                onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
-                margin="normal"
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Based on the test response above, configure how to extract the session ID from the
-                headers. This is only needed for stateful systems.
-              </Typography>
-            </Box>
-          </Box>
         </Box>
       )}
     </Box>
