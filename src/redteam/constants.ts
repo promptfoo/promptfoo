@@ -138,31 +138,101 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
   { plugins: Plugin[]; strategies: Strategy[] }
 > = {
   'owasp:llm:01': {
-    plugins: ['harmful'],
-    strategies: ['jailbreak', 'prompt-injection'],
+    // Prompt Injection
+    plugins: [
+      'ascii-smuggling',
+      'indirect-prompt-injection',
+      'prompt-extraction',
+      'harmful',
+      'harmful:privacy',
+      'harmful:intellectual-property',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:02': {
-    plugins: ['harmful', 'overreliance'],
-    strategies: [],
+    // Sensitive Information Disclosure
+    plugins: [
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'harmful:privacy',
+      'cross-session-leak',
+      'prompt-extraction',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:03': {
-    plugins: ['harmful', 'hallucination', 'overreliance'],
+    // Supply Chain
+    plugins: [],
     strategies: [],
   },
-  'owasp:llm:06': {
-    plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
+  'owasp:llm:04': {
+    // Data and Model Poisoning
+    plugins: [
+      'harmful:misinformation-disinformation',
+      'harmful:hate',
+      'harmful:radicalization',
+      'harmful:specialized-advice',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+  },
+  'owasp:llm:05': {
+    // Improper Output Handling
+    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
+  'owasp:llm:06': {
+    // Excessive Agency
+    plugins: [
+      'excessive-agency',
+      'rbac',
+      'bfla',
+      'bola',
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+  },
   'owasp:llm:07': {
-    plugins: ['bfla', 'bola', 'debug-access', 'rbac', 'shell-injection', 'sql-injection'],
-    strategies: [],
+    // System Prompt Leakage
+    plugins: [
+      'prompt-extraction',
+      'rbac',
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:08': {
-    plugins: ['excessive-agency', 'rbac'],
-    strategies: [],
+    // Vector and Embedding Weaknesses
+    plugins: [
+      'cross-session-leak',
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:09': {
-    plugins: ['hallucination', 'overreliance'],
+    // Misinformation
+    plugins: [
+      'hallucination',
+      'overreliance',
+      'harmful:misinformation-disinformation',
+      'harmful:specialized-advice',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+  },
+  'owasp:llm:10': {
+    // Unbounded Consumption
+    plugins: ['excessive-agency', 'overreliance'],
     strategies: [],
   },
 };
