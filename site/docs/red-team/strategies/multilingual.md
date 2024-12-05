@@ -17,20 +17,42 @@ strategies:
 
 By default, the strategy will translate the input into the following "low-resource" languages (see [background](#background) for more details):
 
-- Bengali (bn)
-- Swahili (sw)
-- Javanese (jv)
+- Bengali (`bn`)
+- Swahili (`sw`)
+- Javanese (`jv`)
 
-You can override this by specifying the `languages` option in the strategy:
+You can override this by specifying the `languages` option in the strategy. Use ISO 639-1 two-letter language codes:
 
 ```yaml
 strategies:
   - id: multilingual
     config:
       languages:
+<<<<<<< Updated upstream
         - fr-FR # French
         - zh-CN # Chinese
+=======
+        - fr  # French
+        - zh  # Chinese
+        - de  # German
+>>>>>>> Stashed changes
 ```
+
+## Language Codes
+
+The strategy expects ISO 639-1 two-letter language codes (e.g., 'fr' for French, 'zh' for Chinese). Some common examples:
+
+- `en` - English
+- `es` - Spanish
+- `fr` - French
+- `de` - German
+- `it` - Italian
+- `ja` - Japanese
+- `ko` - Korean
+- `ru` - Russian
+- `ar` - Arabic
+
+For a complete list of ISO 639-1 codes, you can refer to the [ISO 639-1 Language Codes](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) reference.
 
 ## Background
 
