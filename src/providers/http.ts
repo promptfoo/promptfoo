@@ -441,8 +441,7 @@ export class HttpProvider implements ApiProvider {
         error: `HTTP call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tHTTP response status: ${response.status}`);
-    logger.debug(`\tHTTP response: ${response.data}`);
+    logger.debug(`\tHTTP response status: ${response.status}, response: ${response.data}`);
     const ret: ProviderResponse = {};
     if (context?.debug) {
       ret.raw = response.data;
