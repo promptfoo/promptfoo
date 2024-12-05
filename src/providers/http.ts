@@ -1,4 +1,5 @@
 import httpZ from 'http-z';
+import jsonpath from 'jsonpath-plus';
 import path from 'path';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
@@ -103,29 +104,36 @@ export async function createTransformResponse(
       }
     };
   }
-  if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = parser.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
+  if (typeof parser === 'string') {
+    if (parser.startsWith('file://')) {
+      let filename = parser.slice('file://'.length);
+      let functionName: string | undefined;
+      if (filename.includes(':')) {
+        const splits = filename.split(':');
+        if (splits[0] && isJavascriptFile(splits[0])) {
+          [filename, functionName] = splits;
+        }
       }
+      const requiredModule = await importModule(
+        path.resolve(cliState.basePath || '', filename),
+        functionName,
+      );
+      if (typeof requiredModule === 'function') {
+        return requiredModule;
+      }
+      throw new Error(
+        `Response parser malformed: ${filename} must export a function or have a default export as a function`,
+      );
+    } else if (parser.startsWith('$') || parser.startsWith('$.')) {
+      // Handle JSONPath expression
+      return (data, text) => ({
+        output: jsonpath.JSONPath({ path: parser, json: data })[0],
+      });
+    } else {
+      return (data, text) => ({
+        output: new Function('json', 'text', `return ${parser}`)(data, text),
+      });
     }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return requiredModule;
-    }
-    throw new Error(
-      `Response parser malformed: ${filename} must export a function or have a default export as a function`,
-    );
-  } else if (typeof parser === 'string') {
-    return (data, text) => ({
-      output: new Function('json', 'text', `return ${parser}`)(data, text),
-    });
   }
   throw new Error(
     `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
