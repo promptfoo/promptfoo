@@ -64,7 +64,7 @@ const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean 
   }
 };
 
-const requiresResponseParser = (target: ProviderOptions) => {
+const requiresTransformResponse = (target: ProviderOptions) => {
   return target.id === 'http' || target.id === 'websocket';
 };
 
@@ -174,7 +174,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           type: 'websocket',
           url: 'wss://example.com/ws',
           messageTemplate: '{"message": "{{prompt}}"}',
-          responseParser: 'response.message',
+          transformResponse: 'response.message',
           timeoutMs: 30000,
         },
       });
@@ -499,7 +499,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           handleTestTarget={handleTestTarget}
           selectedTarget={selectedTarget}
           testResult={testResult}
-          requiresResponseParser={requiresResponseParser}
+          requiresTransformResponse={requiresTransformResponse}
           updateCustomTarget={updateCustomTarget}
           hasTestedTarget={hasTestedTarget}
         />

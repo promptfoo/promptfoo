@@ -40,7 +40,7 @@ providers:
           args:
             selector: '#results'
           name: searchResults
-      responseParser: 'data.searchResults'
+      transformResponse: 'data.searchResults'
 ```
 
 ## Supported Actions
@@ -97,7 +97,7 @@ Special characters can be sent using the following placeholders:
 
 ## Response Parsing
 
-Use the `responseParser` config option to extract specific data from the results. The parser receives an object with two properties:
+Use the `transformResponse` config option to extract specific data from the results. The parser receives an object with two properties:
 
 - `extracted`: An object containing named results from `extract` actions
 - `finalHtml`: The final HTML content of the page after all actions are completed
@@ -118,7 +118,7 @@ providers:
           args:
             selector: '#first-result'
           name: topResult
-      responseParser: 'extracted.topResult'
+      transformResponse: 'extracted.topResult'
 
 tests:
   - vars:
@@ -141,7 +141,7 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
         { action: 'click', args: { selector: '#submit' } },
         { action: 'extract', args: { selector: '#results' }, name: 'searchResults' }
       ],
-      responseParser: (extracted, finalHtml) => extracted.searchResults,
+      transformResponse: (extracted, finalHtml) => extracted.searchResults,
     }
   }],
 }
@@ -151,13 +151,13 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 
 Supported config options:
 
-| Option         | Type                                                                             | Description                                                                                                                                                                  |
-| -------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| headless       | `boolean`                                                                        | Whether to run the browser in headless mode. Defaults to `true`.                                                                                                             |
-| cookies        | `string` \| `{ name: string; value: string; domain?: string; path?: string; }[]` | A string or array of cookies to set on the browser                                                                                                                           |
-| responseParser | `string` \| `Function`                                                           | A function or string representation of a function to parse the response. Receives an object with `extracted` and `finalHtml` parameters and should return a ProviderResponse |
-| steps          | `BrowserAction[]`                                                                | An array of actions to perform in the browser                                                                                                                                |
-| timeoutMs      | `number`                                                                         | The maximum time in milliseconds to wait for the browser operations to complete                                                                                              |
+| Option            | Type                                                                             | Description                                                                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| headless          | `boolean`                                                                        | Whether to run the browser in headless mode. Defaults to `true`.                                                                                                             |
+| cookies           | `string` \| `{ name: string; value: string; domain?: string; path?: string; }[]` | A string or array of cookies to set on the browser                                                                                                                           |
+| transformResponse | `string` \| `Function`                                                           | A function or string representation of a function to parse the response. Receives an object with `extracted` and `finalHtml` parameters and should return a ProviderResponse |
+| steps             | `BrowserAction[]`                                                                | An array of actions to perform in the browser                                                                                                                                |
+| timeoutMs         | `number`                                                                         | The maximum time in milliseconds to wait for the browser operations to complete                                                                                              |
 
 Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
@@ -227,7 +227,7 @@ providers:
           args:
             selector: 'div.stChatMessage:last-of-type'
           name: response
-      responseParser: 'extracted.response'
+      transformResponse: 'extracted.response'
 ```
 
 ## Troubleshooting
