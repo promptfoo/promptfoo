@@ -59,18 +59,25 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               }}
             />
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Based on the test response above, configure how to extract the relevant content from
-              the response.
+              Optionally, configure a response parser to extract a specific part of the HTTP
+              response. See{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
+                target="_blank"
+              >
+                docs
+              </a>{' '}
+              for more information.
             </Typography>
           </Box>
           <Box mt={4} mb={2}>
             <Typography variant="h6" gutterBottom>
-              Configure Session Parser
+              Configure Session Header
             </Typography>
             <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
               <TextField
                 fullWidth
-                label="Session Parser"
+                label="Session Header"
                 value={selectedTarget.config.sessionParser}
                 placeholder="Optional: Enter the name of the header that contains the session ID"
                 onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
@@ -80,8 +87,15 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 }}
               />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Based on the test response above, configure how to extract the session ID from the
-                headers. This is only needed for stateful systems.
+                Optionally, configure a session parser to extract the session ID from the HTTP
+                response headers. This is only needed for stateful systems. See{' '}
+                <a
+                  href="https://www.promptfoo.dev/docs/providers/http/#session-management"
+                  target="_blank"
+                >
+                  docs
+                </a>{' '}
+                for more information.
               </Typography>
             </Box>
           </Box>

@@ -1,4 +1,5 @@
 import React from 'react';
+import Editor from 'react-simple-code-editor';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
@@ -9,9 +10,13 @@ import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
-import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
+// @ts-expect-error: No types available
+import { highlight, languages } from 'prismjs/components/prism-core';
+import 'prismjs/components/prism-json';
 import type { ProviderOptions } from '../../types';
+import 'prismjs/themes/prism.css';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -40,6 +45,9 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   isJsonContentType,
 }) => {
+  const theme = useTheme();
+  const darkMode = theme.palette.mode === 'dark';
+
   return (
     <Box mt={2}>
       <Typography variant="h6" gutterBottom>
@@ -101,24 +109,41 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
           Add Header
         </Button>
 
-        <TextField
-          fullWidth
-          label="Request body"
-          value={requestBody}
-          error={!!bodyError}
-          helperText={bodyError}
-          onChange={(e) => {
-            setRequestBody(e.target.value);
-            updateCustomTarget('body', e.target.value);
+        <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+          Request Body
+        </Typography>
+        <Box
+          sx={{
+            border: 1,
+            borderColor: bodyError ? 'error.main' : 'grey.300',
+            borderRadius: 1,
+            mt: 1,
+            position: 'relative',
+            backgroundColor: darkMode ? '#1e1e1e' : '#fff',
           }}
-          margin="normal"
-          multiline
-          minRows={1}
-          maxRows={10}
-          InputProps={{
-            inputComponent: TextareaAutosize,
-          }}
-        />
+        >
+          <Editor
+            value={requestBody}
+            onValueChange={(code) => {
+              setRequestBody(code);
+              updateCustomTarget('body', code);
+            }}
+            highlight={(code) =>
+              highlight(code, isJsonContentType ? languages.json : languages.text)
+            }
+            padding={10}
+            style={{
+              fontFamily: '"Fira code", "Fira Mono", monospace',
+              fontSize: 14,
+              minHeight: '100px',
+            }}
+          />
+        </Box>
+        {bodyError && (
+          <Typography color="error" variant="caption" sx={{ mt: 0.5 }}>
+            {bodyError}
+          </Typography>
+        )}
       </Box>
     </Box>
   );
