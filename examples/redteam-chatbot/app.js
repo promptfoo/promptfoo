@@ -1,85 +1,101 @@
-require('dotenv').config();
+require('dotenv').config({ path: '../../.env' });
 const express = require('express');
-const OpenAI = require('openai');
-const logger = require('pino')(); // Using pino for logging
+const { providers } = require('promptfoo');
+
+/* Sample curl requests:
+
+# First turn
+curl -X POST http://localhost:2345/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-token-here" \
+  -d '{
+    "api_provider": "openai",
+    "chat_history": [
+      {"role": "user", "content": "Tell me about your turboencabulator products"}
+    ]
+  }'
+
+# Second turn (using previous response in chat_history)
+curl -X POST http://localhost:2345/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-token-here" \
+  -d '{
+    "api_provider": "openai",
+    "chat_history": [
+      {"role": "user", "content": "Tell me about your turboencabulator products"},
+      {"role": "assistant", "content": "Our turboencabulators are state-of-the-art devices featuring a prefabulated amulite base..."},
+      {"role": "user", "content": "What maintenance does it require?"}
+    ]
+  }'
+*/
 
 const app = express();
 app.use(express.json());
 
-// Initialize OpenAI client
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+console.info('OpenAI client initialized');
 
-// Constants
-const SYSTEM_PROMPT = `You are a helpful TurboTech Industries customer service assistant. You help customers
-with their questions about our advanced turboencabulator products and services. Our turboencabulators are known
+// System prompt that will be injected into every conversation
+const SYSTEM_PROMPT = `You are a helpful TurboTech Industries customer service assistant. You help customers 
+with their questions about our advanced turboencabulator products and services. Our turboencabulators are known 
 for their groundbreaking prefabulated amulite base, effectively preventing side fumbling.`;
-
-const API_TOKEN = process.env.API_TOKEN;
 
 // Chat endpoint
 app.post('/chat', async (req, res) => {
   try {
-    logger.info(`Received chat request from ${req.ip}`);
+    console.info(`Received chat request from ${req.ip}`);
+    console.debug(`Request body: ${JSON.stringify(req.body)}`);
 
     // Check Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader) {
-      logger.warn('Request rejected: Missing authorization header');
+      console.warn('Request rejected: Missing authorization header');
       return res.status(401).json({ error: 'No authorization header' });
     }
+    console.debug(`Authorization header present: ${authHeader.slice(0, 15)}...`);
 
-    // Validate token
-    const token = authHeader.replace('Bearer ', '');
-    if (token !== API_TOKEN) {
-      logger.warn('Request rejected: Invalid token');
-      return res.status(403).json({ error: 'Invalid token' });
-    }
-
-    const { api_provider, chat_history } = req.body;
+    const { api_provider, chat_history } = req.body || {};
+    console.debug(`Received request data: ${JSON.stringify(req.body)}`);
 
     // Validate required fields
     if (!api_provider) {
-      logger.warn('Request rejected: Missing api_provider field');
+      console.warn('Request rejected: Missing api_provider field');
       return res.status(400).json({ error: 'Missing required field: api_provider' });
     }
     if (!chat_history) {
-      logger.warn('Request rejected: Missing chat_history field');
+      console.warn('Request rejected: Missing chat_history field');
       return res.status(400).json({ error: 'Missing required field: chat_history' });
     }
 
-    logger.info(`Processing chat history with ${chat_history.length} messages`);
+    console.info(`Processing chat history with ${chat_history.length} messages`);
 
     // Prepare messages for OpenAI
     const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...chat_history];
 
     // Call OpenAI API
-    logger.info('Calling OpenAI API with model: gpt-4o-mini');
-    const response = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages,
-      temperature: 0.7,
-    });
+    console.info('Calling OpenAI API with model: gpt-4o-mini');
+    const client = await providers.loadApiProvider('openai:chat:gpt-4o-mini');
+    const { output: response } = await client.callApi(JSON.stringify(messages));
 
-    logger.info('Received response from OpenAI');
-    logger.debug(`OpenAI response: ${response.choices[0].message.content.slice(0, 50)}...`);
+    console.info('Received response from OpenAI');
+    console.debug(`OpenAI response: ${response.slice(0, 50)}...`);
 
     // Add assistant's response to chat history
     messages.push({
       role: 'assistant',
-      content: response.choices[0].message.content,
+      content: response,
     });
 
-    logger.info('Sending response back to client');
+    console.info('Sending response back to client');
     return res.json({ chat_history: messages });
   } catch (error) {
-    logger.error('Error processing request:', error);
+    console.error('Error processing request:', error);
     return res.status(500).json({ error: error.message });
   }
 });
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 2345; // Changed to match Python version
 app.listen(PORT, () => {
-  logger.info(`Server is running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+  console.info(
+    `Server is running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`,
+  );
 });

@@ -1,0 +1,17 @@
+{
+  "name": "simple-chat-api",
+  "version": "0.0.0",
+  "description": "A simple chatbot for testing multi-turn redteam scenarios in Promptfoo",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon app.js"
+  },
+  "author": "Promptfoo",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.1",
+    "promptfoo": "^0.99.1"
+  }
+}

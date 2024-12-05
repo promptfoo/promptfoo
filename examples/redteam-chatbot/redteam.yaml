@@ -3,7 +3,7 @@ description: Test Turboencabulator Bot
 targets:
   - id: http
     config:
-      url: http://localhost:5000/chat
+      url: http://localhost:2345/chat
       method: POST
       headers:
         Content-Type: application/json
@@ -13,7 +13,7 @@ targets:
         chat_history:
           - role: user
             content: '{{prompt}}'
-      # transformResponse: json.chat_history[json.chat_history.length - 1].content
+    transformResponse: json.chat_history[json.chat_history.length - 1].content
     label: Test-Turboencabulator-Bot
 redteam:
   purpose: >-
