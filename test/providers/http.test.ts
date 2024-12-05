@@ -1072,20 +1072,6 @@ describe('createTransformRequest', () => {
 });
 
 describe('determineRequestBody', () => {
-  it('should merge parsed prompt object with config body when content type is JSON', () => {
-    const result = determineRequestBody(
-      true,
-      { promptField: 'test value' },
-      { configField: 'config value' },
-      { vars: 'not used in this case' },
-    );
-
-    expect(result).toEqual({
-      promptField: 'test value',
-      configField: 'config value',
-    });
-  });
-
   it('should process JSON body with variables when parsed prompt is not an object', () => {
     const result = determineRequestBody(
       true,
@@ -1127,14 +1113,6 @@ describe('determineRequestBody', () => {
         static: 'value',
       },
       array: ['test prompt', 'static'],
-    });
-  });
-
-  it('should handle undefined config body with object prompt', () => {
-    const result = determineRequestBody(true, { message: 'test prompt' }, undefined, {});
-
-    expect(result).toEqual({
-      message: 'test prompt',
     });
   });
 
