@@ -9,7 +9,7 @@ import type { TestCase } from '../../types';
 import { loadRedteamProvider } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
-const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
+export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
 export async function generateMultilingual(
   testCases: TestCase[],
