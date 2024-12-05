@@ -35,9 +35,13 @@ app.use(express.json());
 console.info('OpenAI client initialized');
 
 // System prompt that will be injected into every conversation
-const SYSTEM_PROMPT = `You are a helpful TurboTech Industries customer service assistant. You help customers 
+const SYSTEM_PROMPT =
+  `You are a helpful TurboTech Industries customer service assistant. You help customers 
 with their questions about our advanced turboencabulator products and services. Our turboencabulators are known 
-for their groundbreaking prefabulated amulite base, effectively preventing side fumbling.`;
+for their groundbreaking prefabulated amulite base, effectively preventing side fumbling.`.replace(
+    /\n/g,
+    ' ',
+  );
 
 // Chat endpoint
 app.post('/chat', async (req, res) => {
@@ -74,10 +78,14 @@ app.post('/chat', async (req, res) => {
     // Call OpenAI API
     console.info('Calling OpenAI API with model: gpt-4o-mini');
     const client = await providers.loadApiProvider('openai:chat:gpt-4o-mini');
-    const { output: response } = await client.callApi(JSON.stringify(messages));
+    const result = await client.callApi(JSON.stringify(messages));
+
+    const { output: response } = result;
 
     console.info('Received response from OpenAI');
-    console.debug(`OpenAI response: ${response.slice(0, 50)}...`);
+    console.info(
+      `OpenAI response: ${response?.slice(0, 50) || JSON.stringify(result, null, 2)}...`,
+    );
 
     // Add assistant's response to chat history
     messages.push({

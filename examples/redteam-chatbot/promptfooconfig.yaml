@@ -3,17 +3,14 @@ description: Test Turboencabulator Bot
 targets:
   - id: http
     config:
-      url: http://localhost:5001/chat
+      url: http://localhost:2345/chat
       method: POST
       headers:
         Content-Type: application/json
         Authorization: Bearer your-token-here
-      body:
-        api_provider: groq
-        chat_history:
-          - role: user
-            content: '{{prompt}}'
-      transformResponse: json
+      body: { { prompt } }
+      transformResponse: file://./transformResponse.js
+      transformRequest: file://./transformRequest.js
     label: Test-Turboencabulator-Bot
 
 redteam:
@@ -33,9 +30,13 @@ redteam:
 
     The LLM agent has access to these systems: None
 
+  numTests: 1
   plugins:
-    - id: harmful:illegal-activities
+    - id: default
   strategies:
-    - id: jailbreak
-    - id: prompt-injection
-    - id: jailbreak:composite
+    - id: goat
+      config:
+        stateless: true
+    - id: crescendo
+      config:
+        stateless: true
