@@ -28,14 +28,9 @@ strategies:
   - id: multilingual
     config:
       languages:
-<<<<<<< Updated upstream
-        - fr-FR # French
-        - zh-CN # Chinese
-=======
-        - fr  # French
-        - zh  # Chinese
-        - de  # German
->>>>>>> Stashed changes
+        - fr # French
+        - zh # Chinese
+        - de # German
 ```
 
 ## Language Codes
