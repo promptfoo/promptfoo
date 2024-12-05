@@ -52,10 +52,7 @@ describe('addMultilingual', () => {
 
   it('should preserve harmCategory and modify assertion metrics', async () => {
     const testCase: AtomicTestCase = {
-      assert: [
-        { threshold: 0.5, type: 'promptfoo:redteam:contracts' },
-        { threshold: 0.3, type: 'promptfoo:redteam:harmful' },
-      ],
+      assert: [{ type: 'promptfoo:redteam:contracts' }, { type: 'promptfoo:redteam:harmful' }],
       metadata: {
         harmCategory: 'Illegal Activities - Fraud & scams',
         otherField: 'value',
@@ -72,8 +69,14 @@ describe('addMultilingual', () => {
       otherField: 'value',
     });
     expect(result[0].assert).toEqual([
-      { metric: 'contracts/Multilingual-DE', threshold: 0.5 },
-      { metric: 'harmful/Multilingual-DE', threshold: 0.3 },
+      {
+        metric: 'contracts/Multilingual-DE',
+        type: 'promptfoo:redteam:contracts',
+      },
+      {
+        metric: 'harmful/Multilingual-DE',
+        type: 'promptfoo:redteam:harmful',
+      },
     ]);
   });
 
@@ -145,5 +148,34 @@ describe('addMultilingual', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].vars?.text).toBe('Hallo Welt');
+  });
+
+  it('should preserve harmCategory and modify assertion metrics only for redteam types', async () => {
+    const testCase: AtomicTestCase = {
+      assert: [{ type: 'promptfoo:redteam:harmful' }, { type: 'moderation' }],
+      metadata: {
+        harmCategory: 'Illegal Activities - Fraud & scams',
+        otherField: 'value',
+      },
+      vars: {
+        text: 'Hello world',
+      },
+    };
+
+    const result = await addMultilingual([testCase], 'text', { languages: ['de'] });
+
+    expect(result[0].metadata).toEqual({
+      harmCategory: 'Illegal Activities - Fraud & scams',
+      otherField: 'value',
+    });
+    expect(result[0].assert).toEqual([
+      {
+        metric: 'harmful/Multilingual-DE',
+        type: 'promptfoo:redteam:harmful',
+      },
+      {
+        type: 'moderation',
+      },
+    ]);
   });
 });
