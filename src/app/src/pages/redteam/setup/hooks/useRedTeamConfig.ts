@@ -1,3 +1,4 @@
+import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Config, ProviderOptions } from '../types';
@@ -34,7 +35,7 @@ const defaultConfig: Config = {
   description: 'My Red Team Configuration',
   prompts: ['{{prompt}}'],
   target: DEFAULT_HTTP_TARGET,
-  plugins: ['default'],
+  plugins: [...DEFAULT_PLUGINS],
   strategies: ['jailbreak', 'prompt-injection'],
   purpose: '',
   entities: [],

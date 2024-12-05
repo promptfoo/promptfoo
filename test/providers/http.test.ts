@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
+import logger from '../../src/logger';
 import {
   createTransformRequest,
   createTransformResponse,
@@ -10,7 +11,6 @@ import {
   processJsonBody,
 } from '../../src/providers/http';
 import { maybeLoadFromExternalFile } from '../../src/util';
-import logger from '../../src/logger';
 
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
@@ -1041,7 +1041,7 @@ describe('HttpProvider', () => {
   describe('content type validation and warnings', () => {
     let mockWarn: jest.SpyInstance;
     let mockError: jest.SpyInstance;
-    
+
     beforeEach(() => {
       mockWarn = jest.spyOn(logger, 'warn');
       mockError = jest.spyOn(logger, 'error');
@@ -1063,7 +1063,7 @@ describe('HttpProvider', () => {
       });
 
       await expect(provider.callApi('test prompt')).rejects.toThrow(
-        'Expected body to be a string when content type is not application/json'
+        'Expected body to be a string when content type is not application/json',
       );
     });
 
@@ -1120,7 +1120,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined
+        undefined,
       );
     });
 
@@ -1155,7 +1155,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined
+        undefined,
       );
     });
 

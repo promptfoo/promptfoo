@@ -5,7 +5,11 @@ module.exports = (prompt) => {
       if (Array.isArray(messages)) {
         if (
           !messages.every(
-            (message) => message.role && message.content && typeof message.content === 'string' && typeof message.role === 'string',
+            (message) =>
+              message.role &&
+              message.content &&
+              typeof message.content === 'string' &&
+              typeof message.role === 'string',
           )
         ) {
           throw new Error(`Invalid chat history: ${JSON.stringify(messages)}`);
