@@ -343,7 +343,6 @@ export class HttpProvider implements ApiProvider {
         );
       }
       if (typeof body === 'string' && contentTypeIsJson(headers)) {
-        logger.error(`body: ${body}`);
         logger.warn(
           'Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
         );
@@ -380,23 +379,21 @@ export class HttpProvider implements ApiProvider {
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
     const headers = this.getHeaders(defaultHeaders, vars);
+    this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
-
-    const body = determineRequestBody(
-      contentTypeIsJson(headers),
-      transformedPrompt,
-      this.config.body,
-      vars,
-    );
-    this.validateContentTypeAndBody(headers, body);
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
       headers,
-      body,
+      body: determineRequestBody(
+        contentTypeIsJson(headers),
+        transformedPrompt,
+        this.config.body,
+        vars,
+      ),
       queryParams: this.config.queryParams
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
@@ -443,7 +440,6 @@ export class HttpProvider implements ApiProvider {
         error: `HTTP call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tHTTP response status: ${response.status}`);
     logger.debug(`\tHTTP response: ${response.data}`);
     const ret: ProviderResponse = {};
     if (context?.debug) {
