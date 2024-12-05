@@ -49,8 +49,7 @@ export function shareCommand(program: Command) {
 
           if (!eval_) {
             logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
-            process.exitCode = 1;
-            return;
+            process.exit(1);
           }
         }
         invariant(eval_, 'No eval found');
@@ -63,8 +62,7 @@ export function shareCommand(program: Command) {
               If your eval is still running, wait for it to complete and try again.
             `,
           );
-          process.exitCode = 1;
-          return;
+          process.exit(1);
         }
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
           await createPublicUrl(eval_, cmdObj.showAuth);
@@ -78,8 +76,7 @@ export function shareCommand(program: Command) {
         if (cloudConfig.isEnabled()) {
           logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
           await createPublicUrl(eval_, cmdObj.showAuth);
-          process.exitCode = 0;
-          return;
+          process.exit(0);
         }
         const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
         const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
@@ -88,8 +85,7 @@ export function shareCommand(program: Command) {
           async function (answer: string) {
             if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y' && answer !== '') {
               reader.close();
-              process.exitCode = 1;
-              return;
+              process.exit(1);
             }
             reader.close();
 
