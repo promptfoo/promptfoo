@@ -102,7 +102,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       selectedTarget.config.headers['Content-Type'] === 'application/json',
   );
   const [requestBody, setRequestBody] = useState(
-    isJsonContentType ? JSON.stringify(selectedTarget.config.body) : selectedTarget.config.body,
+    isJsonContentType
+      ? JSON.stringify(selectedTarget.config.body, null, 2)
+      : selectedTarget.config.body,
   );
 
   const [missingFields, setMissingFields] = useState<string[]>([]);
