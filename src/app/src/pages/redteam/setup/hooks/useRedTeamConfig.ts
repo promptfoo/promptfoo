@@ -54,11 +54,11 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
   const sections = [];
 
   if (applicationDefinition.purpose) {
-    sections.push(`The objective of the application is to ${applicationDefinition.purpose}`);
+    sections.push(`The objective of the application is: ${applicationDefinition.purpose}`);
   }
 
   if (applicationDefinition.redteamUser) {
-    sections.push(`You are ${applicationDefinition.redteamUser}`);
+    sections.push(`You are: ${applicationDefinition.redteamUser}`);
   }
 
   if (applicationDefinition.accessToData) {
