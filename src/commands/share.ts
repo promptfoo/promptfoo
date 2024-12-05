@@ -65,34 +65,34 @@ export function shareCommand(program: Command) {
         }
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
           await createPublicUrl(eval_, cmdObj.showAuth);
-        } else {
-          const reader = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-
-          if (cloudConfig.isEnabled()) {
-            logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
-            await createPublicUrl(eval_, cmdObj.showAuth);
-            process.exitCode = 0;
-            return;
-          }
-          const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
-          const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
-          reader.question(
-            `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
-            async function (answer: string) {
-              if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y' && answer !== '') {
-                reader.close();
-                process.exitCode = 1;
-                return;
-              }
-              reader.close();
-
-              await createPublicUrl(eval_, cmdObj.showAuth);
-            },
-          );
+          return;
         }
+        const reader = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        if (cloudConfig.isEnabled()) {
+          logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
+          await createPublicUrl(eval_, cmdObj.showAuth);
+          process.exitCode = 0;
+          return;
+        }
+        const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
+        const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
+        reader.question(
+          `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
+          async function (answer: string) {
+            if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y' && answer !== '') {
+              reader.close();
+              process.exitCode = 1;
+              return;
+            }
+            reader.close();
+
+            await createPublicUrl(eval_, cmdObj.showAuth);
+          },
+        );
       },
     );
 }
