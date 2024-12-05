@@ -89,11 +89,15 @@ ${vars.vars.prompt}
 }
 ```
 
+:::note
+In this example, we're using Typescript (.ts) - but you can use regular Javascript (.js) too
+:::
+
 In Promptfoo tests, load the prompt. Promptfoo tests will pass variables in a vars object. In this vars object, the variables are accessible as vars.vars. The example above shows accessing prompt as vars.vars.prompt.
 
 ```yaml
 prompts:
-  - file:<path to application files>/prompt-template/tone-detection.js:toneEvaluationInstructions
+  - file:<path to application files>/prompt-template/tone-detection.ts:toneEvaluationInstructions
 
 providers:
   - openai:gpt-4o-mini
