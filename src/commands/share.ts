@@ -54,11 +54,7 @@ export function shareCommand(program: Command) {
         invariant(eval_, 'No eval found');
         if (eval_.prompts.length === 0) {
           // FIXME(ian): Handle this on the server side.
-          logger.error(
-            `Eval ${eval_.id} is still running or did not complete successfully, so it cannot be shared.
-            
-            If your eval is still running, wait for it to complete and try again.`,
-          );
+          logger.error(`Eval ${eval_.id} did not complete successfully, so it cannot be shared.`);
           process.exit(1);
         }
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
