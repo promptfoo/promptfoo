@@ -25,10 +25,11 @@ You can override this by specifying the `languages` option in the strategy:
 
 ```yaml
 strategies:
-  - multilingual:
+  - id: multilingual
+    config:
       languages:
-        - fr # French
-        - zh # Chinese
+        - fr-FR # French
+        - zh-CN # Chinese
 ```
 
 ## Background
