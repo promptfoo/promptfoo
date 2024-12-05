@@ -10,6 +10,7 @@ import {
   processJsonBody,
 } from '../../src/providers/http';
 import { maybeLoadFromExternalFile } from '../../src/util';
+import logger from '../../src/logger';
 
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
@@ -37,7 +38,11 @@ jest.mock('../../src/cliState', () => ({
   basePath: '/mock/base/path',
 }));
 
-jest.mock('../../src/logger');
+jest.mock('../../src/logger', () => ({
+  warn: jest.fn(),
+  error: jest.fn(),
+  _default: jest.fn(),
+}));
 
 describe('HttpProvider', () => {
   const mockUrl = 'http://example.com/api';
@@ -1030,6 +1035,151 @@ describe('HttpProvider', () => {
       const result = await provider.callApi('test');
 
       expect(result).toEqual({ output: 'success' });
+    });
+  });
+
+  describe('content type validation and warnings', () => {
+    let mockWarn: jest.SpyInstance;
+    let mockError: jest.SpyInstance;
+    
+    beforeEach(() => {
+      mockWarn = jest.spyOn(logger, 'warn');
+      mockError = jest.spyOn(logger, 'error');
+    });
+
+    afterEach(() => {
+      mockWarn.mockRestore();
+      mockError.mockRestore();
+    });
+
+    it('should throw error when content-type is not application/json but body is an object', async () => {
+      provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: 'default body',
+          transformRequest: () => ({ key: 'value' }),
+        },
+      });
+
+      await expect(provider.callApi('test prompt')).rejects.toThrow(
+        'Expected body to be a string when content type is not application/json'
+      );
+    });
+
+    it('should handle null body without warnings', async () => {
+      provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        },
+      });
+
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test prompt');
+
+      expect(mockWarn).not.toHaveBeenCalled();
+      expect(mockError).not.toHaveBeenCalled();
+    });
+
+    it('should handle transformed request body validation with object result', async () => {
+      provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: {},
+          transformRequest: (prompt: string) => ({ transformed: prompt }),
+        },
+      });
+
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test prompt');
+
+      expect(mockWarn).not.toHaveBeenCalled();
+      expect(mockError).not.toHaveBeenCalled();
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ transformed: 'test prompt' }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined
+      );
+    });
+
+    it('should handle transformed request body validation with string result', async () => {
+      provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: '',
+          transformRequest: (prompt: string) => `Transformed: ${prompt}`,
+        },
+      });
+
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test prompt');
+
+      expect(mockWarn).not.toHaveBeenCalled();
+      expect(mockError).not.toHaveBeenCalled();
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: 'Transformed: test prompt',
+        }),
+        expect.any(Number),
+        'text',
+        undefined
+      );
+    });
+
+    it('should handle case-insensitive content-type headers', async () => {
+      provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'CONTENT-TYPE': 'application/json' },
+          body: { key: 'value' },
+        },
+      });
+
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test prompt');
+
+      expect(mockWarn).not.toHaveBeenCalled();
+      expect(mockError).not.toHaveBeenCalled();
     });
   });
 });

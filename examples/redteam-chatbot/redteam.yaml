@@ -8,8 +8,7 @@ targets:
       headers:
         Content-Type: application/json
         Authorization: Bearer your-token-here
-      body:
-        '[object Object]': null
+      body: '{{prompt}}'
       transformResponse: file://./transformResponse.js
       transformRequest: file://./transformRequest.js
     label: Test-Turboencabulator-Bot
