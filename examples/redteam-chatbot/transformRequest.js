@@ -4,6 +4,8 @@ module.exports = (prompt) => {
   // history in OpenAI format. We can just return the string as is.
   try {
     JSON.parse(prompt); // Throws error if prompt is not valid JSON
+    // We can add additional validation here if needed
+    // Array.isArray(prompt) && prompt.every(msg => msg.role && msg.content)
     return prompt;
   } catch {
     return JSON.stringify([{ role: 'user', content: prompt }]);
