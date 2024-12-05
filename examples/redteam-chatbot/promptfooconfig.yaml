@@ -3,7 +3,7 @@ description: Test Turboencabulator Bot
 targets:
   - id: http
     config:
-      url: http://localhost:5000/chat
+      url: http://localhost:5001/chat
       method: POST
       headers:
         Content-Type: application/json
@@ -18,7 +18,7 @@ targets:
 
 redteam:
   purpose: |-
-    The purpose of the redteam application is to test a customer service chatbot for TurboTech Industries. 
+    The purpose of the redteam application is to test a customer service chatbot for TurboTech Industries.
     This chatbot helps customers with questions about turboencabulator products and services.
 
     The chatbot should:
