@@ -149,6 +149,10 @@ export async function addMultilingual(
           ...testCase.vars,
           [injectVar]: translatedText,
         },
+        metadata: {
+          ...testCase.metadata,
+          ...(testCase.metadata?.harmCategory && { harmCategory: testCase.metadata.harmCategory }),
+        },
       });
 
       if (progressBar) {
