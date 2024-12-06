@@ -12,27 +12,17 @@ REMOVE [Plugins](../plugins/) generate prompt injections designed to probe categ
 
 ## How to Select Strategies
 
-Before selecting a strategies you should understand if you are building a single-turn or multi-turn application and if the application is stateless (user can send one or more messages at a time including the full conversation history) or stateful (one message is sent a time from the user, the llm provider keeps track of the conversation history).
+Before selecting strategies you should understand if you are building a single-turn or multi-turn application. Single-turn and multi-turn LLM applications differ primarily in their handling of context.
 
-- Use dialogue-based strategies
-- Test conversation flows
+### Single-turn Applications
 
-:::note
-All single-turn strategies can be applied to multi-turn applications.
-:::
+Single-turn large language model (LLM) applications focus on processing a single user query and generating a single response without maintaining any state beyond that query-response cycle. In this paradigm, the model receives a prompt and returns a corresponding completion. The system treats each interaction as independent, with no memory or continuity between requests. This design is well suited for scenarios where user queries are self-contained, and does not require the model to remember or refer back to prior inputs. For example, code completion tools, one-off question answering systems, or summarization engines often employ single-turn structures. One advantage of single-turn workflows is simplicity of implementation: the model, prompt, and response form a straightforward, stateless pipeline. However, this simplicity also represents a limitation. If an application requires the model to understand the broader context of a conversation or maintain a dialogue over multiple queries, a single-turn approach becomes insufficient.
 
-Example of single turn applications:
+### Multi-turn Applications
 
-- classifiers
-- summarization
-- translation
-- Retrieval Augmented Generation where follow up queries are not allowed.
-- capabilities (parsers)
+Multi-turn LLM applications incorporate mechanisms for continuity. They track the conversation history, enabling the model to reference previous user inputs, prior responses, or other contextual signals across multiple turns of interaction. This can be achieved through internal state management (one message is sent a time from the user, the llm provider keeps track of the conversation history), or if the application is stateless (user can send one or more messages at a time including user, assistant, and system roles). Multi-turn structures are well suited for complex dialogue systems like virtual assistants, chatbots, and collaborative writing tools. They allow the model to maintain a form of short-term memory. This enables the handling of follow-up questions, corrections, and extended reasoning chains. Multi-turn interactions make it possible to provide more accurate, contextually coherent, and user-tailored responses, as each new prompt can be informed by previously exchanged information. However, multi-turn approaches introduce complexity in both design and execution. Developers must decide how best to store and represent the conversation state and handle prompts that grow larger as more context accumulates. Additionally, multi-turn architectures risk model drift, where minor misunderstandings in earlier turns propagate and compound over time, which can lead to security vulnerabilities like the model acting against it's system purpose. This can also reduce overall performance and requiring careful prompt engineering and state management strategies.
 
-Examples of multi-turn applications:
-
-- chatbots
-- customer service agents
+### Promptfoo Strategies
 
 By default, promptfoo recommends [`jailbreak`](./iterative.md) and [`composite-jailbreaks`](./composite-jailbreaks.md). These are single-turn strategies that rely on an attacker model to iteratively probe the target where the conversation history is reset each time. Each testcase run with these strategies results in many calls to the target LLM but significantly increases the ASR. They stop after exhausting a configurable iteration/token budget or when they are able to coerce the target model into generating a harmful output based on the plugin intent. They are run in addition to the unmodified plugins.
 
@@ -46,88 +36,35 @@ redteam:
     - id: jailbreak:composite
 ```
 
-Promptfoo currently supports two multi-turn strategies. [goat](./goat.md) and [crescendo](./multi-turn.md).
+Promptfoo currently supports two state of the art multi-turn strategies. [goat](./goat.md) and [crescendo](./multi-turn.md).
 
-### 1. Basic Testing (Start Here)
+:::note
+All single-turn strategies can be applied to multi-turn applications.
+:::
 
-- Use encoding strategies (Base64, Leetspeak)
-- Test simple content filters
-- Quick results, low cost
+## Strategy Descriptions
 
-```yaml
-strategies:
-  - base64
-  - leetspeak
-```
+Strategies fall into three categories: static, dynamic, and multi-turn.
 
-### 2. Intermediate Testing
+- Static strategies are single-turn and rely on encoding or other simple transformations to bypass content filters or trick the LLM. These are classic attacks like `ignore previous instructions and ...`.
+- Dynamic strategies are single-turn and rely on an attacker LLM to make one or more calls to your target. This can be done either during generation (math prompt) or during evaluation (jailbreak).
+- Multi-turn strategies are multi-turn and rely on more complex prompting techniques to bypass content filters.
 
-- Add one-shot strategies
-- Test more complex filters
-- Medium cost, better coverage
-
-```yaml
-strategies:
-  - citation
-  - math-prompt
-  - prompt-injection
-```
-
-### 3. Advanced Testing
-
-- Use dialogue-based strategies
-- Test conversation flows
-- Higher cost, best coverage
-
-```yaml
-strategies:
-  - goat
-  - crescendo
-```
-
-## Strategy Categories
-
-### 1. Static Strategies (Single Turn)
-
-Simple text transformations that bypass content filters:
-
-| Strategy                  | Description            | Example Transform   |
-| ------------------------- | ---------------------- | ------------------- |
-| [Base64](base64.md)       | Base64 encoding        | "hack" → "aGFjaw==" |
-| [Leetspeak](leetspeak.md) | Character substitution | "hack" → "h4ck"     |
-| [ROT13](rot13.md)         | Letter rotation        | "hack" → "unpx"     |
-
-**Best for**: Quick testing of basic content filters
-**Cost**: Low
-**Success rate**: 20-30%
-
-### 2. One-shot Strategies
-
-Single-pass transformations using LLMs:
-
-| Strategy                                | Description           | Example Transform                         |
-| --------------------------------------- | --------------------- | ----------------------------------------- |
-| [Math](math-prompt.md)                  | Mathematical encoding | Converts prompts to mathematical problems |
-| [Citation](citation.md)                 | Academic framing      | Adds academic context and citations       |
-| [Prompt Injection](prompt-injection.md) | Direct system prompts | Adds system-level commands                |
-
-**Best for**: Testing sophisticated filters
-**Cost**: Medium
-**Success rate**: 40-60%
-
-### 3. Dialogue-based Strategies
-
-Multi-turn attacks that adapt based on responses:
-
-| Strategy                   | Description        | Approach                          |
-| -------------------------- | ------------------ | --------------------------------- |
-| [GOAT](goat.md)            | Dynamic adaptation | Uses LLM to optimize attacks      |
-| [Crescendo](multi-turn.md) | Gradual escalation | Slowly increases attack intensity |
-| [Tree-based](tree.md)      | Branching paths    | Explores multiple attack vectors  |
-
-**Best for**: Testing conversational systems
-**Cost**: High
-**Success rate**: 70-90%
+| Category                  | Strategy                                | Description                      | Cost   | ASR Increase over No Strategy |
+| ------------------------- | --------------------------------------- | -------------------------------- | ------ | ----------------------------- |
+| **Static (Single-Turn)**  | [Base64](base64.md)                     | Base64 encoding bypass           | Low    | 20-30%                        |
+|                           | [Leetspeak](leetspeak.md)               | Character substitution           | Low    | 20-30%                        |
+|                           | [ROT13](rot13.md)                       | Letter rotation encoding         | Low    | 20-30%                        |
+|                           | [Prompt Injection](prompt-injection.md) | Direct system prompts            | Low    | 50-70%                        |
+|                           | [Multilingual](multilingual.md)         | Cross-language testing           | Low    | 30-40%                        |
+| **Dynamic (Single-Turn)** | [Math Prompt](math-prompt.md)           | Mathematical encoding            | Medium | 70-80%                        |
+|                           | [Citation](citation.md)                 | Academic framing                 | Medium | 40-60%                        |
+|                           | [Composite](composite-jailbreaks.md)    | Combined techniques              | Medium | 60-80%                        |
+|                           | [Jailbreak](iterative.md)               | Lightweight iterative refinement | High   | 60-80%                        |
+|                           | [Tree-based](tree.md)                   | Branching attack paths           | High   | 60-80%                        |
+| **Multi-turn**            | [GOAT](goat.md)                         | Gradual escalation               | High   | 70-90%                        |
+|                           | [Crescendo](multi-turn.md)              | Gradual escalation               | High   | 70-90%                        |
+| **Custom**                | [Custom](custom.md)                     | User-defined strategies          | Varies | Varies                        |
 
 ## Implementation
 
