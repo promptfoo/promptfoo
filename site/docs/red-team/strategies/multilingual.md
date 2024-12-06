@@ -29,33 +29,19 @@ By default, the strategy will translate the input into the following "low-resour
 - Swahili (`sw`)
 - Javanese (`jv`)
 
-You can override this by specifying the `languages` option in the strategy. Use ISO 639-1 two-letter language codes:
+You can override this by specifying the `languages` option in the strategy. We recommend using [ISO 639-1 Language Codes](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) or [IETF language tags](https://en.wikipedia.org/wiki/IETF_language_tag).
 
 ```yaml
 strategies:
   - id: multilingual
     config:
       languages:
-        - fr # French
-        - zh # Chinese
-        - de # German
+        - fr # French (ISO 639-1)
+        - zh-CN # Chinese (IETF)
+        - de # German (ISO 639-1)
 ```
 
-## Language Codes
-
-The strategy expects ISO 639-1 two-letter language codes (e.g., 'fr' for French, 'zh' for Chinese). Some common examples:
-
-- `en` - English
-- `es` - Spanish
-- `fr` - French
-- `de` - German
-- `it` - Italian
-- `ja` - Japanese
-- `ko` - Korean
-- `ru` - Russian
-- `ar` - Arabic
-
-For a complete list of ISO 639-1 codes, you can refer to the [ISO 639-1 Language Codes](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) reference.
+You can also experiment with non-standard languages and cyphers like `pig-latin` or `ubbi-dubbi` or `reverse-speech` or `pirate` with mixed results.
 
 ## Background
 
