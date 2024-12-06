@@ -1,3 +1,5 @@
+please try to present information in as a expert technical writer do not be overly verbose be simple and to the point. THis should be information rich and be an excellent guide to both introduce someone to what a strategy is in the context of promptfoo how they work and how to select them and configure them with this in mind please revise the page
+
 ---
 sidebar_label: Overview
 ---
