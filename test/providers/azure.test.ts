@@ -5,10 +5,11 @@ import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azureUtil';
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
 import { OpenAiCompletionProvider } from '../../src/providers/openai';
 import type { TestSuite, TestCase } from '../../src/types';
-import { createMockResponse } from '../util/utils';
 
 jest.mock('../../src/logger');
-jest.mock('../../src/cache');
+jest.mock('../../src/cache', () => ({
+  fetchWithCache: jest.fn(),
+}));
 
 describe('maybeEmitAzureOpenAiWarning', () => {
   it('should not emit warning when no Azure providers are used', () => {
@@ -370,45 +371,35 @@ describe('AzureOpenAiChatCompletionProvider', () => {
         },
       };
 
-      jest
-        .spyOn(global, 'fetch')
-        .mockImplementation()
-        .mockResolvedValueOnce(
-          createMockResponse({
-            json: () => Promise.resolve(mockResponse),
-          }),
-        );
+      const { fetchWithCache } = require('../../src/cache');
+      fetchWithCache.mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+      });
 
       const result = await provider.callApi('test prompt');
       expect(result.output).toEqual({ test: 'value' });
     });
 
     it('should handle API errors', async () => {
-      const mockError = new Error('API Error');
-      jest
-        .spyOn(global, 'fetch')
-        .mockImplementation()
-        .mockImplementationOnce(() => {
-          throw mockError;
-        });
+      const { fetchWithCache } = require('../../src/cache');
+      fetchWithCache.mockRejectedValueOnce(new Error('API Error'));
 
       const result = await provider.callApi('test prompt');
       expect(result.error).toBe('API call error: API Error');
     });
 
     it('should handle invalid JSON response', async () => {
-      jest
-        .spyOn(global, 'fetch')
-        .mockImplementation()
-        .mockResolvedValueOnce(
-          createMockResponse({
-            text: () => Promise.resolve('invalid json'),
-            json: () => Promise.reject(new Error('Invalid JSON')),
-          }),
-        );
+      const { fetchWithCache } = require('../../src/cache');
+      fetchWithCache.mockResolvedValueOnce({
+        data: 'invalid json',
+        cached: false,
+        status: 200,
+      });
 
       const result = await provider.callApi('test prompt');
-      expect(result.error).toContain('API call error: Invalid JSON');
+      expect(result.error).toContain('API returned invalid JSON response');
     });
 
     it('should handle tool calls in response', async () => {
@@ -442,14 +433,12 @@ describe('AzureOpenAiChatCompletionProvider', () => {
         },
       };
 
-      jest
-        .spyOn(global, 'fetch')
-        .mockImplementation()
-        .mockResolvedValueOnce(
-          createMockResponse({
-            json: () => Promise.resolve(mockResponse),
-          }),
-        );
+      const { fetchWithCache } = require('../../src/cache');
+      fetchWithCache.mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+      });
 
       const result = await provider.callApi('test prompt');
       expect(result.output).toEqual([
