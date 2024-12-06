@@ -118,34 +118,34 @@ providers:
   - id: bedrock:amazon.nova-lite-v1:0
     config:
       interfaceConfig:
-        max_new_tokens: 256    # Maximum number of tokens to generate
-        temperature: 0.7       # Controls randomness (0.0 to 1.0)
-        top_p: 0.9            # Nucleus sampling parameter
-        top_k: 50             # Top-k sampling parameter
+        max_new_tokens: 256 # Maximum number of tokens to generate
+        temperature: 0.7 # Controls randomness (0.0 to 1.0)
+        top_p: 0.9 # Nucleus sampling parameter
+        top_k: 50 # Top-k sampling parameter
         stopSequences: ['END'] # Optional stop sequences
-      toolConfig:             # Optional tool configuration
+      toolConfig: # Optional tool configuration
         tools:
           - toolSpec:
-              name: "calculator"
-              description: "A basic calculator for arithmetic operations"
+              name: 'calculator'
+              description: 'A basic calculator for arithmetic operations'
               inputSchema:
                 json:
-                  type: "object"
+                  type: 'object'
                   properties:
                     expression:
-                      description: "The arithmetic expression to evaluate"
-                      type: "string"
-                  required: ["expression"]
-        toolChoice:           # Optional tool selection
+                      description: 'The arithmetic expression to evaluate'
+                      type: 'string'
+                  required: ['expression']
+        toolChoice: # Optional tool selection
           tool:
-            name: "calculator"
+            name: 'calculator'
 ```
 
 Note: Nova models use a slightly different configuration structure compared to other Bedrock models, with separate `interfaceConfig` and `toolConfig` sections.
 
 ### AI21 Models
 
-For AI21 models (e.g., `ai21.jamba-1-5-large-v1:0`), you can use the following configuration options:
+For AI21 models (e.g., `ai21.jamba-1-5-mini-v1:0`, `ai21.jamba-1-5-large-v1:0`), you can use the following configuration options:
 
 ```yaml
 config:
@@ -315,35 +315,3 @@ Model-specific environment variables:
 - `COHERE_TEMPERATURE`, `COHERE_P`, `COHERE_K`, `COHERE_MAX_TOKENS`: For Cohere models
 
 These environment variables can be overridden by the configuration specified in the YAML file.
-
-## Tool Usage with Nova
-
-Nova models support function calling through their tool system. Here's an example of using tools:
-
-```yaml
-providers:
-  - id: bedrock:amazon.nova-lite-v1:0
-    config:
-      interfaceConfig:
-        temperature: 0.7
-      toolConfig:
-        tools:
-          - toolSpec:
-              name: "weather"
-              description: "Get weather information for a location"
-              inputSchema:
-                json:
-                  type: "object"
-                  properties:
-                    location:
-                      description: "The city or location"
-                      type: "string"
-                  required: ["location"]
-
-prompts:
-  - "What's the weather like in {{city}}?"
-
-tests:
-  - vars:
-      city: "Seattle"
-```
