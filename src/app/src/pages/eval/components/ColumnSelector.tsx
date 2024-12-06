@@ -71,7 +71,7 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
   // Group columns by their group property
   const groupedColumns = columnData.reduce(
     (acc, column) => {
-      const group = column.group || 'Other';
+      const group = column?.group || 'Other';
       if (!acc[group]) {
         acc[group] = [];
       }

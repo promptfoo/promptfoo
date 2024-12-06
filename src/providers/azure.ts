@@ -65,7 +65,22 @@ interface AzureCompletionOptions {
     };
   }[];
   tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
-  response_format?: { type: 'json_object' };
+  response_format?:
+    | { type: 'json_object' }
+    | {
+        type: 'json_schema';
+        json_schema: {
+          name: string;
+          strict: boolean;
+          schema: {
+            type: 'object';
+            properties: Record<string, any>;
+            required?: string[];
+            additionalProperties: false;
+            $defs?: Record<string, any>;
+          };
+        };
+      };
   stop?: string[];
   seed?: number;
 
@@ -506,7 +521,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tAzure API response: ${JSON.stringify(data)}`);
+    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
       return {
         output: data.choices[0].text,
@@ -538,22 +553,22 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Record<string, any> {
-    // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
 
+    // Fix: Match OpenAI's message handling exactly
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    let stop: string;
-    try {
-      stop = getEnvString('OPENAI_STOP')
-        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
-        : config?.stop;
-    } catch (err) {
-      throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
-    }
+    // Fix: Match OpenAI's response format handling with variable rendering
+    const responseFormat = config.response_format
+      ? {
+          response_format: maybeLoadFromExternalFile(
+            renderVarsInObject(config.response_format, context?.vars),
+          ),
+        }
+      : {};
 
     const body = {
       model: this.deploymentName,
@@ -573,24 +588,21 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
+        ? {
+            tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
+          }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
       ...(config.dataSources ? { dataSources: config.dataSources } : {}),
-      ...(config.response_format
-        ? {
-            response_format: maybeLoadFromExternalFile(
-              renderVarsInObject(config.response_format, context?.vars),
-            ),
-          }
-        : {}),
+      ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(stop ? { stop } : {}),
+      ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
 
-    return body;
+    logger.debug(`Azure API request body: ${JSON.stringify(body)}`);
+    return { body, config };
   }
 
   async callApi(
@@ -605,7 +617,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throwConfigurationError('Azure API host must be set.');
     }
 
-    const body = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body } = this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;
@@ -620,7 +632,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             this.deploymentName
           }/chat/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`;
 
-      ({ data, cached } = (await fetchWithCache(
+      const {
+        data: responseData,
+        cached: isCached,
+        status,
+      } = await fetchWithCache(
         url,
         {
           method: 'POST',
@@ -631,14 +647,29 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
+      );
+
+      cached = isCached;
+
+      // Handle the response data
+      if (typeof responseData === 'string') {
+        try {
+          data = JSON.parse(responseData);
+        } catch {
+          return {
+            error: `API returned invalid JSON response (status ${status}): ${responseData}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
+          };
+        }
+      } else {
+        data = responseData;
+      }
     } catch (err) {
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
 
-    logger.debug(`\tAzure API response: ${JSON.stringify(data)}`);
+    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
       if (data.error) {
         return {
@@ -652,15 +683,27 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               choice.message.role === 'assistant',
           )?.message
         : data.choices[0].message;
-      const output =
-        message.content == null
-          ? message.tool_calls == null
-            ? message.function_call
-            : message.tool_calls
-          : message.content;
+
+      // Handle structured output
+      let output = message.content;
+      if (output == null) {
+        // Restore tool_calls and function_call handling
+        output = message.tool_calls ?? message.function_call;
+      } else if (
+        this.config.response_format?.type === 'json_schema' ||
+        this.config.response_format?.type === 'json_object'
+      ) {
+        try {
+          output = JSON.parse(output);
+        } catch (err) {
+          logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+        }
+      }
+
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
+
       return {
         output,
         tokenUsage: cached
