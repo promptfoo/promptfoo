@@ -21,7 +21,7 @@ definitions:
         additionalProperties: false
 
 prompts:
-  raw: 'You are a helpful math tutor. Solve {{problem}}'
+  - 'You are a helpful math tutor. Solve {{problem}}'
 providers:
   - id: azure:chat:gpt-4o-2
     config:

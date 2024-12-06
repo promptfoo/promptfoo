@@ -521,7 +521,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tAzure API response: ${JSON.stringify(data)}`);
+    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
       return {
         output: data.choices[0].text,
@@ -553,71 +553,43 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Record<string, any> {
-    // Merge configs from the provider and the prompt, similar to OpenAI
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
 
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    // Fix: Use the same message structure as OpenAI
+    const messages = parseChatPrompt(context?.prompt?.raw || prompt, [
+      { role: 'user', content: context?.prompt?.raw || prompt },
+    ]);
 
-    let stop: string;
-    try {
-      stop = getEnvString('OPENAI_STOP')
-        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
-        : config?.stop;
-    } catch (err) {
-      throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
-    }
-
-    // Add support for structured outputs via response_format
+    // Fix: Match OpenAI's response format structure exactly
     const responseFormat = config.response_format
       ? {
-          response_format: maybeLoadFromExternalFile(
-            renderVarsInObject(
-              {
-                type: config.response_format.type,
-                json_schema:
-                  config.response_format.type === 'json_schema'
-                    ? {
-                        name: config.response_format.json_schema.name,
-                        schema: config.response_format.json_schema.schema,
-                        strict: config.response_format.json_schema.strict,
-                      }
-                    : undefined,
-              },
-              context?.vars,
-            ),
-          ),
+          response_format: {
+            type: config.response_format.type,
+            ...(config.response_format.type === 'json_schema'
+              ? {
+                  json_schema: {
+                    name: config.response_format.json_schema.name,
+                    strict: config.response_format.json_schema.strict,
+                    schema: config.response_format.json_schema.schema,
+                  },
+                }
+              : {}),
+          },
         }
       : {};
 
     const body = {
       model: this.deploymentName,
       messages,
-      max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
-      temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
-      top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
-      presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
-      frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
-      ...(config.functions
-        ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(config.functions, context?.vars),
-            ),
-          }
-        : {}),
-      ...(config.function_call ? { function_call: config.function_call } : {}),
-      ...(config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
-        : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
-      ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
-      ...(config.dataSources ? { dataSources: config.dataSources } : {}),
-      ...(config.seed === undefined ? {} : { seed: config.seed }),
+      max_tokens: config.max_tokens ?? 1024,
+      temperature: config.temperature ?? 1,
+      top_p: config.top_p ?? 1,
+      presence_penalty: config.presence_penalty ?? 0,
+      frequency_penalty: config.frequency_penalty ?? 0,
       ...responseFormat,
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(stop ? { stop } : {}),
       ...(config.passthrough || {}),
     };
 
@@ -636,7 +608,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throwConfigurationError('Azure API host must be set.');
     }
 
-    const { body } = this.getOpenAiBody(prompt, context, callApiOptions);
+    // Get config from getOpenAiBody to use in response handling
+    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;
@@ -688,7 +661,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`\tAzure API response: ${JSON.stringify(data)}`);
+    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
       if (data.error) {
         return {
@@ -709,13 +682,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         // Restore tool_calls and function_call handling
         output = message.tool_calls ?? message.function_call;
       } else if (
-        this.config.response_format?.type === 'json_schema' &&
-        typeof output === 'string'
+        this.config.response_format?.type === 'json_schema' ||
+        this.config.response_format?.type === 'json_object'
       ) {
         try {
           output = JSON.parse(output);
         } catch (err) {
-          logger.error(`Failed to parse JSON output: ${err}`);
+          logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
         }
       }
 
