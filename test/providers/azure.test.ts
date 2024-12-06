@@ -1,3 +1,4 @@
+import { fetchWithCache } from '../../src/cache';
 import { AzureCompletionProvider } from '../../src/providers/azure';
 import { AzureGenericProvider } from '../../src/providers/azure';
 import { AzureChatCompletionProvider } from '../../src/providers/azure';
@@ -371,11 +372,11 @@ describe('AzureOpenAiChatCompletionProvider', () => {
         },
       };
 
-      const { fetchWithCache } = require('../../src/cache');
-      fetchWithCache.mockResolvedValueOnce({
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('test prompt');
@@ -383,19 +384,18 @@ describe('AzureOpenAiChatCompletionProvider', () => {
     });
 
     it('should handle API errors', async () => {
-      const { fetchWithCache } = require('../../src/cache');
-      fetchWithCache.mockRejectedValueOnce(new Error('API Error'));
+      jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
       const result = await provider.callApi('test prompt');
       expect(result.error).toBe('API call error: API Error');
     });
 
     it('should handle invalid JSON response', async () => {
-      const { fetchWithCache } = require('../../src/cache');
-      fetchWithCache.mockResolvedValueOnce({
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
         data: 'invalid json',
         cached: false,
         status: 200,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('test prompt');
@@ -433,11 +433,11 @@ describe('AzureOpenAiChatCompletionProvider', () => {
         },
       };
 
-      const { fetchWithCache } = require('../../src/cache');
-      fetchWithCache.mockResolvedValueOnce({
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('test prompt');
