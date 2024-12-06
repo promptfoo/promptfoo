@@ -617,7 +617,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throwConfigurationError('Azure API host must be set.');
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body } = this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;
@@ -688,8 +688,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         // Restore tool_calls and function_call handling
         output = message.tool_calls ?? message.function_call;
       } else if (
-        config.response_format?.type === 'json_schema' ||
-        config.response_format?.type === 'json_object'
+        this.config.response_format?.type === 'json_schema' ||
+        this.config.response_format?.type === 'json_object'
       ) {
         try {
           output = JSON.parse(output);
