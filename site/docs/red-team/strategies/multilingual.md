@@ -8,6 +8,14 @@ The Multilingual strategy tests an AI system's ability to handle and process inp
 
 This strategy is particularly important in light of [research](https://openreview.net/forum?id=vESNKdEMGp&) highlighting the multilingual jailbreak challenges.
 
+:::info
+
+This will generate multilingual test cases for all selected strategies. For example, if you're running the Crescendo strategy, it will generate test cases for crescendo in all of the languages you specify.
+
+This is a benefit because it allows you to test all of our strategies in multiple languages, however it does increase the total number of test cases generated (plugins \* strategies \* languages).
+
+:::
+
 Use it like so in your promptfooconfig.yaml:
 
 ```yaml

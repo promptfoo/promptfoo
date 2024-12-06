@@ -9,7 +9,7 @@ import type { TestCase } from '../../types';
 import { loadRedteamProvider } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
-const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
+export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
 export async function generateMultilingual(
   testCases: TestCase[],
@@ -143,11 +143,17 @@ export async function addMultilingual(
         ...testCase,
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/Multilingual-${lang.toUpperCase()}`,
+          metric: assertion.type?.startsWith('promptfoo:redteam:')
+            ? `${assertion.type?.split(':').pop() || assertion.metric}/Multilingual-${lang.toUpperCase()}`
+            : assertion.metric,
         })),
         vars: {
           ...testCase.vars,
           [injectVar]: translatedText,
+        },
+        metadata: {
+          ...testCase.metadata,
+          ...(testCase.metadata?.harmCategory && { harmCategory: testCase.metadata.harmCategory }),
         },
       });
 

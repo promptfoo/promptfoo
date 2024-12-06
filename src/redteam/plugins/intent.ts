@@ -19,7 +19,8 @@ export class IntentPlugin extends RedteamPluginBase {
     super(provider, purpose, injectVar);
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
     // Handle both string and array configs
-    this.intents = maybeLoadFromExternalFile(config.intent);
+    const loadedIntents = maybeLoadFromExternalFile(config.intent);
+    this.intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
     this.intents.forEach((intent, i) => {
       invariant(typeof intent === 'string', `Intent: "${intent}" at index ${i} must be a string`);
     });
