@@ -614,6 +614,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
       ...(config.dataSources ? { dataSources: config.dataSources } : {}),
+      ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
