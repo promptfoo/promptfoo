@@ -553,7 +553,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Record<string, any> {
-    // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -574,11 +573,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     const body = {
       model: this.deploymentName,
       messages,
-      max_tokens: config.max_tokens ?? 1024,
-      temperature: config.temperature ?? 1,
-      top_p: config.top_p ?? 1,
-      presence_penalty: config.presence_penalty ?? 0,
-      frequency_penalty: config.frequency_penalty ?? 0,
+      max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+      top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
+      presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
+      frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       ...(config.functions
         ? {
             functions: maybeLoadFromExternalFile(
@@ -587,12 +586,15 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
+      ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.tools
         ? {
             tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
           }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
+      ...(config.dataSources ? { dataSources: config.dataSources } : {}),
       ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
