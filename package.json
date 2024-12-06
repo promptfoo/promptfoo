@@ -59,7 +59,6 @@
     "test:app": "npm run test --prefix src/app",
     "test:integration": "jest --config jest.integration.config.ts integration",
     "test:watch": "jest --watch",
-    "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
     "tsc": "tsc"
   },
