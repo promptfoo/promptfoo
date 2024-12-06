@@ -6,7 +6,7 @@ sidebar_label: Multilingual
 
 The Multilingual strategy tests an AI system's ability to handle and process inputs in multiple languages, potentially uncovering inconsistencies in behavior across different languages or bypassing language-specific content filters.
 
-This strategy is particularly important in light of [research](https://openreview.net/forum?id=vESNKdEMGp&) highlighting the multilingual jailbreak challenges.
+This strategy is particularly important in light of [research](https://openreview.net/forum?id=vESNKdEMGp&) highlighting the multilingual jailbreak challenges. This strategy is also useful for generating test cases in your native language.
 
 :::info
 
@@ -25,20 +25,24 @@ strategies:
 
 By default, the strategy will translate the input into the following "low-resource" languages (see [background](#background) for more details):
 
-- Bengali (bn)
-- Swahili (sw)
-- Javanese (jv)
+- Bengali (`bn`)
+- Swahili (`sw`)
+- Javanese (`jv`)
 
-You can override this by specifying the `languages` option in the strategy:
+You can override this by specifying the `languages` option in the strategy. We recommend using [ISO 639-1 Language Codes](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) or [IETF language tags](https://en.wikipedia.org/wiki/IETF_language_tag).
 
 ```yaml
 strategies:
   - id: multilingual
     config:
       languages:
-        - fr-FR # French
-        - zh-CN # Chinese
+        - fr # French (ISO 639-1)
+        - zh-CN # Chinese (IETF)
+        - de # German (ISO 639-1)
+        # Add as many languages as needed
 ```
+
+You can also experiment with non-standard languages and cyphers like `pig-latin` or `ubbi-dubbi` or `reverse-speech` or `pirate` with mixed results.
 
 ## Background
 
