@@ -553,7 +553,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Record<string, any> {
-    // Merge configs from the provider and the prompt
+    // Merge configs from the provider and the prompt, similar to OpenAI
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -608,7 +608,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
-      ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.tools
         ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
         : {}),
@@ -636,7 +635,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throwConfigurationError('Azure API host must be set.');
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body } = this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;
@@ -651,8 +650,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             this.deploymentName
           }/chat/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`;
 
-      // Restore caching while keeping better error handling
-      const { response, cached: isCached } = await fetchWithCache(
+      const {
+        data: responseData,
+        cached: isCached,
+        status,
+      } = await fetchWithCache(
         url,
         {
           method: 'POST',
@@ -666,14 +668,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       );
 
       cached = isCached;
-      const responseText = await response.text();
 
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        return {
-          error: `API returned non-JSON response (status ${response.status}): ${responseText}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
-        };
+      // Handle the response data
+      if (typeof responseData === 'string') {
+        try {
+          data = JSON.parse(responseData);
+        } catch {
+          return {
+            error: `API returned invalid JSON response (status ${status}): ${responseData}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
+          };
+        }
+      } else {
+        data = responseData;
       }
     } catch (err) {
       return {
