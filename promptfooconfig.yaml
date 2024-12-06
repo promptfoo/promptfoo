@@ -14,9 +14,23 @@ definitions:
       schema:
         type: object
         properties:
+          steps:
+            type: array
+            items:
+              type: object
+              properties:
+                explanation:
+                  type: string
+                output:
+                  type: string
+              required:
+                - explanation
+                - output
+              additionalProperties: false
           final_answer:
             type: string
         required:
+          - steps
           - final_answer
         additionalProperties: false
 
@@ -29,7 +43,7 @@ providers:
       apiVersion: '2024-08-01-preview'
       deploymentName: 'gpt-4o-2'
       response_format: *math_response_format
-  - id: openai:chat:gpt-4o-2024-11-20
+  - id: openai:chat:gpt-4o-2024-08-06
     config:
       response_format: *math_response_format
 tests:
