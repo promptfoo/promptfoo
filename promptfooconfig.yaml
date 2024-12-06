@@ -23,10 +23,10 @@ definitions:
 prompts:
   raw: 'You are a helpful math tutor. Solve {{problem}}'
 providers:
-  - id: azure:chat:gpt-4o-2024-08-06
+  - id: azure:chat:gpt-4o-2
     config:
       apiHost: 'promptfoo.openai.azure.com'
-      apiVersion: '2024-10-21'
+      apiVersion: '2024-08-01-preview'
       deploymentName: 'gpt-4o-2'
       response_format: *math_response_format
   - id: openai:chat:gpt-4o-2024-11-20
