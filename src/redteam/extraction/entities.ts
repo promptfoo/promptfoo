@@ -11,7 +11,8 @@ export async function extractEntities(provider: ApiProvider, prompts: string[]):
       const result = await fetchRemoteGeneration('entities' as RedTeamTask, prompts);
       return result as string[];
     } catch (error) {
-      logger.warn(`Error using remote generation, falling back to local extraction: ${error}`);
+      logger.warn(`Error using remote generation, returning empty list: ${error}`);
+      return [];
     }
   }
 
