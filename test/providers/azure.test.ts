@@ -453,3 +453,42 @@ describe('AzureOpenAiChatCompletionProvider', () => {
     });
   });
 });
+
+describe('AzureCompletionProvider', () => {
+  it('should handle basic completion with caching', async () => {
+    const provider = new AzureCompletionProvider('test-deployment', {
+      config: {
+        apiHost: 'test.azure.com',
+        apiKey: 'test-key',
+      },
+    });
+
+    const mockResponse = {
+      choices: [{ text: 'Test response' }],
+      usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+    };
+
+    jest
+      .mocked(fetchWithCache)
+      .mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: mockResponse,
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+
+    const result1 = await provider.callApi('Test prompt');
+    const result2 = await provider.callApi('Test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledTimes(2);
+    expect(result1.output).toBe('Test response');
+    expect(result1.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    expect(result2.tokenUsage).toEqual({ cached: 10, total: 10 });
+  });
+});
