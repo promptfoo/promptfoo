@@ -738,7 +738,7 @@ class Evaluator {
           .join(' ')
           .slice(0, 50)
           .replace(/\n/g, ' ');
-        logger.info(`[${completed}/${total}] Running ${provider} with vars: ${vars}`);
+        logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
       } else if (multibar && evalStep) {
         const threadIndex = index % concurrency;
         const progressbar = multiProgressBars[threadIndex];
@@ -808,6 +808,17 @@ class Evaluator {
       // Run serial evaluations first
       logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
       for (const evalStep of serialRunEvalOptions) {
+        if (isWebUI) {
+          const provider = evalStep.provider.label || evalStep.provider.id();
+          const vars = Object.entries(evalStep.test.vars || {})
+            .map(([k, v]) => `${k}=${v}`)
+            .join(' ')
+            .slice(0, 50)
+            .replace(/\n/g, ' ');
+          logger.info(
+            `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+          );
+        }
         await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
       }
     }
