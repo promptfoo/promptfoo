@@ -27,7 +27,7 @@ export const evalJobs = new Map<string, Job>();
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
   const id = uuidv4();
-  evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
+  evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null, logs: [] });
 
   promptfoo
     .evaluate(

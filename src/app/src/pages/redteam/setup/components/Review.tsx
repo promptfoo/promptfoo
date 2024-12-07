@@ -38,6 +38,7 @@ export default function Review() {
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
   const [isRunning, setIsRunning] = React.useState(false);
   const [progress, setProgress] = React.useState<{ current: number; total: number } | null>(null);
+  const [logs, setLogs] = React.useState<string[]>([]);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -125,6 +126,7 @@ export default function Review() {
 
   const handleRun = async () => {
     setIsRunning(true);
+    setLogs([]);
     try {
       const response = await callApi('/redteam/run', {
         method: 'POST',
@@ -141,11 +143,14 @@ export default function Review() {
         const statusResponse = await callApi(`/eval/job/${id}`);
         const status = await statusResponse.json();
 
+        if (status.logs) {
+          setLogs(status.logs);
+        }
+
         if (status.status === 'complete') {
           clearInterval(pollInterval);
           setIsRunning(false);
           setProgress(null);
-          // Optionally redirect to results page
           window.location.href = `/report?id=${status.result.id}`;
         } else if (status.status === 'in-progress') {
           setProgress({
@@ -372,6 +377,31 @@ export default function Review() {
               <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
                 Progress: {progress.current}/{progress.total}
               </Typography>
+            )}
+            {logs.length > 0 && (
+              <Paper
+                elevation={1}
+                sx={{
+                  mt: 2,
+                  p: 2,
+                  maxHeight: '300px',
+                  overflow: 'auto',
+                  backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem',
+                }}
+              >
+                {logs.map((log, index) => (
+                  <Typography
+                    key={index}
+                    variant="body2"
+                    component="div"
+                    sx={{ whiteSpace: 'pre-wrap' }}
+                  >
+                    {log}
+                  </Typography>
+                ))}
+              </Paper>
             )}
           </li>
         </ol>

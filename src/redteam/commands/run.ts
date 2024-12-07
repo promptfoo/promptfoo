@@ -5,7 +5,7 @@ import yaml from 'js-yaml';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { doEval } from '../../commands/eval';
-import logger, { setLogLevel } from '../../logger';
+import logger, { setLogLevel, setLogCallback } from '../../logger';
 import telemetry from '../../telemetry';
 import type { CommandLineOptions, RedteamCliGenerateOptions } from '../../types';
 import { setupEnv, isRunningUnderNpx } from '../../util';
@@ -29,9 +29,14 @@ interface RedteamRunOptions {
 
   // Used by webui
   liveRedteamConfig?: any;
+  logCallback?: (message: string) => void;
 }
 
 export async function doRedteamRun(options: RedteamRunOptions) {
+  if (options.logCallback) {
+    setLogCallback(options.logCallback);
+  }
+
   const configPath = options.config || 'promptfooconfig.yaml';
   let redteamPath = options.output || 'redteam.yaml';
 
@@ -90,6 +95,9 @@ export async function doRedteamRun(options: RedteamRunOptions) {
     chalk.blue('To view the results, run: ') +
       chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam report`),
   );
+
+  // Clear the callback when done
+  setLogCallback(null);
 }
 
 export function redteamRunCommand(program: Command) {

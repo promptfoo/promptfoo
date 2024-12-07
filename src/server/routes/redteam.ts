@@ -12,13 +12,12 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   const config = req.body;
   const id = uuidv4();
 
-  // Initialize job status
-  evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
+  // Initialize job status with empty logs array
+  evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null, logs: [] });
 
   // Run redteam in background
   doRedteamRun({
     liveRedteamConfig: config,
-    /*
     progressCallback: (progress: number, total: number) => {
       const job = evalJobs.get(id);
       if (job) {
@@ -26,7 +25,12 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
         job.total = total;
       }
     },
-    */
+    logCallback: (message: string) => {
+      const job = evalJobs.get(id);
+      if (job) {
+        job.logs.push(message);
+      }
+    },
   })
     .then(() => {
       const job = evalJobs.get(id);
@@ -39,6 +43,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       const job = evalJobs.get(id);
       if (job) {
         job.status = 'error';
+        job.logs.push(`Error: ${error.message}`);
       }
     });
 
