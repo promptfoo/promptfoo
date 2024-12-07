@@ -26,7 +26,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     }
   }
 
-  const config = req.body;
+  const { config, force, verbose } = req.body;
   const id = uuidv4();
   currentJobId = id;
   currentAbortController = new AbortController();
@@ -47,6 +47,8 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   // Run redteam in background
   doRedteamRun({
     liveRedteamConfig: config,
+    force,
+    verbose,
     logCallback: (message: string) => {
       if (currentJobId === id) {
         const job = evalJobs.get(id);

@@ -16,9 +16,11 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -46,6 +48,8 @@ export default function Review() {
   const [logs, setLogs] = React.useState<string[]>([]);
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const { showToast } = useToast();
+  const [forceRegeneration, setForceRegeneration] = React.useState(true);
+  const [debugMode, setDebugMode] = React.useState(false);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -141,7 +145,11 @@ export default function Review() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(getUnifiedConfig(config)),
+        body: JSON.stringify({
+          config: getUnifiedConfig(config),
+          force: forceRegeneration,
+          verbose: debugMode,
+        }),
       });
 
       const { id } = await response.json();
@@ -401,38 +409,62 @@ export default function Review() {
           <Typography variant="body1" paragraph>
             Run the red team evaluation right here. Simpler but less powerful than the CLI:
           </Typography>
-          <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleRun}
-              disabled={isRunning}
-              startIcon={
-                isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
-              }
-            >
-              {isRunning ? 'Running...' : 'Run Now'}
-            </Button>
-            {isRunning && (
+          <Box sx={{ mb: 2 }}>
+            <Stack spacing={1} sx={{ mb: 2 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={forceRegeneration}
+                    onChange={(e) => setForceRegeneration(e.target.checked)}
+                    disabled={isRunning}
+                  />
+                }
+                label="Force regeneration"
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={debugMode}
+                    onChange={(e) => setDebugMode(e.target.checked)}
+                    disabled={isRunning}
+                  />
+                }
+                label="Debug mode"
+              />
+            </Stack>
+            <Box sx={{ display: 'flex', gap: 2 }}>
               <Button
                 variant="contained"
-                color="error"
-                onClick={handleCancel}
-                startIcon={<StopIcon />}
+                color="primary"
+                onClick={handleRun}
+                disabled={isRunning}
+                startIcon={
+                  isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
+                }
               >
-                Cancel
+                {isRunning ? 'Running...' : 'Run Now'}
               </Button>
-            )}
-            {evalId && (
-              <Button
-                variant="contained"
-                color="success"
-                href={`/report?evalId=${evalId}`}
-                startIcon={<AssessmentIcon />}
-              >
-                View Report
-              </Button>
-            )}
+              {isRunning && (
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={handleCancel}
+                  startIcon={<StopIcon />}
+                >
+                  Cancel
+                </Button>
+              )}
+              {evalId && (
+                <Button
+                  variant="contained"
+                  color="success"
+                  href={`/report?evalId=${evalId}`}
+                  startIcon={<AssessmentIcon />}
+                >
+                  View Report
+                </Button>
+              )}
+            </Box>
           </Box>
           {logs.length > 0 && <LogViewer logs={logs} />}
         </Box>

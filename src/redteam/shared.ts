@@ -35,6 +35,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     config: configPath,
     output: redteamPath,
     force: options.force,
+    verbose: options.verbose,
     inRedteamRun: true,
     abortSignal: options.abortSignal,
   });
