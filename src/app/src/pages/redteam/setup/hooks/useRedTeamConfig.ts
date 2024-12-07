@@ -144,16 +144,20 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         section: keyof Config['applicationDefinition'],
         value: string,
       ) =>
-        set((state) => ({
-          config: {
-            ...state.config,
-            applicationDefinition: {
-              ...state.config.applicationDefinition,
-              [section]: value,
+        set((state) => {
+          const newApplicationDefinition = {
+            ...state.config.applicationDefinition,
+            [section]: value,
+          };
+          const newPurpose = applicationDefinitionToPurpose(newApplicationDefinition);
+          return {
+            config: {
+              ...state.config,
+              applicationDefinition: newApplicationDefinition,
+              purpose: newPurpose,
             },
-            purpose: applicationDefinitionToPurpose(state.config.applicationDefinition),
-          },
-        })),
+          };
+        }),
     }),
     {
       name: 'redTeamConfig',
