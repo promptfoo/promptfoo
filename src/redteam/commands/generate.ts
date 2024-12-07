@@ -193,7 +193,13 @@ export async function doGenerateRedteam(
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
     maxConcurrency: config.maxConcurrency,
     delay: config.delay,
+    abortSignal: options.abortSignal,
   } as SynthesizeOptions);
+
+  if (redteamTests.length === 0) {
+    logger.warn('No test cases generated. Please check for errors and try again.');
+    return {};
+  }
 
   const updatedRedteamConfig = {
     purpose,
@@ -229,7 +235,7 @@ export async function doGenerateRedteam(
     ret = writePromptfooConfig(updatedYaml, options.output);
     printBorder();
     const relativeOutputPath = path.relative(process.cwd(), options.output);
-    logger.info(`Wrote ${redteamTests.length} new test cases to ${relativeOutputPath}`);
+    logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
     if (!options.inRedteamRun) {
       const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(

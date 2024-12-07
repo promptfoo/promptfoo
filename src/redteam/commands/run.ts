@@ -1,113 +1,12 @@
-import chalk from 'chalk';
 import type { Command } from 'commander';
-import * as fs from 'fs';
-import yaml from 'js-yaml';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { doEval } from '../../commands/eval';
-import logger, { setLogLevel, setLogCallback } from '../../logger';
-import type Eval from '../../models/eval';
+import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
-import type { CommandLineOptions, RedteamCliGenerateOptions } from '../../types';
-import { setupEnv, isRunningUnderNpx } from '../../util';
-import { loadDefaultConfig } from '../../util/config/default';
-import { doGenerateRedteam } from './generate';
-import { redteamInit } from './init';
+import { setupEnv } from '../../util';
+import { doRedteamRun } from '../shared';
+import type { RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
-
-interface RedteamRunOptions {
-  config?: string;
-  output?: string;
-  cache?: boolean;
-  envPath?: string;
-  maxConcurrency?: number;
-  delay?: number;
-  remote?: boolean;
-  force?: boolean;
-  filterProviders?: string;
-  filterTargets?: string;
-  verbose?: boolean;
-
-  // Used by webui
-  liveRedteamConfig?: any;
-  logCallback?: (message: string) => void;
-  abortSignal?: AbortSignal;
-}
-
-export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
-  if (options.logCallback) {
-    setLogCallback(options.logCallback);
-  }
-
-  let configPath: string | undefined = options.config || 'promptfooconfig.yaml';
-  let redteamPath = options.output || 'redteam.yaml';
-
-  if (options.liveRedteamConfig) {
-    // Write liveRedteamConfig to a temporary file
-    const tmpFile = fs.mkdtempSync('/tmp/redteam-') + '/redteam.yaml';
-    fs.writeFileSync(tmpFile, yaml.dump(options.liveRedteamConfig));
-    redteamPath = tmpFile;
-    // Do not use default config.
-    configPath = tmpFile;
-    logger.debug(`Using live config from ${tmpFile}`);
-    logger.debug(`Live config: ${JSON.stringify(options.liveRedteamConfig, null, 2)}`);
-  } else {
-    // Check if promptfooconfig.yaml exists, if not, run init
-    if (!fs.existsSync(configPath)) {
-      logger.info('No configuration file found. Running initialization...');
-      await redteamInit(undefined);
-      // User probably needs to edit init and stuff, so it is premature to generate and eval.
-      return;
-    }
-  }
-
-  // Generate new test cases
-  logger.info('Generating test cases...');
-  await doGenerateRedteam({
-    ...options,
-    config: configPath,
-    output: redteamPath,
-    force: options.force,
-    inRedteamRun: true,
-    abortSignal: options.abortSignal,
-  } as Partial<RedteamCliGenerateOptions>);
-
-  // Check if redteam.yaml exists before running evaluation
-  if (!fs.existsSync(redteamPath)) {
-    logger.info('No test cases generated. Skipping scan.');
-    return;
-  }
-
-  // Run evaluation
-  logger.info('Running scan...');
-  const { defaultConfig } = await loadDefaultConfig();
-  const evalResult = await doEval(
-    {
-      ...options,
-      config: [redteamPath],
-      cache: true, // Enable caching
-      write: true, // Write results to database
-      filterProviders: options.filterProviders,
-      filterTargets: options.filterTargets,
-    } as Partial<CommandLineOptions & Command>,
-    defaultConfig,
-    redteamPath,
-    {
-      showProgressBar: true,
-      abortSignal: options.abortSignal,
-    },
-  );
-
-  logger.info(chalk.green('\nRed team scan complete!'));
-  logger.info(
-    chalk.blue('To view the results, run: ') +
-      chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam report`),
-  );
-
-  // Clear the callback when done
-  setLogCallback(null);
-  return evalResult;
-}
 
 export function redteamRunCommand(program: Command) {
   program

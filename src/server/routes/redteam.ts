@@ -3,8 +3,8 @@ import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { doRedteamRun } from '../../redteam/commands/run';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
+import { doRedteamRun } from '../../redteam/shared';
 import { evalJobs } from './eval';
 
 export const redteamRouter = Router();

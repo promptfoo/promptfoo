@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -43,6 +44,7 @@ export default function Review() {
   const [isRunning, setIsRunning] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
   const [evalId, setEvalId] = React.useState<string | null>(null);
+  const { showToast } = useToast();
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -160,21 +162,24 @@ export default function Review() {
             setEvalId(status.evalId);
           } else {
             console.warn('No evaluation result was generated');
-            alert(
+            showToast(
               'The evaluation completed but no results were generated. Please check the logs for details.',
+              'warning',
             );
           }
         } else if (status.status === 'error') {
           clearInterval(pollInterval);
           setIsRunning(false);
-          // Handle error state
-          alert('An error occurred during evaluation. Please check the logs for details.');
+          showToast(
+            'An error occurred during evaluation. Please check the logs for details.',
+            'error',
+          );
         }
       }, 1000);
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
-      alert('An error occurred while starting the evaluation. Please try again.');
+      showToast('An error occurred while starting the evaluation. Please try again.', 'error');
     }
   };
 
