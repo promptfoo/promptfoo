@@ -6,6 +6,7 @@ import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
+import StopIcon from '@mui/icons-material/Stop';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -180,6 +181,19 @@ export default function Review() {
       console.error('Error running redteam:', error);
       setIsRunning(false);
       showToast('An error occurred while starting the evaluation. Please try again.', 'error');
+    }
+  };
+
+  const handleCancel = async () => {
+    try {
+      await callApi('/redteam/cancel', {
+        method: 'POST',
+      });
+      setIsRunning(false);
+      showToast('Job cancelled successfully', 'success');
+    } catch (error) {
+      console.error('Error cancelling job:', error);
+      showToast('Failed to cancel job', 'error');
     }
   };
 
@@ -399,6 +413,16 @@ export default function Review() {
             >
               {isRunning ? 'Running...' : 'Run Now'}
             </Button>
+            {isRunning && (
+              <Button
+                variant="contained"
+                color="error"
+                onClick={handleCancel}
+                startIcon={<StopIcon />}
+              >
+                Cancel
+              </Button>
+            )}
             {evalId && (
               <Button
                 variant="contained"
