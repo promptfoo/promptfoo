@@ -62,7 +62,7 @@ export async function doRedteamRun(options: RedteamRunOptions) {
 
   // Generate new test cases
   logger.info('Generating test cases...');
-  await doGenerateRedteam({
+  const generatedConfig = await doGenerateRedteam({
     ...options,
     config: configPath,
     output: redteamPath,

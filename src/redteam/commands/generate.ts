@@ -35,7 +35,9 @@ function getConfigHash(configPath: string): string {
   return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
 }
 
-export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptions>) {
+export async function doGenerateRedteam(
+  options: Partial<RedteamCliGenerateOptions>,
+): Promise<Partial<UnifiedConfig> | undefined> {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
@@ -201,6 +203,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     plugins: plugins || [],
   };
 
+  let ret: Partial<UnifiedConfig> | undefined;
   if (options.output) {
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
@@ -224,7 +227,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
           : { configHash: 'force-regenerate' }),
       },
     };
-    writePromptfooConfig(updatedYaml, options.output);
+    ret = writePromptfooConfig(updatedYaml, options.output);
     printBorder();
     const relativeOutputPath = path.relative(process.cwd(), options.output);
     logger.info(`Wrote ${redteamTests.length} new test cases to ${relativeOutputPath}`);
@@ -258,7 +261,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
       ...(existingConfig.metadata || {}),
       configHash: getConfigHash(configPath),
     };
-    writePromptfooConfig(existingConfig, configPath);
+    ret = writePromptfooConfig(existingConfig, configPath);
     logger.info(
       `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
     );
@@ -268,7 +271,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
       : `${commandPrefix} eval -c ${path.relative(process.cwd(), configPath)}`;
     logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
   } else {
-    writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml');
+    ret = writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml');
   }
 
   telemetry.record('command_used', {
@@ -279,6 +282,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     numTestsGenerated: redteamTests.length,
   });
   await telemetry.send();
+  return ret;
 }
 
 export function redteamGenerateCommand(
