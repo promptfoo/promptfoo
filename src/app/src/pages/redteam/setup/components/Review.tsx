@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
@@ -56,6 +56,7 @@ export default function Review() {
   const [forceRegeneration, setForceRegeneration] = React.useState(true);
   const [debugMode, setDebugMode] = React.useState(false);
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
+  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -160,9 +161,15 @@ export default function Review() {
       return;
     }
 
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      setPollInterval(null);
+    }
+
     setIsRunning(true);
     setLogs([]);
     setEvalId(null);
+
     try {
       const response = await callApi('/redteam/run', {
         method: 'POST',
@@ -178,8 +185,7 @@ export default function Review() {
 
       const { id } = await response.json();
 
-      // Poll for job status
-      const pollInterval = setInterval(async () => {
+      const interval = setInterval(async () => {
         const statusResponse = await callApi(`/eval/job/${id}`);
         const status = (await statusResponse.json()) as Job;
 
@@ -187,28 +193,29 @@ export default function Review() {
           setLogs(status.logs);
         }
 
-        if (status.status === 'complete') {
-          clearInterval(pollInterval);
+        if (status.status === 'complete' || status.status === 'error') {
+          clearInterval(interval);
+          setPollInterval(null);
           setIsRunning(false);
 
-          if (status.result && status.evalId) {
+          if (status.status === 'complete' && status.result && status.evalId) {
             setEvalId(status.evalId);
-          } else {
+          } else if (status.status === 'complete') {
             console.warn('No evaluation result was generated');
             showToast(
               'The evaluation completed but no results were generated. Please check the logs for details.',
               'warning',
             );
+          } else {
+            showToast(
+              'An error occurred during evaluation. Please check the logs for details.',
+              'error',
+            );
           }
-        } else if (status.status === 'error') {
-          clearInterval(pollInterval);
-          setIsRunning(false);
-          showToast(
-            'An error occurred during evaluation. Please check the logs for details.',
-            'error',
-          );
         }
       }, 1000);
+
+      setPollInterval(interval);
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
@@ -221,6 +228,12 @@ export default function Review() {
       await callApi('/redteam/cancel', {
         method: 'POST',
       });
+
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        setPollInterval(null);
+      }
+
       setIsRunning(false);
       showToast('Job cancelled successfully', 'success');
     } catch (error) {
@@ -241,6 +254,14 @@ export default function Review() {
       showToast('Failed to cancel existing job', 'error');
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [pollInterval]);
 
   return (
     <Box maxWidth="lg" mx="auto">

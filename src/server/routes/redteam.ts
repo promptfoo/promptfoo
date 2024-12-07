@@ -96,19 +96,25 @@ redteamRouter.post('/cancel', async (req: Request, res: Response): Promise<void>
     return;
   }
 
+  const jobId = currentJobId;
+
   if (currentAbortController) {
     currentAbortController.abort();
   }
 
-  const job = evalJobs.get(currentJobId);
+  const job = evalJobs.get(jobId);
   if (job) {
     job.status = 'error';
     job.logs.push('Job cancelled by user');
   }
 
+  // Clear state
   cliState.webUI = false;
   currentJobId = null;
   currentAbortController = null;
+
+  // Wait a moment to ensure cleanup
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   res.json({ message: 'Job cancelled' });
 });
