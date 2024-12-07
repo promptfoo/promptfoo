@@ -17,6 +17,7 @@ import { alpha } from '@mui/material/styles';
 import {
   DEFAULT_STRATEGIES,
   ALL_STRATEGIES,
+  AGENTIC_STRATEGIES,
   strategyDescriptions,
   strategyDisplayNames,
   MULTI_TURN_STRATEGIES,
@@ -42,6 +43,14 @@ const getStrategyId = (strategy: RedteamStrategy): string => {
 
 // Add this constant at the top of the file to track which strategies have config options
 const CONFIGURABLE_STRATEGIES = ['multilingual'] as const;
+
+// Split strategies into two groups
+const singleTurnStrategies = availableStrategies.filter(
+  (strategy) => !MULTI_TURN_STRATEGIES.includes(strategy.id as any),
+);
+const multiTurnStrategies = availableStrategies.filter((strategy) =>
+  MULTI_TURN_STRATEGIES.includes(strategy.id as any),
+);
 
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
@@ -155,8 +164,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         </Typography>
         <Box sx={{ ml: 2, mb: 2 }}>
           <Typography variant="body2" color="text.secondary" paragraph>
-            • <strong>Single-turn strategies</strong> test individual prompts in isolation. These
-            are ideal for:
+            <strong>Single-turn strategies</strong> test individual prompts in isolation. These are
+            ideal for:
             <Box component="ul" sx={{ mt: 1, mb: 2 }}>
               <li>Systems where each prompt is independent</li>
               <li>API endpoints (e.g., text classification, content generation)</li>
@@ -164,19 +173,26 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             </Box>
           </Typography>
           <Typography variant="body2" color="text.secondary" paragraph>
-            • <strong>Multi-turn strategies</strong> simulate realistic conversations through
-            multiple exchanges. These are ideal for:
+            <strong>Multi-turn strategies</strong> simulate realistic back-and-forth conversations.
+            These are ideal for:
             <Box component="ul" sx={{ mt: 1, mb: 2 }}>
               <li>Chatbots and conversational agents</li>
               <li>Systems that maintain conversation history</li>
               <li>Applications where context builds over time</li>
             </Box>
           </Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            <strong>Agentic strategies</strong> have reasoning capabilities that are better at
+            circumventing guardrails.
+          </Typography>
         </Box>
       </Paper>
 
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        {availableStrategies.map((strategy) => (
+      <Typography variant="h6" gutterBottom sx={{ mt: 4, mb: 2 }}>
+        Single-turn Strategies
+      </Typography>
+      <Grid container spacing={2} sx={{ mb: 4 }}>
+        {singleTurnStrategies.map((strategy) => (
           <Grid item xs={12} sm={6} md={4} key={strategy.id}>
             <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
               <FormControlLabel
@@ -196,7 +212,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                         alignItems: 'center',
                         gap: 1,
                         position: 'relative',
-                        pr: 4, // Add padding to the right to make room for the icon
+                        pr: 4,
                       }}
                     >
                       <Typography variant="subtitle1">{strategy.name}</Typography>
@@ -226,20 +242,102 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                       {DEFAULT_STRATEGIES.includes(
                         strategy.id as (typeof DEFAULT_STRATEGIES)[number],
                       ) && <Chip label="Recommended" size="small" color="default" />}
-                      {MULTI_TURN_STRATEGIES.includes(
-                        strategy.id as (typeof MULTI_TURN_STRATEGIES)[number],
+                      {AGENTIC_STRATEGIES.includes(
+                        strategy.id as (typeof AGENTIC_STRATEGIES)[number],
                       ) && (
                         <Chip
-                          label="Multi-turn"
+                          label="Agent"
                           size="small"
-                          color="secondary"
                           sx={{
                             backgroundColor: (theme) =>
                               theme.palette.mode === 'dark'
-                                ? alpha(theme.palette.secondary.main, 0.1)
-                                : alpha(theme.palette.secondary.main, 0.1),
-                            color: 'secondary.main',
-                            borderColor: 'secondary.main',
+                                ? alpha(theme.palette.warning.main, 0.1)
+                                : alpha(theme.palette.warning.main, 0.1),
+                            color: 'warning.main',
+                            borderColor: 'warning.main',
+                            border: 1,
+                          }}
+                        />
+                      )}
+                    </Box>
+                    <Typography variant="body2" color="text.secondary">
+                      {strategy.description}
+                    </Typography>
+                  </Box>
+                }
+              />
+            </Paper>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+        Multi-turn Strategies
+      </Typography>
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        {multiTurnStrategies.map((strategy) => (
+          <Grid item xs={12} sm={6} md={4} key={strategy.id}>
+            <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
+              <FormControlLabel
+                sx={{ width: '100%' }}
+                control={
+                  <Checkbox
+                    checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
+                    onChange={() => handleStrategyToggle(strategy.id)}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        position: 'relative',
+                        pr: 4,
+                      }}
+                    >
+                      <Typography variant="subtitle1">{strategy.name}</Typography>
+                      {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
+                        CONFIGURABLE_STRATEGIES.includes(
+                          strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
+                        ) && (
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConfigClick(strategy.id);
+                            }}
+                            sx={{
+                              position: 'absolute',
+                              right: 0,
+                              opacity: 0.6,
+                              '&:hover': {
+                                opacity: 1,
+                                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                              },
+                            }}
+                          >
+                            <SettingsOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        )}
+                      {DEFAULT_STRATEGIES.includes(
+                        strategy.id as (typeof DEFAULT_STRATEGIES)[number],
+                      ) && <Chip label="Recommended" size="small" color="default" />}
+                      {AGENTIC_STRATEGIES.includes(
+                        strategy.id as (typeof AGENTIC_STRATEGIES)[number],
+                      ) && (
+                        <Chip
+                          label="Agent"
+                          size="small"
+                          sx={{
+                            backgroundColor: (theme) =>
+                              theme.palette.mode === 'dark'
+                                ? alpha(theme.palette.warning.main, 0.1)
+                                : alpha(theme.palette.warning.main, 0.1),
+                            color: 'warning.main',
+                            borderColor: 'warning.main',
                             border: 1,
                           }}
                         />
