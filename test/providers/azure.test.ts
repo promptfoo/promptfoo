@@ -452,6 +452,154 @@ describe('AzureOpenAiChatCompletionProvider', () => {
       ]);
     });
   });
+
+  describe('structured outputs', () => {
+    let provider: AzureChatCompletionProvider;
+
+    beforeEach(() => {
+      provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+        },
+      });
+    });
+
+    afterEach(() => {
+      jest.resetAllMocks();
+    });
+
+    it('should parse JSON response when prompt config specifies json_object format', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: '{"result": 42, "explanation": "test"}',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt', {
+        prompt: {
+          config: {
+            response_format: { type: 'json_object' },
+          },
+          label: 'test prompt',
+          raw: 'test prompt',
+        },
+        vars: {},
+      });
+
+      expect(result.output).toEqual({
+        result: 42,
+        explanation: 'test',
+      });
+    });
+
+    it('should handle invalid JSON when response format is specified', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Invalid JSON response',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt', {
+        prompt: {
+          config: {
+            response_format: { type: 'json_object' },
+          },
+          label: 'test prompt',
+          raw: 'test prompt',
+        },
+        vars: {},
+      });
+
+      // Should still return the original string if JSON parsing fails
+      expect(result.output).toBe('Invalid JSON response');
+    });
+
+    it('should use correct API URL based on datasources config from prompt', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'test response',
+            },
+          },
+        ],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt', {
+        prompt: {
+          config: {
+            dataSources: [{ type: 'test' }],
+            apiVersion: '2024-custom',
+          },
+          label: 'test prompt',
+          raw: 'test prompt',
+        },
+        vars: {},
+      });
+
+      // Verify the URL includes extensions and uses the custom API version
+      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+        '/extensions/chat/completions?api-version=2024-custom',
+      );
+    });
+  });
 });
 
 describe('AzureCompletionProvider', () => {
