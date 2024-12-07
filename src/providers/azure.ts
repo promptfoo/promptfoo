@@ -617,20 +617,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throwConfigurationError('Azure API host must be set.');
     }
 
-    const { body } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;
     try {
-      const url = this.config.dataSources
+      const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
-          }/extensions/chat/completions?api-version=${
-            this.config.apiVersion || '2023-12-01-preview'
-          }`
+          }/extensions/chat/completions?api-version=${config.apiVersion || '2023-12-01-preview'}`
         : `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
-          }/chat/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`;
+          }/chat/completions?api-version=${config.apiVersion || '2023-12-01-preview'}`;
 
       const {
         data: responseData,
@@ -676,7 +674,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           error: `API response error: ${data.error.code} ${data.error.message}`,
         };
       }
-      const hasDataSources = !!this.config.dataSources;
+      const hasDataSources = !!config.dataSources;
       const message = hasDataSources
         ? data.choices.find(
             (choice: { message: { role: string; content: string } }) =>
@@ -690,8 +688,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         // Restore tool_calls and function_call handling
         output = message.tool_calls ?? message.function_call;
       } else if (
-        this.config.response_format?.type === 'json_schema' ||
-        this.config.response_format?.type === 'json_object'
+        config.response_format?.type === 'json_schema' ||
+        config.response_format?.type === 'json_object'
       ) {
         try {
           output = JSON.parse(output);
@@ -717,7 +715,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         logProbs,
         cost: calculateAzureCost(
           this.deploymentName,
-          this.config,
+          config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),

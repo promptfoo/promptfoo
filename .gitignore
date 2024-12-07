@@ -17,3 +17,5 @@ __pycache__
 
 # IDE
 .idea/
+
+examples/redteam-chatbot/package-lock.json

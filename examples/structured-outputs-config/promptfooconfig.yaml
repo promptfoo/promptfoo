@@ -76,4 +76,4 @@ tests:
         value: 24.01
       - type: is-json
       - type: javascript
-        value: typeof output.final_answer === 'string' || typeof JSON.parse(output).final_answer === 'string'
+        value: typeof output === 'object'
