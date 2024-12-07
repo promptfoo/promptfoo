@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import cliState from '../../cliState';
 import logger from '../../logger';
 import { doRedteamRun } from '../../redteam/commands/run';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
@@ -15,18 +16,12 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   // Initialize job status with empty logs array
   evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null, logs: [] });
 
+  // Set web UI mode
+  cliState.webUI = true;
+
   // Run redteam in background
   doRedteamRun({
     liveRedteamConfig: config,
-    /*
-    progressCallback: (progress: number, total: number) => {
-      const job = evalJobs.get(id);
-      if (job) {
-        job.progress = progress;
-        job.total = total;
-      }
-    },
-    */
     logCallback: (message: string) => {
       const job = evalJobs.get(id);
       if (job) {
@@ -39,6 +34,8 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       if (job) {
         job.status = 'complete';
       }
+      // Reset web UI mode
+      cliState.webUI = false;
     })
     .catch((error) => {
       console.error('Error running redteam:', error);
@@ -47,6 +44,8 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
         job.status = 'error';
         job.logs.push(`Error: ${error.message}`);
       }
+      // Reset web UI mode
+      cliState.webUI = false;
     });
 
   res.json({ id });
