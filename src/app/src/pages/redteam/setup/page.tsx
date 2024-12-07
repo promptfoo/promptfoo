@@ -11,6 +11,7 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import TargetIcon from '@mui/icons-material/GpsFixed';
 import StrategyIcon from '@mui/icons-material/Psychology';
 import ReviewIcon from '@mui/icons-material/RateReview';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SaveIcon from '@mui/icons-material/Save';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -227,10 +228,11 @@ export default function RedTeamSetupPage() {
   const [yamlPreviewOpen, setYamlPreviewOpen] = useState(false);
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
-  const { config, setFullConfig } = useRedTeamConfig();
+  const { config, setFullConfig, resetConfig } = useRedTeamConfig();
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
   const [configName, setConfigName] = useState('');
   const toast = useToast();
@@ -481,6 +483,14 @@ export default function RedTeamSetupPage() {
               >
                 Load Config
               </SidebarButton>
+              <SidebarButton
+                variant="text"
+                fullWidth
+                startIcon={<RestartAltIcon />}
+                onClick={() => setResetDialogOpen(true)}
+              >
+                Reset Config
+              </SidebarButton>
             </SidebarButtons>
           </InnerSidebarContainer>
         </OuterSidebarContainer>
@@ -617,6 +627,34 @@ export default function RedTeamSetupPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={resetDialogOpen}
+        onClose={() => setResetDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Reset Configuration</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to reset the configuration to default values? This action cannot
+            be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              resetConfig();
+              setResetDialogOpen(false);
+              toast.showToast('Configuration reset to defaults', 'success');
+            }}
+            color="error"
+          >
+            Reset
+          </Button>
         </DialogActions>
       </Dialog>
     </Root>
