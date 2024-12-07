@@ -132,15 +132,7 @@ async function handleExampleDownload(
   }
 
   const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
-  if (!exampleName) {
-    return;
-  }
-
-  const basePath = directory && directory !== '.' ? `${directory}/` : '';
-  const readmePath = path.join(basePath, exampleName, 'README.md');
-  const cdCommand = `cd ${path.join(basePath, exampleName)}`;
-
-  if (exampleName.includes('redteam')) {
+  if (directory === '.' || !directory) {
     logger.info(
       dedent`
 
