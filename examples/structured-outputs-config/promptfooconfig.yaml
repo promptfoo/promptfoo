@@ -54,12 +54,12 @@ prompts:
 
 providers:
   - openai:chat:gpt-4o-2024-11-20
-  - id: azure:chat:gpt-4o
+  - id: azure:chat:gpt-4o-2024-08-06
     label: azure gpt-4o-2024-08-06
     config:
-      apiHost: 'YOUR_ORG.openai.azure.com'
+      apiHost: 'promptfoo.openai.azure.com'
       apiVersion: '2024-08-01-preview'
-      deploymentName: 'YOUR_DEPLOYMENT_NAME'
+      deploymentName: 'gpt-4o-2024-08-06'
 tests:
   - vars:
       problem: '8x + 31 = 2'
@@ -68,8 +68,12 @@ tests:
         value:
           - -3.625
           - -29/8
+      - type: is-json
   - vars:
       problem: 'sqrt(x) = 4.9'
     assert:
       - type: contains
         value: 24.01
+      - type: is-json
+      - type: javascript
+        value: typeof output.final_answer === 'string' || typeof JSON.parse(output).final_answer === 'string'
