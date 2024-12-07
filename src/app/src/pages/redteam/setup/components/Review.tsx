@@ -2,6 +2,8 @@ import React, { useCallback, useMemo } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { callApi } from '@app/utils/api';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
@@ -20,7 +22,7 @@ import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { strategyDisplayNames } from '@promptfoo/redteam/constants';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
-import { Job } from '@promptfoo/types';
+import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml, getUnifiedConfig } from '../utils/yamlHelpers';
 import { LogViewer } from './LogViewer';
@@ -40,6 +42,7 @@ export default function Review() {
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
   const [isRunning, setIsRunning] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
+  const [evalId, setEvalId] = React.useState<string | null>(null);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -128,6 +131,7 @@ export default function Review() {
   const handleRun = async () => {
     setIsRunning(true);
     setLogs([]);
+    setEvalId(null);
     try {
       const response = await callApi('/redteam/run', {
         method: 'POST',
@@ -153,7 +157,7 @@ export default function Review() {
           setIsRunning(false);
 
           if (status.result && status.evalId) {
-            window.location.href = `/report?evalId=${status.evalId}`;
+            setEvalId(status.evalId);
           } else {
             console.warn('No evaluation result was generated');
             alert(
@@ -378,16 +382,28 @@ export default function Review() {
           <Typography variant="body1" paragraph>
             Run the red team evaluation right here. Simpler but less powerful than the CLI:
           </Typography>
-          <Box sx={{ mb: 2 }}>
+          <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
             <Button
               variant="contained"
               color="primary"
               onClick={handleRun}
               disabled={isRunning}
-              startIcon={isRunning && <CircularProgress size={20} color="inherit" />}
+              startIcon={
+                isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
+              }
             >
               {isRunning ? 'Running...' : 'Run Now'}
             </Button>
+            {evalId && (
+              <Button
+                variant="contained"
+                color="success"
+                href={`/report?evalId=${evalId}`}
+                startIcon={<AssessmentIcon />}
+              >
+                View Report
+              </Button>
+            )}
           </Box>
           {logs.length > 0 && <LogViewer logs={logs} />}
         </Box>

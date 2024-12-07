@@ -1,5 +1,4 @@
 import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
-import type { RedteamFileConfig } from '@promptfoo/redteam/types';
 
 export interface Config {
   description: string;
