@@ -124,22 +124,19 @@ export function LogViewer({ logs }: LogViewerProps) {
           ...sx,
         }}
       >
-        {logs.map((log, index) => (
-          <Typography
-            key={index}
-            variant="body2"
-            component="div"
-            sx={{
-              whiteSpace: 'pre-wrap',
-              '& span': {
-                color: theme.palette.mode === 'dark' ? 'inherit' : undefined,
-              },
-            }}
-            dangerouslySetInnerHTML={{
-              __html: convertAnsiToHtml(log),
-            }}
-          />
-        ))}
+        <Typography
+          variant="body2"
+          component="div"
+          sx={{
+            whiteSpace: 'pre-wrap',
+            '& span': {
+              color: theme.palette.mode === 'dark' ? 'inherit' : undefined,
+            },
+          }}
+          dangerouslySetInnerHTML={{
+            __html: logs.map((log) => convertAnsiToHtml(log)).join('<br/>'),
+          }}
+        />
       </Paper>
     ),
     [logs, convertAnsiToHtml, theme.palette.mode],
