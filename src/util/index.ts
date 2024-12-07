@@ -1109,3 +1109,11 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
   }
   return contents;
 }
+
+export function isRunningUnderNpx(): boolean {
+  return Boolean(
+    process.env.npm_execpath?.includes('npx') ||
+      process.execPath.includes('npx') ||
+      process.env.npm_lifecycle_script?.includes('npx'),
+  );
+}

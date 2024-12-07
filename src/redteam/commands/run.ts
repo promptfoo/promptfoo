@@ -7,7 +7,7 @@ import { doEval } from '../../commands/eval';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import type { CommandLineOptions, RedteamCliGenerateOptions } from '../../types';
-import { setupEnv } from '../../util';
+import { setupEnv, isRunningUnderNpx } from '../../util';
 import { loadDefaultConfig } from '../../util/config/default';
 import { doGenerateRedteam } from './generate';
 import { redteamInit } from './init';
@@ -75,7 +75,10 @@ async function doRedteamRun(options: RedteamRunOptions) {
   );
 
   logger.info(chalk.green('\nRed team scan complete!'));
-  logger.info(chalk.blue('To view the results, run: ') + chalk.bold('promptfoo redteam report'));
+  logger.info(
+    chalk.blue('To view the results, run: ') +
+      chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam report`),
+  );
 }
 
 export function redteamRunCommand(program: Command) {
