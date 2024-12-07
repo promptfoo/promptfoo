@@ -37,7 +37,7 @@ function getConfigHash(configPath: string): string {
 
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
-): Promise<Partial<UnifiedConfig> | undefined> {
+): Promise<Partial<UnifiedConfig>> {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
@@ -52,20 +52,19 @@ export async function doGenerateRedteam(
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
   if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
-    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as any;
+    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as Partial<UnifiedConfig>;
     const storedHash = redteamContent.metadata?.configHash;
     const currentHash = getConfigHash(configPath);
 
     shouldGenerate = storedHash !== currentHash;
+    if (!shouldGenerate) {
+      logger.warn(
+        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+      );
+      return redteamContent;
+    }
   } else {
     shouldGenerate = true;
-  }
-
-  if (!shouldGenerate) {
-    logger.warn(
-      'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-    );
-    return;
   }
 
   if (configPath) {
@@ -92,7 +91,7 @@ export async function doGenerateRedteam(
         )} first`,
       ),
     );
-    return;
+    return {};
   }
 
   const startTime = Date.now();

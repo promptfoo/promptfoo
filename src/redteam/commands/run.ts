@@ -6,6 +6,7 @@ import { z } from 'zod';
 import cliState from '../../cliState';
 import { doEval } from '../../commands/eval';
 import logger, { setLogLevel, setLogCallback } from '../../logger';
+import type Eval from '../../models/eval';
 import telemetry from '../../telemetry';
 import type { CommandLineOptions, RedteamCliGenerateOptions } from '../../types';
 import { setupEnv, isRunningUnderNpx } from '../../util';
@@ -33,7 +34,7 @@ interface RedteamRunOptions {
   abortSignal?: AbortSignal;
 }
 
-export async function doRedteamRun(options: RedteamRunOptions) {
+export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
   if (options.logCallback) {
     setLogCallback(options.logCallback);
   }
@@ -62,7 +63,7 @@ export async function doRedteamRun(options: RedteamRunOptions) {
 
   // Generate new test cases
   logger.info('Generating test cases...');
-  const generatedConfig = await doGenerateRedteam({
+  await doGenerateRedteam({
     ...options,
     config: configPath,
     output: redteamPath,
@@ -80,7 +81,7 @@ export async function doRedteamRun(options: RedteamRunOptions) {
   // Run evaluation
   logger.info('Running scan...');
   const { defaultConfig } = await loadDefaultConfig();
-  await doEval(
+  const evalResult = await doEval(
     {
       ...options,
       config: [redteamPath],
@@ -105,6 +106,7 @@ export async function doRedteamRun(options: RedteamRunOptions) {
 
   // Clear the callback when done
   setLogCallback(null);
+  return evalResult;
 }
 
 export function redteamRunCommand(program: Command) {

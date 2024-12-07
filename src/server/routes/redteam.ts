@@ -50,10 +50,11 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     },
     abortSignal: currentAbortController.signal,
   })
-    .then(() => {
+    .then(async (evalResult) => {
       const job = evalJobs.get(id);
       if (job && currentJobId === id) {
         job.status = 'complete';
+        job.result = evalResult ? await evalResult.toEvaluateSummary() : null;
       }
       if (currentJobId === id) {
         cliState.webUI = false;

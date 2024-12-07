@@ -964,7 +964,11 @@ class Evaluator {
   }
 }
 
-export function evaluate(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
+export function evaluate(
+  testSuite: TestSuite,
+  evalRecord: Eval,
+  options: EvaluateOptions,
+): Promise<Eval> {
   const ev = new Evaluator(testSuite, evalRecord, options);
   return ev.evaluate();
 }

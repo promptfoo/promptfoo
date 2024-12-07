@@ -150,12 +150,28 @@ export default function Review() {
         if (status.status === 'complete') {
           clearInterval(pollInterval);
           setIsRunning(false);
-          window.location.href = `/report?id=${status.result.id}`;
+
+          // Check if we have a result before navigating
+          if (status.result) {
+            // Navigate to the report page with the eval ID
+            window.location.href = `/report?id=${status.result.evalId || id}`;
+          } else {
+            console.warn('No evaluation result was generated');
+            alert(
+              'The evaluation completed but no results were generated. Please check the logs for details.',
+            );
+          }
+        } else if (status.status === 'error') {
+          clearInterval(pollInterval);
+          setIsRunning(false);
+          // Handle error state
+          alert('An error occurred during evaluation. Please check the logs for details.');
         }
       }, 1000);
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
+      alert('An error occurred while starting the evaluation. Please try again.');
     }
   };
 
