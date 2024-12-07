@@ -27,7 +27,14 @@ export const evalJobs = new Map<string, Job>();
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
   const id = uuidv4();
-  evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null, logs: [] });
+  evalJobs.set(id, {
+    evalId: null,
+    status: 'in-progress',
+    progress: 0,
+    total: 0,
+    result: null,
+    logs: [],
+  });
 
   promptfoo
     .evaluate(
@@ -51,6 +58,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       invariant(job, 'Job not found');
       job.status = 'complete';
       job.result = await result.toEvaluateSummary();
+      job.evalId = result.id;
       console.log(`[${id}] Complete`);
     });
 
@@ -65,7 +73,12 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
     return;
   }
   if (job.status === 'complete') {
-    res.json({ status: 'complete', result: job.result, logs: job.logs });
+    res.json({
+      status: 'complete',
+      result: job.result,
+      evalId: job.evalId,
+      logs: job.logs,
+    });
   } else {
     res.json({
       status: 'in-progress',

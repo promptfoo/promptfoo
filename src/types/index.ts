@@ -854,6 +854,7 @@ export interface OutputFile {
 
 // Live eval job state
 export interface Job {
+  evalId: string | null;
   status: 'in-progress' | 'complete' | 'error';
   progress: number;
   total: number;

@@ -32,7 +32,14 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   currentAbortController = new AbortController();
 
   // Initialize job status with empty logs array
-  evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null, logs: [] });
+  evalJobs.set(id, {
+    evalId: null,
+    status: 'in-progress',
+    progress: 0,
+    total: 0,
+    result: null,
+    logs: [],
+  });
 
   // Set web UI mode
   cliState.webUI = true;
@@ -51,10 +58,12 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     abortSignal: currentAbortController.signal,
   })
     .then(async (evalResult) => {
+      const summary = evalResult ? await evalResult.toEvaluateSummary() : null;
       const job = evalJobs.get(id);
       if (job && currentJobId === id) {
         job.status = 'complete';
-        job.result = evalResult ? await evalResult.toEvaluateSummary() : null;
+        job.result = summary;
+        job.evalId = evalResult?.id ?? null;
       }
       if (currentJobId === id) {
         cliState.webUI = false;

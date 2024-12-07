@@ -20,6 +20,7 @@ import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { strategyDisplayNames } from '@promptfoo/redteam/constants';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
+import { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml, getUnifiedConfig } from '../utils/yamlHelpers';
 import { LogViewer } from './LogViewer';
@@ -141,7 +142,7 @@ export default function Review() {
       // Poll for job status
       const pollInterval = setInterval(async () => {
         const statusResponse = await callApi(`/eval/job/${id}`);
-        const status = await statusResponse.json();
+        const status = (await statusResponse.json()) as Job;
 
         if (status.logs) {
           setLogs(status.logs);
@@ -151,10 +152,8 @@ export default function Review() {
           clearInterval(pollInterval);
           setIsRunning(false);
 
-          // Check if we have a result before navigating
-          if (status.result) {
-            // Navigate to the report page with the eval ID
-            window.location.href = `/report?id=${status.result.evalId || id}`;
+          if (status.result && status.evalId) {
+            window.location.href = `/report?evalId=${status.evalId}`;
           } else {
             console.warn('No evaluation result was generated');
             alert(
