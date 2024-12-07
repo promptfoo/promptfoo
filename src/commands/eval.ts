@@ -28,7 +28,7 @@ import type {
 } from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
-import { maybeLoadFromExternalFile } from '../util';
+import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
@@ -564,12 +564,13 @@ export function evalCommand(
       }
 
       if (validatedOpts.interactiveProviders) {
+        const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
         logger.warn(
           chalk.yellow(dedent`
           Warning: The --interactive-providers option has been removed.
 
           Instead, use -j 1 to run evaluations with a concurrency of 1:
-          ${chalk.green('promptfoo eval -j 1')}
+          ${chalk.green(`${runCommand} -j 1`)}
         `),
         );
         process.exit(2);
