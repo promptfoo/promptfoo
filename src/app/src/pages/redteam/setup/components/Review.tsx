@@ -1,7 +1,8 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useEffect, useRef } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { callApi } from '@app/utils/api';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import SaveIcon from '@mui/icons-material/Save';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
@@ -20,8 +21,9 @@ import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { strategyDisplayNames } from '@promptfoo/redteam/constants';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
+import Convert from 'ansi-to-html';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import { generateOrderedYaml } from '../utils/yamlHelpers';
+import { generateOrderedYaml, getUnifiedConfig } from '../utils/yamlHelpers';
 
 interface PolicyPlugin {
   id: 'policy';
@@ -39,6 +41,25 @@ export default function Review() {
   const [isRunning, setIsRunning] = React.useState(false);
   const [progress, setProgress] = React.useState<{ current: number; total: number } | null>(null);
   const [logs, setLogs] = React.useState<string[]>([]);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = React.useState(true);
+  const [isLogsFullscreen, setIsLogsFullscreen] = React.useState(false);
+
+  useEffect(() => {
+    if (shouldAutoScroll && logsContainerRef.current) {
+      const container = logsContainerRef.current;
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [logs, shouldAutoScroll]);
+
+  const handleScroll = useCallback(() => {
+    if (logsContainerRef.current) {
+      const container = logsContainerRef.current;
+      const isAtBottom =
+        Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 50;
+      setShouldAutoScroll(isAtBottom);
+    }
+  }, []);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -133,7 +154,7 @@ export default function Review() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(config),
+        body: JSON.stringify(getUnifiedConfig(config)),
       });
 
       const { id } = await response.json();
@@ -163,6 +184,35 @@ export default function Review() {
       console.error('Error running redteam:', error);
       setIsRunning(false);
     }
+  };
+
+  const ansiConverter = useMemo(
+    () =>
+      new Convert({
+        fg: theme.palette.mode === 'dark' ? '#fff' : '#000',
+        bg: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
+        newline: true,
+        escapeXML: true,
+        stream: false,
+      }),
+    [theme.palette.mode],
+  );
+
+  const convertAnsiToHtml = useCallback((text: string) => {
+    try {
+      return ansiConverter.toHtml(text);
+    } catch (e) {
+      console.error('Failed to convert ANSI to HTML:', e);
+      return text;
+    }
+  }, []);
+
+  const handleOpenFullscreen = () => {
+    setIsLogsFullscreen(true);
+  };
+
+  const handleCloseFullscreen = () => {
+    setIsLogsFullscreen(false);
   };
 
   return (
@@ -379,29 +429,96 @@ export default function Review() {
               </Typography>
             )}
             {logs.length > 0 && (
-              <Paper
-                elevation={1}
-                sx={{
-                  mt: 2,
-                  p: 2,
-                  maxHeight: '300px',
-                  overflow: 'auto',
-                  backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-                  fontFamily: 'monospace',
-                  fontSize: '0.875rem',
-                }}
-              >
-                {logs.map((log, index) => (
-                  <Typography
-                    key={index}
-                    variant="body2"
-                    component="div"
-                    sx={{ whiteSpace: 'pre-wrap' }}
+              <>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, mb: 1 }}>
+                  <Typography variant="subtitle2">Logs</Typography>
+                  <Button
+                    size="small"
+                    startIcon={<FullscreenIcon />}
+                    onClick={handleOpenFullscreen}
+                    sx={{ ml: 'auto' }}
                   >
-                    {log}
-                  </Typography>
-                ))}
-              </Paper>
+                    Fullscreen
+                  </Button>
+                </Box>
+                <Paper
+                  elevation={1}
+                  ref={logsContainerRef}
+                  onScroll={handleScroll}
+                  sx={{
+                    p: 2,
+                    maxHeight: '300px',
+                    overflow: 'auto',
+                    backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  {logs.map((log, index) => (
+                    <Typography
+                      key={index}
+                      variant="body2"
+                      component="div"
+                      sx={{
+                        whiteSpace: 'pre-wrap',
+                        '& span': {
+                          color: theme.palette.mode === 'dark' ? 'inherit' : undefined,
+                        },
+                      }}
+                      dangerouslySetInnerHTML={{
+                        __html: convertAnsiToHtml(log),
+                      }}
+                    />
+                  ))}
+                </Paper>
+
+                <Dialog
+                  open={isLogsFullscreen}
+                  onClose={handleCloseFullscreen}
+                  maxWidth={false}
+                  fullWidth
+                  fullScreen
+                >
+                  <DialogTitle>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      Logs
+                      <Button size="small" onClick={handleCloseFullscreen} sx={{ ml: 'auto' }}>
+                        Exit Fullscreen
+                      </Button>
+                    </Box>
+                  </DialogTitle>
+                  <DialogContent sx={{ p: 0 }}>
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        height: '100%',
+                        p: 3,
+                        backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+                        fontFamily: 'monospace',
+                        fontSize: '0.875rem',
+                        overflow: 'auto',
+                      }}
+                    >
+                      {logs.map((log, index) => (
+                        <Typography
+                          key={index}
+                          variant="body2"
+                          component="div"
+                          sx={{
+                            whiteSpace: 'pre-wrap',
+                            '& span': {
+                              color: theme.palette.mode === 'dark' ? 'inherit' : undefined,
+                            },
+                          }}
+                          dangerouslySetInnerHTML={{
+                            __html: convertAnsiToHtml(log),
+                          }}
+                        />
+                      ))}
+                    </Paper>
+                  </DialogContent>
+                </Dialog>
+              </>
             )}
           </li>
         </ol>

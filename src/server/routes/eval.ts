@@ -65,9 +65,14 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
     return;
   }
   if (job.status === 'complete') {
-    res.json({ status: 'complete', result: job.result });
+    res.json({ status: 'complete', result: job.result, logs: job.logs });
   } else {
-    res.json({ status: 'in-progress', progress: job.progress, total: job.total });
+    res.json({
+      status: 'in-progress',
+      progress: job.progress,
+      total: job.total,
+      logs: job.logs,
+    });
   }
 });
 

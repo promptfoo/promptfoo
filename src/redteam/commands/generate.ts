@@ -49,7 +49,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
-  if (!options.force && fs.existsSync(outputPath) && configPath) {
+  if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
     const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as any;
     const storedHash = redteamContent.metadata?.configHash;
     const currentHash = getConfigHash(configPath);

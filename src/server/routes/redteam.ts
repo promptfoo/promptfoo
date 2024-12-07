@@ -18,6 +18,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   // Run redteam in background
   doRedteamRun({
     liveRedteamConfig: config,
+    /*
     progressCallback: (progress: number, total: number) => {
       const job = evalJobs.get(id);
       if (job) {
@@ -25,6 +26,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
         job.total = total;
       }
     },
+    */
     logCallback: (message: string) => {
       const job = evalJobs.get(id);
       if (job) {

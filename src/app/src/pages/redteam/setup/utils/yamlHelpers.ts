@@ -1,5 +1,6 @@
 import { subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
+import { UnifiedConfig } from '@promptfoo/types';
 import yaml from 'js-yaml';
 import type { Config, YamlConfig } from '../types';
 
@@ -39,8 +40,10 @@ const orderKeys = (obj: any): any => {
   return orderedObj;
 };
 
-export const generateOrderedYaml = (config: Config): string => {
-  const yamlConfig: YamlConfig = {
+export function getUnifiedConfig(
+  config: Config,
+): UnifiedConfig & { redteam: NonNullable<UnifiedConfig['redteam']> } {
+  return {
     description: config.description,
     targets: [config.target],
     prompts: config.prompts,
@@ -66,14 +69,16 @@ export const generateOrderedYaml = (config: Config): string => {
       }),
     },
   };
+}
 
+export function generateOrderedYaml(config: Config): string {
+  const yamlConfig = getUnifiedConfig(config);
   if (config.purpose) {
     yamlConfig.redteam.purpose = config.purpose;
   }
   if (config.entities && config.entities.length > 0) {
     yamlConfig.redteam.entities = config.entities;
   }
-
   const orderedConfig = orderKeys(yamlConfig);
 
   const yamlString = yaml.dump(orderedConfig, { noRefs: true, lineWidth: -1 });
@@ -93,4 +98,4 @@ export const generateOrderedYaml = (config: Config): string => {
   });
 
   return `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n${updatedLines.join('\n')}`;
-};
+}

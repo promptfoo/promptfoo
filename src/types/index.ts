@@ -858,6 +858,7 @@ export interface Job {
   progress: number;
   total: number;
   result: EvaluateSummaryV3 | EvaluateSummaryV2 | null;
+  logs: string[];
 }
 
 // used for writing eval results

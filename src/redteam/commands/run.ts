@@ -37,14 +37,18 @@ export async function doRedteamRun(options: RedteamRunOptions) {
     setLogCallback(options.logCallback);
   }
 
-  const configPath = options.config || 'promptfooconfig.yaml';
+  let configPath: string | undefined = options.config || 'promptfooconfig.yaml';
   let redteamPath = options.output || 'redteam.yaml';
 
   if (options.liveRedteamConfig) {
     // Write liveRedteamConfig to a temporary file
-    const tmpFile = fs.mkdtempSync('redteam-') + '/redteam.yaml';
+    const tmpFile = fs.mkdtempSync('/tmp/redteam-') + '/redteam.yaml';
     fs.writeFileSync(tmpFile, yaml.dump(options.liveRedteamConfig));
     redteamPath = tmpFile;
+    // Do not use default config.
+    configPath = tmpFile;
+    logger.debug(`Using live config from ${tmpFile}`);
+    logger.debug(`Live config: ${JSON.stringify(options.liveRedteamConfig, null, 2)}`);
   } else {
     // Check if promptfooconfig.yaml exists, if not, run init
     if (!fs.existsSync(configPath)) {
