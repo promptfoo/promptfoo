@@ -715,12 +715,22 @@ class Evaluator {
     let multibar: MultiBar | undefined;
     let multiProgressBars: SingleBar[] = [];
     const originalProgressCallback = this.options.progressCallback;
+    const isWebUI = Boolean(cliState.webUI);
+
     this.options.progressCallback = (completed, total, index, evalStep) => {
       if (originalProgressCallback) {
         originalProgressCallback(completed, total, index, evalStep);
       }
 
-      if (multibar && evalStep) {
+      if (isWebUI) {
+        const provider = evalStep.provider.label || evalStep.provider.id();
+        const vars = Object.entries(evalStep.test.vars || {})
+          .map(([k, v]) => `${k}=${v}`)
+          .join(' ')
+          .slice(0, 50)
+          .replace(/\n/g, ' ');
+        logger.info(`[${completed}/${total}] Running ${provider} with vars: ${vars}`);
+      } else if (multibar && evalStep) {
         const threadIndex = index % concurrency;
         const progressbar = multiProgressBars[threadIndex];
         progressbar.increment({
@@ -738,6 +748,11 @@ class Evaluator {
     };
 
     const createMultiBars = async (evalOptions: RunEvalOptions[]) => {
+      // Only create progress bars if not in web UI mode
+      if (isWebUI) {
+        return;
+      }
+
       const cliProgress = await import('cli-progress');
       multibar = new cliProgress.MultiBar(
         {
@@ -798,7 +813,7 @@ class Evaluator {
     const compareRowsCount = rowsWithSelectBestAssertion.size;
 
     let progressBar;
-    if (compareRowsCount > 0 && multibar) {
+    if (compareRowsCount > 0 && multibar && !isWebUI) {
       progressBar = multibar.create(compareRowsCount, 0, {
         provider: 'Running model-graded comparisons',
         prompt: '',
@@ -808,6 +823,10 @@ class Evaluator {
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
       compareCount++;
+
+      if (isWebUI) {
+        logger.info(`Running model-graded comparison ${compareCount} of ${compareRowsCount}...`);
+      }
 
       const resultsToCompare = this.evalRecord.persisted
         ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
@@ -871,7 +890,7 @@ class Evaluator {
           progressBar.increment({
             prompt: resultsToCompare[0].prompt.raw.slice(0, 10).replace(/\n/g, ''),
           });
-        } else {
+        } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
       }
