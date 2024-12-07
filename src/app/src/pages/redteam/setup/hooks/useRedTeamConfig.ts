@@ -157,7 +157,6 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
     }),
     {
       name: 'redTeamConfig',
-      skipHydration: true,
     },
   ),
 );
