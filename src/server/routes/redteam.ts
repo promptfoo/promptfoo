@@ -149,3 +149,10 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
     res.status(500).json({ error: `Failed to process ${task} task` });
   }
 });
+
+redteamRouter.get('/status', async (req: Request, res: Response): Promise<void> => {
+  res.json({
+    hasRunningJob: currentJobId !== null,
+    jobId: currentJobId,
+  });
+});

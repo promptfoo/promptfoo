@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
@@ -38,6 +38,11 @@ interface PolicyPlugin {
   };
 }
 
+interface JobStatusResponse {
+  hasRunningJob: boolean;
+  jobId?: string;
+}
+
 export default function Review() {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
@@ -50,6 +55,7 @@ export default function Review() {
   const { showToast } = useToast();
   const [forceRegeneration, setForceRegeneration] = React.useState(true);
   const [debugMode, setDebugMode] = React.useState(false);
+  const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -135,7 +141,25 @@ export default function Review() {
     return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
   }, [config.strategies]);
 
+  const checkForRunningJob = async (): Promise<JobStatusResponse> => {
+    try {
+      const response = await callApi('/redteam/status');
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error checking job status:', error);
+      return { hasRunningJob: false };
+    }
+  };
+
   const handleRun = async () => {
+    const { hasRunningJob } = await checkForRunningJob();
+
+    if (hasRunningJob) {
+      setIsJobStatusDialogOpen(true);
+      return;
+    }
+
     setIsRunning(true);
     setLogs([]);
     setEvalId(null);
@@ -202,6 +226,19 @@ export default function Review() {
     } catch (error) {
       console.error('Error cancelling job:', error);
       showToast('Failed to cancel job', 'error');
+    }
+  };
+
+  const handleCancelExistingAndRun = async () => {
+    try {
+      await handleCancel();
+      setIsJobStatusDialogOpen(false);
+      setTimeout(() => {
+        handleRun();
+      }, 500);
+    } catch (error) {
+      console.error('Error canceling existing job:', error);
+      showToast('Failed to cancel existing job', 'error');
     }
   };
 
@@ -474,6 +511,24 @@ export default function Review() {
         <DialogTitle>YAML Configuration</DialogTitle>
         <DialogContent>
           <YamlEditor initialYaml={yamlContent} readOnly />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isJobStatusDialogOpen} onClose={() => setIsJobStatusDialogOpen(false)}>
+        <DialogTitle>Job Already Running</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" paragraph>
+            There is already a red team evaluation running. Would you like to cancel it and start a
+            new one?
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+            <Button variant="outlined" onClick={() => setIsJobStatusDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="contained" color="primary" onClick={handleCancelExistingAndRun}>
+              Cancel Existing & Run New
+            </Button>
+          </Box>
         </DialogContent>
       </Dialog>
     </Box>
