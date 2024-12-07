@@ -1,3 +1,4 @@
+import { subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import yaml from 'js-yaml';
 import type { Config, YamlConfig } from '../types';
@@ -74,5 +75,22 @@ export const generateOrderedYaml = (config: Config): string => {
   }
 
   const orderedConfig = orderKeys(yamlConfig);
-  return yaml.dump(orderedConfig, { noRefs: true, lineWidth: -1 });
+
+  const yamlString = yaml.dump(orderedConfig, { noRefs: true, lineWidth: -1 });
+
+  // Add comments for plugins and strategies
+  const lines = yamlString.split('\n');
+  const updatedLines = lines.map((line) => {
+    const match = line.match(/^\s*- id: (.+)$/);
+    if (match) {
+      const pluginId = match[1];
+      const description = subCategoryDescriptions[pluginId as keyof typeof subCategoryDescriptions];
+      if (description) {
+        return `${line}  # ${description}`;
+      }
+    }
+    return line;
+  });
+
+  return `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n${updatedLines.join('\n')}`;
 };
