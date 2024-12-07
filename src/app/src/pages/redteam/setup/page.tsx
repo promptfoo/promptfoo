@@ -795,7 +795,9 @@ export default function RedTeamSetupPage() {
           <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
           <Button
             onClick={() => {
-              handleResetConfig();
+              resetConfig();
+              setResetDialogOpen(false);
+              toast.showToast('Configuration reset to defaults', 'success');
             }}
             color="error"
           >
