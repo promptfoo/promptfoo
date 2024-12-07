@@ -55,7 +55,6 @@ prompts:
 providers:
   - openai:chat:gpt-4o-2024-11-20
   - id: azure:chat:gpt-4o-2024-08-06
-    label: azure gpt-4o-2024-08-06
     config:
       apiHost: 'YOUR_ORG.openai.azure.com'
       apiVersion: '2024-08-01-preview'
