@@ -635,7 +635,7 @@ export async function initializeProject(directory: string | null, interactive: b
     return telemetryDetails;
   } catch (err) {
     if (err instanceof ExitPromptError) {
-      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
+      const runCommand = isRunningUnderNpx() ? 'npx promptfoo@latest init' : 'promptfoo init';
       logger.info(
         '\n' +
           chalk.blue('Initialization paused. To continue setup later, use the command: ') +

@@ -6,7 +6,6 @@ import dedent from 'dedent';
 import fs from 'fs/promises';
 import path from 'path';
 import { VERSION } from '../constants';
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
