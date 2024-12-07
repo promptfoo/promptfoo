@@ -536,11 +536,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             </Typography>
           </Alert>
         )}
-        {!hasTestedTarget && testingEnabled && (
-          <Alert severity="info" sx={{ flexGrow: 1, mr: 2 }}>
-            Please test the target configuration before proceeding
-          </Alert>
-        )}
         <Button
           variant="outlined"
           startIcon={<KeyboardArrowLeftIcon />}
