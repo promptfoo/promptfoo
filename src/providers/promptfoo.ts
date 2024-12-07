@@ -69,7 +69,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        60000,
+        30000,
         2,
       );
 
