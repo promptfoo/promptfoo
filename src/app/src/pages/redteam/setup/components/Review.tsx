@@ -6,6 +6,7 @@ import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
+import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
@@ -18,10 +19,12 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { strategyDisplayNames } from '@promptfoo/redteam/constants';
@@ -57,6 +60,7 @@ export default function Review() {
   const [debugMode, setDebugMode] = React.useState(false);
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isRunSettingsDialogOpen, setIsRunSettingsDialogOpen] = useState(false);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -153,7 +157,8 @@ export default function Review() {
     }
   };
 
-  const handleRun = async () => {
+  const handleRunWithSettings = async () => {
+    setIsRunSettingsDialogOpen(false);
     const { hasRunningJob } = await checkForRunningJob();
 
     if (hasRunningJob) {
@@ -247,7 +252,7 @@ export default function Review() {
       await handleCancel();
       setIsJobStatusDialogOpen(false);
       setTimeout(() => {
-        handleRun();
+        handleRunWithSettings();
       }, 500);
     } catch (error) {
       console.error('Error canceling existing job:', error);
@@ -468,33 +473,11 @@ export default function Review() {
             Run the red team evaluation right here. Simpler but less powerful than the CLI:
           </Typography>
           <Box sx={{ mb: 2 }}>
-            <Stack spacing={1} sx={{ mb: 2 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={forceRegeneration}
-                    onChange={(e) => setForceRegeneration(e.target.checked)}
-                    disabled={isRunning}
-                  />
-                }
-                label="Force regeneration"
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={debugMode}
-                    onChange={(e) => setDebugMode(e.target.checked)}
-                    disabled={isRunning}
-                  />
-                }
-                label="Debug mode"
-              />
-            </Stack>
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
               <Button
                 variant="contained"
                 color="primary"
-                onClick={handleRun}
+                onClick={handleRunWithSettings}
                 disabled={isRunning}
                 startIcon={
                   isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
@@ -522,6 +505,15 @@ export default function Review() {
                   View Report
                 </Button>
               )}
+              <Tooltip title="Run Settings">
+                <IconButton
+                  onClick={() => setIsRunSettingsDialogOpen(true)}
+                  disabled={isRunning}
+                  size="small"
+                >
+                  <SettingsIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
             </Box>
           </Box>
           {logs.length > 0 && <LogViewer logs={logs} />}
@@ -550,6 +542,53 @@ export default function Review() {
               Cancel Existing & Run New
             </Button>
           </Box>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isRunSettingsDialogOpen} onClose={() => setIsRunSettingsDialogOpen(false)}>
+        <DialogTitle>Run Settings</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1, minWidth: 300 }}>
+            {/*
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={forceRegeneration}
+                  onChange={(e) => setForceRegeneration(e.target.checked)}
+                  disabled={isRunning}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body1">Force regeneration</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Generate new test cases even if no changes are detected
+                  </Typography>
+                </Box>
+              }
+            />
+            */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={debugMode}
+                  onChange={(e) => setDebugMode(e.target.checked)}
+                  disabled={isRunning}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body1">Debug mode</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Show additional debug information in logs
+                  </Typography>
+                </Box>
+              }
+            />
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+              <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
+            </Box>
+          </Stack>
         </DialogContent>
       </Dialog>
     </Box>

@@ -71,12 +71,12 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   const command = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
   if (options.liveRedteamConfig) {
     logger.info(
-      `${chalk.blue('To view the results, click the "View Report" button or run: ')}${chalk.bold(`${command} redteam report`)} on the command line.`,
+      chalk.blue(
+        `To view the results, click the ${chalk.bold('View Report')} button or run: ${chalk.bold(`${command} redteam report`)} on the command line.`,
+      ),
     );
   } else {
-    logger.info(
-      `${chalk.blue('To view the results, run: ')}${chalk.bold(`${command} redteam report`)}`,
-    );
+    logger.info(chalk.blue(`To view the results, run: ${chalk.bold(`${command} redteam report`)}`));
   }
 
   // Clear the callback when done
