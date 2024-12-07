@@ -16,7 +16,7 @@ import { maybeLoadFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { loadRedteamProvider } from '../providers/shared';
+import { redteamProviderManager } from '../providers/shared';
 import { removePrefix } from '../util';
 
 /**
@@ -229,7 +229,7 @@ export abstract class RedteamGraderBase {
       const err = error as Error;
       throw new Error(dedent`
         Error rendering rubric template: ${err.message}
-      
+
         Required variables: ${extractedVars.join(', ')}
         Missing variables: ${missingVars.length > 0 ? missingVars.join(', ') : 'none'}
         Available variables: ${availableVars.join(', ')}
@@ -282,7 +282,7 @@ export abstract class RedteamGraderBase {
 
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
-      provider: await loadRedteamProvider({
+      provider: await redteamProviderManager.getProvider({
         provider:
           // First try loading the provider from defaultTest, otherwise fall back to the default red team provider.
           cliState.config?.defaultTest?.provider ||

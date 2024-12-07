@@ -6,7 +6,7 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
-import { loadRedteamProvider } from '../providers/shared';
+import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
@@ -85,7 +85,10 @@ export async function generateMultilingual(
 }
 
 export async function translate(text: string, lang: string): Promise<string> {
-  const redteamProvider = await loadRedteamProvider({ jsonOnly: true, preferSmallModel: true });
+  const redteamProvider = await redteamProviderManager.getProvider({
+    jsonOnly: true,
+    preferSmallModel: true,
+  });
   const result = await redteamProvider.callApi(
     dedent`Translate the <Text> below to language '${lang}'. Respond with JSON object containing {translation: string}.
 
