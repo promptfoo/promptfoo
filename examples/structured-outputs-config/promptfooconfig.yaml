@@ -57,9 +57,9 @@ providers:
   - id: azure:chat:gpt-4o-2024-08-06
     label: azure gpt-4o-2024-08-06
     config:
-      apiHost: 'YOUR-ORG.openai.azure.com'
+      apiHost: 'YOUR_ORG.openai.azure.com'
       apiVersion: '2024-08-01-preview'
-      deploymentName: 'gpt-4o-2024-08-06'
+      deploymentName: 'YOUR_DEPLOYMENT_NAME'
 
 defaultTest:
   assert:
