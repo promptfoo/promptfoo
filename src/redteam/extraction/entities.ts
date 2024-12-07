@@ -24,7 +24,7 @@ export async function extractEntities(provider: ApiProvider, prompts: string[]):
     Each line in your response must begin with the string "Entity:".
   `;
   try {
-    return callExtraction(provider, prompt, (output: string) => {
+    const entities = await callExtraction(provider, prompt, (output: string) => {
       const entities = output
         .split('\n')
         .filter((line) => line.trim().startsWith('Entity:'))
@@ -36,6 +36,8 @@ export async function extractEntities(provider: ApiProvider, prompts: string[]):
 
       return entities;
     });
+
+    return entities;
   } catch (error) {
     logger.warn(`Error using local extraction, returning empty list: ${error}`);
     return [];
