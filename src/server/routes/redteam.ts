@@ -9,9 +9,27 @@ import { evalJobs } from './eval';
 
 export const redteamRouter = Router();
 
+// Track the current running job
+let currentJobId: string | null = null;
+let currentAbortController: AbortController | null = null;
+
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
+  // If there's a current job running, abort it
+  if (currentJobId) {
+    if (currentAbortController) {
+      currentAbortController.abort();
+    }
+    const existingJob = evalJobs.get(currentJobId);
+    if (existingJob) {
+      existingJob.status = 'error';
+      existingJob.logs.push('Job cancelled - new job started');
+    }
+  }
+
   const config = req.body;
   const id = uuidv4();
+  currentJobId = id;
+  currentAbortController = new AbortController();
 
   // Initialize job status with empty logs array
   evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null, logs: [] });
@@ -23,32 +41,64 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   doRedteamRun({
     liveRedteamConfig: config,
     logCallback: (message: string) => {
-      const job = evalJobs.get(id);
-      if (job) {
-        job.logs.push(message);
+      if (currentJobId === id) {
+        const job = evalJobs.get(id);
+        if (job) {
+          job.logs.push(message);
+        }
       }
     },
+    abortSignal: currentAbortController.signal,
   })
     .then(() => {
       const job = evalJobs.get(id);
-      if (job) {
+      if (job && currentJobId === id) {
         job.status = 'complete';
       }
-      // Reset web UI mode
-      cliState.webUI = false;
+      if (currentJobId === id) {
+        cliState.webUI = false;
+        currentJobId = null;
+        currentAbortController = null;
+      }
     })
     .catch((error) => {
       console.error('Error running redteam:', error);
       const job = evalJobs.get(id);
-      if (job) {
+      if (job && currentJobId === id) {
         job.status = 'error';
         job.logs.push(`Error: ${error.message}`);
       }
-      // Reset web UI mode
-      cliState.webUI = false;
+      if (currentJobId === id) {
+        cliState.webUI = false;
+        currentJobId = null;
+        currentAbortController = null;
+      }
     });
 
   res.json({ id });
+});
+
+redteamRouter.post('/cancel', async (req: Request, res: Response): Promise<void> => {
+  if (!currentJobId) {
+    res.status(400).json({ error: 'No job currently running' });
+    return;
+  }
+
+  if (currentAbortController) {
+    currentAbortController.abort();
+  }
+
+  const job = evalJobs.get(currentJobId);
+  if (job) {
+    job.status = 'error';
+    job.logs.push('Job cancelled by user');
+  }
+
+  cliState.webUI = false;
+  currentJobId = null;
+  currentAbortController = null;
+
+  res.json({ message: 'Job cancelled' });
 });
 
 // NOTE: This comes last, so the other routes take precedence

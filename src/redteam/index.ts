@@ -231,11 +231,22 @@ export async function synthesize({
   purpose: purposeOverride,
   strategies,
   delay,
+  abortSignal,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
   testCases: TestCaseWithPlugin[];
 }> {
+  // Add abort check helper
+  const checkAbort = () => {
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled');
+    }
+  };
+
+  // Add abort checks at key points
+  checkAbort();
+
   if (prompts.length === 0) {
     throw new Error('Prompts array cannot be empty');
   }
@@ -418,6 +429,8 @@ export async function synthesize({
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+    checkAbort();
+
     if (showProgressBar) {
       progressBar?.update({ task: plugin.id });
     } else {

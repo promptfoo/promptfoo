@@ -206,6 +206,7 @@ export async function doEval(
     await evaluate(testSuite, evalRecord, {
       ...options,
       eventSource: 'cli',
+      abortSignal: evaluateOptions.abortSignal,
     });
 
     const shareableUrl =

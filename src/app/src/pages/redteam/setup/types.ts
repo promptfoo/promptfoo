@@ -88,13 +88,6 @@ export interface YamlPreviewProps {
   config: Config;
 }
 
-export interface YamlConfig {
-  description: string;
-  targets: ProviderOptions[];
-  prompts: string[];
-  redteam: RedteamFileConfig;
-}
-
 export interface LocalPluginConfig {
   [key: string]: {
     indirectInjectionVar?: string;

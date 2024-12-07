@@ -353,6 +353,15 @@ class Evaluator {
 
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
+    const checkAbort = () => {
+      if (options.abortSignal?.aborted) {
+        throw new Error('Operation cancelled');
+      }
+    };
+
+    // Add abort checks at key points
+    checkAbort();
+
     const prompts: CompletedPrompt[] = [];
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
@@ -807,7 +816,10 @@ class Evaluator {
     logger.info(
       `Running ${concurrentRunEvalOptions.length} concurrent evaluations with ${concurrency} threads...`,
     );
-    await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, processEvalStep);
+    await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep, index) => {
+      checkAbort();
+      await processEvalStep(evalStep, index);
+    });
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size;

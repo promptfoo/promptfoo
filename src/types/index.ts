@@ -154,7 +154,7 @@ const EvaluateOptionsSchema = z.object({
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
 });
-export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema>;
+export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
 const PromptMetricsSchema = z.object({
   score: z.number(),

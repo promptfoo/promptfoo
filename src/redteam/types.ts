@@ -88,6 +88,7 @@ export interface SynthesizeOptions extends CommonOptions {
   plugins: (RedteamPluginObject & { id: string; numTests: number })[];
   prompts: [string, ...string[]];
   strategies: RedteamStrategyObject[];
+  abortSignal?: AbortSignal;
 }
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;

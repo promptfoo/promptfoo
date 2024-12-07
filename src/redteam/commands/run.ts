@@ -30,6 +30,7 @@ interface RedteamRunOptions {
   // Used by webui
   liveRedteamConfig?: any;
   logCallback?: (message: string) => void;
+  abortSignal?: AbortSignal;
 }
 
 export async function doRedteamRun(options: RedteamRunOptions) {
@@ -67,6 +68,7 @@ export async function doRedteamRun(options: RedteamRunOptions) {
     output: redteamPath,
     force: options.force,
     inRedteamRun: true,
+    abortSignal: options.abortSignal,
   } as Partial<RedteamCliGenerateOptions>);
 
   // Check if redteam.yaml exists before running evaluation
@@ -91,6 +93,7 @@ export async function doRedteamRun(options: RedteamRunOptions) {
     redteamPath,
     {
       showProgressBar: true,
+      abortSignal: options.abortSignal,
     },
   );
 
