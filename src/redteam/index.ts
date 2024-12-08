@@ -16,7 +16,6 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
 import { redteamProviderManager } from './providers/shared';
-import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
