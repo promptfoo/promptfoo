@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import invariant from 'tiny-invariant';
-import { fromZodError, ZodError } from 'zod-validation-error';
+import type { ZodError } from 'zod-validation-error';
+import { fromZodError } from 'zod-validation-error';
 import logger from '../../logger';
-import { loadApiProvider } from '../../providers';
-import { HttpProvider, HttpProviderConfig, HttpProviderConfigSchema } from '../../providers/http';
+import type { HttpProviderConfig } from '../../providers/http';
+import { HttpProvider, HttpProviderConfigSchema } from '../../providers/http';
 import type { ProviderOptions } from '../../types/providers';
 import { ProviderOptionsSchema } from '../../validators/providers';
 
