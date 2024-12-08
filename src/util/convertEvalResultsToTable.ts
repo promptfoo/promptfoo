@@ -11,6 +11,7 @@ export class PromptMetrics {
   score: number;
   testPassCount: number;
   testFailCount: number;
+  testErrorCount: number;
   assertPassCount: number;
   assertFailCount: number;
   totalLatencyMs: number;
@@ -23,6 +24,7 @@ export class PromptMetrics {
     this.score = 0;
     this.testPassCount = 0;
     this.testFailCount = 0;
+    this.testErrorCount = 0;
     this.assertPassCount = 0;
     this.assertFailCount = 0;
     this.totalLatencyMs = 0;
@@ -105,6 +107,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       prompt: result.prompt.raw,
       provider: result.provider?.label || result.provider?.id || 'unknown provider',
       pass: result.success,
+      failureReason: result.failureReason,
       cost: result.cost || 0,
     };
     invariant(result.promptId, 'Prompt ID is required');

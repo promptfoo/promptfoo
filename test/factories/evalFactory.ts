@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { ResultFailureReason } from '../../src';
 import { getDb } from '../../src/database';
 import { evalsTable } from '../../src/database/tables';
 import Eval from '../../src/models/eval';
@@ -30,6 +31,7 @@ export default class EvalFactory {
           score: 1,
           testPassCount: 1,
           testFailCount: 1,
+          testErrorCount: 0,
           assertPassCount: 1,
           assertFailCount: 1,
           totalLatencyMs: 200,
@@ -64,6 +66,7 @@ export default class EvalFactory {
           tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
         },
         error: null,
+        failureReason: ResultFailureReason.NONE,
         success: true,
         score: 1,
         latencyMs: 100,
@@ -115,6 +118,7 @@ export default class EvalFactory {
           tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
         },
         error: null,
+        failureReason: ResultFailureReason.NONE,
         success: false,
         score: 0,
         latencyMs: 100,

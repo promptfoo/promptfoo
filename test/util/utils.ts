@@ -34,6 +34,6 @@ export function createMockResponse(options: Partial<Response> = {}): Response {
       return createMockResponse(this);
     },
     ...options,
-  };
+  } as Response;
   return mockResponse;
 }
