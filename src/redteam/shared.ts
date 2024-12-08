@@ -30,7 +30,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   // Generate new test cases
   logger.info('Generating test cases...');
-  await doGenerateRedteam({
+  const redteamConfig = await doGenerateRedteam({
     ...options,
     config: configPath,
     output: redteamPath,
@@ -41,7 +41,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   });
 
   // Check if redteam.yaml exists before running evaluation
-  if (!fs.existsSync(redteamPath)) {
+  if (!redteamConfig || !fs.existsSync(redteamPath)) {
     logger.info('No test cases generated. Skipping scan.');
     return;
   }

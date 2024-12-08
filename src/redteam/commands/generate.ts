@@ -37,7 +37,7 @@ function getConfigHash(configPath: string): string {
 
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
-): Promise<Partial<UnifiedConfig>> {
+): Promise<Partial<UnifiedConfig> | null> {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
@@ -91,7 +91,7 @@ export async function doGenerateRedteam(
         )} first`,
       ),
     );
-    return {};
+    return null;
   }
 
   const startTime = Date.now();
@@ -198,7 +198,7 @@ export async function doGenerateRedteam(
 
   if (redteamTests.length === 0) {
     logger.warn('No test cases generated. Please check for errors and try again.');
-    return {};
+    return null;
   }
 
   const updatedRedteamConfig = {
