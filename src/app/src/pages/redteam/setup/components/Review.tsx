@@ -240,7 +240,7 @@ export default function Review() {
       }
 
       setIsRunning(false);
-      showToast('Job cancelled successfully', 'success');
+      showToast('Cancel request submitted', 'success');
     } catch (error) {
       console.error('Error cancelling job:', error);
       showToast('Failed to cancel job', 'error');

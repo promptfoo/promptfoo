@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
-import logger, { setLogCallback } from '../logger';
+import logger, { setLogCallback, setLogLevel } from '../logger';
 import type Eval from '../models/eval';
 import { isRunningUnderNpx } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
@@ -10,6 +10,9 @@ import { doGenerateRedteam } from './commands/generate';
 import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+  if (options.verbose) {
+    setLogLevel('debug');
+  }
   if (options.logCallback) {
     setLogCallback(options.logCallback);
   }
