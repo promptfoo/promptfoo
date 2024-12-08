@@ -1,4 +1,5 @@
 import React from 'react';
+import Editor from 'react-simple-code-editor';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import Accordion from '@mui/material/Accordion';
@@ -17,11 +18,10 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import type { ProviderOptions } from '../../types';
-import Editor from 'react-simple-code-editor';
-import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-clike';
+import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
+import type { ProviderOptions } from '../../types';
 import 'prismjs/themes/prism.css';
 
 interface TestTargetConfigurationProps {
@@ -77,7 +77,8 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a request parser to transform the prompt before sending. This can be used to format the prompt into a specific structure required by your API.
+              Optionally, configure a request parser to transform the prompt before sending. This
+              can be used to format the prompt into a specific structure required by your API.
             </Typography>
           </Box>
           <Typography variant="h6" gutterBottom>

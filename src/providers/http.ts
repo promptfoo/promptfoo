@@ -1,6 +1,7 @@
 import httpZ from 'http-z';
 import path from 'path';
 import invariant from 'tiny-invariant';
+import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { importModule } from '../esm';
@@ -16,16 +17,11 @@ import { isJavascriptFile } from '../util/file';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
-import { z } from 'zod';
 
 const nunjucks = getNunjucksEngine();
 
 export const HttpProviderConfigSchema = z.object({
-  body: z.union([
-    z.record(z.any()),
-    z.string(),
-    z.array(z.any())
-  ]).optional(),
+  body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
   method: z.string().optional(),
   queryParams: z.record(z.string()).optional(),
@@ -233,9 +229,7 @@ export async function createTransformRequest(
     return (prompt) => transform(prompt);
   }
 
-  logger.warn(
-    `[HttpProvider] transform: ${typeof transform}`,
-  );
+  logger.warn(`[HttpProvider] transform: ${typeof transform}`);
 
   if (typeof transform === 'string') {
     if (transform.startsWith('file://')) {
@@ -261,14 +255,8 @@ export async function createTransformRequest(
     // Handle string template
     return (prompt) => {
       const rendered = nunjucks.renderString(transform, { prompt });
-      logger.warn(
-        `[HttpProvider] transform: ${rendered}`,
-      );
-      try {
-        return JSON.parse(rendered);
-      } catch {
-        return rendered;
-      }
+      logger.warn(`[HttpProvider] transform: ${rendered}`);
+      return new Function('prompt', `${rendered}`)(prompt);
     };
   }
 
@@ -309,13 +297,9 @@ export class HttpProvider implements ApiProvider {
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
   constructor(url: string, options: ProviderOptions) {
-    logger.error(
-      `[HttpProvider] options: ${JSON.stringify(options, null, 2)}`,
-    );
+    logger.error(`[HttpProvider] options: ${JSON.stringify(options, null, 2)}`);
     this.config = HttpProviderConfigSchema.parse(options.config);
-    logger.error(
-      `[HttpProvider] config: ${JSON.stringify(this.config, null, 2)}`,
-    );
+    logger.error(`[HttpProvider] config: ${JSON.stringify(this.config, null, 2)}`);
     this.url = this.config.url || url;
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,

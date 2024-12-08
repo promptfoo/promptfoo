@@ -12,12 +12,12 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-json';
 import type { ProviderOptions } from '../../types';
 import 'prismjs/themes/prism.css';
-import yaml from 'js-yaml';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -51,7 +51,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
 
   const handleRequestBodyChange = (code: string) => {
     setRequestBody(code);
-    
+
     if (isJsonContentType) {
       // Try to parse as YAML first
       try {
