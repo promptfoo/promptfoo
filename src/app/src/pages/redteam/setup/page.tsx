@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -47,8 +47,8 @@ const StyledTabs = styled(Tabs)(({ theme }) => ({
     left: 0,
     right: 'auto',
   },
-  width: '200px',
-  minWidth: '200px',
+  width: '280px',
+  minWidth: '280px',
   backgroundColor: theme.palette.background.paper,
   '& .MuiTab-root': {
     minHeight: '48px',
@@ -146,6 +146,8 @@ const OuterSidebarContainer = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   height: '100%',
+  width: '280px',
+  minWidth: '280px',
   borderRight: `1px solid ${theme.palette.divider}`,
 }));
 
@@ -214,7 +216,44 @@ const readFileAsText = (file: File): Promise<string> => {
   });
 };
 
+// Update the StatusSection styling
+const StatusSection = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(2),
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.background.paper,
+  width: '280px',
+  minWidth: '280px',
+  '& .configName': {
+    fontSize: '1rem',
+    fontWeight: 500,
+    color: theme.palette.text.primary,
+    marginBottom: theme.spacing(0.5),
+  },
+  '& .statusRow': {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing(1),
+  },
+  '& .unsavedChanges': {
+    fontSize: '0.875rem',
+    color: theme.palette.warning.main,
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing(0.5),
+  },
+  '& .saveButton': {
+    minWidth: 'auto',
+    padding: theme.spacing(0.5, 1),
+  },
+  '& .dateText': {
+    fontSize: '0.875rem',
+    color: theme.palette.text.secondary,
+  },
+}));
+
 export default function RedTeamSetupPage() {
+  // --- Hooks ---
   const location = useLocation();
   const navigate = useNavigate();
   const { recordEvent } = useTelemetry();
@@ -236,6 +275,14 @@ export default function RedTeamSetupPage() {
   const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
   const [configName, setConfigName] = useState('');
   const toast = useToast();
+
+  // Add new state:
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Add new state for tracking the config date
+  const [configDate, setConfigDate] = useState<string | null>(null);
+
+  const lastSavedConfig = useRef<string>('');
 
   // Handle browser back/forward
   useEffect(() => {
@@ -315,7 +362,10 @@ export default function RedTeamSetupPage() {
 
       toast.showToast('Configuration saved successfully', 'success');
       setSaveDialogOpen(false);
-      setConfigName('');
+      lastSavedConfig.current = JSON.stringify(config);
+      setHasUnsavedChanges(false);
+      setConfigName(configName);
+      setConfigDate(data.createdAt);
     } catch (error) {
       console.error('Failed to save configuration', error);
       toast.showToast(
@@ -323,6 +373,8 @@ export default function RedTeamSetupPage() {
         'error',
       );
     }
+
+    setHasUnsavedChanges(false);
   };
 
   const loadConfigs = async () => {
@@ -334,6 +386,8 @@ export default function RedTeamSetupPage() {
       if (data.error) {
         throw new Error(data.error);
       }
+
+      setHasUnsavedChanges(false);
 
       setSavedConfigs(
         data.configs.sort(
@@ -361,6 +415,11 @@ export default function RedTeamSetupPage() {
       }
 
       setFullConfig(data.config);
+      setConfigName(data.name);
+      setConfigDate(data.updatedAt);
+      lastSavedConfig.current = JSON.stringify(data.config);
+      setHasUnsavedChanges(false);
+
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
     } catch (error) {
@@ -418,11 +477,62 @@ export default function RedTeamSetupPage() {
     event.target.value = '';
   };
 
+  // Replace the existing effect with this one
+  useEffect(() => {
+    if (!configName) {
+      setHasUnsavedChanges(false);
+      return;
+    }
+
+    const currentConfigString = JSON.stringify(config);
+    const hasChanges = lastSavedConfig.current !== currentConfigString;
+    setHasUnsavedChanges(hasChanges);
+  }, [config, configName]);
+
+  // Update handleResetConfig
+  const handleResetConfig = () => {
+    resetConfig();
+    setConfigName('');
+    lastSavedConfig.current = '';
+    setHasUnsavedChanges(false);
+    setResetDialogOpen(false);
+    toast.showToast('Configuration reset to defaults', 'success');
+  };
+
+  // --- JSX ---
   return (
     <Root>
       <Content>
         <OuterSidebarContainer>
           <InnerSidebarContainer>
+            <StatusSection>
+              <Typography className="configName">
+                {configName ? `Config: ${configName}` : 'New Configuration'}
+              </Typography>
+              {hasUnsavedChanges ? (
+                <div className="statusRow">
+                  <Typography className="unsavedChanges">
+                    <span>●</span> Unsaved changes
+                  </Typography>
+                  <Button
+                    className="saveButton"
+                    size="small"
+                    variant="outlined"
+                    color="warning"
+                    onClick={handleSaveConfig}
+                    disabled={!configName}
+                  >
+                    Save now
+                  </Button>
+                </div>
+              ) : (
+                configDate && (
+                  <Typography className="dateText" color="text.secondary" variant="body2">
+                    {new Date(configDate).toLocaleString()}
+                  </Typography>
+                )
+              )}
+            </StatusSection>
             <TabsContainer>
               <StyledTabs
                 orientation="vertical"
@@ -647,9 +757,7 @@ export default function RedTeamSetupPage() {
           <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
           <Button
             onClick={() => {
-              resetConfig();
-              setResetDialogOpen(false);
-              toast.showToast('Configuration reset to defaults', 'success');
+              handleResetConfig();
             }}
             color="error"
           >
