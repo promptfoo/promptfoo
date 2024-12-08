@@ -72,6 +72,31 @@ const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
+const EXAMPLE_TARGET: ProviderOptions = {
+  id: 'http',
+  label: 'Acme Chatbot',
+  config: {
+    url: 'https://acme-cx-chatbot.promptfoo.dev/chat',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(
+      {
+        messages: [
+          {
+            role: 'user',
+            content: '{{prompt}}',
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    transformResponse: 'json.response',
+  },
+};
+
 export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
@@ -101,11 +126,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     selectedTarget.config.headers &&
       selectedTarget.config.headers['Content-Type'] === 'application/json',
   );
-  const [requestBody, setRequestBody] = useState(
-    isJsonContentType
-      ? JSON.stringify(selectedTarget.config.body, null, 2)
-      : selectedTarget.config.body,
-  );
+  const [requestBody, setRequestBody] = useState(selectedTarget.config.body);
 
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [hasTestedTarget, setHasTestedTarget] = useState(false);
@@ -355,6 +376,13 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     }
   };
 
+  const handleTryExample = () => {
+    setSelectedTarget(EXAMPLE_TARGET);
+    setRequestBody(EXAMPLE_TARGET.config.body);
+    setIsJsonContentType(true);
+    recordEvent('feature_used', { feature: 'redteam_config_try_example' });
+  };
+
   return (
     <Stack direction="column" spacing={3}>
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
@@ -400,19 +428,34 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         </Typography>
 
         <FormControl fullWidth>
-          <InputLabel id="predefined-target-label">Target Type</InputLabel>
-          <Select
-            labelId="predefined-target-label"
-            value={selectedTarget.id}
-            onChange={handleTargetChange}
-            label="Target Type"
-          >
-            {selectOptions.map((target) => (
-              <MenuItem key={target.value} value={target.value}>
-                {target.label}
-              </MenuItem>
-            ))}
-          </Select>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+            <Box sx={{ flex: 1 }}>
+              <InputLabel id="predefined-target-label">Target Type</InputLabel>
+              <Select
+                labelId="predefined-target-label"
+                value={selectedTarget.id}
+                onChange={handleTargetChange}
+                label="Target Type"
+                fullWidth
+              >
+                {selectOptions.map((target) => (
+                  <MenuItem key={target.value} value={target.value}>
+                    {target.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Box>
+            <Button
+              variant="outlined"
+              onClick={handleTryExample}
+              sx={{
+                height: '56px',
+                mt: 0,
+              }}
+            >
+              Try Example
+            </Button>
+          </Box>
         </FormControl>
         {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
           <TextField
