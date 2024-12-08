@@ -123,7 +123,12 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
           }}
         >
           <Editor
-            value={requestBody}
+            value={
+              /*
+              Should always be a string, but there might be some bad state in localStorage as of 2024-12-07
+              */
+              typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody, null, 2)
+            }
             onValueChange={(code) => {
               setRequestBody(code);
               updateCustomTarget('body', code);
