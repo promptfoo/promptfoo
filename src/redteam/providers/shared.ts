@@ -47,21 +47,20 @@ async function loadRedteamProvider({
 
 class RedteamProviderManager {
   private provider: ApiProvider | undefined;
-  private overrideDefaultProvider = false;
+  private jsonOnlyProvider: ApiProvider | undefined;
 
-  async setProvider(provider: ApiProvider) {
-    this.provider = provider;
+  clearProvider() {
+    this.provider = undefined;
+    this.jsonOnlyProvider = undefined;
   }
 
-  setOverrideDefaultProvider(value: boolean) {
-    this.overrideDefaultProvider = value;
+  async setProvider(provider: RedteamFileConfig['provider']) {
+    this.provider = await loadRedteamProvider({ provider });
+    this.jsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
   }
 
-  getOverrideDefaultProvider() {
-    return this.overrideDefaultProvider;
-  }
-
-  async getProvider({ provider,
+  async getProvider({
+    provider,
     jsonOnly = false,
     preferSmallModel = false,
   }: {
@@ -71,21 +70,20 @@ class RedteamProviderManager {
   }) {
     if (this.provider) {
       logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
-    } else {
-      logger.debug(
-        `[RedteamProviderManager] Loading redteam provider: ${JSON.stringify({
-          providedConfig: typeof provider == 'string' ? provider : provider?.id ?? 'none',
-          jsonOnly,
-          preferSmallModel,
-        })}`,
-      );
-      this.provider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
-      logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${this.provider.id()}`);
+      return jsonOnly ? this.jsonOnlyProvider : this.provider;
     }
-    return this.provider;
+
+    logger.debug(
+      `[RedteamProviderManager] Loading redteam provider: ${JSON.stringify({
+        providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
+        jsonOnly,
+        preferSmallModel,
+      })}`,
+    );
+    const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
+    logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
+    return redteamProvider;
   }
-
-
 }
 
 export const redteamProviderManager = new RedteamProviderManager();
