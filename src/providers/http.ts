@@ -16,24 +16,31 @@ import { isJavascriptFile } from '../util/file';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
+import { z } from 'zod';
 
 const nunjucks = getNunjucksEngine();
 
-interface HttpProviderConfig {
-  body?: Record<string, any> | string | any[];
-  headers?: Record<string, string>;
-  method?: string;
-  queryParams?: Record<string, string>;
-  request?: string;
-  sessionParser?: string | Function;
-  transformRequest?: string | Function;
-  transformResponse?: string | Function;
-  url?: string;
+export const HttpProviderConfigSchema = z.object({
+  body: z.union([
+    z.record(z.any()),
+    z.string(),
+    z.array(z.any())
+  ]).optional(),
+  headers: z.record(z.string()).optional(),
+  method: z.string().optional(),
+  queryParams: z.record(z.string()).optional(),
+  request: z.string().optional(),
+  sessionParser: z.union([z.string(), z.function()]).optional(),
+  transformRequest: z.union([z.string(), z.function()]).optional(),
+  transformResponse: z.union([z.string(), z.function()]).optional(),
+  url: z.string().optional(),
   /**
    * @deprecated
    */
-  responseParser?: string | Function;
-}
+  responseParser: z.union([z.string(), z.function()]).optional(),
+});
+
+export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
@@ -226,6 +233,10 @@ export async function createTransformRequest(
     return (prompt) => transform(prompt);
   }
 
+  logger.warn(
+    `[HttpProvider] transform: ${typeof transform}`,
+  );
+
   if (typeof transform === 'string') {
     if (transform.startsWith('file://')) {
       let filename = transform.slice('file://'.length);
@@ -250,6 +261,9 @@ export async function createTransformRequest(
     // Handle string template
     return (prompt) => {
       const rendered = nunjucks.renderString(transform, { prompt });
+      logger.warn(
+        `[HttpProvider] transform: ${rendered}`,
+      );
       try {
         return JSON.parse(rendered);
       } catch {
@@ -295,7 +309,13 @@ export class HttpProvider implements ApiProvider {
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
   constructor(url: string, options: ProviderOptions) {
-    this.config = options.config;
+    logger.error(
+      `[HttpProvider] options: ${JSON.stringify(options, null, 2)}`,
+    );
+    this.config = HttpProviderConfigSchema.parse(options.config);
+    logger.error(
+      `[HttpProvider] config: ${JSON.stringify(this.config, null, 2)}`,
+    );
     this.url = this.config.url || url;
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,

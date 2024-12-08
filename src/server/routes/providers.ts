@@ -1,31 +1,43 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import logger from '../../logger';
-import { loadApiProviders } from '../../providers';
-import { HttpProvider } from '../../providers/http';
-import { ProviderSchema } from '../../validators/providers';
+import { loadApiProvider } from '../../providers';
+import { HttpProvider, HttpProviderConfig, HttpProviderConfigSchema } from '../../providers/http';
+import { ProviderOptionsSchema } from '../../validators/providers';
+import type { ProviderOptions } from '../../types/providers';
+import { fromZodError, ZodError } from 'zod-validation-error';
+import invariant from 'tiny-invariant';
 
 export const providersRouter = Router();
 
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
-
-  let provider;
+  let providerOptions: ProviderOptions;
   try {
-    provider = ProviderSchema.parse(body);
+    providerOptions = ProviderOptionsSchema.parse(body);
   } catch (e) {
-    res.status(400).json({ error: (e as Error).message });
+    res.status(400).json({ error: fromZodError(e as ZodError).toString() });
     return;
   }
 
-  // Instantiate the provider from the JSON config
-  // @ts-ignore
-  const loadedProviders = await loadApiProviders([provider], { env: {}, basePath: '' });
-  const loadedProvider = loadedProviders[0];
-  if (!(loadedProvider instanceof HttpProvider)) {
-    res.status(400).json({ error: 'Only http providers are supported for testing' });
+  let config: HttpProviderConfig;
+  try {
+    config = HttpProviderConfigSchema.parse(providerOptions.config);
+  } catch (e) {
+    res.status(400).json({ error: fromZodError(e as ZodError).toString() });
     return;
   }
+  invariant(config.url, 'url is required');
+  const loadedProvider = new HttpProvider(config.url, providerOptions);
+  
+  /*if (provider?.config?.transformRequest) {
+    // @ts-ignore
+    loadedProvider.transformRequest = provider.config.transformRequest;
+  }*/
+
+  logger.warn(
+    `[POST /providers/test] loadedProvider: ${JSON.stringify(loadedProvider, null, 2)}`,
+  );
 
   // Call the provider with the test prompt
   const result = await loadedProvider.callApi('Hello, world!', {
@@ -34,7 +46,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     vars: {},
   });
   logger.debug(
-    `[POST /providers/test] result from API provider ${JSON.stringify({ result, provider })}`,
+    `[POST /providers/test] result from API provider ${JSON.stringify({ result, providerOptions })}`,
   );
 
   const HOST = process.env.PROMPTFOO_CLOUD_API_URL || 'https://api.promptfoo.app';
@@ -46,7 +58,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        config: provider,
+        config: providerOptions,
         providerResponse: result.raw,
         parsedResponse: result.output,
         error: result.error,

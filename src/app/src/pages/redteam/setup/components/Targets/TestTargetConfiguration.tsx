@@ -18,6 +18,11 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import type { ProviderOptions } from '../../types';
+import Editor from 'react-simple-code-editor';
+import { highlight, languages } from 'prismjs/components/prism-core';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/themes/prism.css';
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
@@ -38,26 +43,70 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   updateCustomTarget,
 }) => {
   const theme = useTheme();
+  const darkMode = theme.palette.mode === 'dark';
 
   return (
     <Box mt={4}>
       {requiresTransformResponse(selectedTarget) && (
         <Box>
           <Typography variant="h6" gutterBottom>
+            Configure Request Parser
+          </Typography>
+          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+            <Box
+              sx={{
+                border: 1,
+                borderColor: 'grey.300',
+                borderRadius: 1,
+                mt: 1,
+                position: 'relative',
+                backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+              }}
+            >
+              <Editor
+                value={selectedTarget.config.transformRequest || ''}
+                onValueChange={(code) => updateCustomTarget('transformRequest', code)}
+                highlight={(code) => highlight(code, languages.javascript)}
+                padding={10}
+                placeholder="Optional: A JavaScript expression to transform the prompt before sending. E.g. `{ messages: [{ role: 'user', content: prompt }] }`"
+                style={{
+                  fontFamily: '"Fira code", "Fira Mono", monospace',
+                  fontSize: 14,
+                  minHeight: '100px',
+                }}
+              />
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Optionally, configure a request parser to transform the prompt before sending. This can be used to format the prompt into a specific structure required by your API.
+            </Typography>
+          </Box>
+          <Typography variant="h6" gutterBottom>
             Configure Response Parser
           </Typography>
           <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-            <TextField
-              fullWidth
-              label="Response Parser"
-              value={selectedTarget.config.transformResponse}
-              placeholder="Optional: A JavaScript expression to parse the response. E.g. json.choices[0].message.content"
-              onChange={(e) => updateCustomTarget('transformResponse', e.target.value)}
-              margin="normal"
-              InputLabelProps={{
-                shrink: true,
+            <Box
+              sx={{
+                border: 1,
+                borderColor: 'grey.300',
+                borderRadius: 1,
+                mt: 1,
+                position: 'relative',
+                backgroundColor: darkMode ? '#1e1e1e' : '#fff',
               }}
-            />
+            >
+              <Editor
+                value={selectedTarget.config.transformResponse || ''}
+                onValueChange={(code) => updateCustomTarget('transformResponse', code)}
+                highlight={(code) => highlight(code, languages.javascript)}
+                padding={10}
+                placeholder="Optional: A JavaScript expression to parse the response. E.g. json.choices[0].message.content"
+                style={{
+                  fontFamily: '"Fira code", "Fira Mono", monospace',
+                  fontSize: 14,
+                  minHeight: '100px',
+                }}
+              />
+            </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
               Optionally, configure a response parser to extract a specific part of the HTTP
               response. See{' '}
