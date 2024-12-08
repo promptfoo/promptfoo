@@ -90,7 +90,7 @@ export async function translate(text: string, lang: string): Promise<string> {
     preferSmallModel: true,
   });
   const result = await redteamProvider.callApi(
-    dedent`Translate the <Text> below to language '${lang}'. Respond with JSON object containing {translation: string}.
+    dedent`Translate the <Text> below to language '${lang}'. Respond with JSON object containing {translation: string}, , do not put it in markdown
 
     <Text>
     ${text}
