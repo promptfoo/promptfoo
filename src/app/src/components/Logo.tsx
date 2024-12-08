@@ -21,6 +21,20 @@ const LogoText = styled(Typography)(({ theme }) => ({
   letterSpacing: '0.02em',
   marginLeft: theme.spacing(1),
   transition: 'all 0.3s ease',
+  '@keyframes rainbow': {
+    '0%': { backgroundPosition: '0% 50%' },
+    '50%': { backgroundPosition: '100% 50%' },
+    '100%': { backgroundPosition: '0% 50%' },
+  },
+  '&:hover': {
+    color: 'transparent',
+    backgroundImage:
+      'linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8f00ff)',
+    backgroundSize: '300% 300%',
+    backgroundClip: 'text',
+    WebkitBackgroundClip: 'text',
+    animation: 'rainbow 3s ease infinite',
+  },
 }));
 
 const LogoIcon = styled('img')({

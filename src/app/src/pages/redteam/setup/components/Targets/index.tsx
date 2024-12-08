@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
+import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -15,11 +16,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import {
-  DEFAULT_HTTP_TARGET,
-  DEFAULT_PURPOSE,
-  useRedTeamConfig,
-} from '../../hooks/useRedTeamConfig';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
@@ -30,6 +27,7 @@ import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 interface TargetsProps {
   onNext: () => void;
+  onBack: () => void;
   setupModalOpen: boolean;
 }
 
@@ -66,7 +64,7 @@ const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean 
   }
 };
 
-const requiresResponseParser = (target: ProviderOptions) => {
+const requiresTransformResponse = (target: ProviderOptions) => {
   return target.id === 'http' || target.id === 'websocket';
 };
 
@@ -74,7 +72,32 @@ const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
+const EXAMPLE_TARGET: ProviderOptions = {
+  id: 'http',
+  label: 'Acme Chatbot',
+  config: {
+    url: 'https://acme-cx-chatbot.promptfoo.dev/chat',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(
+      {
+        messages: [
+          {
+            role: 'user',
+            content: '{{prompt}}',
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    transformResponse: 'json.response',
+  },
+};
+
+export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const selectedTarget = config.target || DEFAULT_HTTP_TARGET;
@@ -103,9 +126,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     selectedTarget.config.headers &&
       selectedTarget.config.headers['Content-Type'] === 'application/json',
   );
-  const [requestBody, setRequestBody] = useState(
-    isJsonContentType ? JSON.stringify(selectedTarget.config.body) : selectedTarget.config.body,
-  );
+  const [requestBody, setRequestBody] = useState(selectedTarget.config.body);
 
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [hasTestedTarget, setHasTestedTarget] = useState(false);
@@ -152,7 +173,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         config: { temperature: 0.5 },
       });
       setRawConfigJson(JSON.stringify({ temperature: 0.5 }, null, 2));
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'javascript' || value === 'python') {
       const filePath =
         value === 'javascript'
@@ -163,7 +183,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         config: {},
         label: currentLabel,
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'http') {
       setSelectedTarget({
         ...DEFAULT_HTTP_TARGET,
@@ -178,7 +197,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           type: 'websocket',
           url: 'wss://example.com/ws',
           messageTemplate: '{"message": "{{prompt}}"}',
-          responseParser: 'response.message',
+          transformResponse: 'response.message',
           timeoutMs: 30000,
         },
       });
@@ -196,14 +215,12 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           ],
         },
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else {
       setSelectedTarget({
         id: value,
         config: {},
         label: currentLabel,
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     }
   };
 
@@ -359,6 +376,13 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     }
   };
 
+  const handleTryExample = () => {
+    setSelectedTarget(EXAMPLE_TARGET);
+    setRequestBody(EXAMPLE_TARGET.config.body);
+    setIsJsonContentType(true);
+    recordEvent('feature_used', { feature: 'redteam_config_try_example' });
+  };
+
   return (
     <Stack direction="column" spacing={3}>
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
@@ -404,19 +428,34 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         </Typography>
 
         <FormControl fullWidth>
-          <InputLabel id="predefined-target-label">Target Type</InputLabel>
-          <Select
-            labelId="predefined-target-label"
-            value={selectedTarget.id}
-            onChange={handleTargetChange}
-            label="Target Type"
-          >
-            {selectOptions.map((target) => (
-              <MenuItem key={target.value} value={target.value}>
-                {target.label}
-              </MenuItem>
-            ))}
-          </Select>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+            <Box sx={{ flex: 1 }}>
+              <InputLabel id="predefined-target-label">Target Type</InputLabel>
+              <Select
+                labelId="predefined-target-label"
+                value={selectedTarget.id}
+                onChange={handleTargetChange}
+                label="Target Type"
+                fullWidth
+              >
+                {selectOptions.map((target) => (
+                  <MenuItem key={target.value} value={target.value}>
+                    {target.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Box>
+            <Button
+              variant="outlined"
+              onClick={handleTryExample}
+              sx={{
+                height: '56px',
+                mt: 0,
+              }}
+            >
+              Try Example
+            </Button>
+          </Box>
         </FormControl>
         {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
           <TextField
@@ -505,7 +544,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           handleTestTarget={handleTestTarget}
           selectedTarget={selectedTarget}
           testResult={testResult}
-          requiresResponseParser={requiresResponseParser}
+          requiresTransformResponse={requiresTransformResponse}
           updateCustomTarget={updateCustomTarget}
           hasTestedTarget={hasTestedTarget}
         />
@@ -540,11 +579,17 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
             </Typography>
           </Alert>
         )}
-        {!hasTestedTarget && testingEnabled && (
-          <Alert severity="info" sx={{ flexGrow: 1, mr: 2 }}>
-            Please test the target configuration before proceeding
-          </Alert>
-        )}
+        <Button
+          variant="outlined"
+          startIcon={<KeyboardArrowLeftIcon />}
+          onClick={onBack}
+          sx={{
+            px: 4,
+            py: 1,
+          }}
+        >
+          Back
+        </Button>
         <Button
           variant="contained"
           onClick={onNext}
@@ -557,6 +602,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
             px: 4,
             py: 1,
             minWidth: '150px',
+            ml: 2,
           }}
         >
           Next

@@ -11,8 +11,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import { getRemoteGenerationUrl } from '../constants';
-import { neverGenerateRemote } from '../util';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
@@ -100,6 +99,8 @@ export default class GoatProvider implements ApiProvider {
               context.filters,
               targetProvider,
             );
+
+        logger.debug(`GOAT turn ${turn} target prompt: ${targetPrompt}`);
         const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
         logger.debug(`GOAT turn ${turn} target response: ${JSON.stringify(targetResponse)}`);
 
@@ -115,7 +116,10 @@ export default class GoatProvider implements ApiProvider {
           `Expected target response output to be set, but got: ${JSON.stringify(targetResponse)}`,
         );
         messages.push({
-          content: targetResponse.output,
+          content:
+            typeof targetResponse.output === 'string'
+              ? targetResponse.output
+              : JSON.stringify(targetResponse.output),
           role: 'assistant',
         });
 

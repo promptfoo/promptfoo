@@ -1,6 +1,6 @@
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.1, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.1, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -72,7 +72,7 @@ The provider will automatically use AWS SSO credentials when a profile is specif
 
 ## Example
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, AI21, Llama 3.1, and Titan model usage.
+See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.1, and Titan model usage.
 
 ```yaml
 prompts:
@@ -84,12 +84,13 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:ai21.jamba-1-5-large-v1:0
+  - id: bedrock:amazon.nova-lite-v1:0
     config:
       region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+      interfaceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+  - id: bedrock:anthropic.claude-3-5-sonnet-20240229-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -107,6 +108,40 @@ tests:
 ## Model-specific Configuration
 
 Different models may support different configuration options. Here are some model-specific parameters:
+
+### Amazon Nova Models
+
+Amazon Nova models (e.g., `amazon.nova-lite-v1:0`, `amazon.nova-pro-v1:0`, `amazon.nova-micro-v1:0`) support advanced features like tool use and structured outputs. You can configure them with the following options:
+
+```yaml
+providers:
+  - id: bedrock:amazon.nova-lite-v1:0
+    config:
+      interfaceConfig:
+        max_new_tokens: 256 # Maximum number of tokens to generate
+        temperature: 0.7 # Controls randomness (0.0 to 1.0)
+        top_p: 0.9 # Nucleus sampling parameter
+        top_k: 50 # Top-k sampling parameter
+        stopSequences: ['END'] # Optional stop sequences
+      toolConfig: # Optional tool configuration
+        tools:
+          - toolSpec:
+              name: 'calculator'
+              description: 'A basic calculator for arithmetic operations'
+              inputSchema:
+                json:
+                  type: 'object'
+                  properties:
+                    expression:
+                      description: 'The arithmetic expression to evaluate'
+                      type: 'string'
+                  required: ['expression']
+        toolChoice: # Optional tool selection
+          tool:
+            name: 'calculator'
+```
+
+Note: Nova models use a slightly different configuration structure compared to other Bedrock models, with separate `interfaceConfig` and `toolConfig` sections.
 
 ### AI21 Models
 

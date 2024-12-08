@@ -3,7 +3,7 @@ import logger from '../../logger';
 import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { loadRedteamProvider } from '../providers/shared';
+import { redteamProviderManager } from '../providers/shared';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
@@ -71,7 +71,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       purpose: this.purpose,
       n,
     });
-    const provider = await loadRedteamProvider({
+    const provider = await redteamProviderManager.getProvider({
       provider: this.provider,
       jsonOnly: true,
     });

@@ -6,7 +6,7 @@ import {
   ATTACKER_MODEL_SMALL,
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
-import { loadRedteamProvider } from '../../../src/redteam/providers/shared';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 
 jest.mock('../../../src/cliState', () => ({
   __esModule: true,
@@ -31,7 +31,7 @@ jest.mock('../../../src/providers/openai', () => ({
   OpenAiChatCompletionProvider: jest.fn(),
 }));
 
-describe('loadRedteamProvider', () => {
+describe('redteamProviderManager', () => {
   const mockOpenAiProvider = {
     id: jest.fn(),
     callApi: jest.fn(),
@@ -51,13 +51,13 @@ describe('loadRedteamProvider', () => {
 
   it('should return the provided ApiProvider', async () => {
     const mockApiProvider = { id: jest.fn(), callApi: jest.fn() };
-    const result = await loadRedteamProvider({ provider: mockApiProvider });
+    const result = await redteamProviderManager.getProvider({ provider: mockApiProvider });
     expect(result).toBe(mockApiProvider);
   });
 
   it('should load provider from string', async () => {
     jest.mocked(loadApiProviders).mockResolvedValue([mockLoadedProvider]);
-    const result = await loadRedteamProvider({ provider: 'test-provider' });
+    const result = await redteamProviderManager.getProvider({ provider: 'test-provider' });
     expect(result).toBe(mockLoadedProvider);
     expect(loadApiProviders).toHaveBeenCalledWith(['test-provider']);
   });
@@ -65,14 +65,14 @@ describe('loadRedteamProvider', () => {
   it('should load provider from ProviderOptions', async () => {
     const providerOptions = { id: 'test-provider', apiKey: 'test-key' };
     jest.mocked(loadApiProviders).mockResolvedValue([mockLoadedProvider]);
-    const result = await loadRedteamProvider({ provider: providerOptions });
+    const result = await redteamProviderManager.getProvider({ provider: providerOptions });
     expect(result).toBe(mockLoadedProvider);
     expect(loadApiProviders).toHaveBeenCalledWith([providerOptions]);
   });
 
   it('should use default provider when no provider is specified', async () => {
     jest.mocked(OpenAiChatCompletionProvider).mockReturnValue(mockOpenAiProvider);
-    const result = await loadRedteamProvider();
+    const result = await redteamProviderManager.getProvider({});
     expect(result).toBe(mockOpenAiProvider);
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(ATTACKER_MODEL, {
       config: {
@@ -82,9 +82,18 @@ describe('loadRedteamProvider', () => {
     });
   });
 
+  it('should use the set provider', async () => {
+    jest.mocked(loadApiProviders).mockResolvedValue([mockLoadedProvider]);
+    await redteamProviderManager.setProvider(mockLoadedProvider);
+    const result = await redteamProviderManager.getProvider({});
+    expect(result).toBe(mockLoadedProvider);
+
+    redteamProviderManager.clearProvider();
+  });
+
   it('should use small model when preferSmallModel is true', async () => {
     jest.mocked(OpenAiChatCompletionProvider).mockReturnValue(mockOpenAiProvider);
-    const result = await loadRedteamProvider({ preferSmallModel: true });
+    const result = await redteamProviderManager.getProvider({ preferSmallModel: true });
     expect(result).toBe(mockOpenAiProvider);
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(ATTACKER_MODEL_SMALL, {
       config: {
@@ -96,7 +105,7 @@ describe('loadRedteamProvider', () => {
 
   it('should set response_format to json_object when jsonOnly is true', async () => {
     jest.mocked(OpenAiChatCompletionProvider).mockReturnValue(mockOpenAiProvider);
-    const result = await loadRedteamProvider({ jsonOnly: true });
+    const result = await redteamProviderManager.getProvider({ jsonOnly: true });
     expect(result).toBe(mockOpenAiProvider);
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(ATTACKER_MODEL, {
       config: {
@@ -109,7 +118,7 @@ describe('loadRedteamProvider', () => {
   it('should use provider from cliState if available', async () => {
     const mockStateProvider = { id: jest.fn(), callApi: jest.fn() };
     cliState.config!.redteam!.provider = mockStateProvider;
-    const result = await loadRedteamProvider();
+    const result = await redteamProviderManager.getProvider({});
     expect(result).toBe(mockStateProvider);
   });
 });

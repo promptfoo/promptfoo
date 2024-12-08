@@ -406,7 +406,64 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
-                                      "type": {},
+                                      "type": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "enum": [
+                                              "answer-relevance",
+                                              "bleu",
+                                              "classifier",
+                                              "contains-all",
+                                              "contains-any",
+                                              "contains-json",
+                                              "contains-sql",
+                                              "contains-xml",
+                                              "contains",
+                                              "context-faithfulness",
+                                              "context-recall",
+                                              "context-relevance",
+                                              "cost",
+                                              "equals",
+                                              "factuality",
+                                              "icontains-all",
+                                              "icontains-any",
+                                              "icontains",
+                                              "is-json",
+                                              "is-sql",
+                                              "is-valid-openai-function-call",
+                                              "is-valid-openai-tools-call",
+                                              "is-xml",
+                                              "javascript",
+                                              "latency",
+                                              "levenshtein",
+                                              "llm-rubric",
+                                              "model-graded-closedqa",
+                                              "model-graded-factuality",
+                                              "moderation",
+                                              "perplexity-score",
+                                              "perplexity",
+                                              "python",
+                                              "regex",
+                                              "rouge-n",
+                                              "similar",
+                                              "starts-with",
+                                              "webhook"
+                                            ]
+                                          },
+                                          {
+                                            "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert/items/anyOf/0/properties/assert/items/properties/type/anyOf/0"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": [
+                                              "select-best",
+                                              "human"
+                                            ]
+                                          },
+                                          {}
+                                        ]
+                                      },
                                       "value": {},
                                       "config": {
                                         "type": "object",

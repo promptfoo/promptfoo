@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../src/csv';
+import { getEnvString } from '../src/envars';
 import { fetchCsvFromGoogleSheet } from '../src/googleSheets';
 import logger from '../src/logger';
 import { loadApiProvider } from '../src/providers';
@@ -26,6 +27,7 @@ jest.mock('glob', () => ({
 jest.mock('../src/providers', () => ({
   loadApiProvider: jest.fn(),
 }));
+jest.mock('../src/fetch');
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -47,6 +49,12 @@ jest.mock('../src/googleSheets', () => ({
   fetchCsvFromGoogleSheet: jest.fn(),
 }));
 jest.mock('../src/logger');
+
+jest.mock('../src/envars', () => ({
+  ...jest.requireActual('../src/envars'),
+  getEnvBool: jest.fn(),
+  getEnvString: jest.fn().mockImplementation((key, defaultValue) => defaultValue),
+}));
 
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
@@ -169,6 +177,58 @@ describe('readStandaloneTestsFile', () => {
 
   it('should return an empty array for unsupported file types', async () => {
     await expect(readStandaloneTestsFile('test.txt')).resolves.toEqual([]);
+  });
+
+  it('should read CSV file with default delimiter', async () => {
+    jest.mocked(getEnvString).mockReturnValue(',');
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValue('var1,var2,__expected\nvalue1,value2,expected1\nvalue3,value4,expected2');
+
+    const result = await readStandaloneTestsFile('test.csv');
+
+    expect(getEnvString).toHaveBeenCalledWith('PROMPTFOO_CSV_DELIMITER', ',');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'), 'utf-8');
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
+  });
+
+  it('should read CSV file with custom delimiter', async () => {
+    jest.mocked(getEnvString).mockReturnValue(';');
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValue('var1;var2;__expected\nvalue1;value2;expected1\nvalue3;value4;expected2');
+
+    const result = await readStandaloneTestsFile('test.csv');
+
+    expect(getEnvString).toHaveBeenCalledWith('PROMPTFOO_CSV_DELIMITER', ',');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'), 'utf-8');
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
   });
 });
 

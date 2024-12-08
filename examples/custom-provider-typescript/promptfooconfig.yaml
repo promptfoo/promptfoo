@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - file://prompts.txt
+
+providers:
+  - id: file://customProvider.ts
+    label: 'My custom provider'
+
+tests: file://vars.csv
+# To compare two of the same provider, you can do the following:
+#
+# providers:
+#   - id: customProvider.js
+#     label: custom-provider-hightemp
+#     config:
+#       temperature: 1.0
+#   - id: customProvider.js
+#     label: custom-provider-lowtemp
+#     config:
+#       temperature: 0

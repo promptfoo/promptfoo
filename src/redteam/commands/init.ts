@@ -17,7 +17,7 @@ import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
-import { setupEnv } from '../../util';
+import { setupEnv, isRunningUnderNpx } from '../../util';
 import { BrowserBehavior } from '../../util/server';
 import { checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
@@ -74,7 +74,8 @@ redteam:
   purpose: {{ purpose | dump }}
   {% endif %}
   # Default number of inputs to generate for each plugin.
-  # The total number of tests will be (numTests * plugins.length * (1 + strategies.length))
+  # The total number of tests will be (numTests * plugins.length * (1 + strategies.length) * languages.length)
+  # Languages.length is 1 by default, but is added when the multilingual strategy is used.
   numTests: {{numTests}}
 
   {% if plugins.length > 0 -%}
@@ -445,7 +446,7 @@ export async function redteamInit(directory: string | undefined) {
       plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
       recordOnboardingStep('skip indirect prompt injection');
       logger.warn(
-        dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because no prompt is specified. 
+        dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because no prompt is specified.
         You can re-add this plugin after adding a prompt in your redteam config.
 
         Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection`,
@@ -570,7 +571,7 @@ export async function redteamInit(directory: string | undefined) {
           });
           writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
         } catch (err) {
-          logger.error(`Error saving consent: ${(err as Error).message}`);
+          logger.debug(`Failed to save consent: ${(err as Error).message}`);
         }
       }
     }
@@ -621,7 +622,7 @@ export async function redteamInit(directory: string | undefined) {
         chalk.green(dedent`
           To generate test cases and run your red team, use the command:
 
-              ${chalk.bold('promptfoo redteam run')}
+              ${chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`)}
         `),
     );
     return;
@@ -649,7 +650,7 @@ export async function redteamInit(directory: string | undefined) {
         '\n' +
           chalk.blue(
             'To generate test cases and run your red team later, use the command: ' +
-              chalk.bold('promptfoo redteam run'),
+              chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`),
           ),
       );
     }
@@ -692,7 +693,7 @@ export function initCommand(program: Command) {
                 chalk.blue(
                   'Red team initialization paused. To continue setup later, use the command: ',
                 ) +
-                chalk.bold('promptfoo redteam init'),
+                chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam init`),
             );
             logger.info(
               chalk.blue('For help or feedback, visit ') +
