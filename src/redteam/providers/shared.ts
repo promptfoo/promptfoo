@@ -67,8 +67,8 @@ class RedteamProviderManager {
     provider?: RedteamFileConfig['provider'];
     jsonOnly?: boolean;
     preferSmallModel?: boolean;
-  }) {
-    if (this.provider) {
+  }): Promise<ApiProvider> {
+    if (this.provider && this.jsonOnlyProvider) {
       logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
       return jsonOnly ? this.jsonOnlyProvider : this.provider;
     }
