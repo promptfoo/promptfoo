@@ -69,328 +69,31 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
-  // Internal state management
-  const [useRawRequest, setUseRawRequest] = useState(
-    forceStructured ? false : !!selectedTarget.config.request,
-  );
-  const [rawRequestValue, setRawRequestValue] = useState(selectedTarget.config.request || '');
-  const [requestBody, setRequestBody] = useState(
-    typeof selectedTarget.config.body === 'string'
-      ? selectedTarget.config.body
-      : JSON.stringify(selectedTarget.config.body, null, 2) || '',
-  );
-  const [headers, setHeaders] = useState<Array<{ key: string; value: string }>>(
-    Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
-      key,
-      value: String(value),
-    })),
-  );
-  const [isJsonContentType] = useState(true); // Used for syntax highlighting
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const [request, setRequest] = useState(
-    `POST /v1/chat HTTP/1.1
-Host: api.example.com
-Content-Type: application/json
-
-{
-  "messages": [
-    {
-      "role": "user", 
-      "content": "{{prompt}}"
-    }
-  ]
-}`,
-  );
-  const [response, setResponse] = useState(
-    `{
-  "response": "Hello! How can I help you today?",
-  "metadata": {
-    "model": "gpt-3.5-turbo",
-    "tokens": 12
-  }
-}`,
-  );
-  const [generatedConfig, setGeneratedConfig] = useState<GeneratedConfig | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
-
-  const resetState = useCallback(
-    (isRawMode: boolean) => {
-      setBodyError(null);
-      setUrlError(null);
-
-      if (isRawMode) {
-        // Reset to empty raw request
-        setRawRequestValue('');
-        updateCustomTarget('request', '');
-
-        // Clear structured mode fields
-        updateCustomTarget('url', undefined);
-        updateCustomTarget('method', undefined);
-        updateCustomTarget('headers', undefined);
-        updateCustomTarget('body', undefined);
-      } else {
-        // Reset to empty structured fields
-        setRawRequestValue('');
-        setHeaders([]);
-        setRequestBody('');
-
-        // Clear raw request
-        updateCustomTarget('request', undefined);
-
-        // Reset structured fields
-        updateCustomTarget('url', '');
-        updateCustomTarget('method', 'POST');
-        updateCustomTarget('headers', {});
-        updateCustomTarget('body', '');
-      }
-    },
-    [updateCustomTarget, setBodyError, setUrlError],
-  );
-
-  // Header management
-  const addHeader = useCallback(() => {
-    setHeaders((prev) => [...prev, { key: '', value: '' }]);
-  }, []);
-
-  const removeHeader = useCallback(
-    (index: number) => {
-      setHeaders((prev) => {
-        const newHeaders = [...prev];
-        newHeaders.splice(index, 1);
-        return newHeaders;
-      });
-
-      // Update target configuration
-      const headerObj = headers.reduce(
-        (acc, { key, value }) => {
-          if (key) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
-      updateCustomTarget('headers', headerObj);
-    },
-    [headers, updateCustomTarget],
-  );
-
-  const updateHeaderKey = useCallback(
-    (index: number, newKey: string) => {
-      setHeaders((prev) => {
-        const newHeaders = [...prev];
-        newHeaders[index] = { ...newHeaders[index], key: newKey };
-        return newHeaders;
-      });
-
-      // Update target configuration
-      const headerObj = headers.reduce(
-        (acc, { key, value }) => {
-          if (key) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
-      updateCustomTarget('headers', headerObj);
-    },
-    [headers, updateCustomTarget],
-  );
-
-  const updateHeaderValue = useCallback(
-    (index: number, newValue: string) => {
-      setHeaders((prev) => {
-        const newHeaders = [...prev];
-        newHeaders[index] = { ...newHeaders[index], value: newValue };
-        return newHeaders;
-      });
-
-      // Update target configuration
-      const headerObj = headers.reduce(
-        (acc, { key, value }) => {
-          if (key) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
-      updateCustomTarget('headers', headerObj);
-    },
-    [headers, updateCustomTarget],
-  );
-
   const handleRequestBodyChange = (code: string) => {
     setRequestBody(code);
-    // Update state immediately without validation
-    updateCustomTarget('body', code);
-  };
 
-  const handleRawRequestChange = (value: string) => {
-    setRawRequestValue(value);
-    // Update state immediately without validation
-    updateCustomTarget('request', value);
-  };
-
-  // Separate validation from state updates
-  useEffect(() => {
-    if (!useRawRequest) {
-      setBodyError(null);
-      return;
-    }
-
-    // Don't show errors while typing short content
-    if (!rawRequestValue.trim() || rawRequestValue.trim().length < 20) {
-      setBodyError(null);
-      return;
-    }
-
-    // Debounce validation to avoid blocking input
-    const timeoutId = setTimeout(() => {
-      const request = rawRequestValue.trim();
-
-      // Check for required template variable
-      if (!request.includes('{{prompt}}')) {
-        setBodyError('Request must include {{prompt}} template variable');
-        return;
-      }
-
-      // Check for basic HTTP request format
-      const firstLine = request.split('\n')[0];
-      const hasValidFirstLine = /^(POST|GET|PUT|DELETE)\s+\S+/.test(firstLine);
-      if (!hasValidFirstLine) {
-        setBodyError('First line must be in format: METHOD URL');
-        return;
-      }
-
-      setBodyError(null);
-    }, 750);
-
-    return () => clearTimeout(timeoutId);
-  }, [useRawRequest, rawRequestValue]);
-
-  // Note to Michael: don't dedent this, we want to preserve JSON formatting.
-  const placeholderText = `Enter your HTTP request here. Example:
-
-POST /v1/chat/completions HTTP/1.1
-Host: api.example.com
-Content-Type: application/json
-Authorization: Bearer {{api_key}}
-
-{
-  "messages": [
-    {
-      "role": "user",
-      "content": "{{prompt}}"
-    }
-  ]
-}`;
-
-  // Add effect to handle forceStructured changes
-  useEffect(() => {
-    if (forceStructured) {
-      // Reset all state to structured mode
-      setUseRawRequest(false);
-      setRawRequestValue('');
-      // Clear any validation errors
-      setUrlError(null);
-      setBodyError(null);
-
-      setHeaders(
-        Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
-          key,
-          value: String(value),
-        })),
-      );
-      setRequestBody(
-        typeof selectedTarget.config.body === 'string'
-          ? selectedTarget.config.body
-          : JSON.stringify(selectedTarget.config.body, null, 2) || '',
-      );
-
-      // Only update the target config if we need to clear the raw request
-      if (selectedTarget.config.request) {
-        updateCustomTarget('request', undefined);
-      }
-    }
-  }, [forceStructured, selectedTarget.config]);
-
-  const handleGenerateConfig = async () => {
-    setGenerating(true);
-    setError('');
-    try {
-      const res = await fetch('https://api.promptfoo.app/http-provider-generator', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requestExample: request,
-          responseExample: response,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-
-      const data = await res.json();
-      setGeneratedConfig(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'An error occurred');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleCopy = () => {
-    if (generatedConfig) {
-      navigator.clipboard.writeText(yaml.dump(generatedConfig.config));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleApply = () => {
-    if (generatedConfig) {
-      if (generatedConfig.config.request) {
-        setUseRawRequest(true);
-        setRawRequestValue(generatedConfig.config.request);
-        updateCustomTarget('request', generatedConfig.config.request);
-      } else {
-        setUseRawRequest(false);
-        if (generatedConfig.config.url) {
-          updateCustomTarget('url', generatedConfig.config.url);
-        }
-        if (generatedConfig.config.method) {
-          updateCustomTarget('method', generatedConfig.config.method);
-        }
-        if (generatedConfig.config.headers) {
-          updateCustomTarget('headers', generatedConfig.config.headers);
-          setHeaders(
-            Object.entries(generatedConfig.config.headers).map(([key, value]) => ({
-              key,
-              value: String(value),
-            })),
-          );
-        }
-        if (generatedConfig.config.body) {
-          // First update the internal state
-          const formattedBody =
-            typeof generatedConfig.config.body === 'string'
-              ? generatedConfig.config.body
-              : JSON.stringify(generatedConfig.config.body, null, 2);
-          setRequestBody(formattedBody);
-
-          // Then update the target config with the original value
-          updateCustomTarget('body', generatedConfig.config.body);
+    if (isJsonContentType) {
+      // Try to parse as YAML first
+      try {
+        const parsedYaml = yaml.load(code);
+        // If it's valid YAML, convert to JSON and update
+        // Don't stringify the parsed object - send it as is
+        updateCustomTarget('body', parsedYaml);
+      } catch (yamlError) {
+        console.error('YAML parsing failed:', yamlError);
+        // If YAML parsing fails, try JSON parse as fallback
+        try {
+          const parsedJson = JSON.parse(code);
+          updateCustomTarget('body', parsedJson);
+        } catch (jsonError) {
+          console.error('JSON parsing failed:', jsonError);
+          // If both YAML and JSON parsing fail, use the raw text
+          updateCustomTarget('body', code);
         }
       }
-      if (generatedConfig.config.transformResponse) {
-        updateCustomTarget('transformResponse', generatedConfig.config.transformResponse);
-      }
-      setConfigDialogOpen(false);
+    } else {
+      // For non-JSON content types, use raw text
+      updateCustomTarget('body', code);
     }
   };
 
@@ -516,10 +219,7 @@ Authorization: Bearer {{api_key}}
               */
               typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody, null, 2)
             }
-            onValueChange={(code) => {
-              setRequestBody(code);
-              updateCustomTarget('body', code);
-            }}
+            onValueChange={handleRequestBodyChange}
             highlight={(code) =>
               highlight(code, isJsonContentType ? languages.json : languages.text)
             }
