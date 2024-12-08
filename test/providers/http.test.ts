@@ -1363,7 +1363,7 @@ describe('response handling', () => {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: 'test',
-        transformResponse: (data, text) => text,
+        transformResponse: (data: Record<string, unknown>, text: string) => text,
       },
     });
 
