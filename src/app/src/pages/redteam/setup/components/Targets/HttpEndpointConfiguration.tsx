@@ -496,8 +496,44 @@ Authorization: Bearer {{api_key}}
             Add Header
           </Button>
 
-          <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-            Request Body
+        <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+          Request Body
+        </Typography>
+        <Box
+          sx={{
+            border: 1,
+            borderColor: bodyError ? 'error.main' : 'grey.300',
+            borderRadius: 1,
+            mt: 1,
+            position: 'relative',
+            backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+          }}
+        >
+          <Editor
+            value={
+              /*
+              Should always be a string, but there might be some bad state in localStorage as of 2024-12-07
+              */
+              typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody, null, 2)
+            }
+            onValueChange={(code) => {
+              setRequestBody(code);
+              updateCustomTarget('body', code);
+            }}
+            highlight={(code) =>
+              highlight(code, isJsonContentType ? languages.json : languages.text)
+            }
+            padding={10}
+            style={{
+              fontFamily: '"Fira code", "Fira Mono", monospace',
+              fontSize: 14,
+              minHeight: '100px',
+            }}
+          />
+        </Box>
+        {bodyError && (
+          <Typography color="error" variant="caption" sx={{ mt: 0.5 }}>
+            {bodyError}
           </Typography>
           <Box
             sx={{

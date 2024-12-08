@@ -72,6 +72,31 @@ const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
+const EXAMPLE_TARGET: ProviderOptions = {
+  id: 'http',
+  label: 'Acme Chatbot',
+  config: {
+    url: 'https://acme-cx-chatbot.promptfoo.dev/chat',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(
+      {
+        messages: [
+          {
+            role: 'user',
+            content: '{{prompt}}',
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    transformResponse: 'json.response',
+  },
+};
+
 export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
@@ -92,6 +117,14 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       };
     };
   } | null>(null);
+  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
+  const [isJsonContentType, setIsJsonContentType] = useState(
+    selectedTarget.config.headers &&
+      selectedTarget.config.headers['Content-Type'] === 'application/json',
+  );
+  const [requestBody, setRequestBody] = useState(selectedTarget.config.body);
+
+  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [hasTestedTarget, setHasTestedTarget] = useState(false);
   const [bodyError, setBodyError] = useState<string | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -322,6 +355,13 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     }
   };
 
+  const handleTryExample = () => {
+    setSelectedTarget(EXAMPLE_TARGET);
+    setRequestBody(EXAMPLE_TARGET.config.body);
+    setIsJsonContentType(true);
+    recordEvent('feature_used', { feature: 'redteam_config_try_example' });
+  };
+
   return (
     <Stack direction="column" spacing={3}>
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
@@ -384,6 +424,16 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
                 ))}
               </Select>
             </Box>
+            <Button
+              variant="outlined"
+              onClick={handleTryExample}
+              sx={{
+                height: '56px',
+                mt: 0,
+              }}
+            >
+              Try Example
+            </Button>
           </Box>
         </FormControl>
         {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
