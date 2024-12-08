@@ -974,10 +974,13 @@
                           "owasp:llm:01",
                           "owasp:llm:02",
                           "owasp:llm:03",
+                          "owasp:llm:04",
+                          "owasp:llm:05",
                           "owasp:llm:06",
                           "owasp:llm:07",
                           "owasp:llm:08",
-                          "owasp:llm:09"
+                          "owasp:llm:09",
+                          "owasp:llm:10"
                         ]
                       },
                       {
@@ -1089,10 +1092,13 @@
                           "owasp:llm:01",
                           "owasp:llm:02",
                           "owasp:llm:03",
+                          "owasp:llm:04",
+                          "owasp:llm:05",
                           "owasp:llm:06",
                           "owasp:llm:07",
                           "owasp:llm:08",
-                          "owasp:llm:09"
+                          "owasp:llm:09",
+                          "owasp:llm:10"
                         ],
                         "description": "Name of the plugin"
                       },

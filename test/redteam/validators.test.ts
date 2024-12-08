@@ -670,6 +670,14 @@ describe('redteamConfigSchema', () => {
         'harmful:intellectual-property',
         'harmful:misinformation-disinformation',
         'harmful:specialized-advice',
+        'ascii-smuggling',
+        'indirect-prompt-injection',
+        'prompt-extraction',
+        'pii:api-db',
+        'pii:direct',
+        'pii:session',
+        'pii:social',
+        'cross-session-leak',
         'overreliance',
       ];
       expect(result.data?.plugins).toHaveLength(expectedPlugins.length);
