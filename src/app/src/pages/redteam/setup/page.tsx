@@ -49,7 +49,8 @@ const StyledTabs = styled(Tabs)(({ theme }) => ({
     left: 0,
     right: 'auto',
   },
-  width: '100%',
+  width: '280px',
+  minWidth: '280px',
   backgroundColor: theme.palette.background.paper,
   '& .MuiTab-root': {
     minHeight: '48px',
@@ -224,7 +225,6 @@ const readFileAsText = (file: File): Promise<string> => {
 const StatusSection = styled(Box)(({ theme }) => ({
   padding: theme.spacing(2),
   borderBottom: `1px solid ${theme.palette.divider}`,
-  borderRight: `1px solid ${theme.palette.divider}`,
   backgroundColor: theme.palette.background.paper,
   width: '280px',
   minWidth: '280px',
@@ -504,23 +504,6 @@ export default function RedTeamSetupPage() {
     toast.showToast('Configuration reset to defaults', 'success');
   };
 
-  const handleDownloadYaml = () => {
-    const yamlContent = generateOrderedYaml(config);
-    const blob = new Blob([yamlContent], { type: 'text/yaml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${configName || 'redteam-config'}.yaml`;
-    link.click();
-    URL.revokeObjectURL(url);
-    recordEvent('feature_used', {
-      feature: 'redteam_config_download',
-      numPlugins: config.plugins.length,
-      numStrategies: config.strategies.length,
-      targetType: config.target.id,
-    });
-  };
-
   // --- JSX ---
   return (
     <Root>
@@ -795,9 +778,7 @@ export default function RedTeamSetupPage() {
           <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
           <Button
             onClick={() => {
-              resetConfig();
-              setResetDialogOpen(false);
-              toast.showToast('Configuration reset to defaults', 'success');
+              handleResetConfig();
             }}
             color="error"
           >
