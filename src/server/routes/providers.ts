@@ -29,14 +29,6 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   }
   invariant(config.url, 'url is required');
   const loadedProvider = new HttpProvider(config.url, providerOptions);
-
-  /*if (provider?.config?.transformRequest) {
-    // @ts-ignore
-    loadedProvider.transformRequest = provider.config.transformRequest;
-  }*/
-
-  logger.warn(`[POST /providers/test] loadedProvider: ${JSON.stringify(loadedProvider, null, 2)}`);
-
   // Call the provider with the test prompt
   const result = await loadedProvider.callApi('Hello, world!', {
     debug: true,

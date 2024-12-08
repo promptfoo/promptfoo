@@ -229,8 +229,6 @@ export async function createTransformRequest(
     return (prompt) => transform(prompt);
   }
 
-  logger.warn(`[HttpProvider] transform: ${typeof transform}`);
-
   if (typeof transform === 'string') {
     if (transform.startsWith('file://')) {
       let filename = transform.slice('file://'.length);
@@ -255,7 +253,6 @@ export async function createTransformRequest(
     // Handle string template
     return (prompt) => {
       const rendered = nunjucks.renderString(transform, { prompt });
-      logger.warn(`[HttpProvider] transform: ${rendered}`);
       return new Function('prompt', `${rendered}`)(prompt);
     };
   }
@@ -297,9 +294,7 @@ export class HttpProvider implements ApiProvider {
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
   constructor(url: string, options: ProviderOptions) {
-    logger.error(`[HttpProvider] options: ${JSON.stringify(options, null, 2)}`);
     this.config = HttpProviderConfigSchema.parse(options.config);
-    logger.error(`[HttpProvider] config: ${JSON.stringify(this.config, null, 2)}`);
     this.url = this.config.url || url;
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
