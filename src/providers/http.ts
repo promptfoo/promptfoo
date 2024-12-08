@@ -35,7 +35,7 @@ interface HttpProviderConfig {
   responseParser?: string | Function;
 }
 
-function contentTypeIsJson(headers: Record<string, string> | undefined) {
+function contentTypeIsJson(headers: Record<string, string> | undefined): boolean {
   if (!headers) {
     return false;
   }
@@ -156,16 +156,19 @@ function processObjects(
     );
   }
 
-  const processedBody: Record<string, any> = {};
+  if (typeof body === 'object' && body !== null) {
+    const processedBody: Record<string, any> = {};
 
-  for (const [key, value] of Object.entries(body)) {
-    if (typeof value === 'object' && value !== null) {
-      processedBody[key] = processObjects(value, vars);
-    } else {
-      processedBody[key] = processValue(value, vars);
+    for (const [key, value] of Object.entries(body)) {
+      if (typeof value === 'object' && value !== null) {
+        processedBody[key] = processObjects(value, vars);
+      } else {
+        processedBody[key] = processValue(value, vars);
+      }
     }
+    return processedBody;
   }
-  return processedBody;
+  return body;
 }
 
 export function processJsonBody(
@@ -264,27 +267,32 @@ export async function createTransformRequest(
 }
 
 export function determineRequestBody(
-  contentType: boolean,
+  typeIsJson: boolean,
   parsedPrompt: any,
   configBody: Record<string, any> | any[] | string | undefined,
   vars: Record<string, any>,
 ): Record<string, any> | any[] | string {
-  if (contentType) {
-    // For JSON content type
-    if (typeof parsedPrompt === 'object' && parsedPrompt !== null) {
-      // If parser returned an object, merge it with config body
-      return Object.assign({}, configBody || {}, parsedPrompt);
-    }
-    // Otherwise process the config body with parsed prompt
-    return processJsonBody(configBody as Record<string, any> | any[], {
-      ...vars,
-      prompt: parsedPrompt,
-    });
+  const processedPrompt =
+    typeof parsedPrompt === 'object' ? JSON.stringify(parsedPrompt) : parsedPrompt;
+
+  if (!typeIsJson) {
+    // For non-JSON content type, process as text
+    return processTextBody(configBody as string, { ...vars, prompt: processedPrompt });
   }
-  // For non-JSON content type, process as text
-  return processTextBody(configBody as string, {
+
+  // For JSON content type
+  if (typeof processedPrompt === 'object' && processedPrompt !== null) {
+    // Merge parsed prompt object with config body
+    return {
+      ...(typeof configBody === 'object' ? configBody : {}),
+      ...processedPrompt,
+    };
+  }
+
+  // Process config body with parsed prompt
+  return processJsonBody(configBody as Record<string, any> | any[], {
     ...vars,
-    prompt: parsedPrompt,
+    prompt: processedPrompt,
   });
 }
 
@@ -379,21 +387,22 @@ export class HttpProvider implements ApiProvider {
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
     const headers = this.getHeaders(defaultHeaders, vars);
-    this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
+    const body = determineRequestBody(
+      contentTypeIsJson(headers),
+      transformedPrompt,
+      this.config.body,
+      vars,
+    );
+    this.validateContentTypeAndBody(headers, body);
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
       headers,
-      body: determineRequestBody(
-        contentTypeIsJson(headers),
-        transformedPrompt,
-        this.config.body,
-        vars,
-      ),
+      body,
       queryParams: this.config.queryParams
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
@@ -440,7 +449,7 @@ export class HttpProvider implements ApiProvider {
         error: `HTTP call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tHTTP response: ${response.data}`);
+    logger.debug(`\tHTTP response status: ${response.status}, response: ${response.data}`);
     const ret: ProviderResponse = {};
     if (context?.debug) {
       ret.raw = response.data;
