@@ -425,7 +425,7 @@ export default function Review() {
           </Typography>
           <Typography variant="body1">
             Save your configuration and run it from the command line. Full control over the
-            evaluation process:
+            evaluation process, good for larger scans:
           </Typography>
           <Box
             component="pre"
@@ -470,7 +470,8 @@ export default function Review() {
             Option 2: Run Directly in Browser
           </Typography>
           <Typography variant="body1" paragraph>
-            Run the red team evaluation right here. Simpler but less powerful than the CLI:
+            Run the red team evaluation right here. Simpler but less powerful than the CLI, good for
+            tests and small scans:
           </Typography>
           <Box sx={{ mb: 2 }}>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
