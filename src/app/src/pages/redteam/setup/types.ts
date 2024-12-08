@@ -1,5 +1,4 @@
 import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
-import type { RedteamFileConfig } from '@promptfoo/redteam/types';
 
 export interface Config {
   description: string;
@@ -86,13 +85,6 @@ export interface ComponentProps {
 
 export interface YamlPreviewProps {
   config: Config;
-}
-
-export interface YamlConfig {
-  description: string;
-  targets: ProviderOptions[];
-  prompts: string[];
-  redteam: RedteamFileConfig;
 }
 
 export interface LocalPluginConfig {
