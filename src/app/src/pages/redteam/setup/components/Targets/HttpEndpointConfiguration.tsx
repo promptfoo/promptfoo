@@ -12,6 +12,7 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-json';
@@ -47,6 +48,34 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
 }) => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
+
+  const handleRequestBodyChange = (code: string) => {
+    setRequestBody(code);
+
+    if (isJsonContentType) {
+      // Try to parse as YAML first
+      try {
+        const parsedYaml = yaml.load(code);
+        // If it's valid YAML, convert to JSON and update
+        // Don't stringify the parsed object - send it as is
+        updateCustomTarget('body', parsedYaml);
+      } catch (yamlError) {
+        console.error('YAML parsing failed:', yamlError);
+        // If YAML parsing fails, try JSON parse as fallback
+        try {
+          const parsedJson = JSON.parse(code);
+          updateCustomTarget('body', parsedJson);
+        } catch (jsonError) {
+          console.error('JSON parsing failed:', jsonError);
+          // If both YAML and JSON parsing fail, use the raw text
+          updateCustomTarget('body', code);
+        }
+      }
+    } else {
+      // For non-JSON content types, use raw text
+      updateCustomTarget('body', code);
+    }
+  };
 
   return (
     <Box mt={2}>
@@ -129,10 +158,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
               */
               typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody, null, 2)
             }
-            onValueChange={(code) => {
-              setRequestBody(code);
-              updateCustomTarget('body', code);
-            }}
+            onValueChange={handleRequestBodyChange}
             highlight={(code) =>
               highlight(code, isJsonContentType ? languages.json : languages.text)
             }
