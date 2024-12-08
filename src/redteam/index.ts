@@ -13,7 +13,7 @@ import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
-import { loadRedteamProvider } from './providers/shared';
+import { redteamProviderManager } from './providers/shared';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
@@ -244,7 +244,7 @@ export async function synthesize({
   }
   validateStrategies(strategies);
 
-  const redteamProvider = await loadRedteamProvider({ provider });
+  const redteamProvider = await redteamProviderManager.getProvider({ provider });
 
   // We need to know how many languages we're generating for
   // We generate multilingual attacks for all of our test cases so it's plugins * strategies * languages
