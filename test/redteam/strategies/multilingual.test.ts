@@ -1,6 +1,7 @@
 import { SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addMultilingual } from '../../../src/redteam/strategies/multilingual';
 import type { AtomicTestCase } from '../../../src/types';
@@ -22,13 +23,16 @@ jest.mock('../../../src/cache', () => ({
   }),
 }));
 
-jest.mock('../../../src/redteam/providers/shared', () => ({
-  loadRedteamProvider: jest.fn().mockResolvedValue({
-    callApi: jest.fn().mockResolvedValue({
-      output: '{"translation": "Hallo Welt"}',
-    }),
-  }),
-}));
+jest.spyOn(redteamProviderManager, 'getProvider').mockResolvedValue({
+  callApi: jest.fn().mockResolvedValue({ output: '{"translation": "Hallo Welt"}' }),
+  config: {},
+  getOpenAiBody: jest.fn(),
+  modelName: 'test-model',
+  id: 'test-provider',
+  type: 'openai',
+  isAvailable: jest.fn().mockResolvedValue(true),
+  validateConfig: jest.fn(),
+} as any);
 
 jest.mock('cli-progress', () => ({
   Presets: {

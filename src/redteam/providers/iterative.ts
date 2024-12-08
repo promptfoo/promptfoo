@@ -14,7 +14,7 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
-import { getTargetResponse, loadRedteamProvider } from './shared';
+import { getTargetResponse, redteamProviderManager } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -275,7 +275,7 @@ class RedteamIterativeProvider implements ApiProvider {
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: await loadRedteamProvider({
+      redteamProvider: await redteamProviderManager.getProvider({
         provider: this.redteamProvider,
         jsonOnly: true,
       }),

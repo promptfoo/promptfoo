@@ -21,10 +21,9 @@ export const DEFAULT_HTTP_TARGET: ProviderOptions = {
     url: '',
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    // @ts-ignore
-    body: {
+    body: JSON.stringify({
       message: '{{prompt}}',
-    },
+    }),
   },
 };
 
@@ -139,7 +138,11 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           };
         }),
       setFullConfig: (config) => set({ config }),
-      resetConfig: () => set({ config: defaultConfig }),
+      resetConfig: () => {
+        set({ config: defaultConfig });
+        // There's a bunch of state that's not persisted that we want to reset
+        window.location.reload();
+      },
       updateApplicationDefinition: (
         section: keyof Config['applicationDefinition'],
         value: string,

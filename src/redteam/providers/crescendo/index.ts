@@ -17,7 +17,7 @@ import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
-import { getTargetResponse, loadRedteamProvider, type TargetResponse } from '../shared';
+import { getTargetResponse, redteamProviderManager, type TargetResponse } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_ROUNDS = 10;
@@ -99,7 +99,7 @@ class CrescendoProvider implements ApiProvider {
           preferSmallModel: true,
         });
       } else {
-        this.redTeamProvider = await loadRedteamProvider({
+        this.redTeamProvider = await redteamProviderManager.getProvider({
           provider: this.config.redteamProvider,
           preferSmallModel: true,
           jsonOnly: true,
@@ -118,7 +118,7 @@ class CrescendoProvider implements ApiProvider {
           preferSmallModel: true,
         });
       } else {
-        this.scoringProvider = await loadRedteamProvider({
+        this.scoringProvider = await redteamProviderManager.getProvider({
           provider: this.config.redteamProvider,
           preferSmallModel: true,
         });
