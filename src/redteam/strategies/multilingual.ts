@@ -97,10 +97,10 @@ export async function translate(text: string, lang: string): Promise<string> {
     </Text>`,
   );
   try {
-    return (yaml.load(result.output) as { translation: string }).translation;
+    return (JSON.parse(result.output) as { translation: string }).translation;
   } catch (error) {
     logger.error(
-      `[translate] Error parsing translation result: ${error} Provider Output: ${JSON.stringify(result.output, null, 2)}`,
+      `[translate] Error parsing translation result: ${error} Provider Output: ${result.output}`,
     );
     throw error;
   }
