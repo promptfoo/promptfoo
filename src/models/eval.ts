@@ -170,7 +170,6 @@ export default class Eval {
           description: config.description,
           config,
           results: {},
-          prompts: renderedPrompts,
         })
         .run();
 
