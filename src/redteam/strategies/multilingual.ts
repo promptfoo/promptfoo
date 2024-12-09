@@ -96,7 +96,14 @@ export async function translate(text: string, lang: string): Promise<string> {
     ${text}
     </Text>`,
   );
-  return (JSON.parse(result.output) as { translation: string }).translation;
+  try {
+    return (JSON.parse(result.output) as { translation: string }).translation;
+  } catch (error) {
+    logger.error(
+      `[translate] Error parsing translation result: ${error} Provider Output: ${result.output}`,
+    );
+    throw error;
+  }
 }
 
 export async function addMultilingual(
