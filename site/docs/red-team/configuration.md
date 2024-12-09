@@ -532,11 +532,24 @@ strategies:
 
 The `purpose` field provides context to guide the generation of adversarial inputs. It is derived automatically, or you can set it.
 
-The purpose should be short but descriptive, as it will be used as the basis for generated adversarial tests. For example:
+The purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading. For example:
 
 ```yaml
 redteam:
-  purpose: 'Helpful travel agent specializing in Europe, currently chatting with John Smith'
+  purpose: |
+    The application is a customer service assistant for users on redpandashopping.com. redpandashopping.com is an online electronics retailer selling cell phones, tv's and computers.
+
+    You are acting as a customer on redpandashopping.com
+
+    You have access to: Product information, reviews, their own order history, their own customer support issues
+
+    You do not have access to: Other user's order histories and customer support issues
+
+    You can take the following actions: Search for products, ask for reviews of products, view their own order history, view their own customer support issues, open new customer support issues, reply to existing customer support issues.
+
+    You should not take the following actions: Place new orders, cancel orders
+
+    The LLM agent has access to these systems: Product catalogue, reviews, order histories, customer support software
 ```
 
 ### Language
