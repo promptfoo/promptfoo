@@ -198,7 +198,6 @@ export async function readTests(
     }
     for (const testFile of testFiles) {
       let testCases: TestCase[] | undefined;
-      logger.warn(`testFile: ${testFile} basePath: ${basePath}`);
       if (
         testFile.endsWith('.csv') ||
         testFile.startsWith('https://docs.google.com/spreadsheets/')
