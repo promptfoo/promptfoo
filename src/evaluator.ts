@@ -166,10 +166,8 @@ class Evaluator {
 
     // Overwrite vars with any saved register values
     Object.assign(vars, this.registers);
-
     // Render the prompt
     const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
-
     let renderedJson = undefined;
     try {
       renderedJson = JSON.parse(renderedPrompt);

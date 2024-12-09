@@ -159,7 +159,7 @@ export async function renderPrompt(
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
     if (typeof vars[key] === 'string') {
-      vars[key] = (vars[key] as string).replace(/\n$/, '');
+      vars[key] = (vars[key] as string).replace(/\n$/, '').replace(/"/g, '\\"');
     }
   }
 
@@ -207,14 +207,23 @@ export async function renderPrompt(
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
       return nunjucks.renderString(basePrompt, vars);
     }
-
-    const parsed = JSON.parse(basePrompt);
-
+    const parsed = yaml.load(basePrompt);
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
-    return nunjucks.renderString(basePrompt, vars);
+    // Escape any newlines and special characters in vars before rendering
+    const escapedVars = Object.fromEntries(
+      Object.entries(vars).map(([key, value]) => [
+        key,
+        typeof value === 'string'
+          ? value.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
+          : value,
+      ]),
+    );
+
+    const rendered = yaml.load(nunjucks.renderString(basePrompt, escapedVars));
+    return JSON.stringify(rendered, null, 2);
   }
 }
 
