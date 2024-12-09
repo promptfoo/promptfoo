@@ -214,6 +214,9 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         createdAt: new Date(incEval.createdAt),
         results: incEval.results,
       });
+      if (incEval.prompts) {
+        eval_.addPrompts(incEval.prompts);
+      }
       logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
 
       logger.debug(`[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`);
