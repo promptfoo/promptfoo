@@ -929,8 +929,10 @@ export async function matchesModeration(
   // Get default providers
   const defaultProviders = await getDefaultProviders();
 
-  // Check for Replicate API key and override provider if specified in grading config
-  const hasReplicateKey = getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN');
+  // Only try to use Replicate if OpenAI is not available
+  const hasOpenAiKey = getEnvString('OPENAI_API_KEY');
+  const hasReplicateKey =
+    !hasOpenAiKey && (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN'));
   const defaultModerationProvider = hasReplicateKey
     ? await loadApiProvider(LLAMA_GUARD_REPLICATE_PROVIDER)
     : defaultProviders.moderationProvider;
