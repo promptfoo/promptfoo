@@ -181,6 +181,11 @@ export async function readTests(
     const testFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
+
+    if (loadTestsGlob.startsWith('https://docs.google.com/spreadsheets/')) {
+      testFiles.push(loadTestsGlob);
+    }
+
     const _deref = async (testCases: TestCase[], file: string) => {
       logger.debug(`Dereferencing test file: ${file}`);
       return (await $RefParser.dereference(testCases)) as TestCase[];
@@ -193,7 +198,11 @@ export async function readTests(
     }
     for (const testFile of testFiles) {
       let testCases: TestCase[] | undefined;
-      if (testFile.endsWith('.csv')) {
+      logger.warn(`testFile: ${testFile} basePath: ${basePath}`);
+      if (
+        testFile.endsWith('.csv') ||
+        testFile.startsWith('https://docs.google.com/spreadsheets/')
+      ) {
         testCases = await readStandaloneTestsFile(testFile, basePath);
       } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
         testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
