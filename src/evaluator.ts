@@ -154,7 +154,6 @@ class Evaluator {
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
-    // Include metadata.conversationId in the conversation key if it exists
     const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
     const usesConversation = prompt.raw.includes('_conversation');
     if (
