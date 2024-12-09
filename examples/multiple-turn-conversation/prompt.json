@@ -5,16 +5,16 @@
   },
   {% for completion in _conversation %}
     {
-      "role": "user",
-      "content": "{{ completion.prompt[completion.prompt.length - 1].content }}"
-    },
-    {
-      "role": "assistant",
-      "content": "{{ completion.output }}"
-    },
+    "role": "user",
+    "content": "{{ completion.prompt[completion.prompt.length - 1].content | safe }}"
+  },
+  {
+    "role": "assistant",
+    "content": "{{ completion.output | dump }}"
+  },
   {% endfor %}
   {
     "role": "user",
-    "content": "{{ question }}"
+    "content": "{{ question | safe }}"
   }
 ]
