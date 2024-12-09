@@ -1534,6 +1534,51 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(mockApiProvider2.callApi).toHaveBeenCalledTimes(1);
   });
+
+  it('merges defaultTest.vars before applying transformVars', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ test1 }} {{ test2 }} {{ test2UpperCase }}')],
+      defaultTest: {
+        vars: {
+          test2: 'bar',
+        },
+        options: {
+          transformVars: `
+            return {
+              ...vars,
+              test2UpperCase: vars.test2.toUpperCase()
+            };
+          `,
+        },
+      },
+      tests: [
+        {
+          vars: {
+            test1: 'foo',
+          },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+
+    // Check that vars were merged correctly and transform was applied
+    expect(summary.results[0].vars).toEqual({
+      test1: 'foo',
+      test2: 'bar',
+      test2UpperCase: 'BAR',
+    });
+
+    // Verify the prompt was rendered with all variables
+    expect(summary.results[0].prompt.raw).toBe('Test prompt foo bar BAR');
+  });
 });
 
 describe('generateVarCombinations', () => {
