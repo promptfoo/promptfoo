@@ -23,10 +23,14 @@ const PresetCard: React.FC<PresetCardProps> = ({ name, isSelected, onClick }) =>
         justifyContent: 'center',
       }}
     >
-      <CardContent sx={{ textAlign: 'center', position: 'relative' }}>
-        <Typography variant="h6" component="div">
-          {name}
-        </Typography>
+      <CardContent
+        sx={{
+          textAlign: 'center',
+          position: 'relative',
+          padding: '16px !important',
+        }}
+      >
+        <Typography variant="h6">{name}</Typography>
       </CardContent>
     </Card>
   );

@@ -12,7 +12,7 @@ import type {
 } from '../../types';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
-import { getTargetResponse, loadRedteamProvider, type TargetResponse } from './shared';
+import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';
 
 const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
   ? Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)
@@ -306,7 +306,7 @@ class RedteamIterativeProvider implements ApiProvider {
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: await loadRedteamProvider({
+      redteamProvider: await redteamProviderManager.getProvider({
         provider: this.redteamProvider,
         preferSmallModel: false,
         jsonOnly: true,

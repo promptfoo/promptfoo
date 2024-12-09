@@ -43,16 +43,22 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     const { name, type, config } = req.body;
     const id = uuidv4();
 
-    await db.insert(configsTable).values({
-      id,
-      name,
-      type,
-      config,
-    });
+    const [result] = await db
+      .insert(configsTable)
+      .values({
+        id,
+        name,
+        type,
+        config,
+      })
+      .returning({
+        id: configsTable.id,
+        createdAt: configsTable.createdAt,
+      });
 
     logger.info(`Saved config ${id} of type ${type}`);
 
-    res.json({ id });
+    res.json(result);
   } catch (error) {
     logger.error('Error saving config:', error);
     res.status(500).json({ error: 'Failed to save config' });

@@ -15,6 +15,7 @@ import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
+import { isRunningUnderNpx } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
@@ -25,9 +26,9 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../constants';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
 import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
-import { shouldGenerateRemote } from '../util';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -84,7 +85,9 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
   } else {
     logger.info(
       chalk.red(
-        `\nCan't generate without configuration - run ${chalk.yellow.bold('promptfoo redteam init')} first`,
+        `\nCan't generate without configuration - run ${chalk.yellow.bold(
+          isRunningUnderNpx() ? 'npx promptfoo redteam init' : 'promptfoo redteam init',
+        )} first`,
       ),
     );
     return;
@@ -216,7 +219,9 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
       redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
       metadata: {
         ...(existingYaml.metadata || {}),
-        ...(configPath ? { configHash: getConfigHash(configPath) } : {}),
+        ...(configPath && redteamTests.length > 0
+          ? { configHash: getConfigHash(configPath) }
+          : { configHash: 'force-regenerate' }),
       },
     };
     writePromptfooConfig(updatedYaml, options.output);
@@ -224,13 +229,14 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     const relativeOutputPath = path.relative(process.cwd(), options.output);
     logger.info(`Wrote ${redteamTests.length} new test cases to ${relativeOutputPath}`);
     if (!options.inRedteamRun) {
+      const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
         '\n' +
           chalk.green(
             `Run ${chalk.bold(
               relativeOutputPath === 'redteam.yaml'
-                ? 'promptfoo redteam eval'
-                : `promptfoo redteam eval -c ${relativeOutputPath}`,
+                ? `${commandPrefix} redteam eval`
+                : `${commandPrefix} redteam eval -c ${relativeOutputPath}`,
             )} to run the red team!`,
           ),
       );
@@ -256,9 +262,10 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     logger.info(
       `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
     );
+    const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
     const command = configPath.endsWith('promptfooconfig.yaml')
-      ? 'promptfoo eval'
-      : `promptfoo eval -c ${path.relative(process.cwd(), configPath)}`;
+      ? `${commandPrefix} eval`
+      : `${commandPrefix} eval -c ${path.relative(process.cwd(), configPath)}`;
     logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
   } else {
     writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml');

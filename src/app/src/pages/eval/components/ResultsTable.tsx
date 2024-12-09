@@ -302,7 +302,6 @@ function ResultsTable({
           } else if (filterMode === 'different') {
             outputsPassFilter = !row.outputs.every((output) => output.text === row.outputs[0].text);
           } else if (filterMode === 'highlights') {
-            console.log(row.outputs[0].text);
             outputsPassFilter = row.outputs.some((output) =>
               output.gradingResult?.comment?.startsWith('!highlight'),
             );

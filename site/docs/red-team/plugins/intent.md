@@ -25,6 +25,14 @@ redteam:
       - id: 'jailbreak'
 ```
 
+The `intent` property can be a string or a file path to a list of intents:
+
+```yaml
+intent: file://path/to/intents.csv
+```
+
+This CSV file should have one column with a header.
+
 The Intent plugin creates one test case for each intent specified. The intent text is used directly as the prompt and the model's response is evaluated against the intended behavior. This is unlike all other plugins which generate variations of a goal designed to elicit a specific harmful behavior.
 
 :::note

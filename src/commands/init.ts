@@ -6,11 +6,10 @@ import dedent from 'dedent';
 import fs from 'fs/promises';
 import path from 'path';
 import { VERSION } from '../constants';
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
-import { setupEnv } from '../util';
+import { isRunningUnderNpx, setupEnv } from '../util';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
@@ -132,8 +131,7 @@ async function handleExampleDownload(
     }
   }
 
-  const isNpx = getEnvString('npm_execpath')?.includes('npx');
-  const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
+  const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
   if (directory === '.' || !directory) {
     logger.info(
       dedent`View the README file at ${chalk.bold(`${exampleName}/README.md`)} or run 

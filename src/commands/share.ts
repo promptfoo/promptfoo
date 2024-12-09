@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
+import dedent from 'dedent';
 import readline from 'readline';
 import invariant from 'tiny-invariant';
 import { URL } from 'url';
@@ -54,42 +55,43 @@ export function shareCommand(program: Command) {
         invariant(eval_, 'No eval found');
         if (eval_.prompts.length === 0) {
           // FIXME(ian): Handle this on the server side.
-          logger.error(`Eval ${eval_.id} did not complete successfully, so it cannot be shared.`);
+          logger.error(
+            dedent`
+              Eval ${chalk.bold(eval_.id)} cannot be shared.
+              This may be because the eval is still running or because it did not complete successfully.
+              If your eval is still running, wait for it to complete and try again.
+            `,
+          );
           process.exit(1);
         }
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
           await createPublicUrl(eval_, cmdObj.showAuth);
-        } else {
-          const reader = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-
-          if (cloudConfig.isEnabled()) {
-            logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
-            await createPublicUrl(eval_, cmdObj.showAuth);
-            process.exit(0);
-          } else {
-            const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
-            const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
-            reader.question(
-              `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
-              async function (answer: string) {
-                if (
-                  answer.toLowerCase() !== 'yes' &&
-                  answer.toLowerCase() !== 'y' &&
-                  answer !== ''
-                ) {
-                  reader.close();
-                  process.exit(1);
-                }
-                reader.close();
-
-                await createPublicUrl(eval_, cmdObj.showAuth);
-              },
-            );
-          }
+          return;
         }
+        const reader = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        if (cloudConfig.isEnabled()) {
+          logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
+          await createPublicUrl(eval_, cmdObj.showAuth);
+          process.exit(0);
+        }
+        const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
+        const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
+        reader.question(
+          `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
+          async function (answer: string) {
+            if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y' && answer !== '') {
+              reader.close();
+              process.exit(1);
+            }
+            reader.close();
+
+            await createPublicUrl(eval_, cmdObj.showAuth);
+          },
+        );
       },
     );
 }

@@ -51,7 +51,7 @@ describe('System Purpose Extractor', () => {
 
     expect(result).toBe('Remote extracted purpose');
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/v1/generate',
+      'https://api.promptfoo.app/task',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({

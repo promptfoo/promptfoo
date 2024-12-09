@@ -1,4 +1,5 @@
 import React from 'react';
+import Editor from 'react-simple-code-editor';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
@@ -9,9 +10,14 @@ import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
-import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
+import yaml from 'js-yaml';
+// @ts-expect-error: No types available
+import { highlight, languages } from 'prismjs/components/prism-core';
+import 'prismjs/components/prism-json';
 import type { ProviderOptions } from '../../types';
+import 'prismjs/themes/prism.css';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -40,6 +46,37 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   isJsonContentType,
 }) => {
+  const theme = useTheme();
+  const darkMode = theme.palette.mode === 'dark';
+
+  const handleRequestBodyChange = (code: string) => {
+    setRequestBody(code);
+
+    if (isJsonContentType) {
+      // Try to parse as YAML first
+      try {
+        const parsedYaml = yaml.load(code);
+        // If it's valid YAML, convert to JSON and update
+        // Don't stringify the parsed object - send it as is
+        updateCustomTarget('body', parsedYaml);
+      } catch (yamlError) {
+        console.error('YAML parsing failed:', yamlError);
+        // If YAML parsing fails, try JSON parse as fallback
+        try {
+          const parsedJson = JSON.parse(code);
+          updateCustomTarget('body', parsedJson);
+        } catch (jsonError) {
+          console.error('JSON parsing failed:', jsonError);
+          // If both YAML and JSON parsing fail, use the raw text
+          updateCustomTarget('body', code);
+        }
+      }
+    } else {
+      // For non-JSON content types, use raw text
+      updateCustomTarget('body', code);
+    }
+  };
+
   return (
     <Box mt={2}>
       <Typography variant="h6" gutterBottom>
@@ -101,24 +138,43 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
           Add Header
         </Button>
 
-        <TextField
-          fullWidth
-          label="Request body"
-          value={requestBody}
-          error={!!bodyError}
-          helperText={bodyError}
-          onChange={(e) => {
-            setRequestBody(e.target.value);
-            updateCustomTarget('body', e.target.value);
+        <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+          Request Body
+        </Typography>
+        <Box
+          sx={{
+            border: 1,
+            borderColor: bodyError ? 'error.main' : 'grey.300',
+            borderRadius: 1,
+            mt: 1,
+            position: 'relative',
+            backgroundColor: darkMode ? '#1e1e1e' : '#fff',
           }}
-          margin="normal"
-          multiline
-          minRows={1}
-          maxRows={10}
-          InputProps={{
-            inputComponent: TextareaAutosize,
-          }}
-        />
+        >
+          <Editor
+            value={
+              /*
+              Should always be a string, but there might be some bad state in localStorage as of 2024-12-07
+              */
+              typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody, null, 2)
+            }
+            onValueChange={handleRequestBodyChange}
+            highlight={(code) =>
+              highlight(code, isJsonContentType ? languages.json : languages.text)
+            }
+            padding={10}
+            style={{
+              fontFamily: '"Fira code", "Fira Mono", monospace',
+              fontSize: 14,
+              minHeight: '100px',
+            }}
+          />
+        </Box>
+        {bodyError && (
+          <Typography color="error" variant="caption" sx={{ mt: 0.5 }}>
+            {bodyError}
+          </Typography>
+        )}
       </Box>
     </Box>
   );

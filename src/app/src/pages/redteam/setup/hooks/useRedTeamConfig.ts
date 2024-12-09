@@ -1,3 +1,4 @@
+import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Config, ProviderOptions } from '../types';
@@ -20,10 +21,9 @@ export const DEFAULT_HTTP_TARGET: ProviderOptions = {
     url: '',
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    // @ts-ignore
-    body: {
+    body: JSON.stringify({
       message: '{{prompt}}',
-    },
+    }),
   },
 };
 
@@ -34,7 +34,7 @@ const defaultConfig: Config = {
   description: 'My Red Team Configuration',
   prompts: ['{{prompt}}'],
   target: DEFAULT_HTTP_TARGET,
-  plugins: ['default'],
+  plugins: [...DEFAULT_PLUGINS],
   strategies: ['jailbreak', 'prompt-injection'],
   purpose: '',
   entities: [],
@@ -53,11 +53,11 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
   const sections = [];
 
   if (applicationDefinition.purpose) {
-    sections.push(`The objective of the application is to ${applicationDefinition.purpose}`);
+    sections.push(`The objective of the application is: ${applicationDefinition.purpose}`);
   }
 
   if (applicationDefinition.redteamUser) {
-    sections.push(`You are ${applicationDefinition.redteamUser}`);
+    sections.push(`You are: ${applicationDefinition.redteamUser}`);
   }
 
   if (applicationDefinition.accessToData) {
@@ -138,25 +138,32 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           };
         }),
       setFullConfig: (config) => set({ config }),
-      resetConfig: () => set({ config: defaultConfig }),
+      resetConfig: () => {
+        set({ config: defaultConfig });
+        // There's a bunch of state that's not persisted that we want to reset
+        window.location.reload();
+      },
       updateApplicationDefinition: (
         section: keyof Config['applicationDefinition'],
         value: string,
       ) =>
-        set((state) => ({
-          config: {
-            ...state.config,
-            applicationDefinition: {
-              ...state.config.applicationDefinition,
-              [section]: value,
+        set((state) => {
+          const newApplicationDefinition = {
+            ...state.config.applicationDefinition,
+            [section]: value,
+          };
+          const newPurpose = applicationDefinitionToPurpose(newApplicationDefinition);
+          return {
+            config: {
+              ...state.config,
+              applicationDefinition: newApplicationDefinition,
+              purpose: newPurpose,
             },
-            purpose: applicationDefinitionToPurpose(state.config.applicationDefinition),
-          },
-        })),
+          };
+        }),
     }),
     {
       name: 'redTeamConfig',
-      skipHydration: true,
     },
   ),
 );

@@ -17,3 +17,6 @@ __pycache__
 
 # IDE
 .idea/
+
+# examples related
+examples/**/package-lock.json

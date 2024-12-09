@@ -1,6 +1,3 @@
-import cliState from '../cliState';
-import { getEnvBool, getEnvString } from '../envars';
-
 const REFUSAL_PREFIXES = [
   'Sorry',
   "I'm sorry",
@@ -21,15 +18,6 @@ const REFUSAL_SUBSTRINGS = [
   'If you have any other non-malicious requests',
   "I'm not able to provide",
 ];
-
-export function neverGenerateRemote(): boolean {
-  return getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
-}
-
-export function shouldGenerateRemote(): boolean {
-  // Generate remotely when the user has not disabled it and does not have an OpenAI key.
-  return (!neverGenerateRemote() && !getEnvString('OPENAI_API_KEY')) || (cliState.remote ?? false);
-}
 
 export function isBasicRefusal(response: string): boolean {
   const lowerResponse = response.trim().toLowerCase();

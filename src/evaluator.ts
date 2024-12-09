@@ -504,6 +504,7 @@ class Evaluator {
     const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
     const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
+      testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
@@ -548,7 +549,6 @@ class Evaluator {
         `testCase.assert is not an array in test case #${index + 1}`,
       );
       // Handle default properties
-      testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase.vars };
       testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
       testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };

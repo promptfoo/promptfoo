@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+import { maybeLoadFromExternalFile } from '../../util';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:intent';
@@ -18,7 +19,8 @@ export class IntentPlugin extends RedteamPluginBase {
     super(provider, purpose, injectVar);
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
     // Handle both string and array configs
-    this.intents = Array.isArray(config.intent) ? config.intent : [config.intent];
+    const loadedIntents = maybeLoadFromExternalFile(config.intent);
+    this.intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
     this.intents.forEach((intent, i) => {
       invariant(typeof intent === 'string', `Intent: "${intent}" at index ${i} must be a string`);
     });
