@@ -951,7 +951,6 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         body: JSON.stringify(params),
       });
     } catch (err) {
-      logger.error(String(err));
       return {
         error: `API call error: ${String(err)}`,
       };
