@@ -24,7 +24,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -33,7 +33,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
        config:
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
@@ -50,7 +50,7 @@ Configure Amazon Bedrock authentication in your provider's `config` section usin
 
 ```yaml
 providers:
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       accessKeyId: 'YOUR_ACCESS_KEY_ID'
       secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
@@ -62,7 +62,7 @@ providers:
 
 ```yaml
 providers:
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       profile: 'YOUR_SSO_PROFILE'
       region: 'us-east-1' # Optional, defaults to us-east-1
@@ -291,7 +291,7 @@ For example:
 
 ```yaml
 providers:
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       guardrailIdentifier: 'test-guardrail'
       guardrailVersion: 1 # The version number for the guardrail. The value can also be DRAFT.
