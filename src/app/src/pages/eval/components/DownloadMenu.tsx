@@ -11,6 +11,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { ResultFailureReason } from '@promptfoo/types';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
 import { useStore as useResultsViewStore } from './store';
@@ -88,7 +89,14 @@ function DownloadMenu() {
     table.body.forEach((row) => {
       const rowValues = [
         ...row.vars,
-        ...row.outputs.map(({ pass, text }) => (pass ? '[PASS] ' : '[FAIL] ') + text),
+        ...row.outputs.map(
+          ({ pass, text, failureReason: failureType }) =>
+            (pass
+              ? '[PASS] '
+              : failureType === ResultFailureReason.ASSERT
+                ? '[FAIL] '
+                : '[ERROR] ') + text,
+        ),
       ];
       csvRows.push(rowValues);
     });
