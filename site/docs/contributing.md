@@ -9,6 +9,16 @@ We welcome contributions from the community to help make promptfoo better. This 
 
 promptfoo is an MIT licensed tool for testing and evaluating LLM apps.
 
+### How to Contribute
+
+There are several ways to contribute to promptfoo:
+
+1. **Submit Pull Requests**: Anyone can contribute by forking the repository and submitting pull requests. You don't need to be a collaborator to contribute code or documentation changes.
+
+2. **Report Issues**: Help us by reporting bugs or suggesting improvements through GitHub issues or [Discord](https://discord.gg/gHPS9jjfbs).
+
+3. **Improve Documentation**: Documentation improvements are always welcome, including fixing typos, adding examples, or writing guides.
+
 We particularly welcome contributions in the following areas:
 
 - Bug fixes
@@ -18,7 +28,7 @@ We particularly welcome contributions in the following areas:
 
 ## Getting Started
 
-1. Fork the repository on GitHub.
+1. Fork the repository on GitHub by clicking the "Fork" button at the top right of the [promptfoo repository](https://github.com/promptfoo/promptfoo).
 2. Clone your fork locally:
 
    ```sh
@@ -79,7 +89,7 @@ If you're not sure where to start, check out our [good first issues](https://git
    git checkout -b feature/your-feature-name
    ```
 
-2. We try to follow the [Conventional Commits](https://www.conventionalcommits.org/) specification. This is not required for feature branches. We merge all PRs into `main` with a squash merge and a conventional commit message.
+2. Make your changes and commit them. We try to follow the [Conventional Commits](https://www.conventionalcommits.org/) specification, but this is not required for feature branches. We merge all PRs into `main` with a squash merge and a conventional commit message.
 
 3. Push your branch to your fork:
 
@@ -87,7 +97,7 @@ If you're not sure where to start, check out our [good first issues](https://git
    git push origin your-branch-name
    ```
 
-4. Open a pull request against the `main` branch of the promptfoo repository.
+4. Open a pull request (PR) against the `main` branch of the promptfoo repository.
 
 When opening a pull request:
 
@@ -125,7 +135,7 @@ npx jest [pattern]
 
 When writing tests, please:
 
-- Run them with the `--randomize` flag to ensure your mocks setup and teardown are not affecting other tests.
+- Run the test suite you modified with the `--randomize` flag to ensure your mocks setup and teardown are not affecting other tests.
 - Check the coverage report to ensure your changes are covered.
 - Avoid adding additional logs to the console.
 
