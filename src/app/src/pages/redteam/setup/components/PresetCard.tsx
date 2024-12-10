@@ -44,18 +44,17 @@ export default function PresetCard({ name, isSelected, onClick }: PresetCardProp
         },
       }}
     >
-      <CardContent
+      <Typography
+        variant="h6"
         sx={{
+          fontWeight: 500,
           textAlign: 'center',
-          position: 'relative',
-          padding: '16px !important',
+          color: isSelected ? 'primary.main' : 'text.primary',
+          transition: 'color 0.2s ease-in-out',
         }}
       >
-        <Typography variant="h6">{name}</Typography>
-      </CardContent>
-    </Card>
-  );
-};
+        {name}
+      </Typography>
 
       <Typography
         variant="body2"

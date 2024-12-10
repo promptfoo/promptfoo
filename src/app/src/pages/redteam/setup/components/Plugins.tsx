@@ -477,7 +477,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             Available presets
           </Typography>
 
-          <Box>
+          <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
             <Grid
               container
               spacing={3}
