@@ -871,3 +871,12 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   rot13: 'ROT13 Encoding',
 };
+
+export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
+  Default: 'Promptfoo recommended',
+  NIST: 'NIST AI Risk Management Framework',
+  'OWASP LLM': 'OWASP LLM Top 10',
+  'OWASP API': 'OWASP API Top 10',
+  MITRE: 'MITRE ATLAS framework',
+  Custom: 'Choose your own plugins',
+} as const;
