@@ -13,7 +13,6 @@ import type { Prompt } from '../../types';
  * @throws Will throw an error if the file cannot be read or parsed.
  */
 export function processYamlFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  // Yaml is parsed later - just pass it through.
   const fileContents = fs.readFileSync(filePath, 'utf8');
   const parsed = yaml.load(fileContents);
   return [
