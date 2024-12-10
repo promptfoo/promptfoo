@@ -346,12 +346,12 @@ Make sure to:
 2. Configure the corresponding region in your provider config
 3. Ensure you have model access enabled in your AWS Bedrock console for that region
 
-### AccessDeniedException: You don't have access to the model with the specified model ID.
+### AccessDeniedException: You don't have access to the model with the specified model ID
 
-If you see this error:
+If you see this error. Make sure you have access to the model in the region you're using:
 
-```text
-AccessDeniedException: You don't have access to the model with the specified model ID.
-```
-
-This usually means you need to make sure you have access to the model in the region you're using.
+1. Verify model access in AWS Console:
+   - Go to AWS Bedrock Console
+   - Navigate to "Model access"
+   - Enable access for the specific model
+2. Check your region configuration matches the model's region.
