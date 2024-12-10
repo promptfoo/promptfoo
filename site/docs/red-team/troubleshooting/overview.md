@@ -15,14 +15,6 @@ Common issues encountered when red teaming LLM applications with promptfoo.
 | [Multiple Response Types](/docs/red-team/troubleshooting/multiple-response-types) | Response parsing errors occur when handling non-standard formats, guardrails, or error states.                              |
 | [Remote Generation](/docs/red-team/troubleshooting/remote-generation)             | Corporate firewalls may block access to remote generation endpoints due to security policies around adversarial content.    |
 
-## Getting Help
-
-| Resource                                                       | Purpose                    |
-| -------------------------------------------------------------- | -------------------------- |
-| [GitHub Issues](https://github.com/promptfoo/promptfoo/issues) | Check existing bug reports |
-| [Discord Community](https://discord.gg/promptfoo)              | Real-time troubleshooting  |
-| [Enterprise Support](/contact/)                                | Priority assistance        |
-
 ## Related Documentation
 
 - [Red Team Quickstart](/docs/red-team/quickstart/)

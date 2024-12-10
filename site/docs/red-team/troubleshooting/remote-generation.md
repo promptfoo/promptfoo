@@ -4,7 +4,7 @@ sidebar_label: Remote Generation Errors
 
 # Remote Generation Errors
 
-When using promptfoo's remote generation capabilities, you may encounter connection issues due to corporate firewalls or security policies. Since our service generates potentially harmful outputs for testing purposes, some organizations' security policies may block access to our API endpoints.
+You may encounter connection issues due to corporate firewalls or security policies. Since our service generates potentially harmful outputs for testing purposes, some organizations' security policies may block access to our API endpoints.
 
 ## Checking Connectivity
 
@@ -17,10 +17,12 @@ curl https://api.promptfoo.app/version
 You should receive a response like:
 
 ```json
-{ "version": "0.100.5" }
+{
+  "version": "0.100.5"
+}
 ```
 
-If this request fails or times out, it likely means your network is blocking access to our API. You can also try opening `https://api.promptfoo.app/version` in your browser.
+If this request fails or times out, it likely means your network is blocking access to our API. You can also try opening `https://api.promptfoo.app/version` in your browser to see if you can reach the page.
 
 ## Common Solutions
 
@@ -36,14 +38,12 @@ If this request fails or times out, it likely means your network is blocking acc
    - Mobile hotspot
    - Development environment outside corporate network
 
-3. **Configure Proxy**: If you must use a corporate proxy:
+3. **Configure Proxy**: If you need to use a corporate proxy, you can configure it using environment variables. Promptfoo uses [proxy-agent](https://www.npmjs.com/package/proxy-agent) to handle proxy configuration. It automatically detects and uses standard proxy environment variables. The proxy URL format is: `[protocol://][user:password@]host[:port]`
 
    ```bash
    export HTTPS_PROXY=http://proxy.company.com:8080
    promptfoo eval
    ```
-
-Requests to most providers are made via [proxy-agent](https://www.npmjs.com/package/proxy-agent), which respects `HTTP_PROXY` and `HTTPS_PROXY` [environment variables](https://www.npmjs.com/package/proxy-from-env#environment-variables) of the form `[protocol://]<host>[:port]`.
 
 ## Alternative Options
 
