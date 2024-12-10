@@ -20,10 +20,6 @@ jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),
-}));
-
 describe('fetchRemoteGeneration', () => {
   beforeAll(() => {
     delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
