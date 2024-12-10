@@ -1,8 +1,4 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-
-# NOTE: Make sure to have the model access to the models you want to use in your region
-# https://us-west-2.console.aws.amazon.com/bedrock/home?region=us-west-2#/modelaccess
-
 description: 'Bedrock Claude Eval'
 prompts:
   - 'Write a tweet about {{topic}}'
