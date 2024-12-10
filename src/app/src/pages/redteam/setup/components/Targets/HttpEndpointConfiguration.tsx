@@ -25,7 +25,7 @@ interface HttpEndpointConfigurationProps {
   updateHeaderValue: (index: number, newValue: string) => void;
   addHeader: () => void;
   removeHeader: (index: number) => void;
-  requestBody: string;
+  requestBody: string | object;
   setRequestBody: (value: string) => void;
   bodyError: string | null;
   urlError: string | null;
