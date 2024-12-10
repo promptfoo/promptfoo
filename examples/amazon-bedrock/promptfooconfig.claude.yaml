@@ -1,23 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# NOTE: Make sure to have the model access to the models you want to use in your region
+# https://us-west-2.console.aws.amazon.com/bedrock/home?region=us-west-2#/modelaccess
+
+description: 'Bedrock Claude Eval'
 prompts:
   - 'Write a tweet about {{topic}}'
-
 providers:
-  - id: bedrock:anthropic.claude-3-5-haiku-20241022-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+    label: Claude 3.5 Haiku v1
     config:
-      region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
+      region: us-west-2
   - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+    label: Claude 3.5 Sonnet v1
     config:
-      region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+      region: us-west-2
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: Claude 3.5 Sonnet v2
     config:
-      region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-
+      region: us-west-2
 tests:
   - vars:
       topic: Our eco-friendly packaging

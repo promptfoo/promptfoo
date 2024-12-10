@@ -676,7 +676,9 @@ export const BEDROCK_MODEL = {
   },
   MISTRAL: {
     params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => {
-      const params: any = { prompt, stop };
+      const params: any = {
+        prompt: `<s>[INST] ${prompt} [/INST]`,
+      };
       addConfigParam(
         params,
         'max_tokens',
@@ -689,10 +691,13 @@ export const BEDROCK_MODEL = {
         'temperature',
         config?.temperature,
         getEnvFloat('MISTRAL_TEMPERATURE'),
-        0,
+        0.5,
       );
-      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
-      addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'), 0);
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 0.9);
+      addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'), 50);
+      if (stop && stop.length > 0) {
+        params.stop_sequences = stop;
+      }
       return params;
     },
     output: (responseJson: any) => responseJson?.outputs[0]?.text,

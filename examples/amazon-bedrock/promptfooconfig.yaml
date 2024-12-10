@@ -1,4 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'Bedrock Eval'
+
 prompts:
   - file://prompts.txt
 
