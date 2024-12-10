@@ -6,6 +6,7 @@ import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import AppIcon from '@mui/icons-material/Apps';
 import CloseIcon from '@mui/icons-material/Close';
+import DownloadIcon from '@mui/icons-material/Download';
 import PluginIcon from '@mui/icons-material/Extension';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import TargetIcon from '@mui/icons-material/GpsFixed';
@@ -40,6 +41,7 @@ import YamlPreview from './components/YamlPreview';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import type { Config } from './types';
+import { generateOrderedYaml } from './utils/yamlHelpers';
 import './page.css';
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
@@ -499,6 +501,23 @@ export default function RedTeamSetupPage() {
     toast.showToast('Configuration reset to defaults', 'success');
   };
 
+  const handleDownloadYaml = () => {
+    const yamlContent = generateOrderedYaml(config);
+    const blob = new Blob([yamlContent], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${configName || 'redteam-config'}.yaml`;
+    link.click();
+    URL.revokeObjectURL(url);
+    recordEvent('feature_used', {
+      feature: 'redteam_config_download',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+  };
+
   // --- JSX ---
   return (
     <Root>
@@ -669,13 +688,30 @@ export default function RedTeamSetupPage() {
             fullWidth
             value={configName}
             onChange={(e) => setConfigName(e.target.value)}
+            sx={{ mb: 2 }}
           />
+          <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              onClick={handleDownloadYaml}
+              fullWidth
+            >
+              Export YAML
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<SaveIcon />}
+              onClick={handleSaveConfig}
+              disabled={!configName}
+              fullWidth
+            >
+              Save
+            </Button>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleSaveConfig} disabled={!configName}>
-            Save
-          </Button>
         </DialogActions>
       </Dialog>
 
