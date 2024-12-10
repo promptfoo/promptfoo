@@ -12,7 +12,7 @@ providers:
     config:
       temperature: 0.7
       max_tokens: 256
-      region: us-west-2
+      region: us-east-2
   - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
     label: Claude 3.5 Sonnet v1
     config:
