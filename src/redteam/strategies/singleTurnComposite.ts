@@ -61,7 +61,7 @@ async function generateCompositePrompts(
       );
       if (data.error) {
         logger.error(`[jailbreak:composite] Error in composite generation: ${data.error}}`);
-        logger.error(`[jailbreak:composite] Response: ${JSON.stringify(data)}`);
+        logger.debug(`[jailbreak:composite] Response: ${JSON.stringify(data)}`);
         return;
       }
 
