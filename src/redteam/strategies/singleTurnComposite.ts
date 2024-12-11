@@ -59,6 +59,11 @@ async function generateCompositePrompts(
           data,
         )}`,
       );
+      if (data.error) {
+        logger.error(`[jailbreak:composite] Error in composite generation: ${data.error}}`);
+        logger.error(`[jailbreak:composite] Response: ${JSON.stringify(data)}`);
+        return;
+      }
 
       const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => ({
         ...testCase,
