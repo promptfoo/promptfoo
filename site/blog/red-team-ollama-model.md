@@ -80,7 +80,7 @@ redteam:
     - imitation
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak:composite
 ```
 
 To see the full configuration example on Github, [click here](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-ollama).
@@ -96,9 +96,11 @@ To see the full configuration example on Github, [click here](https://github.com
   - `hallucination`: Tests for false information
   - `imitation`: Tests if model impersonates others
 - **strategies**: Techniques for delivering adversarial inputs (see [full list](/docs/category/strategies-1/)):
-  - `jailbreak`: Tests if model can escape its constraints
-  - `prompt-injection`: Tests if model is susceptible to injected instructions
+  - `jailbreak`: Tests if model can escape its constraints using an iterative approach with an attacker model.
+  - `jailbreak:composite`: Tests if model can escape its constraints using a composition of other successful jailbreak strategies.
 - **numTests**: Number of test cases per plugin
+
+> **Note:** The strategies above are designed for single-turn interactions (one prompt, one response). For multi-turn conversations or applications, see our [multi-turn chatbot redteam example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-chatbot).
 
 ## Running the Red Team Evaluation
 
@@ -157,7 +159,7 @@ Here are some common issues you might find when red teaming Llama models:
 
 ## Mitigating Vulnerabilities
 
-Remeditations will depend on your test results, but in general some things to keep in mind are:
+Remediations will depend on your test results, but in general some things to keep in mind are:
 
 1. **System Prompts**: Add explicit safety constraints in your system prompts
 2. **Input Validation**: Implement pre-processing to catch malicious inputs
