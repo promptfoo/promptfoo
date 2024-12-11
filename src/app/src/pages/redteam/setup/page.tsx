@@ -504,6 +504,23 @@ export default function RedTeamSetupPage() {
     toast.showToast('Configuration reset to defaults', 'success');
   };
 
+  const handleDownloadYaml = () => {
+    const yamlContent = generateOrderedYaml(config);
+    const blob = new Blob([yamlContent], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${configName || 'redteam-config'}.yaml`;
+    link.click();
+    URL.revokeObjectURL(url);
+    recordEvent('feature_used', {
+      feature: 'redteam_config_download',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+  };
+
   // --- JSX ---
   return (
     <Root>
