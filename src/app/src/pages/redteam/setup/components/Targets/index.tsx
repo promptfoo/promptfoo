@@ -81,18 +81,14 @@ const EXAMPLE_TARGET: ProviderOptions = {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(
-      {
-        messages: [
-          {
-            role: 'user',
-            content: '{{prompt}}',
-          },
-        ],
-      },
-      null,
-      2,
-    ),
+    body: {
+      messages: [
+        {
+          role: 'user',
+          content: '{{prompt}}',
+        },
+      ],
+    },
     transformResponse: 'json.response',
   },
 };

@@ -1,3 +1,6 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Nova Tool Use Eval'
+
 prompts:
   - 'What is the color of {{topic}}? ONLY answer using the "color_json" tool.'
 

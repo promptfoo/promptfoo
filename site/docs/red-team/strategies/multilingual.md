@@ -42,7 +42,7 @@ strategies:
         # Add as many languages as needed
 ```
 
-You can also experiment with non-standard languages and cyphers like `pig-latin` or `ubbi-dubbi` or `reverse-speech` or `pirate` with mixed results.
+You can also experiment with non-standard languages and cyphers like `pig-latin`, `ubbi-dubbi`, `reverse-speech`, `pirate`, or `klingon` with mixed results.
 
 ## Background
 

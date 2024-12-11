@@ -1,3 +1,7 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Tool Use'
+prompts:
+  - Tell me about the weather in {{city}}.
 providers:
   - id: bedrock:anthropic.claude-3-5-haiku-20241022-v1:0
     config:
@@ -31,10 +35,6 @@ providers:
                 type: number
               b:
                 type: number
-
-prompts:
-  - Tell me about the weather in {{city}}.
-
 tests:
   - vars:
       city: Boston

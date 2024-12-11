@@ -465,26 +465,59 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           Plugin Configuration
         </Typography>
 
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          Available presets
-        </Typography>
-        <Grid container spacing={2} sx={{ mb: 4 }}>
-          {presets.map((preset) => {
-            const isSelected =
-              preset.name === 'Custom'
-                ? isCustomMode
-                : preset.name === currentlySelectedPreset?.name;
-            return (
-              <Grid item xs={6} sm={4} md={2} key={preset.name}>
-                <PresetCard
-                  name={preset.name}
-                  isSelected={isSelected}
-                  onClick={() => handlePresetSelect(preset)}
-                />
-              </Grid>
-            );
-          })}
-        </Grid>
+        <Box sx={{ mb: 4 }}>
+          <Typography
+            variant="h5"
+            sx={{
+              mb: 3,
+              fontWeight: 500,
+              color: 'text.primary',
+            }}
+          >
+            Available presets
+          </Typography>
+
+          <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
+            <Grid
+              container
+              spacing={3}
+              sx={{
+                mb: 4,
+                justifyContent: {
+                  xs: 'center',
+                  sm: 'flex-start',
+                },
+              }}
+            >
+              {presets.map((preset) => {
+                const isSelected =
+                  preset.name === 'Custom'
+                    ? isCustomMode
+                    : preset.name === currentlySelectedPreset?.name;
+                return (
+                  <Grid
+                    item
+                    xs={12}
+                    sm={6}
+                    md={4}
+                    lg={3}
+                    key={preset.name}
+                    sx={{
+                      minWidth: { xs: '280px', sm: '320px' },
+                      maxWidth: { xs: '100%', sm: '380px' },
+                    }}
+                  >
+                    <PresetCard
+                      name={preset.name}
+                      isSelected={isSelected}
+                      onClick={() => handlePresetSelect(preset)}
+                    />
+                  </Grid>
+                );
+              })}
+            </Grid>
+          </Box>
+        </Box>
 
         <TextField
           fullWidth
