@@ -129,8 +129,14 @@ export function resolveVariables(variables: Variables): Variables {
   return resolvedVars;
 }
 
-const isBasicPrompt = (s: string) =>
-  (!s.includes('{') && !s.includes('}')) || (s.includes('[') && s.includes(']'));
+const isBasicPrompt = (s: string): boolean => {
+  // If it starts with { or [ it's likely JSON/YAML
+  const firstNonWhitespaceChar = s.trim()[0];
+  if (firstNonWhitespaceChar === '{' || firstNonWhitespaceChar === '[') {
+    return false;
+  }
+  return true;
+};
 
 export async function renderPrompt(
   prompt: Prompt,
@@ -227,7 +233,7 @@ export async function renderPrompt(
   // Resolve variable mappings
   const resolvedVars: Variables = resolveVariables(vars);
 
-  // Third party integrations
+  // Handle third party integrations first
   if (prompt.raw.startsWith('portkey://')) {
     const { getPrompt } = await import('./integrations/portkey');
     const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), resolvedVars);
@@ -264,33 +270,29 @@ export async function renderPrompt(
     );
     return heliconeResult;
   }
+
+  // If JSON autoescape is disabled, just render with nunjucks
   if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
     return nunjucks.renderString(basePrompt, resolvedVars);
   }
+
+  // Check if it's a basic text prompt first
+  if (isBasicPrompt(basePrompt)) {
+    return nunjucks.renderString(basePrompt, resolvedVars);
+  }
+
+  // Try parsing as YAML/JSON
   try {
     const parsed = yaml.load(basePrompt) as Record<string, any>;
-    // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute
-    // vars _within_ the JSON itself. Recursively walk the JSON structure. If we find a
-    // string, render it with nunjucks.
-    const rendered: Record<string, any> | string = renderVarsInObject<Variables>(
-      parsed,
-      resolvedVars,
-    );
+    const rendered = renderVarsInObject<Variables>(parsed, resolvedVars);
     if (typeof rendered === 'object' && rendered !== null) {
       return JSON.stringify(rendered, null, 2);
     }
     return rendered as string;
-  } catch {}
-  const rendered = nunjucks.renderString(basePrompt, resolvedVars);
-  // Don't try to parse and stringify if we think it's not an object or array prompt
-  if (isBasicPrompt(rendered)) {
-    return rendered;
+  } catch {
+    // If YAML/JSON parsing fails, render as basic text
+    return nunjucks.renderString(basePrompt, resolvedVars);
   }
-  try {
-    // normalizes whitespace, escapes newlines, etc.
-    return JSON.stringify(yaml.load(rendered), null, 2);
-  } catch {}
-  return rendered;
 }
 
 /**

@@ -350,6 +350,54 @@ describe('renderPrompt', () => {
       },
     ]);
   });
+
+  it('should handle duplicate prompts with simple text', async () => {
+    const prompts = [
+      toPrompt('Summarize this: {{text}}'),
+      toPrompt('Summarize this: {{text}}'),
+      toPrompt('Do not Summarize this: {{text}}'),
+      toPrompt('This is the prompt {{text}}'),
+    ];
+
+    const vars = {
+      text: 'The quick brown fox jumps over the lazy dog.',
+    };
+
+    // Test each prompt individually
+    for (const prompt of prompts) {
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+      // Ensure the text variable is properly substituted
+      expect(renderedPrompt).toContain('The quick brown fox');
+      // Ensure no JSON escaping is applied to plain text
+      expect(renderedPrompt).not.toContain('\\"');
+      // Ensure the original template structure is maintained
+      expect(renderedPrompt.startsWith(prompt.raw.split('{{')[0])).toBe(true);
+    }
+  });
+
+  it('should handle duplicate prompts with JSON content', async () => {
+    const prompts = [
+      toPrompt('{"summary": "{{text}}"}'),
+      toPrompt('{"summary": "{{text}}"}'),
+      toPrompt('{"different": "{{text}}"}'),
+    ];
+
+    const vars = {
+      text: 'The quick brown fox jumps over the lazy dog.',
+    };
+
+    for (const prompt of prompts) {
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+      // Ensure it's valid JSON
+      expect(() => JSON.parse(renderedPrompt)).not.toThrow();
+      // Ensure the text is properly included
+      expect(renderedPrompt).toContain('quick brown fox');
+      // Ensure proper JSON escaping
+      const parsed = JSON.parse(renderedPrompt);
+      expect(typeof parsed).toBe('object');
+      expect(parsed).toHaveProperty(Object.keys(parsed)[0], vars.text);
+    }
+  });
 });
 
 describe('resolveVariables', () => {
