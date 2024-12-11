@@ -976,13 +976,11 @@ describe('readConfig', () => {
   it('should throw validation error for invalid dereferenced config', async () => {
     const mockConfig = {
       description: 'invalid_config',
-      prompts: ['test prompt'],
       providers: [{ $ref: 'defaultParams.yaml#/invalidKey' }],
     };
 
     const dereferencedConfig = {
       description: 'invalid_config',
-      prompts: ['test prompt'],
       providers: [{ invalid: true }], // This will fail validation
     };
 
