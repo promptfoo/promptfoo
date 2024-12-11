@@ -1585,6 +1585,76 @@ describe('evaluator', () => {
     // Verify the prompt was rendered with all variables
     expect(summary.results[0].prompt.raw).toBe('Test prompt foo bar BAR');
   });
+
+  it('evaluates with provider delay', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      delay: 100,
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(sleep).toHaveBeenCalledWith(100);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluates with no provider delay', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(mockApiProvider.delay).toBe(0);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips delay for cached responses', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      delay: 100,
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        cached: true,
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(sleep).not.toHaveBeenCalled();
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('generateVarCombinations', () => {
