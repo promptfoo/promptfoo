@@ -481,8 +481,12 @@ class CrescendoProvider implements ApiProvider {
     logger.debug(targetPrompt);
 
     const targetResponse = await getTargetResponse(provider, targetPrompt, context, options);
-    invariant(targetResponse.output, 'Expected output to be defined');
-    logger.debug(`[Crescendo] Received response from target: ${targetResponse.output}`);
+    if (!targetResponse.output && !targetResponse.error) {
+      logger.error(`[Crescendo] Empty response from target provider`);
+    }
+    logger.debug(
+      `[Crescendo] Received response from target: ${JSON.stringify(targetResponse, null, 2)}`,
+    );
 
     this.memory.addMessage(this.targetConversationId, {
       role: 'assistant',
