@@ -533,9 +533,18 @@ class CrescendoProvider implements ApiProvider {
       vars: {},
     });
     if (refusalResponse.error) {
-      throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
+      logger.error(`[Crescendo] Error from redteam (refusal) provider: ${refusalResponse.error}`);
     }
-    invariant(typeof refusalResponse.output === 'string', 'Expected output to be a string');
+    if (typeof refusalResponse.output !== 'string') {
+      logger.error(
+        `[Crescendo] Refusal score response is not a string: ${JSON.stringify(
+          refusalResponse.output,
+          null,
+          2,
+        )}`,
+      );
+      return [false, 'Invalid refusal grader response - output is not a string'];
+    }
     logger.debug(`[Crescendo] Refusal score response: ${refusalResponse.output}`);
 
     const parsed = extractFirstJsonObject<{
@@ -544,11 +553,14 @@ class CrescendoProvider implements ApiProvider {
       rationale: string;
     }>(refusalResponse.output);
 
-    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
-    invariant(
-      typeof parsed.metadata === 'number',
-      'Expected refusal grader metadata to be a number',
-    );
+    if (typeof parsed.value !== 'boolean') {
+      logger.error('[Crescendo] Refusal grader value is not a boolean');
+      return [false, 'Invalid refusal grader response - value is not a boolean'];
+    }
+    if (typeof parsed.metadata !== 'number') {
+      logger.error('[Crescendo] Refusal grader metadata is not a number');
+      return [false, 'Invalid refusal grader response - metadata is not a number'];
+    }
 
     return [parsed.value, parsed.rationale];
   }
@@ -580,9 +592,19 @@ class CrescendoProvider implements ApiProvider {
       vars: {},
     });
     if (evalResponse.error) {
-      throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
+      logger.error(`[Crescendo] Error from redteam (eval) provider: ${evalResponse.error}`);
+      return [
+        { value: false, metadata: 0, rationale: `Error from eval provider: ${evalResponse.error}` },
+        evalResponse.tokenUsage,
+      ];
     }
-    invariant(typeof evalResponse.output === 'string', 'Expected output to be a string');
+    if (typeof evalResponse.output !== 'string') {
+      logger.error('[Crescendo] Expected eval provider output to be a string');
+      return [
+        { value: false, metadata: 0, rationale: 'Invalid response from eval provider' },
+        evalResponse.tokenUsage,
+      ];
+    }
     logger.debug(`[Crescendo] Eval score response: ${evalResponse.output}`);
 
     const parsed = extractFirstJsonObject<{
@@ -592,8 +614,28 @@ class CrescendoProvider implements ApiProvider {
       metadata: number;
     }>(evalResponse.output);
 
-    invariant(typeof parsed.value === 'boolean', 'Expected eval grader value to be a boolean');
-    invariant(typeof parsed.metadata === 'number', 'Expected eval grader metadata to be a number');
+    if (typeof parsed.value !== 'boolean') {
+      logger.error('[Crescendo] Expected eval grader value to be a boolean');
+      return [
+        {
+          value: false,
+          metadata: 0,
+          rationale: 'Invalid eval grader response - value is not a boolean',
+        },
+        undefined,
+      ];
+    }
+    if (typeof parsed.metadata !== 'number') {
+      logger.error('[Crescendo] Expected eval grader metadata to be a number');
+      return [
+        {
+          value: false,
+          metadata: 0,
+          rationale: 'Invalid eval grader response - metadata is not a number',
+        },
+        undefined,
+      ];
+    }
 
     return [parsed, evalResponse.tokenUsage];
   }
