@@ -152,6 +152,12 @@ class Evaluator {
     // Use the original prompt to set the label, not renderedPrompt
     const promptLabel = prompt.label;
 
+    provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
+    invariant(
+      typeof provider.delay === 'number',
+      `Provider delay should be set for ${provider.label}`,
+    );
+
     // Set up the special _conversation variable
     const vars = test.vars || {};
     const conversationKey = `${provider.label || provider.id()}:${prompt.id}`;
@@ -240,15 +246,9 @@ class Evaluator {
         output: response.output || '',
       });
 
-      if (!response.cached) {
-        let sleepMs = provider.delay ?? delay;
-        if (!sleepMs) {
-          sleepMs = getEnvInt('PROMPTFOO_DELAY_MS', 0);
-        }
-        if (sleepMs) {
-          logger.debug(`Sleeping for ${sleepMs}ms`);
-          await sleep(sleepMs);
-        }
+      if (!response.cached && provider.delay > 0) {
+        logger.debug(`Sleeping for ${provider.delay}ms`);
+        await sleep(provider.delay);
       }
 
       const ret: EvaluateResult = {
