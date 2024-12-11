@@ -31,11 +31,22 @@ ollama pull llama3.2
 
 ## Setting Up the Environment
 
+You can either initialize a new project or download the complete example:
+
+### Option 1: Download the Example
+
+```bash
+npx promptfoo@latest init --example redteam-ollama
+cd redteam-ollama
+```
+
+### Option 2: Create from Scratch
+
 Create a new directory for your red teaming project and initialize it:
 
 ```bash
-mkdir ollama-redteam
-cd ollama-redteam
+mkdir redteam-ollama
+cd redteam-ollama
 npx promptfoo@latest redteam init --no-gui --no-interactive
 ```
 
@@ -43,9 +54,13 @@ This creates a `promptfooconfig.yaml` file that we'll customize for Ollama.
 
 ## Configuring the Ollama Provider
 
-Edit `promptfooconfig.yaml` to use Ollama as the target:
+If you're creating from scratch, edit `promptfooconfig.yaml` to use Ollama as the target:
 
 ```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - file://system_message.txt
+
 targets:
   - id: ollama:chat:llama3.2
     label: llama3.2-redteam
@@ -54,8 +69,8 @@ targets:
       max_tokens: 150
 
 redteam:
-  numTests: 5
   purpose: 'The system is a helpful chatbot assistant that answers questions and helps with tasks.'
+  numTests: 5
   plugins:
     # Replace these with the plugins you want to test
     - harmful
@@ -68,7 +83,7 @@ redteam:
     - prompt-injection
 ```
 
-To see the full configuration example on Github, [click here](https://github.com/promptfoo/promptfoo/blob/main/examples/ollama-redteam).
+To see the full configuration example on Github, [click here](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-ollama).
 
 ### Configuration Explained
 
