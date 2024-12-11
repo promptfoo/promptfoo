@@ -132,7 +132,7 @@ class CrescendoProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
-    logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug(`[Crescendo] callApi context: ${JSON.stringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 

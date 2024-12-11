@@ -627,7 +627,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
-    logger.debug(`[IterativeTree] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug(`[IterativeTree] callApi context: ${JSON.stringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 

@@ -276,7 +276,7 @@ class RedteamIterativeProvider implements ApiProvider {
    * @returns
    */
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
-    logger.debug(`[Iterative] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug(`[Iterative] callApi context: ${JSON.stringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context.vars, 'Expected vars to be set');
 
