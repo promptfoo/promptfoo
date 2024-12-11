@@ -991,7 +991,7 @@ export function renderVarsInObject<T>(
     return nunjucks.renderString(obj, vars) as unknown as T;
   }
   if (Array.isArray(obj)) {
-    return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
+    return obj.map((item) => renderVarsInObject<T>(item, vars)) as unknown as T;
   }
   if (typeof obj === 'object' && obj !== null) {
     const result: Record<string, unknown> = {};

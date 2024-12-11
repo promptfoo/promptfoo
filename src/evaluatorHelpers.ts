@@ -129,6 +129,9 @@ export function resolveVariables(variables: Variables): Variables {
   return resolvedVars;
 }
 
+const isBasicPrompt = (s: string) =>
+  (!s.includes('{') && !s.includes('}')) || (s.includes('[') && s.includes(']'));
+
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
@@ -265,27 +268,29 @@ export async function renderPrompt(
     return nunjucks.renderString(basePrompt, resolvedVars);
   }
   try {
-    // base prompt is either a string or JSON object. Throws if it's a string.
     const parsed = yaml.load(basePrompt) as Record<string, any>;
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute
     // vars _within_ the JSON itself. Recursively walk the JSON structure. If we find a
     // string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject<Variables>(parsed, resolvedVars), null, 2);
-  } catch {
-    const rendered = nunjucks.renderString(basePrompt, resolvedVars).trim();
-
-    const hasJsonStructure = rendered.includes('{') || rendered.includes('[');
-    if (!hasJsonStructure) {
-      return rendered;
+    const rendered: Record<string, any> | string = renderVarsInObject<Variables>(
+      parsed,
+      resolvedVars,
+    );
+    if (typeof rendered === 'object' && rendered !== null) {
+      return JSON.stringify(rendered, null, 2);
     }
-    try {
-      // handles newlines in strings that would cause JSON.parse to fail
-      const parsed = yaml.load(rendered) as Record<string, any>;
-      return JSON.stringify(parsed, null, 2);
-    } catch {
-      return rendered;
-    }
+    return rendered as string;
+  } catch {}
+  const rendered = nunjucks.renderString(basePrompt, resolvedVars);
+  // Don't try to parse and stringify if we think it's not an object or array prompt
+  if (isBasicPrompt(rendered)) {
+    return rendered;
   }
+  try {
+    // normalizes whitespace, escapes newlines, etc.
+    return JSON.stringify(yaml.load(rendered), null, 2);
+  } catch {}
+  return rendered;
 }
 
 /**
