@@ -11,6 +11,7 @@ import type {
   ProviderResponse,
 } from '../../types/providers';
 import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 export default class GoatProvider implements ApiProvider {
@@ -102,6 +103,12 @@ export default class GoatProvider implements ApiProvider {
 
         logger.debug(`GOAT turn ${turn} target prompt: ${targetPrompt}`);
         const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
+
+        if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
+          logger.debug(`Sleeping for ${targetProvider.delay}ms`);
+          await sleep(targetProvider.delay);
+        }
+
         logger.debug(`GOAT turn ${turn} target response: ${JSON.stringify(targetResponse)}`);
 
         if (targetResponse.sessionId) {
