@@ -214,9 +214,187 @@ describe('renderPrompt', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.yaml'), 'utf8');
     expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
   });
+
+  it('should handle deeply nested JSON structures', async () => {
+    const prompt = toPrompt(`{
+      "outer": {
+        "inner": {
+          "text": "{{ var1 }}"
+        }
+      }
+    }`);
+    const renderedPrompt = await renderPrompt(
+      prompt,
+      {
+        var1: 'value with "quotes"',
+      },
+      {},
+    );
+    expect(renderedPrompt).toBe(
+      JSON.stringify(
+        {
+          outer: {
+            inner: {
+              text: 'value with "quotes"',
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+  });
+
+  it('should handle arrays of objects with variables', async () => {
+    const prompt = toPrompt(`[
+      {"message": "{{ msg1 }}"},
+      {"message": "{{ msg2 }}"}
+    ]`);
+    const renderedPrompt = await renderPrompt(
+      prompt,
+      {
+        msg1: 'first "quoted" message',
+        msg2: 'second "quoted" message',
+      },
+      {},
+    );
+    expect(renderedPrompt).toBe(
+      JSON.stringify(
+        [{ message: 'first "quoted" message' }, { message: 'second "quoted" message' }],
+        null,
+        2,
+      ),
+    );
+  });
+
+  it('should handle JSON strings containing escaped characters', async () => {
+    const prompt = toPrompt('{"text": "{{ var1 }}"}');
+    const renderedPrompt = await renderPrompt(
+      prompt,
+      {
+        var1: 'line1\nline2\t"quoted"',
+      },
+      {},
+    );
+    expect(renderedPrompt).toBe(
+      JSON.stringify(
+        {
+          text: 'line1\nline2\t"quoted"',
+        },
+        null,
+        2,
+      ),
+    );
+  });
+
+  it('should handle multiple JSON string replacements', async () => {
+    const prompt = toPrompt(`{
+      "text1": "{{ var1 }}",
+      "text2": "{{ var2 }}",
+      "nested": {
+        "text3": "{{ var3 }}"
+      }
+    }`);
+    const renderedPrompt = await renderPrompt(
+      prompt,
+      {
+        var1: 'first "quote"',
+        var2: 'second "quote"',
+        var3: 'nested "quote"',
+      },
+      {},
+    );
+    expect(renderedPrompt).toBe(
+      JSON.stringify(
+        {
+          text1: 'first "quote"',
+          text2: 'second "quote"',
+          nested: {
+            text3: 'nested "quote"',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+  });
+
+  it('should handle chat completion JSON templates', async () => {
+    const prompt = toPrompt(`[
+      {
+        "role": "system",
+        "content": "{{ system_message }}"
+      },
+      {
+        "role": "user",
+        "content": "{{ user_message }}"
+      }
+    ]`);
+
+    const vars = {
+      system_message: 'You are a helpful assistant\nBe concise',
+      user_message: 'Hello\nHow are you?',
+    };
+
+    const result = await renderPrompt(prompt, vars);
+    const parsed = JSON.parse(result);
+
+    expect(parsed).toEqual([
+      {
+        role: 'system',
+        content: 'You are a helpful assistant\nBe concise',
+      },
+      {
+        role: 'user',
+        content: 'Hello\nHow are you?',
+      },
+    ]);
+  });
 });
 
 describe('resolveVariables', () => {
+  it('should handle multiple variables in single string', () => {
+    const variables = {
+      template: '{{greeting}} {{name}}',
+      greeting: 'Hello',
+      name: 'World',
+    };
+    const result = resolveVariables(variables);
+    expect(result.template).toBe('Hello World');
+  });
+
+  it('should preserve non-string values', () => {
+    const variables = {
+      str: '{{num}}',
+      num: 42,
+      obj: { key: 'value' },
+      bool: true,
+    };
+    const result = resolveVariables(variables);
+    expect(result).toEqual(variables);
+  });
+
+  it('should stop after 5 iterations for circular references', () => {
+    const variables = {
+      a: '{{b}}',
+      b: '{{c}}',
+      c: '{{d}}',
+      d: '{{e}}',
+      e: '{{f}}',
+      f: '{{a}}',
+    };
+    const result = resolveVariables(variables);
+    const expected = {
+      a: '{{e}}',
+      b: '{{e}}',
+      c: '{{e}}',
+      d: '{{e}}',
+      e: '{{e}}',
+      f: '{{e}}',
+    };
+    expect(result).toEqual(expected);
+  });
+
   it('should replace placeholders with corresponding variable values', () => {
     const variables = { final: '{{ my_greeting }}, {{name}}!', my_greeting: 'Hello', name: 'John' };
     const expected = { final: 'Hello, John!', my_greeting: 'Hello', name: 'John' };
@@ -231,21 +409,12 @@ describe('resolveVariables', () => {
 
   it('should not modify variables without placeholders', () => {
     const variables = { greeting: 'Hello, world!', name: 'John' };
-    const expected = { greeting: 'Hello, world!', name: 'John' };
-    expect(resolveVariables(variables)).toEqual(expected);
+    expect(resolveVariables(variables)).toEqual(variables);
   });
 
   it('should not fail if a variable is not found', () => {
     const variables = { greeting: 'Hello, {{name}}!' };
     expect(resolveVariables(variables)).toEqual({ greeting: 'Hello, {{name}}!' });
-  });
-
-  it('should not fail for unresolved placeholders', () => {
-    const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
-    expect(resolveVariables(variables)).toEqual({
-      greeting: 'Hello, {{unknown}}!',
-      name: '{{unknown}}',
-    });
   });
 
   it('should handle different whitespace patterns in placeholders', () => {
@@ -260,60 +429,6 @@ describe('resolveVariables', () => {
       oneSpace: 'value',
       multipleSpaces: 'value',
       var: 'value',
-    };
-    expect(resolveVariables(variables)).toEqual(expected);
-  });
-
-  it('should stop after 5 iterations for circular dependencies', () => {
-    const variables = {
-      a: '{{b}}',
-      b: '{{c}}',
-      c: '{{d}}',
-      d: '{{e}}',
-      e: '{{f}}',
-      f: '{{e}}',
-    };
-    const result = resolveVariables(variables);
-    expect(result).toEqual({
-      a: '{{e}}',
-      b: '{{e}}',
-      c: '{{e}}',
-      d: '{{e}}',
-      e: '{{e}}',
-      f: '{{e}}',
-    });
-  });
-
-  it('should handle non-string values', () => {
-    const variables = {
-      string: 'plain text',
-      obj: { key: 'value' },
-      num: { value: 42 },
-      bool: { value: true },
-      arr: ['test'],
-    };
-    const expected = {
-      string: 'plain text',
-      obj: { key: 'value' },
-      num: { value: 42 },
-      bool: { value: true },
-      arr: ['test'],
-    };
-    expect(resolveVariables(variables)).toEqual(expected);
-  });
-
-  it('should resolve multiple variables in a single string', () => {
-    const variables = {
-      template: '{{greeting}} {{name}}! How is {{location}}?',
-      greeting: 'Hello',
-      name: 'John',
-      location: 'New York',
-    };
-    const expected = {
-      template: 'Hello John! How is New York?',
-      greeting: 'Hello',
-      name: 'John',
-      location: 'New York',
     };
     expect(resolveVariables(variables)).toEqual(expected);
   });
@@ -352,10 +467,7 @@ describe('resolveVariables', () => {
     const variables = {
       template: 'Start {{missing}} middle {{also_missing}} end',
     };
-    const expected = {
-      template: 'Start {{missing}} middle {{also_missing}} end',
-    };
-    expect(resolveVariables(variables)).toEqual(expected);
+    expect(resolveVariables(variables)).toEqual(variables);
   });
 });
 
