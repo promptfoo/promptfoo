@@ -190,7 +190,7 @@ export class PalmChatProvider extends PalmGenericProvider {
       {
         role: 'user',
         parts: [
-          { text: 'Here is the ad' },
+          { text: process.env.USER_ROLE_MESSAGE_CONTENTS },
           ...geminiFiles,
           // { text: prompt }
         ]
