@@ -30,6 +30,7 @@ async function generateCompositePrompts(
     }
 
     await async.forEachOfLimit(testCases, concurrency, async (testCase, index) => {
+      logger.debug(`[Composite] Processing test case: ${JSON.stringify(testCase)}`);
       invariant(
         testCase.vars,
         `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
