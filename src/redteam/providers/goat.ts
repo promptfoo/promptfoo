@@ -32,6 +32,13 @@ export default class GoatProvider implements ApiProvider {
     if (neverGenerateRemote()) {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
+    logger.debug(
+      `[GOAT] Constructor options: ${JSON.stringify({
+        injectVar: options.injectVar,
+        maxTurns: options.maxTurns,
+        stateless: options.stateless,
+      })}`,
+    );
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
     this.maxTurns = options.maxTurns || 5;
@@ -44,6 +51,7 @@ export default class GoatProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     let response: Response | undefined = undefined;
+    logger.debug(`[GOAT] callApi context: ${JSON.stringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -109,11 +117,11 @@ export default class GoatProvider implements ApiProvider {
           context.vars.sessionId = targetResponse.sessionId;
         }
         if (targetResponse.error) {
-          throw new Error(`Error from target provider: ${targetResponse.error}`);
+          throw new Error(`[GOAT] Target returned an error: ${targetResponse.error}`);
         }
         invariant(
           targetResponse.output,
-          `Expected target response output to be set, but got: ${JSON.stringify(targetResponse)}`,
+          `[GOAT] Expected target response output to be set, but got: ${JSON.stringify(targetResponse)}`,
         );
         messages.push({
           content:
