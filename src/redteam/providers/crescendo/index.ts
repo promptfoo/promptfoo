@@ -13,7 +13,7 @@ import type {
   TokenUsage,
 } from '../../../types';
 import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
+import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';

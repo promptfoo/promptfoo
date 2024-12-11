@@ -10,7 +10,7 @@ import {
   type RedteamFileConfig,
 } from '../../types';
 import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';

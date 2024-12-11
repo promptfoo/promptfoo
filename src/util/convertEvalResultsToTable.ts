@@ -1,10 +1,9 @@
-import {
-  ResultFailureReason,
-  type CompletedPrompt,
-  type EvaluateTable,
-  type EvaluateTableRow,
-  type ResultsFile,
-  type TokenUsage,
+import type {
+  CompletedPrompt,
+  EvaluateTable,
+  EvaluateTableRow,
+  ResultsFile,
+  TokenUsage,
 } from '../types';
 import invariant from '../util/invariant';
 

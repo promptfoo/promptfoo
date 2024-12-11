@@ -31,7 +31,6 @@ import {
   getLatestEval,
   getStandaloneEvals,
 } from '../util';
-import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { BrowserBehavior } from '../util/server';
 import { openBrowser } from '../util/server';

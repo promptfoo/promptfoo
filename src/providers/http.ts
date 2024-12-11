@@ -1,6 +1,5 @@
 import httpZ from 'http-z';
 import path from 'path';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
