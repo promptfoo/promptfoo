@@ -8,6 +8,7 @@ import {
   useLocation,
   Outlet,
 } from 'react-router-dom';
+import invariant from '../../../utils/invariant';
 import PageShell from './components/PageShell';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';

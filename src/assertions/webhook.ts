@@ -1,7 +1,7 @@
-import invariant from 'tiny-invariant';
 import { getEnvInt } from '../envars';
 import { fetchWithRetries } from '../fetch';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 
 export async function handleWebhook({
   assertion,

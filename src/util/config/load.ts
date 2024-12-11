@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -30,6 +29,7 @@ import {
 } from '../../types';
 import { maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
+import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {

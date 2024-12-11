@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import cliState from './cliState';
 import { getEnvString } from './envars';
 import logger from './logger';
@@ -34,6 +33,7 @@ import type {
   ApiModerationProvider,
 } from './types';
 import { maybeLoadFromExternalFile } from './util';
+import invariant from './util/invariant';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 

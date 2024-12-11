@@ -4,7 +4,6 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
@@ -32,6 +31,7 @@ import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
+import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 

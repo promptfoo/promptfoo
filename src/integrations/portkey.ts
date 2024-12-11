@@ -1,5 +1,5 @@
-import invariant from 'tiny-invariant';
 import { getEnvString } from '../envars';
+import invariant from '../util/invariant';
 
 interface PortkeyResponse {
   success: boolean;

@@ -1,10 +1,10 @@
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+import invariant from '../../util/invariant';
 import type { HarmPlugin } from '../constants';
 import { PII_PLUGINS, REDTEAM_PROVIDER_HARM_PLUGINS } from '../constants';
 import { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../constants';

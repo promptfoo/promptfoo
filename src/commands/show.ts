@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import invariant from 'tiny-invariant';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
@@ -12,6 +11,7 @@ import {
   printBorder,
   setupEnv,
 } from '../util';
+import invariant from '../util/invariant';
 
 async function handlePrompt(id: string) {
   telemetry.record('command_used', {

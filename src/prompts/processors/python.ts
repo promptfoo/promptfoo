@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
-import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
 import type { Prompt, ApiProvider, PromptFunctionContext } from '../../types';
+import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
 /**
