@@ -5,7 +5,6 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { synthesize } from '..';
 import { disableCache } from '../../cache';
@@ -18,6 +17,7 @@ import { printBorder, setupEnv } from '../../util';
 import { isRunningUnderNpx } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
+import invariant from '../../util/invariant';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 import {
   REDTEAM_MODEL,

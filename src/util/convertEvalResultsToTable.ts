@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import type {
   CompletedPrompt,
   EvaluateTable,
@@ -6,6 +5,7 @@ import type {
   ResultsFile,
   TokenUsage,
 } from '../types';
+import invariant from '../util/invariant';
 
 export class PromptMetrics {
   score: number;

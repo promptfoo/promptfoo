@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -10,6 +9,7 @@ import {
   type NunjucksFilterMap,
   type RedteamFileConfig,
 } from '../../types';
+import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { shouldGenerateRemote } from '../remoteGeneration';

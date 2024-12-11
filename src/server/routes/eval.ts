@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
@@ -17,6 +16,7 @@ import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { updateResult, deleteEval, writeResultsToDatabase } from '../../util';
+import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 
 export const evalRouter = Router();

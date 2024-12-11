@@ -1,10 +1,10 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
+import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 async function generateCompositePrompts(

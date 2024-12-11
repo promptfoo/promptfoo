@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import { and, desc, eq, like, sql } from 'drizzle-orm';
-import invariant from 'tiny-invariant';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import {
@@ -30,6 +29,7 @@ import type {
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
 

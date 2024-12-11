@@ -5,7 +5,6 @@ import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
-import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
@@ -30,6 +29,7 @@ import type {
   TestSuite,
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
+import invariant from './util/invariant';
 import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 

@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -12,6 +11,7 @@ import telemetry from './telemetry';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
 import { isJavascriptFile } from './util/file';
+import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
