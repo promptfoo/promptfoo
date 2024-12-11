@@ -1,9 +1,10 @@
-import type {
-  CompletedPrompt,
-  EvaluateTable,
-  EvaluateTableRow,
-  ResultsFile,
-  TokenUsage,
+import {
+  ResultFailureReason,
+  type CompletedPrompt,
+  type EvaluateTable,
+  type EvaluateTableRow,
+  type ResultsFile,
+  type TokenUsage,
 } from '../types';
 import invariant from '../util/invariant';
 
@@ -123,6 +124,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     prompt.metrics.score += result.score;
     prompt.metrics.testPassCount += result.success ? 1 : 0;
     prompt.metrics.testFailCount += result.success ? 0 : 1;
+    prompt.metrics.testErrorCount += result.failureReason === ResultFailureReason.ERROR ? 1 : 0;
     prompt.metrics.assertPassCount +=
       result.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
     prompt.metrics.assertFailCount +=
