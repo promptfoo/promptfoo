@@ -57,7 +57,16 @@ jest.mock('../../../src/testCases', () => {
   };
 });
 
-jest.mock('../../../src/logger');
+jest.mock('../../../src/logger', () => ({
+  default: {
+    debug: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+  debug: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+}));
 
 describe('combineConfigs', () => {
   beforeEach(() => {
@@ -964,9 +973,7 @@ describe('readConfig', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith('config.yaml', 'utf-8');
   });
 
-  // Disabled because Validator requires `prompts`, but prompts is not actually required for redteam.
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('should throw validation error for invalid dereferenced config', async () => {
+  it('should throw validation error for invalid dereferenced config', async () => {
     const mockConfig = {
       description: 'invalid_config',
       prompts: ['test prompt'],
@@ -982,15 +989,14 @@ describe('readConfig', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(mockConfig));
     jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(dereferencedConfig);
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation();
 
     await readConfig('config.yaml');
 
-    expect(loggerSpy).toHaveBeenCalledWith(
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
       'Invalid configuration file config.yaml:\nValidation error: Unrecognized key(s) in object: \'invalid\' at "providers[0]"',
     );
-    expect(loggerSpy.mock.calls[0][0]).toContain('Invalid configuration file');
-
-    loggerSpy.mockRestore();
+    const calls = jest.mocked(logger.warn).mock.calls;
+    expect(calls[0][0]).toContain('Invalid configuration file');
   });
 });
