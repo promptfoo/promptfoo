@@ -30,6 +30,7 @@ async function generateCompositePrompts(
     }
 
     await async.forEachOfLimit(testCases, concurrency, async (testCase, index) => {
+      logger.debug(`[Composite] Processing test case: ${JSON.stringify(testCase)}`);
       invariant(
         testCase.vars,
         `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
@@ -59,6 +60,11 @@ async function generateCompositePrompts(
           data,
         )}`,
       );
+      if (data.error) {
+        logger.error(`[jailbreak:composite] Error in composite generation: ${data.error}}`);
+        logger.debug(`[jailbreak:composite] Response: ${JSON.stringify(data)}`);
+        return;
+      }
 
       const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => ({
         ...testCase,
