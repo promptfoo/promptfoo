@@ -1,7 +1,13 @@
 import * as fs from 'fs';
 import { createRequire } from 'node:module';
 import * as path from 'path';
-import { renderPrompt, resolveVariables, runExtensionHook } from '../src/evaluatorHelpers';
+import { getEnvBool } from '../src/envars';
+import {
+  extractTextFromPDF,
+  renderPrompt,
+  resolveVariables,
+  runExtensionHook,
+} from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
 import { transform } from '../src/util/transform';
 
@@ -40,6 +46,34 @@ jest.mock('../src/database', () => ({
 jest.mock('../src/logger');
 jest.mock('../src/util/transform', () => ({
   transform: jest.fn(),
+}));
+
+jest.mock('pdf-parse', () => {
+  let mockImpl = jest.fn().mockResolvedValue({ text: 'extracted pdf text' });
+  return {
+    __esModule: true,
+    default: mockImpl,
+    _setMockImplementation: (impl: any) => {
+      mockImpl = impl;
+    },
+  };
+});
+
+jest.mock('../src/integrations/portkey', () => ({
+  getPrompt: jest.fn().mockResolvedValue({ messages: [{ role: 'user', content: 'test' }] }),
+}));
+
+jest.mock('../src/integrations/langfuse', () => ({
+  getPrompt: jest.fn().mockResolvedValue('langfuse result'),
+}));
+
+jest.mock('../src/integrations/helicone', () => ({
+  getPrompt: jest.fn().mockResolvedValue('helicone result'),
+}));
+
+jest.mock('../src/envars', () => ({
+  ...jest.requireActual('../src/envars'),
+  getEnvBool: jest.fn().mockReturnValue(false),
 }));
 
 function toPrompt(text: string): Prompt {
@@ -360,5 +394,99 @@ describe('runExtensionHook', () => {
     await expect(runExtensionHook(extensions, hookName, context)).rejects.toThrow(
       'extension must be a string',
     );
+  });
+});
+
+describe('extractTextFromPDF', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should extract text from PDF', async () => {
+    const result = await extractTextFromPDF('test.pdf');
+    expect(result).toBe('extracted pdf text');
+  });
+});
+
+describe('renderPrompt additional cases', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should handle prompt functions returning string', async () => {
+    const prompt: Prompt = {
+      raw: 'base prompt',
+      label: 'test',
+      function: async () => 'function result',
+    };
+    const result = await renderPrompt(prompt, {});
+    expect(result).toBe('function result');
+  });
+
+  it('should handle prompt functions returning object', async () => {
+    const prompt: Prompt = {
+      raw: 'base prompt',
+      label: 'test',
+      function: async () => ({ key: 'value' }),
+    };
+    const result = await renderPrompt(prompt, {});
+    expect(JSON.parse(result)).toEqual({ key: 'value' });
+  });
+
+  it('should throw on invalid prompt function return type', async () => {
+    const prompt: Prompt = {
+      raw: 'base prompt',
+      label: 'test',
+      function: async () => 42 as any,
+    };
+    await expect(renderPrompt(prompt, {})).rejects.toThrow(
+      'Prompt function must return a string or object, got number',
+    );
+  });
+
+  it('should handle portkey integration', async () => {
+    const prompt: Prompt = {
+      raw: 'portkey://test-prompt',
+      label: 'test',
+    };
+    const result = await renderPrompt(prompt, {});
+    expect(JSON.parse(result)).toEqual([{ role: 'user', content: 'test' }]);
+  });
+
+  it('should handle langfuse integration with text type', async () => {
+    const prompt: Prompt = {
+      raw: 'langfuse://helper:1:text',
+      label: 'test',
+    };
+    const result = await renderPrompt(prompt, {});
+    expect(result).toBe('langfuse result');
+  });
+
+  it('should throw on invalid langfuse prompt type', async () => {
+    const prompt: Prompt = {
+      raw: 'langfuse://helper:1:invalid',
+      label: 'test',
+    };
+
+    await expect(renderPrompt(prompt, {})).rejects.toThrow('Unknown promptfoo prompt type');
+  });
+
+  it('should handle helicone integration', async () => {
+    const prompt: Prompt = {
+      raw: 'helicone://test-id:1.2',
+      label: 'test',
+    };
+    const result = await renderPrompt(prompt, {});
+    expect(result).toBe('helicone result');
+  });
+
+  it('should handle disabled JSON autoescape', async () => {
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    const prompt: Prompt = {
+      raw: '{"test": "{{ var }}"}',
+      label: 'test',
+    };
+    const result = await renderPrompt(prompt, { var: 'value' });
+    expect(JSON.parse(result)).toEqual({ test: 'value' });
   });
 });
