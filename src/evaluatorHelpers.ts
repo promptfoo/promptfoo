@@ -36,6 +36,20 @@ type VariableValue = string | object | number | boolean;
 type Variables = Record<string, VariableValue>;
 
 /**
+ * Helper function to remove trailing newlines from string values
+ * This prevents issues with JSON prompts
+ */
+export function trimTrailingNewlines(variables: Variables): Variables {
+  const trimmedVars: Variables = { ...variables };
+  for (const [key, value] of Object.entries(trimmedVars)) {
+    if (typeof value === 'string') {
+      trimmedVars[key] = value.replace(/\n$/, '');
+    }
+  }
+  return trimmedVars;
+}
+
+/**
  * Helper function that resolves variables within a single string.
  *
  * @param value - The string containing variables to resolve
@@ -82,7 +96,7 @@ function resolveString(value: string, variables: Variables, regex: RegExp): stri
  */
 export function resolveVariables(variables: Variables): Variables {
   const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
-  const resolvedVars: Variables = { ...variables };
+  const resolvedVars: Variables = trimTrailingNewlines(variables);
   const MAX_ITERATIONS = 5;
 
   // Iterate up to MAX_ITERATIONS times to handle nested variables
@@ -207,13 +221,6 @@ export async function renderPrompt(
     }
   }
 
-  // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
-  for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string') {
-      vars[key] = (vars[key] as string).replace(/\n$/, '');
-    }
-  }
-
   // Resolve variable mappings
   const resolvedVars: Variables = resolveVariables(vars);
 
@@ -258,13 +265,26 @@ export async function renderPrompt(
     return nunjucks.renderString(basePrompt, resolvedVars);
   }
   try {
-    const parsed = JSON.parse(basePrompt);
+    // base prompt is either a string or JSON object. Throws if it's a string.
+    const parsed = yaml.load(basePrompt) as Record<string, any>;
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute
     // vars _within_ the JSON itself. Recursively walk the JSON structure. If we find a
     // string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject<Variables>(parsed, resolvedVars), null, 2);
   } catch {
-    return nunjucks.renderString(basePrompt, resolvedVars);
+    const rendered = nunjucks.renderString(basePrompt, resolvedVars).trim();
+
+    const hasJsonStructure = rendered.includes('{') || rendered.includes('[');
+    if (!hasJsonStructure) {
+      return rendered;
+    }
+    try {
+      // handles newlines in strings that would cause JSON.parse to fail
+      const parsed = yaml.load(rendered) as Record<string, any>;
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return rendered;
+    }
   }
 }
 

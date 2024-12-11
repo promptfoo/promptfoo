@@ -7,6 +7,7 @@ import {
   renderPrompt,
   resolveVariables,
   runExtensionHook,
+  trimTrailingNewlines,
 } from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
 import { transform } from '../src/util/transform';
@@ -488,5 +489,72 @@ describe('renderPrompt additional cases', () => {
     };
     const result = await renderPrompt(prompt, { var: 'value' });
     expect(JSON.parse(result)).toEqual({ test: 'value' });
+  });
+});
+
+describe('trimTrailingNewlines', () => {
+  it('should remove trailing newlines from string values', () => {
+    const variables = {
+      str1: 'hello\n',
+      str2: 'world\n\n',
+      str3: 'no newline',
+      num: 42,
+      obj: { key: 'value' },
+      bool: true,
+      nested: {
+        text: 'nested\n',
+      },
+    };
+
+    const expected = {
+      str1: 'hello',
+      str2: 'world\n', // Only removes last newline
+      str3: 'no newline',
+      num: 42,
+      obj: { key: 'value' },
+      bool: true,
+      nested: {
+        text: 'nested\n', // Doesn't process nested objects
+      },
+    };
+
+    expect(trimTrailingNewlines(variables)).toEqual(expected);
+  });
+
+  it('should handle empty strings', () => {
+    const variables = {
+      empty: '',
+      justNewline: '\n',
+      normal: 'text',
+    };
+
+    const expected = {
+      empty: '',
+      justNewline: '',
+      normal: 'text',
+    };
+
+    expect(trimTrailingNewlines(variables)).toEqual(expected);
+  });
+
+  it('should preserve original object when no newlines exist', () => {
+    const variables = {
+      text1: 'hello',
+      text2: 'world',
+      number: 123,
+    };
+
+    expect(trimTrailingNewlines(variables)).toEqual(variables);
+  });
+
+  it('should not modify the original object', () => {
+    const original = {
+      text: 'hello\n',
+      other: 'world',
+    };
+    const originalCopy = { ...original };
+
+    trimTrailingNewlines(original);
+    expect(original).toEqual(originalCopy);
   });
 });
