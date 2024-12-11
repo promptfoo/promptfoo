@@ -212,6 +212,116 @@ describe('resolveVariables', () => {
       name: '{{unknown}}',
     });
   });
+
+  it('should handle different whitespace patterns in placeholders', () => {
+    const variables = {
+      noSpace: '{{var}}',
+      oneSpace: '{{ var }}',
+      multipleSpaces: '{{   var   }}',
+      var: 'value',
+    };
+    const expected = {
+      noSpace: 'value',
+      oneSpace: 'value',
+      multipleSpaces: 'value',
+      var: 'value',
+    };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should stop after 5 iterations for circular dependencies', () => {
+    const variables = {
+      a: '{{b}}',
+      b: '{{c}}',
+      c: '{{d}}',
+      d: '{{e}}',
+      e: '{{f}}',
+      f: '{{e}}',
+    };
+    const result = resolveVariables(variables);
+    expect(result).toEqual({
+      a: '{{e}}',
+      b: '{{e}}',
+      c: '{{e}}',
+      d: '{{e}}',
+      e: '{{e}}',
+      f: '{{e}}',
+    });
+  });
+
+  it('should handle non-string values', () => {
+    const variables = {
+      string: 'plain text',
+      obj: { key: 'value' },
+      num: { value: 42 },
+      bool: { value: true },
+      arr: ['test'],
+    };
+    const expected = {
+      string: 'plain text',
+      obj: { key: 'value' },
+      num: { value: 42 },
+      bool: { value: true },
+      arr: ['test'],
+    };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should resolve multiple variables in a single string', () => {
+    const variables = {
+      template: '{{greeting}} {{name}}! How is {{location}}?',
+      greeting: 'Hello',
+      name: 'John',
+      location: 'New York',
+    };
+    const expected = {
+      template: 'Hello John! How is New York?',
+      greeting: 'Hello',
+      name: 'John',
+      location: 'New York',
+    };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should handle nested variable resolution in correct order', () => {
+    const variables = {
+      template: '{{message}}',
+      message: '{{greeting}} {{person}}',
+      greeting: 'Hello',
+      person: '{{name}}',
+      name: 'John',
+    };
+    const expected = {
+      template: 'Hello John',
+      message: 'Hello John',
+      greeting: 'Hello',
+      person: 'John',
+      name: 'John',
+    };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should handle partial variable resolution', () => {
+    const variables = {
+      template: '{{greeting}} {{unknown}}',
+      greeting: 'Hello',
+    };
+    const expected = {
+      template: 'Hello {{unknown}}',
+      greeting: 'Hello',
+    };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should preserve text around unresolved variables', () => {
+    const variables = {
+      template: 'Start {{missing}} middle {{also_missing}} end',
+    };
+    const expected = {
+      template: 'Start {{missing}} middle {{also_missing}} end',
+    };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
 });
 
 describe('runExtensionHook', () => {

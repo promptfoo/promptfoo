@@ -33,7 +33,7 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
 }
 
 export function resolveVariables(
-  variables: Record<string, string | object>,
+  variables: Record<string, string | object | number | boolean>,
 ): Record<string, string | object> {
   let resolved = true;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
@@ -159,7 +159,7 @@ export async function renderPrompt(
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
     if (typeof vars[key] === 'string') {
-      vars[key] = (vars[key] as string).replace(/\n$/, '').replace(/"/g, '\\"');
+      vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
 
@@ -171,7 +171,8 @@ export async function renderPrompt(
     const { getPrompt } = await import('./integrations/portkey');
     const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
     return JSON.stringify(portKeyResult.messages);
-  } else if (prompt.raw.startsWith('langfuse://')) {
+  }
+  if (prompt.raw.startsWith('langfuse://')) {
     const { getPrompt } = await import('./integrations/langfuse');
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
@@ -188,7 +189,8 @@ export async function renderPrompt(
       version === 'latest' ? undefined : Number(version),
     );
     return langfuseResult;
-  } else if (prompt.raw.startsWith('helicone://')) {
+  }
+  if (prompt.raw.startsWith('helicone://')) {
     const { getPrompt } = await import('./integrations/helicone');
     const heliconePrompt = prompt.raw.slice('helicone://'.length);
     const [id, version] = heliconePrompt.split(':');
@@ -201,29 +203,17 @@ export async function renderPrompt(
     );
     return heliconeResult;
   }
-
-  // Render prompt
+  if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
+    return nunjucks.renderString(basePrompt, vars);
+  }
   try {
-    if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
-      return nunjucks.renderString(basePrompt, vars);
-    }
-    const parsed = yaml.load(basePrompt);
-    // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
-    // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
+    const parsed = JSON.parse(basePrompt);
+    // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute
+    // vars _within_ the JSON itself. Recursively walk the JSON structure. If we find a
+    // string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
-    // Escape any newlines and special characters in vars before rendering
-    const escapedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => [
-        key,
-        typeof value === 'string'
-          ? value.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
-          : value,
-      ]),
-    );
-
-    const rendered = yaml.load(nunjucks.renderString(basePrompt, escapedVars));
-    return JSON.stringify(rendered, null, 2);
+    return nunjucks.renderString(basePrompt, vars);
   }
 }
 
