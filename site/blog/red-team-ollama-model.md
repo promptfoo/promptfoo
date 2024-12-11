@@ -53,9 +53,9 @@ targets:
       temperature: 0.7
       max_tokens: 150
 
-purpose: 'The system is a helpful chatbot assistant that answers questions and helps with tasks.'
-
 redteam:
+  numTests: 5
+  purpose: 'The system is a helpful chatbot assistant that answers questions and helps with tasks.'
   plugins:
     # Replace these with the plugins you want to test
     - harmful
@@ -66,7 +66,6 @@ redteam:
   strategies:
     - jailbreak
     - prompt-injection
-  numTests: 5
 ```
 
 To see the full configuration example on Github, [click here](https://github.com/promptfoo/promptfoo/blob/main/examples/ollama-redteam).
