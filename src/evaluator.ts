@@ -152,9 +152,11 @@ class Evaluator {
     // Use the original prompt to set the label, not renderedPrompt
     const promptLabel = prompt.label;
 
-    // Mutate provider with override or env var
     provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
-    invariant(typeof provider.delay === 'number', 'Provider delay should be set');
+    invariant(
+      typeof provider.delay === 'number',
+      `Provider delay should be set for ${provider.label}`,
+    );
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
