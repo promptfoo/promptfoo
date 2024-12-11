@@ -1,8 +1,8 @@
 import { ProxyAgent } from 'proxy-agent';
-import invariant from 'tiny-invariant';
 import { VERSION } from './constants';
 import { getEnvInt, getEnvBool } from './envars';
 import logger from './logger';
+import invariant from './util/invariant';
 import { sleep } from './util/time';
 
 export async function fetchWithProxy(

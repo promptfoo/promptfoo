@@ -1,6 +1,5 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
-import invariant from 'tiny-invariant';
 import { URL } from 'url';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
 import { getEnvBool, isCI } from './envars';
@@ -11,6 +10,7 @@ import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
+import invariant from './util/invariant';
 
 async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
   const response = await fetchWithProxy(`${apiHost}/health`, {

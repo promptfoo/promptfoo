@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import readline from 'readline';
-import invariant from 'tiny-invariant';
 import { URL } from 'url';
 import { getEnvString } from '../envars';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -11,6 +10,7 @@ import Eval from '../models/eval';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
+import invariant from '../util/invariant';
 
 export async function createPublicUrl(evalRecord: Eval, showAuth: boolean) {
   const url = await createShareableUrl(evalRecord, showAuth);

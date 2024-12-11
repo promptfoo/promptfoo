@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import WebSocket from 'ws';
 import logger from '../logger';
 import type {
@@ -7,6 +6,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
+import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 

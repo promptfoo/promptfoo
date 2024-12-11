@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -11,6 +10,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
+import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 export default class GoatProvider implements ApiProvider {

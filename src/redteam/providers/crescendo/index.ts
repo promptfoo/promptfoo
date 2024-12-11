@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
@@ -13,6 +12,7 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
+import invariant from '../../../util/invariant';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { shouldGenerateRemote } from '../../remoteGeneration';

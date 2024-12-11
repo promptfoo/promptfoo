@@ -1,4 +1,4 @@
-import invariant from 'tiny-invariant';
+import invariant from '../util/invariant';
 
 export function isValidJson(str: string): boolean {
   try {

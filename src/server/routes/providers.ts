@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import invariant from 'tiny-invariant';
 import type { ZodError } from 'zod-validation-error';
 import { fromZodError } from 'zod-validation-error';
 import logger from '../../logger';
 import type { HttpProviderConfig } from '../../providers/http';
 import { HttpProvider, HttpProviderConfigSchema } from '../../providers/http';
 import type { ProviderOptions } from '../../types/providers';
+import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
 
 export const providersRouter = Router();
