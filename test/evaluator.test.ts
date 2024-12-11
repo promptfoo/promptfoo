@@ -1051,19 +1051,12 @@ describe('evaluator', () => {
   it('evaluate with _conversation variable', async () => {
     const mockApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockImplementation((prompt) => {
-        console.log(
-          'prompt',
-          prompt,
-          typeof prompt,
-          JSON.stringify(prompt, null, 2),
-          prompt.length,
-        );
-        return Promise.resolve({
+      callApi: jest.fn().mockImplementation((prompt) =>
+        Promise.resolve({
           output: prompt,
           tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        });
-      }),
+        }),
+      ),
     };
 
     const testSuite: TestSuite = {
