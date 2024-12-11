@@ -34,6 +34,12 @@ import 'prismjs/themes/prism.css';
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: any) => void;
+  updateHeaderKey: (index: number, newKey: string) => void;
+  updateHeaderValue: (index: number, newValue: string) => void;
+  addHeader: () => void;
+  removeHeader: (index: number) => void;
+  requestBody: string | object;
+  setRequestBody: (value: string) => void;
   bodyError: string | null;
   setBodyError: (error: string | null) => void;
   urlError: string | null;
