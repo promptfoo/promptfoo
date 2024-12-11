@@ -156,7 +156,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     // Validator requires `prompts`, but prompts is not actually required for redteam.
     const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
       .innerType()
-      .omit({ prompts: true });
+      .extend({ prompts: UnifiedConfigSchema.innerType().innerType().shape.prompts.optional() });
     const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
     if (!validationResult.success) {
       logger.warn(
