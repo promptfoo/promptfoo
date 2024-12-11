@@ -1,9 +1,9 @@
 import request from 'supertest';
-import invariant from 'tiny-invariant';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
+import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
 describe('eval routes', () => {
