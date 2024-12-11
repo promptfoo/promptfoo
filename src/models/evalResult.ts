@@ -9,6 +9,7 @@ import type {
   Prompt,
   ProviderOptions,
   ProviderResponse,
+  ResultFailureReason,
 } from '../types';
 import { type EvaluateResult } from '../types';
 import { getCurrentTimestamp } from '../util/time';
@@ -32,6 +33,7 @@ export default class EvalResult {
       namedScores,
       cost,
       metadata,
+      failureReason,
     } = result;
     const args = {
       id: randomUUID(),
@@ -51,6 +53,7 @@ export default class EvalResult {
       latencyMs,
       cost,
       metadata,
+      failureReason,
     };
     if (persist) {
       const db = getDb();
@@ -148,6 +151,7 @@ export default class EvalResult {
   latencyMs: number;
   cost: number;
   metadata: Record<string, any>;
+  failureReason: ResultFailureReason;
   persisted: boolean;
 
   constructor(opts: {
@@ -168,6 +172,7 @@ export default class EvalResult {
     latencyMs?: number | null;
     cost?: number | null;
     metadata?: Record<string, any> | null;
+    failureReason: ResultFailureReason;
     persisted?: boolean;
   }) {
     this.id = opts.id;
@@ -188,6 +193,7 @@ export default class EvalResult {
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
     this.metadata = opts.metadata || {};
+    this.failureReason = opts.failureReason;
     this.persisted = opts.persisted || false;
   }
 
@@ -226,6 +232,7 @@ export default class EvalResult {
       testIdx: this.testIdx,
       vars: this.testCase.vars || {},
       metadata: this.metadata,
+      failureReason: this.failureReason,
     };
   }
 }

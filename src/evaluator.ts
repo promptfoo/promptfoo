@@ -16,17 +16,18 @@ import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
-import type {
-  ApiProvider,
-  Assertion,
-  CompletedPrompt,
-  EvaluateOptions,
-  EvaluateResult,
-  EvaluateStats,
-  Prompt,
-  ProviderResponse,
-  RunEvalOptions,
-  TestSuite,
+import {
+  ResultFailureReason,
+  type ApiProvider,
+  type Assertion,
+  type CompletedPrompt,
+  type EvaluateOptions,
+  type EvaluateResult,
+  type EvaluateStats,
+  type Prompt,
+  type ProviderResponse,
+  type RunEvalOptions,
+  type TestSuite,
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import invariant from './util/invariant';
@@ -119,6 +120,7 @@ class Evaluator {
     this.stats = {
       successes: 0,
       failures: 0,
+      errors: 0,
       tokenUsage: {
         total: 0,
         prompt: 0,
@@ -255,6 +257,7 @@ class Evaluator {
         ...setup,
         response,
         success: false,
+        failureReason: ResultFailureReason.NONE,
         score: 0,
         namedScores: {},
         latencyMs,
@@ -298,6 +301,7 @@ class Evaluator {
         });
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
+          ret.failureReason = ResultFailureReason.ASSERT;
         }
         ret.success = checkResult.pass;
         ret.score = checkResult.score;
@@ -324,6 +328,8 @@ class Evaluator {
 
       if (ret.success) {
         this.stats.successes++;
+      } else if (ret.failureReason === ResultFailureReason.ERROR) {
+        this.stats.errors++;
       } else {
         this.stats.failures++;
       }
@@ -335,11 +341,12 @@ class Evaluator {
 
       return ret;
     } catch (err) {
-      this.stats.failures++;
+      this.stats.errors++;
       return {
         ...setup,
         error: String(err) + '\n\n' + (err as Error).stack,
         success: false,
+        failureReason: ResultFailureReason.ERROR,
         score: 0,
         namedScores: {},
         latencyMs,
@@ -420,6 +427,7 @@ class Evaluator {
             score: 0,
             testPassCount: 0,
             testFailCount: 0,
+            testErrorCount: 0,
             assertPassCount: 0,
             assertFailCount: 0,
             totalLatencyMs: 0,
@@ -687,7 +695,13 @@ class Evaluator {
         }
       }
       metrics.testPassCount += row.success ? 1 : 0;
-      metrics.testFailCount += row.success ? 0 : 1;
+      if (!row.success) {
+        if (row.failureReason === ResultFailureReason.ERROR) {
+          metrics.testErrorCount += 1;
+        } else {
+          metrics.testFailCount += 1;
+        }
+      }
       metrics.assertPassCount +=
         row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
       metrics.assertFailCount +=
@@ -895,7 +909,11 @@ class Evaluator {
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
       numTests: prompts.reduce(
-        (acc, p) => acc + (p.metrics?.testPassCount || 0) + (p.metrics?.testFailCount || 0),
+        (acc, p) =>
+          acc +
+          (p.metrics?.testPassCount || 0) +
+          (p.metrics?.testFailCount || 0) +
+          (p.metrics?.testErrorCount || 0),
         0,
       ),
       numVars: varNames.size,

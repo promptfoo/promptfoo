@@ -51,6 +51,7 @@ import {
   isProviderOptions,
   OutputFileExtension,
   type EvaluateSummaryV2,
+  ResultFailureReason,
 } from '../types';
 import invariant from '../util/invariant';
 import { getConfigDirectoryPath } from './config/manage';
@@ -62,7 +63,11 @@ import { getNunjucksEngine } from './templates';
 const DEFAULT_QUERY_LIMIT = 100;
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
-  const passFailText = output.pass ? '[PASS]' : '[FAIL]';
+  const passFailText = output.pass
+    ? '[PASS]'
+    : output.failureReason === ResultFailureReason.ASSERT
+      ? '[FAIL]'
+      : '[ERROR]';
   const namedScoresText = Object.entries(output.namedScores)
     .map(([name, value]) => `${name}: ${value?.toFixed(2)}`)
     .join(', ');

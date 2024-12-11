@@ -52,6 +52,8 @@ function formatRowOutput(output: EvaluateTableOutput | string) {
       text = text.slice('[PASS]'.length);
     } else if (output.startsWith('[FAIL]')) {
       text = text.slice('[FAIL]'.length);
+    } else if (output.startsWith('[ERROR]')) {
+      text = text.slice('[ERROR]'.length);
     }
     return {
       text,
@@ -543,7 +545,6 @@ function ResultsTable({
                   ) : null}
                 </div>
               ) : null;
-
               const providerConfig = Array.isArray(config?.providers)
                 ? config.providers[idx]
                 : undefined;
@@ -568,6 +569,13 @@ function ResultsTable({
                         <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{body.length} cases)
                       </div>
                     </div>
+                    {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
+                      <div className="summary">
+                        <div className="highlight fail">
+                          <strong>Errors:</strong> {prompt.metrics?.testErrorCount || 0}
+                        </div>
+                      </div>
+                    ) : null}
                     {prompt.metrics?.namedScores &&
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
                       <CustomMetrics
