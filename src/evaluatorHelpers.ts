@@ -215,12 +215,12 @@ export async function renderPrompt(
   }
 
   // Resolve variable mappings
-  resolveVariables(vars);
+  const resolvedVars: Variables = resolveVariables(vars);
 
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const { getPrompt } = await import('./integrations/portkey');
-    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
+    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), resolvedVars);
     return JSON.stringify(portKeyResult.messages);
   }
   if (prompt.raw.startsWith('langfuse://')) {
@@ -235,7 +235,7 @@ export async function renderPrompt(
 
     const langfuseResult = await getPrompt(
       helper,
-      vars,
+      resolvedVars,
       promptType,
       version === 'latest' ? undefined : Number(version),
     );
@@ -248,23 +248,23 @@ export async function renderPrompt(
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
     const heliconeResult = await getPrompt(
       id,
-      vars,
+      resolvedVars,
       majorVersion === undefined ? undefined : Number(majorVersion),
       minorVersion === undefined ? undefined : Number(minorVersion),
     );
     return heliconeResult;
   }
   if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
-    return nunjucks.renderString(basePrompt, vars);
+    return nunjucks.renderString(basePrompt, resolvedVars);
   }
   try {
     const parsed = JSON.parse(basePrompt);
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute
     // vars _within_ the JSON itself. Recursively walk the JSON structure. If we find a
     // string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
+    return JSON.stringify(renderVarsInObject<Variables>(parsed, resolvedVars), null, 2);
   } catch {
-    return nunjucks.renderString(basePrompt, vars);
+    return nunjucks.renderString(basePrompt, resolvedVars);
   }
 }
 

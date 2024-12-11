@@ -979,7 +979,10 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   return varsMatch(testCase.vars, result.vars) && providersMatch;
 }
 
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
+export function renderVarsInObject<T>(
+  obj: T,
+  vars?: Record<string, string | object | number | boolean>,
+): T {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
