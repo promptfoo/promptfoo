@@ -104,10 +104,10 @@ const App: React.FC = () => {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
+        const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
+        const injectVarValue = result.vars[injectVar]?.toString();
         failures[pluginId].push({
-          // FIXME(ian): Use injectVar (and contextVar), not hardcoded query
-          prompt:
-            result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
+          prompt: injectVarValue || result.prompt.raw,
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,
