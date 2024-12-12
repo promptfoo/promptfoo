@@ -13,6 +13,14 @@ import type Eval from './models/eval';
 import type { SharedResults } from './types';
 import invariant from './util/invariant';
 
+async function rollbackEval(url: string, evalId: string, headers: Record<string, string>) {
+  logger.info(`Upload failed, rolling back...`);
+  await fetchWithProxy(`${url}/${evalId}`, {
+    method: 'DELETE',
+    headers,
+  });
+}
+
 async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
   const response = await fetchWithProxy(`${apiHost}/health`, {
     method: 'GET',
@@ -133,9 +141,15 @@ async function sendEvalResults(evalRecord: Eval, url: string) {
 
     // Send chunks
     logger.debug(`Sending ${chunks.length} requests to upload results`);
-    for (const chunk of chunks) {
-      await sendChunkOfResults(chunk, url, evalId, headers);
-      progressBar.increment(chunk.length);
+    try {
+      for (const chunk of chunks) {
+        await sendChunkOfResults(chunk, url, evalId, headers);
+        progressBar.increment(chunk.length);
+      }
+    } catch (e) {
+      logger.error(`Upload failed: ${e}`);
+      logger.info(`Upload failed, rolling back...`);
+      await rollbackEval(url, evalId, headers);
     }
 
     return evalId;
