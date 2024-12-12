@@ -64,10 +64,7 @@
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
-    "whatwg-url": "14.1.0",
-    "*": {
-      "whatwg-url": "14.1.0"
-    }
+    "whatwg-url": "14.1.0"
   },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
