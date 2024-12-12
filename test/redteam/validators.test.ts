@@ -1,4 +1,4 @@
-import { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
+import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
@@ -7,7 +7,6 @@ import {
   HARM_PLUGINS,
   PII_PLUGINS,
 } from '../../src/redteam/constants';
-import invariant from '../../src/util/invariant';
 import {
   RedteamGenerateOptionsSchema,
   RedteamConfigSchema,
@@ -847,5 +846,74 @@ describe('RedteamConfigSchema transform', () => {
       throw new Error('First strategy should be an object');
     }
     expect(firstStrategy.id).toBe('file://path/to/strategy.js');
+  });
+
+  describe('file:// plugins', () => {
+    it('should accept file:// plugins in string format', () => {
+      const result = RedteamConfigSchema.parse({
+        plugins: ['file://path/to/plugin.js'],
+      });
+
+      expect(result.plugins?.[0]).toEqual({
+        id: 'file://path/to/plugin.js',
+      });
+    });
+
+    it('should accept file:// plugins in object format', () => {
+      const result = RedteamConfigSchema.parse({
+        plugins: [
+          {
+            id: 'file://path/to/plugin.js',
+            numTests: 10,
+            config: { custom: 'value' },
+          },
+        ],
+      });
+
+      expect(result.plugins?.[0]).toEqual({
+        id: 'file://path/to/plugin.js',
+        numTests: 10,
+        config: { custom: 'value' },
+      });
+    });
+
+    it('should handle mix of file:// and built-in plugins', () => {
+      const result = RedteamConfigSchema.parse({
+        plugins: [
+          'file://path/to/plugin.js',
+          'harmful:hate',
+          { id: 'file://another/plugin.js', numTests: 3 },
+        ],
+      });
+
+      expect(result.plugins).toEqual([
+        { id: 'file://another/plugin.js', numTests: 3 },
+        { id: 'file://path/to/plugin.js' },
+        { id: 'harmful:hate' },
+      ]);
+    });
+
+    it('should reject non-file:// custom paths', () => {
+      expect(() =>
+        RedteamConfigSchema.parse({
+          plugins: ['custom/path/without/file/protocol.js'],
+        }),
+      ).toThrow(
+        JSON.stringify(
+          [
+            {
+              code: 'invalid_string',
+              validation: {
+                startsWith: 'file://',
+              },
+              message: 'Invalid input: must start with "file://"',
+              path: ['plugins', 0],
+            },
+          ],
+          null,
+          2,
+        ),
+      );
+    });
   });
 });
