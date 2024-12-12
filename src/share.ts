@@ -21,9 +21,11 @@ async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
     },
   });
   if (!response.ok) {
+    logger.debug(`Failed to check health of ${apiHost}: ${response.statusText}`);
     return false;
   }
   const responseJson = await response.json();
+  logger.debug(`Response from ${apiHost} health check: ${JSON.stringify(responseJson)}`);
   return 'version' in responseJson;
 }
 
