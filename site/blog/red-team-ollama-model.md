@@ -40,6 +40,8 @@ npx promptfoo@latest init --example redteam-ollama
 cd redteam-ollama
 ```
 
+This will create a new directory with `promptfooconfig.yaml` and `system_message.txt` files.
+
 ### Option 2: Create from Scratch
 
 Create a new directory for your red teaming project and initialize it:
