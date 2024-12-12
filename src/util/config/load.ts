@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -30,6 +29,7 @@ import {
 } from '../../types';
 import { maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
+import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
@@ -154,14 +154,15 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8'));
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     // Validator requires `prompts`, but prompts is not actually required for redteam.
-    /*
-    const validationResult = UnifiedConfigSchema.safeParse(dereferencedConfig);
+    const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
+      .innerType()
+      .extend({ prompts: UnifiedConfigSchema.innerType().innerType().shape.prompts.optional() });
+    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
       );
     }
-    */
     ret = dereferencedConfig;
   } else if (isJavascriptFile(configPath)) {
     const imported = await importModule(configPath);

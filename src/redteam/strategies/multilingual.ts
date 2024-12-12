@@ -1,11 +1,12 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
+import yaml from 'js-yaml';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
+import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
@@ -97,10 +98,10 @@ export async function translate(text: string, lang: string): Promise<string> {
     </Text>`,
   );
   try {
-    return (JSON.parse(result.output) as { translation: string }).translation;
+    return (yaml.load(result.output) as { translation: string }).translation;
   } catch (error) {
     logger.error(
-      `[translate] Error parsing translation result: ${error} Provider Output: ${result.output}`,
+      `[translate] Error parsing translation result: ${error} Provider Output: ${JSON.stringify(result.output, null, 2)}`,
     );
     throw error;
   }

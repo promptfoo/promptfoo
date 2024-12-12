@@ -1,7 +1,7 @@
-import invariant from 'tiny-invariant';
 import { runPythonCode } from '../python/wrapper';
 import type { AssertionParams } from '../types';
 import { type GradingResult, isGradingResult } from '../types';
+import invariant from '../util/invariant';
 
 export const handlePython = async ({
   assertion,

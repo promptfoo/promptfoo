@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import { and, desc, eq, like, sql } from 'drizzle-orm';
-import invariant from 'tiny-invariant';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import {
@@ -30,6 +29,7 @@ import type {
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
 
@@ -404,6 +404,7 @@ export default class Eval {
     const stats: EvaluateStats = {
       successes: 0,
       failures: 0,
+      errors: 0,
       tokenUsage: {
         cached: 0,
         completion: 0,
@@ -416,6 +417,7 @@ export default class Eval {
     for (const prompt of this.prompts) {
       stats.successes += prompt.metrics?.testPassCount || 0;
       stats.failures += prompt.metrics?.testFailCount || 0;
+      stats.errors += prompt.metrics?.testErrorCount || 0;
       stats.tokenUsage.prompt += prompt.metrics?.tokenUsage.prompt || 0;
       stats.tokenUsage.cached += prompt.metrics?.tokenUsage.cached || 0;
       stats.tokenUsage.completion += prompt.metrics?.tokenUsage.completion || 0;

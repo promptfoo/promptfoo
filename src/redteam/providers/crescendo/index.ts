@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
@@ -13,6 +12,7 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
+import invariant from '../../../util/invariant';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { shouldGenerateRemote } from '../../remoteGeneration';
@@ -132,6 +132,7 @@ class CrescendoProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+    logger.debug(`[Crescendo] callApi context: ${JSON.stringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -481,7 +482,11 @@ class CrescendoProvider implements ApiProvider {
     logger.debug(targetPrompt);
 
     const targetResponse = await getTargetResponse(provider, targetPrompt, context, options);
-    invariant(targetResponse.output, 'Expected output to be defined');
+    logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
+    if (targetResponse.error) {
+      throw new Error(`[Crescendo] Target returned an error: ${targetResponse.error}`);
+    }
+    invariant(targetResponse.output, '[Crescendo] Target did not return an output');
     logger.debug(`[Crescendo] Received response from target: ${targetResponse.output}`);
 
     this.memory.addMessage(this.targetConversationId, {
@@ -540,6 +545,7 @@ class CrescendoProvider implements ApiProvider {
       rationale: string;
     }>(refusalResponse.output);
 
+    logger.debug(`[Crescendo] Refusal score parsed response: ${JSON.stringify(parsed)}`);
     invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
     invariant(
       typeof parsed.metadata === 'number',
@@ -588,6 +594,7 @@ class CrescendoProvider implements ApiProvider {
       metadata: number;
     }>(evalResponse.output);
 
+    logger.debug(`[Crescendo] Eval score parsed response: ${JSON.stringify(parsed)}`);
     invariant(typeof parsed.value === 'boolean', 'Expected eval grader value to be a boolean');
     invariant(typeof parsed.metadata === 'number', 'Expected eval grader metadata to be a number');
 

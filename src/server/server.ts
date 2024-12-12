@@ -9,7 +9,6 @@ import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
-import invariant from 'tiny-invariant';
 import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION, DEFAULT_PORT } from '../constants';
@@ -31,6 +30,7 @@ import {
   getLatestEval,
   getStandaloneEvals,
 } from '../util';
+import invariant from '../util/invariant';
 import { BrowserBehavior } from '../util/server';
 import { openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';

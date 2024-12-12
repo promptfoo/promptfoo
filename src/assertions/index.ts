@@ -2,7 +2,6 @@ import async from 'async';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import invariant from 'tiny-invariant';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import { importModule } from '../esm';
@@ -37,6 +36,7 @@ import {
   type GradingResult,
 } from '../types';
 import { isJavascriptFile } from '../util/file';
+import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
 import { AssertionsResult } from './AssertionsResult';

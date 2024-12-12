@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -7,6 +6,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
+import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 
 interface SequenceProviderConfig {

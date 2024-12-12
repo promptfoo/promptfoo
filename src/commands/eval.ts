@@ -4,7 +4,6 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
@@ -32,6 +31,7 @@ import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
+import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 
@@ -213,6 +213,7 @@ export async function doEval(
 
     let successes = 0;
     let failures = 0;
+    let errors = 0;
     const tokenUsage = {
       total: 0,
       prompt: 0,
@@ -229,13 +230,16 @@ export async function doEval(
       if (prompt.metrics?.testFailCount) {
         failures += prompt.metrics.testFailCount;
       }
+      if (prompt.metrics?.testErrorCount) {
+        errors += prompt.metrics.testErrorCount;
+      }
       tokenUsage.total += prompt.metrics?.tokenUsage?.total || 0;
       tokenUsage.prompt += prompt.metrics?.tokenUsage?.prompt || 0;
       tokenUsage.completion += prompt.metrics?.tokenUsage?.completion || 0;
       tokenUsage.cached += prompt.metrics?.tokenUsage?.cached || 0;
       tokenUsage.numRequests += prompt.metrics?.tokenUsage?.numRequests || 0;
     }
-    const totalTests = successes + failures;
+    const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
@@ -297,6 +301,9 @@ export async function doEval(
 
     logger.info(chalk.green.bold(`Successes: ${successes}`));
     logger.info(chalk.red.bold(`Failures: ${failures}`));
+    if (!Number.isNaN(errors)) {
+      logger.info(chalk.red.bold(`Errors: ${errors}`));
+    }
     if (!Number.isNaN(passRate)) {
       logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     }

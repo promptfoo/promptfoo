@@ -353,7 +353,7 @@ describe('renderPrompt', () => {
 
   it('should handle duplicate prompts with simple text', async () => {
     const prompts = [
-      toPrompt('Summarize this: {{text}}'),
+      toPrompt('[Summarize this: {{text}}'),
       toPrompt('Summarize this: {{text}}'),
       toPrompt('Do not Summarize this: {{text}}'),
       toPrompt('This is the prompt {{text}}'),

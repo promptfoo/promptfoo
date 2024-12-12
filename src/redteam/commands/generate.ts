@@ -5,8 +5,8 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
+import { fromError } from 'zod-validation-error';
 import { synthesize } from '..';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
@@ -18,6 +18,7 @@ import { printBorder, setupEnv } from '../../util';
 import { isRunningUnderNpx } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
+import invariant from '../../util/invariant';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 import {
   REDTEAM_MODEL,
@@ -177,7 +178,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
     logger.error('Invalid redteam configuration:');
-    logger.error(parsedConfig.error.toString());
+    logger.error(fromError(parsedConfig.error).toString());
     throw new Error('Invalid redteam configuration');
   }
 

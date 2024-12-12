@@ -8,15 +8,16 @@ import {
   uniqueIndex,
   real,
 } from 'drizzle-orm/sqlite-core';
-import type {
-  Prompt,
-  ProviderResponse,
-  GradingResult,
-  UnifiedConfig,
-  ProviderOptions,
-  AtomicTestCase,
-  CompletedPrompt,
-  EvaluateSummaryV2,
+import {
+  type Prompt,
+  type ProviderResponse,
+  type GradingResult,
+  type UnifiedConfig,
+  type ProviderOptions,
+  type AtomicTestCase,
+  type CompletedPrompt,
+  type EvaluateSummaryV2,
+  ResultFailureReason,
 } from '../types';
 
 // ------------ Prompts ------------
@@ -100,6 +101,7 @@ export const evalResultsTable = sqliteTable(
     // Output-related fields
     response: text('response', { mode: 'json' }).$type<ProviderResponse>(),
     error: text('error'),
+    failureReason: integer('failure_reason').default(ResultFailureReason.NONE).notNull(),
 
     // Result-related fields
     success: integer('success', { mode: 'boolean' }).notNull(),

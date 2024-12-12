@@ -8,8 +8,8 @@
  *
  * {@link https://doi.org/10.3115/1073083.1073135}
  */
-import invariant from 'tiny-invariant';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 
 /**
  * Generates n-grams from an array of words
