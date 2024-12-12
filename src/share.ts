@@ -11,17 +11,15 @@ import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
-import invariant from './util/invariant';
+import { cloudCanAcceptChunkedResults } from './util/cloud';
 
-async function rollbackEval(url: string, evalId: string, headers: Record<string, string>) {
-  logger.info(`Upload failed, rolling back...`);
-  await fetchWithProxy(`${url}/${evalId}`, {
-    method: 'DELETE',
-    headers,
-  });
+const VERSION_SUPPORTS_CHUNKS = '0.103.8';
+
+function isVersionGreaterOrEqual(a: string, b: string) {
+  return a.localeCompare(b, undefined, { numeric: true }) !== -1;
 }
 
-async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
+async function getTargetOpenSourceServerVersion(apiHost: string): Promise<string | undefined> {
   const response = await fetchWithProxy(`${apiHost}/health`, {
     method: 'GET',
     headers: {
@@ -29,12 +27,20 @@ async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
     },
   });
   if (!response.ok) {
-    logger.debug(`Failed to check health of ${apiHost}: ${response.statusText}`);
-    return false;
+    return;
   }
-  const responseJson = await response.json();
-  logger.debug(`Response from ${apiHost} health check: ${JSON.stringify(responseJson)}`);
-  return 'version' in responseJson;
+  const { version } = await response.json();
+  return version;
+}
+
+async function targetOpenSourceServerCanAcceptChunks(apiHost: string): Promise<boolean> {
+  const version = await getTargetOpenSourceServerVersion(apiHost);
+  return version != null && isVersionGreaterOrEqual(version, VERSION_SUPPORTS_CHUNKS);
+}
+
+async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
+  const version = await getTargetOpenSourceServerVersion(apiHost);
+  return version != null;
 }
 
 // Helper functions
@@ -88,7 +94,7 @@ async function sendChunkOfResults(
   evalId: string,
   headers: Record<string, string>,
 ) {
-  const response = await fetch(`${url}/${evalId}/results`, {
+  const response = await fetchWithProxy(`${url}/${evalId}/results`, {
     method: 'POST',
     headers,
     body: JSON.stringify(chunk),
@@ -102,8 +108,13 @@ async function sendChunkOfResults(
   }
 }
 
-async function sendEvalResults(evalRecord: Eval, url: string) {
+async function rollbackEval(url: string, evalId: string, headers: Record<string, string>) {
+  await fetchWithProxy(`${url}/${evalId}`, { method: 'DELETE', headers });
+}
+
+async function sendChunkedResults(evalRecord: Eval, url: string) {
   await evalRecord.loadResults();
+
   const allResults = evalRecord.results;
   logger.debug(`Loaded ${allResults.length} results`);
 
@@ -158,6 +169,29 @@ async function sendEvalResults(evalRecord: Eval, url: string) {
   }
 }
 
+async function sendEvalResults(evalRecord: Eval, url: string) {
+  await evalRecord.loadResults();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (cloudConfig.isEnabled()) {
+    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
+  }
+
+  const response = await fetchWithProxy(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(evalRecord),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to send eval results: ${response.statusText}`);
+  }
+
+  const evalId = (await response.json()).id;
+  return evalId;
+}
+
 /**
  * Removes authentication information (username and password) from a URL.
  *
@@ -181,124 +215,134 @@ export function stripAuthFromUrl(urlString: string): string {
   }
 }
 
+async function handleEmailCollection(evalRecord: Eval): Promise<void> {
+  if (!process.stdout.isTTY || isCI() || getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
+    return;
+  }
+
+  let email = getUserEmail();
+  if (!email) {
+    email = await input({
+      message: `${chalk.bold('Please enter your work email address')} (for managing shared URLs):`,
+      validate: (value) => value.includes('@') || 'Please enter a valid email address',
+    });
+    setUserEmail(email);
+  }
+
+  evalRecord.author = email;
+  await evalRecord.save();
+}
+
+async function getApiConfig(evalRecord: Eval): Promise<{
+  apiBaseUrl: string;
+  url: string;
+  sendInChunks: boolean;
+}> {
+  if (cloudConfig.isEnabled()) {
+    const apiBaseUrl = cloudConfig.getApiHost();
+    return {
+      apiBaseUrl,
+      url: `${apiBaseUrl}/results`,
+      sendInChunks: await cloudCanAcceptChunkedResults(),
+    };
+  }
+
+  const apiBaseUrl =
+    typeof evalRecord.config.sharing === 'object'
+      ? evalRecord.config.sharing.apiBaseUrl || SHARE_API_BASE_URL
+      : SHARE_API_BASE_URL;
+
+  return {
+    apiBaseUrl,
+    url: `${apiBaseUrl}/api/eval`,
+    sendInChunks: await targetOpenSourceServerCanAcceptChunks(apiBaseUrl),
+  };
+}
+
+async function handleLegacyResults(
+  evalRecord: Eval,
+  url: string,
+): Promise<string | null | undefined> {
+  const summary = await evalRecord.toEvaluateSummary();
+  const table = await evalRecord.getTable();
+
+  const sharedResults: SharedResults = {
+    data: {
+      version: 3,
+      createdAt: new Date().toISOString(),
+      author: getAuthor(),
+      results: { ...summary, table, version: 2 },
+      config: evalRecord.config,
+    },
+  };
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(cloudConfig.isEnabled() && { Authorization: `Bearer ${cloudConfig.getApiKey()}` }),
+  };
+
+  const response = await fetchWithProxy(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(sharedResults),
+  });
+
+  if (!response.ok) {
+    logger.error(`Failed to create shareable URL: ${response.statusText}`);
+    return null;
+  }
+
+  const responseJson = (await response.json()) as { id?: string; error?: string };
+  if (responseJson.error) {
+    logger.error(`Failed to create shareable URL: ${responseJson.error}`);
+    return null;
+  }
+
+  return responseJson.id;
+}
+
 export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
-  if (process.stdout.isTTY && !isCI() && !getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
-    let email = getUserEmail();
-    if (!email) {
-      email = await input({
-        message: `${chalk.bold('Please enter your work email address')} (for managing shared URLs):`,
-        validate: (value) => {
-          return value.includes('@') || 'Please enter a valid email address';
-        },
-      });
-      setUserEmail(email);
-    }
-    evalRecord.author = email;
-    await evalRecord.save();
-  }
+  // 1. Handle email collection
+  await handleEmailCollection(evalRecord);
 
-  let response: Response;
-  let apiBaseUrl: string;
-  let url: string;
-  if (cloudConfig.isEnabled()) {
-    apiBaseUrl = cloudConfig.getApiHost();
-    url = `${apiBaseUrl}/results`;
+  // 2. Get API configuration
+  const { apiBaseUrl, url, sendInChunks } = await getApiConfig(evalRecord);
 
-    const loggedInEmail = getUserEmail();
-    invariant(loggedInEmail, 'User email is not set');
-    const evalAuthor = evalRecord.author;
-    if (evalAuthor !== loggedInEmail) {
-      logger.warn(
-        `Warning: Changing eval author from ${evalAuthor} to logged-in user ${loggedInEmail}`,
-      );
-    }
-    evalRecord.author = loggedInEmail;
-    await evalRecord.save();
-  } else {
-    apiBaseUrl =
-      typeof evalRecord.config.sharing === 'object'
-        ? evalRecord.config.sharing.apiBaseUrl || SHARE_API_BASE_URL
-        : SHARE_API_BASE_URL;
-
-    url = `${apiBaseUrl}/api/eval`;
-  }
-
+  // 3. Determine if we can use new results format
   const canUseNewResults =
     cloudConfig.isEnabled() || (await targetHostCanUseNewResults(apiBaseUrl));
   logger.debug(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
-  let evalId: string | undefined;
-  if (canUseNewResults && !evalRecord.useOldResults()) {
-    evalId = await sendEvalResults(evalRecord, url);
-  } else {
-    const summary = await evalRecord.toEvaluateSummary();
-    const table = await evalRecord.getTable();
-    const v2Summary = {
-      ...summary,
-      table,
-      version: 2,
-    };
 
-    logger.debug(`Sending eval results (v2 result file) to ${url}`);
-    // check if we're using the cloud
-    const sharedResults: SharedResults = {
-      data: {
-        version: 3,
-        createdAt: new Date().toISOString(),
-        author: getAuthor(),
-        results: v2Summary,
-        config: evalRecord.config,
-      },
-    };
-    if (cloudConfig.isEnabled()) {
-      response = await fetchWithProxy(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${cloudConfig.getApiKey()}`,
-        },
-        body: JSON.stringify(sharedResults),
-      });
-    } else {
-      response = await fetchWithProxy(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(sharedResults),
-      });
-    }
-    if (!response.ok) {
-      logger.error(`Failed to create shareable URL: ${response.statusText}`);
-      return null;
-    }
-    const responseJson = (await response.json()) as { id?: string; error?: string };
-    if (responseJson.error) {
-      logger.error(`Failed to create shareable URL: ${responseJson.error}`);
-      return null;
-    }
-    evalId = responseJson.id;
+  // 4. Process and send results
+  let evalId: string | undefined | null;
+  if (canUseNewResults && !evalRecord.useOldResults()) {
+    evalId = sendInChunks
+      ? await sendChunkedResults(evalRecord, url)
+      : await sendEvalResults(evalRecord, url);
+  } else {
+    evalId = await handleLegacyResults(evalRecord, url);
+  }
+
+  if (!evalId) {
+    return null;
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
-  let appBaseUrl = SHARE_VIEW_BASE_URL;
-  let fullUrl = SHARE_VIEW_BASE_URL;
-  if (cloudConfig.isEnabled()) {
-    appBaseUrl = cloudConfig.getAppUrl();
-    fullUrl = `${appBaseUrl}/eval/${evalId}`;
-  } else {
-    const appBaseUrl =
-      typeof evalRecord.config.sharing === 'object'
-        ? evalRecord.config.sharing.appBaseUrl
-        : SHARE_VIEW_BASE_URL;
-    fullUrl =
-      SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
-        ? `${appBaseUrl}/eval/${evalId}`
-        : `${appBaseUrl}/eval/?evalId=${evalId}`;
-  }
+
+  // 5. Generate final URL
+  const appBaseUrl = cloudConfig.isEnabled()
+    ? cloudConfig.getAppUrl()
+    : (evalRecord.config.sharing as any)?.appBaseUrl || SHARE_VIEW_BASE_URL;
+
+  const fullUrl = cloudConfig.isEnabled()
+    ? `${appBaseUrl}/eval/${evalId}`
+    : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
+      ? `${appBaseUrl}/eval/${evalId}`
+      : `${appBaseUrl}/eval/?evalId=${evalId}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }

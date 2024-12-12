@@ -477,13 +477,6 @@ export default class Eval {
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
-
-  async getSuccessfulJailbreaks(): Promise<{ plugin: string; prompt: string }[]> {
-    const results = await this.getResults();
-    return results
-      .filter((r) => r.success)
-      .map((r) => ({ plugin: r.prompt.config.plugin, prompt: r.prompt.raw }));
-  }
 }
 
 export async function getSummaryOfLatestEvals(
