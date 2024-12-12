@@ -363,7 +363,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
 };
 
-export const DEFAULT_STRATEGIES = ['jailbreak', 'jailbreak:composite', 'prompt-injection'] as const;
+export const DEFAULT_STRATEGIES = ['jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
 export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
@@ -382,6 +382,7 @@ export const ADDITIONAL_STRATEGIES = [
   'leetspeak',
   'math-prompt',
   'multilingual',
+  'prompt-injection',
   'rot13',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
