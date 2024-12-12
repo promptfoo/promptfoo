@@ -5,12 +5,15 @@ import {
   COLLECTIONS,
   HARM_PLUGINS,
   PII_PLUGINS,
+  DEFAULT_STRATEGIES,
 } from '../../src/redteam/constants';
 import {
   RedteamGenerateOptionsSchema,
   RedteamConfigSchema,
   RedteamPluginSchema,
 } from '../../src/validators/redteam';
+
+const DEFAULT_STRATEGIES_OBJECTS = DEFAULT_STRATEGIES.map((id) => ({ id }));
 
 describe('redteamGenerateOptionsSchema', () => {
   it('should accept valid options for a redteam test', () => {
@@ -127,7 +130,7 @@ describe('redteamConfigSchema', () => {
         plugins: expect.arrayContaining(
           Array(REDTEAM_DEFAULT_PLUGINS.size).fill(expect.any(Object)),
         ),
-        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
+        strategies: DEFAULT_STRATEGIES_OBJECTS,
       },
     });
   });
@@ -141,7 +144,7 @@ describe('redteamConfigSchema', () => {
         plugins: expect.arrayContaining(
           Array(REDTEAM_DEFAULT_PLUGINS.size).fill(expect.any(Object)),
         ),
-        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
+        strategies: DEFAULT_STRATEGIES_OBJECTS,
       },
     });
   });
@@ -158,7 +161,7 @@ describe('redteamConfigSchema', () => {
           { id: 'hijacking', numTests: undefined },
           { id: 'overreliance', numTests: undefined },
         ],
-        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
+        strategies: DEFAULT_STRATEGIES_OBJECTS,
       },
     });
   });
@@ -251,7 +254,7 @@ describe('redteamConfigSchema', () => {
             numTests: 3,
           }))
           .sort((a, b) => a.id.localeCompare(b.id)),
-        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
+        strategies: DEFAULT_STRATEGIES_OBJECTS,
       },
     });
   });
@@ -279,7 +282,7 @@ describe('redteamConfigSchema', () => {
               numTests: 3,
             })),
         ].sort((a, b) => a.id.localeCompare(b.id)),
-        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
+        strategies: DEFAULT_STRATEGIES_OBJECTS,
       },
     });
     expect(RedteamConfigSchema.safeParse(input)?.data?.plugins).toHaveLength(
@@ -303,7 +306,7 @@ describe('redteamConfigSchema', () => {
             .filter((category) => !['harmful:hate', 'harmful:violent-crime'].includes(category))
             .map((category) => ({ id: category, numTests: 3 })),
         ]),
-        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
+        strategies: DEFAULT_STRATEGIES_OBJECTS,
       },
     });
   });
@@ -321,7 +324,7 @@ describe('redteamConfigSchema', () => {
           { id: 'harmful:hate', numTests: 10 },
           { id: 'harmful:violent-crime', numTests: 3 },
         ]),
-        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
+        strategies: DEFAULT_STRATEGIES_OBJECTS,
       },
     });
   });
@@ -398,7 +401,7 @@ describe('redteamConfigSchema', () => {
           { id: 'overreliance', numTests: undefined },
           { id: 'politics', numTests: undefined },
         ],
-        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
+        strategies: DEFAULT_STRATEGIES_OBJECTS,
       },
     });
   });
@@ -483,7 +486,7 @@ describe('redteamConfigSchema', () => {
             .filter((category) => category !== 'harmful:hate')
             .map((category) => ({ id: category, numTests: 2 })),
         ].sort((a, b) => a.id.localeCompare(b.id)),
-        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
+        strategies: DEFAULT_STRATEGIES_OBJECTS,
       },
     });
     expect(RedteamConfigSchema.safeParse(input)?.data?.plugins).toHaveLength(
