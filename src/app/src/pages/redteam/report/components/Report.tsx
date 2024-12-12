@@ -104,10 +104,8 @@ const App: React.FC = () => {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
-        // Backwards compatibility for old evals that used 'query' instead of 'prompt'. 2024-12-12
         const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
-        const injectVarValue =
-          result.vars[injectVar]?.toString() || result.vars['query']?.toString();
+        const injectVarValue = result.vars[injectVar]?.toString();
         failures[pluginId].push({
           prompt: injectVarValue || result.prompt.raw,
           output: result.response?.output,
