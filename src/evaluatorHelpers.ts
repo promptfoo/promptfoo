@@ -129,7 +129,7 @@ export function resolveVariables(variables: Variables): Variables {
   return resolvedVars;
 }
 
-const isBasicPrompt = (s: string): boolean => {
+const isStringPrompt = (s: string): boolean => {
   // If it starts with { or [ it's likely JSON/YAML
   const firstNonWhitespaceChar = s.trim()[0];
   if (firstNonWhitespaceChar === '{' || firstNonWhitespaceChar === '[') {
@@ -272,23 +272,22 @@ export async function renderPrompt(
   }
 
   // If JSON autoescape is disabled, just render with nunjucks
-  if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
+  // basic prompt is defined as something that does not contain JSON
+  // elements like { or [ before rendering
+  if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE') || isStringPrompt(basePrompt)) {
     return nunjucks.renderString(basePrompt, resolvedVars);
   }
-
-  // Check if it's a basic text prompt first
-  if (isBasicPrompt(basePrompt)) {
-    return nunjucks.renderString(basePrompt, resolvedVars);
-  }
-
-  // Try parsing as YAML/JSON
   try {
+    // Everything should be a JSON at this point. Use yaml parser because it's more forgiving
     const parsed = yaml.load(basePrompt) as Record<string, any>;
     const rendered = renderVarsInObject<Variables>(parsed, resolvedVars);
     if (typeof rendered === 'object' && rendered !== null) {
       return JSON.stringify(rendered, null, 2);
     }
-    return rendered as string;
+    if (typeof rendered === 'string') {
+      return rendered;
+    }
+    throw new Error(`Unknown rendered type: ${typeof rendered}`);
   } catch {
     // If YAML/JSON parsing fails, render as basic text
     return nunjucks.renderString(basePrompt, resolvedVars);
