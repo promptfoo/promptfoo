@@ -280,6 +280,8 @@ export async function renderPrompt(
   try {
     // Everything should be a JSON at this point. Use yaml parser because it's more forgiving
     const parsed = yaml.load(basePrompt) as Record<string, any>;
+    // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
+    // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     const rendered = renderVarsInObject<Variables>(parsed, resolvedVars);
     if (typeof rendered === 'object' && rendered !== null) {
       return JSON.stringify(rendered, null, 2);
