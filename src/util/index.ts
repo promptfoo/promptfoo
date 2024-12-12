@@ -10,7 +10,6 @@ import yaml from 'js-yaml';
 import NodeCache from 'node-cache';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
@@ -53,6 +52,7 @@ import {
   OutputFileExtension,
   type EvaluateSummaryV2,
 } from '../types';
+import invariant from '../util/invariant';
 import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
 import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
