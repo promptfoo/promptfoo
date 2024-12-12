@@ -198,7 +198,7 @@ export default class Eval {
 
         logger.debug(`Inserting prompt ${promptId}`);
       }
-      if (opts?.results) {
+      if (opts?.results && opts.results.length > 0) {
         const res = await tx
           .insert(evalResultsTable)
           .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
@@ -380,6 +380,7 @@ export default class Eval {
     this.results = results;
     if (this.persisted) {
       const db = getDb();
+
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
     }
   }
