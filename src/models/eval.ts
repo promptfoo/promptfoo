@@ -380,7 +380,6 @@ export default class Eval {
     this.results = results;
     if (this.persisted) {
       const db = getDb();
-
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
     }
   }
