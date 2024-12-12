@@ -1056,12 +1056,12 @@ describe('evaluator', () => {
   it('evaluate with _conversation variable', async () => {
     const mockApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockImplementation((prompt) => {
-        return Promise.resolve({
+      callApi: jest.fn().mockImplementation((prompt) =>
+        Promise.resolve({
           output: prompt,
           tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        });
-      }),
+        }),
+      ),
     };
 
     const testSuite: TestSuite = {
@@ -1583,6 +1583,83 @@ describe('evaluator', () => {
 
     // Verify the prompt was rendered with all variables
     expect(summary.results[0].prompt.raw).toBe('Test prompt foo bar BAR');
+  });
+
+  it('should maintain separate conversation histories based on metadata.conversationId', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockImplementation((prompt) => ({
+        output: 'Test output',
+      })),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: '{% for completion in _conversation %}User: {{ completion.input }}\nAssistant: {{ completion.output }}\n{% endfor %}User: {{ question }}',
+          label: 'Conversation test',
+        },
+      ],
+      tests: [
+        // First conversation
+        {
+          vars: { question: 'Question 1A' },
+          metadata: { conversationId: 'conversation1' },
+        },
+        {
+          vars: { question: 'Question 1B' },
+          metadata: { conversationId: 'conversation1' },
+        },
+        // Second conversation
+        {
+          vars: { question: 'Question 2A' },
+          metadata: { conversationId: 'conversation2' },
+        },
+        {
+          vars: { question: 'Question 2B' },
+          metadata: { conversationId: 'conversation2' },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    // Check that the API was called with the correct prompts
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+
+    // First conversation, first question
+    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('User: Question 1A'),
+      expect.anything(),
+      expect.anything(),
+    );
+
+    // First conversation, second question (should include history)
+    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
+      expect.anything(),
+      expect.anything(),
+    );
+
+    // Second conversation, first question (should NOT include first conversation)
+    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('User: Question 2A'),
+      expect.anything(),
+      expect.anything(),
+    );
+
+    // Second conversation, second question (should only include second conversation history)
+    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
+      4,
+      expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('evaluates with provider delay', async () => {

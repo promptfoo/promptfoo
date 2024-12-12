@@ -162,7 +162,7 @@ class Evaluator {
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
-    const conversationKey = `${provider.label || provider.id()}:${prompt.id}`;
+    const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
     const usesConversation = prompt.raw.includes('_conversation');
     if (
       !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
@@ -174,10 +174,8 @@ class Evaluator {
 
     // Overwrite vars with any saved register values
     Object.assign(vars, this.registers);
-
     // Render the prompt
     const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
-
     let renderedJson = undefined;
     try {
       renderedJson = JSON.parse(renderedPrompt);
