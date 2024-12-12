@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import logger from '../logger';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
@@ -25,7 +26,10 @@ import { ProviderSchema } from '../validators/providers';
  */
 const RedteamPluginObjectSchema = z.object({
   id: z
-    .enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]])
+    .union([
+      z.enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]]),
+      z.string().startsWith('file://'),
+    ])
     .describe('Name of the plugin'),
   numTests: z
     .number()
@@ -43,9 +47,7 @@ export const RedteamPluginSchema = z.union([
   z
     .union([
       z.enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]]),
-      z.string().refine((value) => value.startsWith('file://'), {
-        message: 'Plugin must be one of `promptfoo redteam plugins` or start with "file://"',
-      }),
+      z.string().startsWith('file://'),
     ])
     .describe('Name of the plugin or path to custom plugin'),
   RedteamPluginObjectSchema,
@@ -131,10 +133,7 @@ export const RedteamConfigSchema = z
       .string()
       .optional()
       .describe('Purpose override string - describes the prompt templates'),
-    provider: z
-      .lazy(() => ProviderSchema)
-      .optional()
-      .describe('Provider used for generating adversarial inputs'),
+    provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
     language: z.string().optional().describe('Language of tests ot generate for this plugin'),
     entities: z

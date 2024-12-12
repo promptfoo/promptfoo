@@ -1,3 +1,4 @@
+import { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
@@ -6,6 +7,7 @@ import {
   HARM_PLUGINS,
   PII_PLUGINS,
 } from '../../src/redteam/constants';
+import invariant from '../../src/util/invariant';
 import {
   RedteamGenerateOptionsSchema,
   RedteamConfigSchema,
@@ -715,5 +717,135 @@ describe('redteamConfigSchema', () => {
         expect.arrayContaining([{ id: 'prompt-injection' }, { id: 'jailbreak' }]),
       );
     });
+  });
+});
+
+describe('RedteamConfigSchema transform', () => {
+  it('should deduplicate plugins with same id and config', () => {
+    const result = RedteamConfigSchema.parse({
+      plugins: [
+        { id: 'contracts', config: { key: 'value' } },
+        { id: 'contracts', config: { key: 'value' } },
+      ],
+    });
+
+    expect(result.plugins).toHaveLength(1);
+    expect(result.plugins?.[0]).toEqual({
+      id: 'contracts',
+      config: { key: 'value' },
+      numTests: 5,
+    });
+  });
+
+  it('should keep plugins with same id but different configs', () => {
+    const result = RedteamConfigSchema.parse({
+      plugins: [
+        { id: 'contracts', config: { key: 'value1' } },
+        { id: 'contracts', config: { key: 'value2' }, numTests: 2 },
+      ],
+    });
+
+    expect(result.plugins).toHaveLength(2);
+    expect(result.plugins).toEqual([
+      { id: 'contracts', config: { key: 'value1' }, numTests: 5 },
+      { id: 'contracts', config: { key: 'value2' }, numTests: 2 },
+    ]);
+  });
+
+  it('should sort plugins by id and then by config', () => {
+    const result = RedteamConfigSchema.parse({
+      plugins: [
+        { id: 'contracts', config: { key: 'b' } },
+        { id: 'harmful:hate' },
+        { id: 'contracts', config: { key: 'a' } },
+      ],
+    });
+
+    expect(
+      result.plugins?.map((p: RedteamPluginObject) => ({ id: p.id, config: p.config })),
+    ).toEqual([
+      { id: 'contracts', config: { key: 'a' } },
+      { id: 'contracts', config: { key: 'b' } },
+      { id: 'harmful:hate' },
+    ]);
+  });
+
+  it('should filter out collection plugins from final output', () => {
+    const result = RedteamConfigSchema.parse({
+      plugins: ['harmful', 'pii', 'default'],
+    });
+
+    // Verify no collection names appear in final plugin list
+    expect(
+      result.plugins?.some((p: RedteamPluginObject) =>
+        ['harmful', 'pii', 'default'].includes(p.id),
+      ),
+    ).toBe(false);
+  });
+
+  it('should expand collection plugins correctly', () => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 5,
+      plugins: ['harmful'],
+    });
+
+    // Should expand 'harmful' into individual harm categories
+    expect(result.plugins?.every((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
+      true,
+    );
+    expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
+  });
+
+  it('should handle plugin aliases and their associated strategies', () => {
+    const result = RedteamConfigSchema.parse({
+      plugins: ['harmful:hate'],
+    });
+
+    // Check if associated strategies were added
+    expect(
+      result.strategies?.some((s: RedteamStrategy) => {
+        if (typeof s === 'string' || !s) {
+          throw new Error('Strategy should be an object');
+        }
+        return s.id === 'jailbreak';
+      }),
+    ).toBe(true);
+    expect(
+      result.strategies?.some((s: RedteamStrategy) => {
+        if (typeof s === 'string' || !s) {
+          throw new Error('Strategy should be an object');
+        }
+        return s.id === 'prompt-injection';
+      }),
+    ).toBe(true);
+  });
+
+  it('should preserve numTests hierarchy (plugin > global)', () => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 5,
+      plugins: ['contracts', { id: 'harmful:hate', numTests: 10 }, { id: 'overreliance' }],
+    });
+
+    const contractsPlugin = result.plugins?.find((p) => p.id === 'contracts');
+    const hatePlugin = result.plugins?.find((p) => p.id === 'harmful:hate');
+    const overreliancePlugin = result.plugins?.find((p) => p.id === 'overreliance');
+
+    expect(contractsPlugin?.numTests).toBe(5);
+    expect(hatePlugin?.numTests).toBe(10);
+    expect(overreliancePlugin?.numTests).toBe(5);
+  });
+
+  it('should handle file:// paths in transform', () => {
+    const result = RedteamConfigSchema.parse({
+      plugins: ['file://path/to/plugin.js'],
+      strategies: ['file://path/to/strategy.js'],
+    });
+
+    expect(result.plugins?.[0]?.id).toBe('file://path/to/plugin.js');
+    const firstStrategy = result.strategies?.[0];
+    if (typeof firstStrategy === 'string' || !firstStrategy) {
+      throw new Error('First strategy should be an object');
+    }
+    expect(firstStrategy.id).toBe('file://path/to/strategy.js');
   });
 });
