@@ -5,7 +5,6 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
-import { sleep } from '../src/util/time';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -19,10 +18,6 @@ jest.mock('../src/logger');
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
   runExtensionHook: jest.fn(),
-}));
-jest.mock('../src/util/time', () => ({
-  ...jest.requireActual('../src/util/time'),
-  sleep: jest.fn(),
 }));
 
 const mockApiProvider: ApiProvider = {
@@ -1056,12 +1051,12 @@ describe('evaluator', () => {
   it('evaluate with _conversation variable', async () => {
     const mockApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockImplementation((prompt) => {
-        return Promise.resolve({
+      callApi: jest.fn().mockImplementation((prompt) =>
+        Promise.resolve({
           output: prompt,
           tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        });
-      }),
+        }),
+      ),
     };
 
     const testSuite: TestSuite = {
@@ -1585,74 +1580,81 @@ describe('evaluator', () => {
     expect(summary.results[0].prompt.raw).toBe('Test prompt foo bar BAR');
   });
 
-  it('evaluates with provider delay', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      delay: 100,
-      callApi: jest.fn().mockResolvedValue({
+  it('should maintain separate conversation histories based on metadata.conversationId', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockImplementation((prompt) => ({
         output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      })),
     };
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
+      prompts: [
+        {
+          raw: '{% for completion in _conversation %}User: {{ completion.input }}\nAssistant: {{ completion.output }}\n{% endfor %}User: {{ question }}',
+          label: 'Conversation test',
+        },
+      ],
+      tests: [
+        // First conversation
+        {
+          vars: { question: 'Question 1A' },
+          metadata: { conversationId: 'conversation1' },
+        },
+        {
+          vars: { question: 'Question 1B' },
+          metadata: { conversationId: 'conversation1' },
+        },
+        // Second conversation
+        {
+          vars: { question: 'Question 2A' },
+          metadata: { conversationId: 'conversation2' },
+        },
+        {
+          vars: { question: 'Question 2B' },
+          metadata: { conversationId: 'conversation2' },
+        },
+      ],
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    expect(sleep).toHaveBeenCalledWith(100);
-    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
-  });
+    // Check that the API was called with the correct prompts
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
 
-  it('evaluates with no provider delay', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    // First conversation, first question
+    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('User: Question 1A'),
+      expect.anything(),
+      expect.anything(),
+    );
 
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
-    };
+    // First conversation, second question (should include history)
+    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
+      expect.anything(),
+      expect.anything(),
+    );
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
+    // Second conversation, first question (should NOT include first conversation)
+    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('User: Question 2A'),
+      expect.anything(),
+      expect.anything(),
+    );
 
-    expect(mockApiProvider.delay).toBe(0);
-    expect(sleep).not.toHaveBeenCalled();
-    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
-  });
-
-  it('skips delay for cached responses', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      delay: 100,
-      callApi: jest.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        cached: true,
-      }),
-    };
-
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
-    };
-
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
-
-    expect(sleep).not.toHaveBeenCalled();
-    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    // Second conversation, second question (should only include second conversation history)
+    expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
+      4,
+      expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });
 

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import invariant from 'tiny-invariant';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -11,7 +12,6 @@ import telemetry from './telemetry';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
 import { isJavascriptFile } from './util/file';
-import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
@@ -32,37 +32,111 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
-export function resolveVariables(
-  variables: Record<string, string | object>,
-): Record<string, string | object> {
-  let resolved = true;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
+type VariableValue = string | object | number | boolean;
+type Variables = Record<string, VariableValue>;
 
-  let iterations = 0;
-  do {
-    resolved = true;
-    for (const key of Object.keys(variables)) {
-      if (typeof variables[key] !== 'string') {
+/**
+ * Helper function to remove trailing newlines from string values
+ * This prevents issues with JSON prompts
+ */
+export function trimTrailingNewlines(variables: Variables): Variables {
+  const trimmedVars: Variables = { ...variables };
+  for (const [key, value] of Object.entries(trimmedVars)) {
+    if (typeof value === 'string') {
+      trimmedVars[key] = value.replace(/\n$/, '');
+    }
+  }
+  return trimmedVars;
+}
+
+/**
+ * Helper function that resolves variables within a single string.
+ *
+ * @param value - The string containing variables to resolve
+ * @param variables - Object containing variable values
+ * @param regex - Regular expression for matching variables
+ * @returns The string with all resolvable variables replaced
+ */
+function resolveString(value: string, variables: Variables, regex: RegExp): string {
+  let result = value;
+  let match: RegExpExecArray | null;
+
+  // Reset regex for new string
+  regex.lastIndex = 0;
+
+  // Find and replace all variables in the string
+  while ((match = regex.exec(result)) !== null) {
+    const [placeholder, varName] = match;
+
+    // Skip undefined variables (will be handled by nunjucks later)
+    if (variables[varName] === undefined) {
+      continue;
+    }
+
+    // Only replace if the replacement is a string
+    const replacement = variables[varName];
+    if (typeof replacement === 'string') {
+      result = result.replace(placeholder, replacement);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Resolves variables within string values of an object, replacing {{varName}} with
+ * the corresponding value from the variables object.
+ *
+ * Example:
+ * Input: { greeting: "Hello {{name}}!", name: "World" }
+ * Output: { greeting: "Hello World!", name: "World" }
+ *
+ * @param variables - Object containing variable names and their values
+ * @returns A new object with all variables resolved
+ */
+export function resolveVariables(variables: Variables): Variables {
+  const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
+  const resolvedVars: Variables = trimTrailingNewlines(variables);
+  const MAX_ITERATIONS = 5;
+
+  // Iterate up to MAX_ITERATIONS times to handle nested variables
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+    let hasChanges = false;
+
+    // Process each variable in the object
+    for (const [key, value] of Object.entries(resolvedVars)) {
+      // Skip non-string values as they can't contain variable references
+      if (typeof value !== 'string') {
         continue;
       }
-      const value = variables[key] as string;
-      const match = regex.exec(value);
-      if (match) {
-        const [placeholder, varName] = match;
-        if (variables[varName] === undefined) {
-          // Do nothing - final nunjucks render will fail if necessary.
-          // logger.warn(`Variable "${varName}" not found for substitution.`);
-        } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
-          resolved = false; // Indicate that we've made a replacement and should check again
-        }
+
+      // Try to resolve any variables in this string
+      const newValue = resolveString(value, resolvedVars, regex);
+
+      // Only update if the value actually changed
+      if (newValue !== value) {
+        resolvedVars[key] = newValue;
+        hasChanges = true;
       }
     }
-    iterations++;
-  } while (!resolved && iterations < 5);
 
-  return variables;
+    // If no changes were made in this iteration, we're done
+    if (!hasChanges) {
+      break;
+    }
+  }
+
+  return resolvedVars;
 }
+
+const isBasicPrompt = (s: string): boolean => {
+  // If it starts with { or [ it's likely JSON/YAML
+  const firstNonWhitespaceChar = s.trim()[0];
+  if (firstNonWhitespaceChar === '{' || firstNonWhitespaceChar === '[') {
+    return false;
+  }
+  return true;
+};
 
 export async function renderPrompt(
   prompt: Prompt,
@@ -156,22 +230,16 @@ export async function renderPrompt(
     }
   }
 
-  // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
-  for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string') {
-      vars[key] = (vars[key] as string).replace(/\n$/, '');
-    }
-  }
-
   // Resolve variable mappings
-  resolveVariables(vars);
+  const resolvedVars: Variables = resolveVariables(vars);
 
-  // Third party integrations
+  // Handle third party integrations first
   if (prompt.raw.startsWith('portkey://')) {
     const { getPrompt } = await import('./integrations/portkey');
-    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
+    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), resolvedVars);
     return JSON.stringify(portKeyResult.messages);
-  } else if (prompt.raw.startsWith('langfuse://')) {
+  }
+  if (prompt.raw.startsWith('langfuse://')) {
     const { getPrompt } = await import('./integrations/langfuse');
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
@@ -183,38 +251,47 @@ export async function renderPrompt(
 
     const langfuseResult = await getPrompt(
       helper,
-      vars,
+      resolvedVars,
       promptType,
       version === 'latest' ? undefined : Number(version),
     );
     return langfuseResult;
-  } else if (prompt.raw.startsWith('helicone://')) {
+  }
+  if (prompt.raw.startsWith('helicone://')) {
     const { getPrompt } = await import('./integrations/helicone');
     const heliconePrompt = prompt.raw.slice('helicone://'.length);
     const [id, version] = heliconePrompt.split(':');
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
     const heliconeResult = await getPrompt(
       id,
-      vars,
+      resolvedVars,
       majorVersion === undefined ? undefined : Number(majorVersion),
       minorVersion === undefined ? undefined : Number(minorVersion),
     );
     return heliconeResult;
   }
 
-  // Render prompt
+  // If JSON autoescape is disabled, just render with nunjucks
+  if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
+    return nunjucks.renderString(basePrompt, resolvedVars);
+  }
+
+  // Check if it's a basic text prompt first
+  if (isBasicPrompt(basePrompt)) {
+    return nunjucks.renderString(basePrompt, resolvedVars);
+  }
+
+  // Try parsing as YAML/JSON
   try {
-    if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
-      return nunjucks.renderString(basePrompt, vars);
+    const parsed = yaml.load(basePrompt) as Record<string, any>;
+    const rendered = renderVarsInObject<Variables>(parsed, resolvedVars);
+    if (typeof rendered === 'object' && rendered !== null) {
+      return JSON.stringify(rendered, null, 2);
     }
-
-    const parsed = JSON.parse(basePrompt);
-
-    // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
-    // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
+    return rendered as string;
   } catch {
-    return nunjucks.renderString(basePrompt, vars);
+    // If YAML/JSON parsing fails, render as basic text
+    return nunjucks.renderString(basePrompt, resolvedVars);
   }
 }
 
