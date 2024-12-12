@@ -42,7 +42,17 @@ cd redteam-ollama
 
 This will create a new directory with `promptfooconfig.yaml` and `system_message.txt` files.
 
-### Option 2: Create from Scratch
+### Option 2: Use the Web Interface
+
+Run the following command to open a local web server that will guide you through the red teaming process:
+
+```bash
+npx promptfoo@latest redteam init
+```
+
+on the Application Details page, enter a system purpose for the 
+
+### Option 3: Create from Scratch
 
 Create a new directory for your red teaming project and initialize it:
 
