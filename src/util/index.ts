@@ -2,7 +2,7 @@ import { parse as csvParse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
-import { desc, eq, like, and, sql, not } from 'drizzle-orm';
+import { and, desc, eq, like, not, sql } from 'drizzle-orm';
 import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -15,13 +15,13 @@ import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
 import {
   datasetsTable,
+  evalResultsTable,
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
   evalsToTagsTable,
   promptsTable,
   tagsTable,
-  evalResultsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { getDirectory, importModule } from '../esm';
@@ -32,37 +32,43 @@ import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
 import type EvalResult from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
-  type EvalWithMetadata,
+  isApiProvider,
+  isProviderOptions,
+  OutputFileExtension,
+  ResultFailureReason,
+  type CompletedPrompt,
+  type CsvRow,
   type EvaluateResult,
   type EvaluateTable,
   type EvaluateTableOutput,
+  type EvaluateSummaryV2,
+  type EvalWithMetadata,
   type NunjucksFilterMap,
+  type OutputFile,
   type PromptWithMetadata,
+  type ResultLightweight,
   type ResultsFile,
   type TestCase,
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
-  type OutputFile,
-  type CompletedPrompt,
-  type CsvRow,
-  type ResultLightweight,
-  isApiProvider,
-  isProviderOptions,
-  OutputFileExtension,
-  type EvaluateSummaryV2,
 } from '../types';
 import invariant from '../util/invariant';
 import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
-import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
+import { getHeaderForTable } from './exportToFile';
+import { convertTestResultsToTableRow } from './exportToFile';
 import { isJavascriptFile } from './file';
 import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
-  const passFailText = output.pass ? '[PASS]' : '[FAIL]';
+  const passFailText = output.pass
+    ? '[PASS]'
+    : output.failureReason === ResultFailureReason.ASSERT
+      ? '[FAIL]'
+      : '[ERROR]';
   const namedScoresText = Object.entries(output.namedScores)
     .map(([name, value]) => `${name}: ${value?.toFixed(2)}`)
     .join(', ');
@@ -979,7 +985,10 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   return varsMatch(testCase.vars, result.vars) && providersMatch;
 }
 
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
+export function renderVarsInObject<T>(
+  obj: T,
+  vars?: Record<string, string | object | number | boolean>,
+): T {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
@@ -988,7 +997,7 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return nunjucks.renderString(obj, vars) as unknown as T;
   }
   if (Array.isArray(obj)) {
-    return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
+    return obj.map((item) => renderVarsInObject<T>(item, vars)) as unknown as T;
   }
   if (typeof obj === 'object' && obj !== null) {
     const result: Record<string, unknown> = {};

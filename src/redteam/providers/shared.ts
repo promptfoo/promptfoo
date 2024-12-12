@@ -9,6 +9,7 @@ import {
   type TokenUsage,
   type CallApiContextParams,
 } from '../../types';
+import { sleep } from '../../util/time';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 async function loadRedteamProvider({
@@ -114,7 +115,10 @@ export async function getTargetResponse(
   } catch (error) {
     return { output: '', error: (error as Error).message, tokenUsage: { numRequests: 1 } };
   }
-
+  if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
+    logger.debug(`Sleeping for ${targetProvider.delay}ms`);
+    await sleep(targetProvider.delay);
+  }
   if (targetRespRaw?.output) {
     return {
       output:
