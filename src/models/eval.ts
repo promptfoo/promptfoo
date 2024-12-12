@@ -376,6 +376,14 @@ export default class Eval {
     }
   }
 
+  async addResults(results: EvalResult[]) {
+    this.results = results;
+    if (this.persisted) {
+      const db = getDb();
+      await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
+    }
+  }
+
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
   }
@@ -468,6 +476,13 @@ export default class Eval {
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+  }
+
+  async getSuccessfulJailbreaks(): Promise<{ plugin: string; prompt: string }[]> {
+    const results = await this.getResults();
+    return results
+      .filter((r) => r.success)
+      .map((r) => ({ plugin: r.prompt.config.plugin, prompt: r.prompt.raw }));
   }
 }
 

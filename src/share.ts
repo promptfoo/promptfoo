@@ -1,8 +1,9 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
+import cliProgress from 'cli-progress';
 import { URL } from 'url';
 import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
-import { getEnvBool, isCI } from './envars';
+import { getEnvBool, getEnvInt, isCI } from './envars';
 import { fetchWithProxy } from './fetch';
 import { getAuthor } from './globalConfig/accounts';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -26,9 +27,87 @@ async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
   return 'version' in responseJson;
 }
 
+// Helper functions
+function getResultSize(result: any): number {
+  return Buffer.byteLength(JSON.stringify(result), 'utf8');
+}
+
+function calculateMedianResultSize(results: any[], sampleSize: number = 25): number {
+  // Get the result size of the first sampleSize results
+  const sampleSizes = results.slice(0, Math.min(sampleSize, results.length)).map(getResultSize);
+  // Return the median result size
+  return sampleSizes.sort((a, b) => a - b)[Math.floor(sampleSizes.length / 2)];
+}
+
+function createChunks(results: any[], targetChunkSize: number): any[][] {
+  const medianSize = calculateMedianResultSize(results);
+  const estimatedResultsPerChunk =
+    getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
+    Math.max(1, Math.floor(targetChunkSize / medianSize));
+
+  logger.debug(
+    `Median result size: ${medianSize} bytes, estimated results per chunk: ${estimatedResultsPerChunk}`,
+  );
+
+  const chunks: any[][] = [];
+  for (let i = 0; i < results.length; i += estimatedResultsPerChunk) {
+    chunks.push(results.slice(i, i + estimatedResultsPerChunk));
+  }
+
+  return chunks;
+}
+
+async function sendInitialEvalData(evalRecord: Eval, url: string, headers: Record<string, string>) {
+  const evalDataWithoutResults = { ...evalRecord, results: [] };
+  const response = await fetchWithProxy(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(evalDataWithoutResults),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to send initial eval data: ${response.statusText}`);
+  }
+
+  return (await response.json()).id;
+}
+
+async function sendChunkOfResults(
+  chunk: any[],
+  url: string,
+  evalId: string,
+  headers: Record<string, string>,
+) {
+  const response = await fetch(`${url}/${evalId}/results`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(chunk),
+  });
+
+  if (!response.ok) {
+    const responseBody = await response.json();
+    throw new Error(
+      `Failed to send results chunk: ${response.statusText} = ${JSON.stringify(responseBody)}`,
+    );
+  }
+}
+
 async function sendEvalResults(evalRecord: Eval, url: string) {
   await evalRecord.loadResults();
+  const allResults = evalRecord.results;
+  logger.debug(`Loaded ${allResults.length} results`);
 
+  // Constants
+  const TARGET_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB in bytes
+
+  // Calculate chunk sizes
+  const medianSize = calculateMedianResultSize(allResults);
+  logger.debug(`Median result size: ${medianSize} bytes`);
+
+  // Create chunks
+  const chunks = createChunks(allResults, TARGET_CHUNK_SIZE);
+
+  // Prepare headers
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -36,18 +115,31 @@ async function sendEvalResults(evalRecord: Eval, url: string) {
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
 
-  const response = await fetchWithProxy(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(evalRecord),
-  });
+  // Setup progress bar
+  const progressBar = new cliProgress.SingleBar(
+    {
+      format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
+    },
+    cliProgress.Presets.shades_classic,
+  );
+  progressBar.start(allResults.length, 0);
 
-  if (!response.ok) {
-    throw new Error(`Failed to send eval results: ${response.statusText}`);
+  try {
+    // Send initial data and get eval ID
+    const evalId = await sendInitialEvalData(evalRecord, url, headers);
+    logger.debug(`Initial eval data sent successfully - ${evalId}`);
+
+    // Send chunks
+    logger.debug(`Sending ${chunks.length} requests to upload results`);
+    for (const chunk of chunks) {
+      await sendChunkOfResults(chunk, url, evalId, headers);
+      progressBar.increment(chunk.length);
+    }
+
+    return evalId;
+  } finally {
+    progressBar.stop();
   }
-
-  const evalId = (await response.json()).id;
-  return evalId;
 }
 
 /**

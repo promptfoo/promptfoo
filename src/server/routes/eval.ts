@@ -145,6 +145,29 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
   }
 });
 
+evalRouter.post('/:id/results', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const results = req.body as unknown as EvalResult[];
+
+  if (!Array.isArray(results)) {
+    res.status(400).json({ error: 'Results must be an array' });
+    return;
+  }
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+  try {
+    await eval_.addResults(results);
+  } catch (error) {
+    logger.error('Failed to add results to eval', error);
+    res.status(500).json({ error: 'Failed to add results to eval' });
+    return;
+  }
+  res.status(204).send();
+});
+
 evalRouter.post(
   '/:evalId/results/:id/rating',
   async (req: Request, res: Response): Promise<void> => {
