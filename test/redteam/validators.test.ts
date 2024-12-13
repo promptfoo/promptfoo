@@ -93,6 +93,48 @@ describe('redteamPluginSchema', () => {
     };
     expect(RedteamPluginSchema.safeParse(input).success).toBe(true);
   });
+
+  it('should provide helpful error message for invalid plugin names', () => {
+    const result = RedteamPluginSchema.safeParse('hate');
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    const errorMessage = result.error.errors[0].message;
+    expect(errorMessage).toContain('Custom plugins must start with file://');
+    expect(errorMessage).toContain('built-in plugins');
+  });
+
+  it('should provide helpful error message for invalid file:// paths', () => {
+    const result = RedteamPluginSchema.safeParse('path/to/plugin.js');
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    const errorMessage = result.error.errors[0].message;
+    expect(errorMessage).toContain('Custom plugins must start with file://');
+    expect(errorMessage).toContain('built-in plugins');
+  });
+
+  it('should provide helpful error message for invalid plugin object', () => {
+    const result = RedteamPluginSchema.safeParse({
+      id: 'invalid-plugin',
+      numTests: 5,
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    const errorMessage = result.error.errors[0].message;
+    expect(errorMessage).toContain('Custom plugins must start with file://');
+    expect(errorMessage).toContain('built-in plugins');
+  });
 });
 
 describe('redteamConfigSchema', () => {
@@ -906,7 +948,8 @@ describe('RedteamConfigSchema transform', () => {
               validation: {
                 startsWith: 'file://',
               },
-              message: 'Invalid input: must start with "file://"',
+              message:
+                'Custom plugins must start with file:// (or use one of the built-in plugins)',
               path: ['plugins', 0],
             },
           ],
