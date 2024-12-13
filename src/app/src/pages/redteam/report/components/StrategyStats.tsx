@@ -238,7 +238,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             <Grid container spacing={3}>
               <Grid item xs={4}>
                 <Typography variant="h6" align="center">
-                  {selectedStrategy && strategyStats[selectedStrategy].total}
+                  {selectedStrategy && strategyStats[selectedStrategy]?.total}
                 </Typography>
                 <Typography variant="body2" align="center" color="text.secondary">
                   Total Attempts
