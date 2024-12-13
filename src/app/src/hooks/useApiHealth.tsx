@@ -1,7 +1,17 @@
 import { useState } from 'react';
-import { useToast } from './useToast';
+import { callApi } from '@app/utils/api';
 
 export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked';
+
+interface RemoteHealthResponse {
+  status: string;
+  remoteVersion?: string;
+}
+
+interface ErrorResponse {
+  status: 'ERROR';
+  error: string;
+}
 
 export function useApiHealth() {
   const [status, setStatus] = useState<ApiHealthStatus>('unknown');
@@ -9,12 +19,14 @@ export function useApiHealth() {
 
   const checkHealth = async () => {
     try {
-      const response = await fetch('https://api.promptfoo.app/health');
-      const data = await response.json();
-      if (data.status !== 'OK2') {
-        throw new Error('API health check failed');
+      const response = await callApi('/remote-health');
+      const data = (await response.json()) as RemoteHealthResponse | ErrorResponse;
+
+      if ('error' in data) {
+        throw new Error(data.error);
       }
-      setStatus('connected');
+
+      setStatus(data.status === 'OK' ? 'connected' : 'blocked');
     } catch {
       setStatus('blocked');
     }
