@@ -1,6 +1,5 @@
 import React from 'react';
-import LightbulbIcon from '@mui/icons-material/Lightbulb';
-import { Tabs, Tab, List, ListItem, ListItemIcon, ListItemText } from '@mui/material';
+import { Tabs, Tab, List, ListItem } from '@mui/material';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
