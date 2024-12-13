@@ -26,7 +26,7 @@ import type {
   TokenUsage,
 } from '../../types';
 import invariant from '../../util/invariant';
-import { extractFirstJsonObject } from '../../util/json';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { PENALIZED_PHRASES } from './constants';
@@ -627,7 +627,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
-    logger.debug(`[IterativeTree] callApi context: ${JSON.stringify(context)}`);
+    logger.debug(`[IterativeTree] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
