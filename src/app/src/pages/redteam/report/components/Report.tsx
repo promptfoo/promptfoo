@@ -384,7 +384,6 @@ const App: React.FC = () => {
         />
         <RiskCategories
           categoryStats={categoryStats}
-          strategyStats={strategyStats}
           evalId={evalId}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
