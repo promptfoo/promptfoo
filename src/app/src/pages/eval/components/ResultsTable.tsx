@@ -577,7 +577,7 @@ function ResultsTable({
                       </div>
                     </div>
                     {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
-                      <div className="summary">
+                      <div className="summary error-pill" onClick={() => setFilterMode('errors')}>
                         <div className="highlight fail">
                           <strong>Errors:</strong> {prompt.metrics?.testErrorCount || 0}
                         </div>
