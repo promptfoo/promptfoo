@@ -22,6 +22,8 @@ interface PluginStrategyFlowProps {
 // Add custom node component
 const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any) => {
   const theme = useTheme();
+  const textRef = React.useRef<SVGTextElement>(null);
+  const [labelWidth, setLabelWidth] = React.useState(0);
   const isOut = x + width + 6 > containerWidth;
   const displayName =
     payload.name === 'Pass'
@@ -30,23 +32,36 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any
         ? 'Vulnerable'
         : displayNameOverrides[payload.name as keyof typeof displayNameOverrides] || payload.name;
 
-  // Add test count to label
   const label = `${displayName} (${payload.value || 0})`;
-
   const color =
-    payload.name === 'Pass'
-      ? '#2e7d32' // success.dark
-      : payload.name === 'Fail'
-        ? '#d32f2f' // error.dark
-        : '#8884d8'; // default purple
+    payload.name === 'Pass' ? '#2e7d32' : payload.name === 'Fail' ? '#d32f2f' : '#8884d8';
+
+  React.useEffect(() => {
+    if (textRef.current) {
+      setLabelWidth(textRef.current.getComputedTextLength() + 16);
+    }
+  }, [label]);
 
   return (
     <Layer key={`CustomNode${index}`}>
       <Rectangle x={x} y={y} width={width} height={height} fill={color} fillOpacity="0.8" />
+      {labelWidth > 0 && (
+        <rect
+          x={isOut ? x - labelWidth - 6 : x + width + 6}
+          y={y + height / 2 - 8}
+          width={labelWidth}
+          height={20}
+          rx={10}
+          ry={10}
+          fill={theme.palette.background.paper}
+          stroke={theme.palette.divider}
+        />
+      )}
       <text
+        ref={textRef}
         textAnchor={isOut ? 'end' : 'start'}
-        x={isOut ? x - 6 : x + width + 6}
-        y={y + height / 2}
+        x={isOut ? x - 14 : x + width + 14}
+        y={y + height / 2 + 5}
         fontSize="12"
         fill={theme.palette.text.primary}
       >
@@ -63,22 +78,48 @@ const COLORS = {
   default: '#8884d8', // default purple
 };
 
+// Helper function to interpolate between colors
+const interpolateColor = (ratio: number) => {
+  // Define colors: red -> yellow -> green
+  const colors = {
+    red: { r: 0xd3, g: 0x2f, b: 0x2f }, // #d32f2f
+    yellow: { r: 0xff, g: 0xeb, b: 0x3b }, // #ffeb3b
+    green: { r: 0x2e, g: 0x7d, b: 0x32 }, // #2e7d32
+  };
+
+  if (ratio <= 0.5) {
+    // Interpolate from red to yellow
+    const t = ratio * 2; // normalize to 0-1 range
+    return `#${Math.round(colors.red.r + (colors.yellow.r - colors.red.r) * t)
+      .toString(16)
+      .padStart(2, '0')}${Math.round(colors.red.g + (colors.yellow.g - colors.red.g) * t)
+      .toString(16)
+      .padStart(2, '0')}${Math.round(colors.red.b + (colors.yellow.b - colors.red.b) * t)
+      .toString(16)
+      .padStart(2, '0')}`;
+  } else {
+    // Interpolate from yellow to green
+    const t = (ratio - 0.5) * 2; // normalize to 0-1 range
+    return `#${Math.round(colors.yellow.r + (colors.green.r - colors.yellow.r) * t)
+      .toString(16)
+      .padStart(2, '0')}${Math.round(colors.yellow.g + (colors.green.g - colors.yellow.g) * t)
+      .toString(16)
+      .padStart(2, '0')}${Math.round(colors.yellow.b + (colors.green.b - colors.yellow.b) * t)
+      .toString(16)
+      .padStart(2, '0')}`;
+  }
+};
+
 const CustomLink = (props: any) => {
   const { sourceX, targetX, sourceY, targetY, sourceControlX, targetControlX, linkWidth, payload } =
     props;
 
-  // Calculate pass ratio for gradient
+  // Calculate pass ratio and determine color
   const passRatio = payload.source.passRatio || 0;
-  const gradientId = `linkGradient${props.index}`;
+  const color = interpolateColor(passRatio);
 
   return (
     <Layer>
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor={COLORS.pass} stopOpacity={passRatio} />
-          <stop offset="100%" stopColor={COLORS.fail} stopOpacity={1 - passRatio} />
-        </linearGradient>
-      </defs>
       <path
         d={`
           M${sourceX},${sourceY + linkWidth / 2}
@@ -91,7 +132,7 @@ const CustomLink = (props: any) => {
             ${sourceX},${sourceY - linkWidth / 2}
           Z
         `}
-        fill={`url(#${gradientId})`}
+        fill={color}
         fillOpacity={0.5}
         strokeWidth="0"
       />
