@@ -7,6 +7,7 @@ import CardContent from '@mui/material/CardContent';
 import Drawer from '@mui/material/Drawer';
 import Grid from '@mui/material/Grid';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
+import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -320,53 +321,56 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
               {getExamplesByStrategy(selectedStrategy)
                 .failures.slice(0, 5)
                 .map((failure, index) => (
-                  <ListItem
-                    key={index}
-                    sx={{
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      bgcolor: 'background.paper',
-                      borderRadius: 1,
-                      mb: 2,
-                      p: 2,
-                    }}
-                  >
-                    <Box sx={{ width: '100%' }}>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Prompt:
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          mb: 2,
-                          p: 1.5,
-                          bgcolor: 'grey.50',
-                          borderRadius: 1,
-                          fontFamily: 'monospace',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {getPromptDisplayString(failure.prompt)}
-                      </Typography>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Response:
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          p: 1.5,
-                          bgcolor: 'grey.50',
-                          borderRadius: 1,
-                          fontFamily: 'monospace',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {getOutputDisplay(failure.output)}
-                      </Typography>
-                    </Box>
-                  </ListItem>
+                  <Paper key={index} elevation={1} sx={{ mb: 2, p: 2 }}>
+                    <ListItem
+                      sx={{
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        p: 2,
+                      }}
+                    >
+                      <Box sx={{ width: '100%' }}>
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                          gutterBottom
+                          sx={{ fontWeight: 'bold' }}
+                        >
+                          Prompt:
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            mb: 2,
+                            p: 1.5,
+                            bgcolor: 'grey.50',
+                            borderRadius: 1,
+                            fontFamily: 'monospace',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {getPromptDisplayString(failure.prompt)}
+                        </Typography>
+                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                          Response:
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            p: 1.5,
+                            bgcolor: 'grey.50',
+                            borderRadius: 1,
+                            fontFamily: 'monospace',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {getOutputDisplay(failure.output)}
+                        </Typography>
+                      </Box>
+                    </ListItem>
+                  </Paper>
                 ))}
             </List>
           )}
@@ -376,53 +380,56 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
               {getExamplesByStrategy(selectedStrategy)
                 .passes.slice(0, 5)
                 .map((pass, index) => (
-                  <ListItem
-                    key={index}
-                    sx={{
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      bgcolor: 'background.paper',
-                      borderRadius: 1,
-                      mb: 2,
-                      p: 2,
-                    }}
-                  >
-                    <Box sx={{ width: '100%' }}>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Prompt:
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          mb: 2,
-                          p: 1.5,
-                          bgcolor: 'grey.50',
-                          borderRadius: 1,
-                          fontFamily: 'monospace',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {getPromptDisplayString(pass.prompt)}
-                      </Typography>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Response:
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          p: 1.5,
-                          bgcolor: 'grey.50',
-                          borderRadius: 1,
-                          fontFamily: 'monospace',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {getOutputDisplay(pass.output)}
-                      </Typography>
-                    </Box>
-                  </ListItem>
+                  <Paper key={index} elevation={1} sx={{ mb: 2 }}>
+                    <ListItem
+                      sx={{
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        p: 2,
+                      }}
+                    >
+                      <Box sx={{ width: '100%' }}>
+                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                          Prompt:
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            mb: 2,
+                            p: 1.5,
+                            bgcolor: 'grey.50',
+                            borderRadius: 1,
+                            fontFamily: 'monospace',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {getPromptDisplayString(pass.prompt)}
+                        </Typography>
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                          gutterBottom
+                          sx={{ fontWeight: 'bold' }}
+                        >
+                          Response:
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            p: 1.5,
+                            bgcolor: 'grey.50',
+                            borderRadius: 1,
+                            fontFamily: 'monospace',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {getOutputDisplay(pass.output)}
+                        </Typography>
+                      </Box>
+                    </ListItem>
+                  </Paper>
                 ))}
             </List>
           )}
