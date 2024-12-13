@@ -139,12 +139,12 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
       const parsedPrompt = JSON.parse(prompt);
       if (Array.isArray(parsedPrompt)) {
         const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
-        if (lastPrompt.content) {
+        if (lastPrompt?.content) {
           return lastPrompt.content || '-';
         }
       }
     } catch {
-      // Ignore error
+      console.debug('Failed to parse prompt as JSON, using raw string');
     }
     return prompt;
   };
