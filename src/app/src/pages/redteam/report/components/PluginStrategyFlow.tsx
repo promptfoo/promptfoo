@@ -22,7 +22,15 @@ interface PluginStrategyFlowProps {
 const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any) => {
   const isOut = x + width + 6 > containerWidth;
   const displayName =
-    displayNameOverrides[payload.name as keyof typeof displayNameOverrides] || payload.name;
+    payload.name === 'Pass'
+      ? 'Defended'
+      : payload.name === 'Fail'
+        ? 'Vulnerable'
+        : displayNameOverrides[payload.name as keyof typeof displayNameOverrides] || payload.name;
+
+  // Add test count to label
+  const label = `${displayName} (${payload.value || 0})`;
+
   const color =
     payload.name === 'Pass'
       ? '#2e7d32' // success.dark
@@ -37,10 +45,10 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any
         textAnchor={isOut ? 'end' : 'start'}
         x={isOut ? x - 6 : x + width + 6}
         y={y + height / 2}
-        fontSize="14"
+        fontSize="12"
         fill="#000"
       >
-        {displayName}
+        {label}
       </text>
     </Layer>
   );
@@ -56,16 +64,19 @@ const COLORS = {
 const CustomLink = (props: any) => {
   const { sourceX, targetX, sourceY, targetY, sourceControlX, targetControlX, linkWidth, payload } =
     props;
-  const targetNode = payload.target;
-  const color =
-    targetNode.name === 'Pass'
-      ? COLORS.pass
-      : targetNode.name === 'Fail'
-        ? COLORS.fail
-        : COLORS.default;
+
+  // Calculate pass ratio for gradient
+  const passRatio = payload.source.passRatio || 0;
+  const gradientId = `linkGradient${props.index}`;
 
   return (
     <Layer>
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={COLORS.pass} stopOpacity={passRatio} />
+          <stop offset="100%" stopColor={COLORS.fail} stopOpacity={1 - passRatio} />
+        </linearGradient>
+      </defs>
       <path
         d={`
           M${sourceX},${sourceY + linkWidth / 2}
@@ -78,7 +89,7 @@ const CustomLink = (props: any) => {
             ${sourceX},${sourceY - linkWidth / 2}
           Z
         `}
-        fill={color}
+        fill={`url(#${gradientId})`}
         fillOpacity={0.5}
         strokeWidth="0"
       />
@@ -129,15 +140,62 @@ const PluginStrategyFlow: React.FC<PluginStrategyFlowProps> = ({
     const plugins = Object.keys(linkCounts);
     const strategies = Array.from(new Set(plugins.flatMap((p) => Object.keys(linkCounts[p]))));
 
+    const totalPasses = strategies.reduce((acc, s) => {
+      let strategyPasses = 0;
+      for (const p of plugins) {
+        if (linkCounts[p][s]) {
+          strategyPasses += linkCounts[p][s].pass;
+        }
+      }
+      return acc + strategyPasses;
+    }, 0);
+
+    const totalFails = strategies.reduce((acc, s) => {
+      let strategyFails = 0;
+      for (const p of plugins) {
+        if (linkCounts[p][s]) {
+          strategyFails += linkCounts[p][s].fail;
+        }
+      }
+      return acc + strategyFails;
+    }, 0);
+
     // Build nodes array with labels
     const nodes = [
       // Plugin nodes
-      ...plugins.map((p) => ({ name: p, displayName: p })),
+      ...plugins.map((p) => {
+        const totalTests = Object.values(linkCounts[p]).reduce(
+          (acc, curr) => acc + curr.pass + curr.fail,
+          0,
+        );
+        const totalPasses = Object.values(linkCounts[p]).reduce((acc, curr) => acc + curr.pass, 0);
+        return {
+          name: p,
+          displayName: p,
+          passRatio: totalTests > 0 ? totalPasses / totalTests : 0,
+          value: totalTests,
+        };
+      }),
       // Strategy nodes
-      ...strategies.map((s) => ({ name: s, displayName: s })),
+      ...strategies.map((s) => {
+        let totalPass = 0;
+        let totalTests = 0;
+        for (const p of plugins) {
+          if (linkCounts[p][s]) {
+            totalPass += linkCounts[p][s].pass;
+            totalTests += linkCounts[p][s].pass + linkCounts[p][s].fail;
+          }
+        }
+        return {
+          name: s,
+          displayName: s,
+          passRatio: totalTests > 0 ? totalPass / totalTests : 0,
+          value: totalTests,
+        };
+      }),
       // Outcome nodes
-      { name: 'Pass', displayName: 'Pass' },
-      { name: 'Fail', displayName: 'Fail' },
+      { name: 'Pass', displayName: 'Pass', passRatio: 1, value: totalPasses },
+      { name: 'Fail', displayName: 'Fail', passRatio: 0, value: totalFails },
     ];
 
     // Create indices for looking up node positions

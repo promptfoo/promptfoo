@@ -181,6 +181,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
         >
           <Tab label={`Flagged Tests (${failures.length})`} />
           <Tab label={`Passed Tests (${passes.length})`} />
+          <Tab label="Flow Diagram" />
         </Tabs>
 
         {activeTab === 0 ? (
@@ -258,39 +259,38 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
               <Typography variant="body1">No failed tests</Typography>
             </Box>
           )
-        ) : passes.length > 0 ? (
-          <List>
-            {passes.map((pass, index) => (
-              <ListItem key={index} className="failure-item">
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="subtitle1" className="prompt">
-                      {getPromptDisplayString(pass.prompt)}
-                    </Typography>
-                    <Typography variant="body2" className="output">
-                      {getOutputDisplay(pass.output)}
-                    </Typography>
+        ) : activeTab === 1 ? (
+          passes.length > 0 ? (
+            <List>
+              {passes.map((pass, index) => (
+                <ListItem key={index} className="failure-item">
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="subtitle1" className="prompt">
+                        {getPromptDisplayString(pass.prompt)}
+                      </Typography>
+                      <Typography variant="body2" className="output">
+                        {getOutputDisplay(pass.output)}
+                      </Typography>
+                    </Box>
                   </Box>
-                </Box>
-              </ListItem>
-            ))}
-          </List>
+                </ListItem>
+              ))}
+            </List>
+          ) : (
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
+              <Typography variant="body1">No passed tests</Typography>
+            </Box>
+          )
         ) : (
-          <Box sx={{ mt: 2, textAlign: 'center' }}>
-            <Typography variant="body1">No passed tests</Typography>
+          <Box sx={{ mt: 2 }}>
+            <PluginStrategyFlow
+              failuresByPlugin={failures}
+              passesByPlugin={passes}
+              strategyStats={strategyStats}
+            />
           </Box>
         )}
-
-        <Box sx={{ mt: 4, mb: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            Strategy Flow
-          </Typography>
-          <PluginStrategyFlow
-            failuresByPlugin={failures}
-            passesByPlugin={passes}
-            strategyStats={strategyStats}
-          />
-        </Box>
       </Box>
       <SuggestionsDialog
         open={suggestionsDialogOpen}
