@@ -92,11 +92,11 @@ export function createApp() {
       }
 
       const data = await response.json();
-      if (data.status === 'OK2') {
+      if (data.status === 'OK') {
         const cloudConfig = new CloudConfig();
         res.json({
           status: 'OK',
-          message: `Connected to promptfoo cloud service${cloudConfig.isEnabled() ? ' (using custom endpoint)' : ''}`,
+          message: `Cloud API is healthy${cloudConfig.isEnabled() ? ' (using custom endpoint)' : ''}`,
         });
         return;
       }

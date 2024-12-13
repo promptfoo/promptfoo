@@ -20,7 +20,7 @@ const StatusIndicator = ({ status }: { status: ApiHealthStatus }) => {
     connected: { color: 'success.main', text: 'Connected to promptfoo API' },
     blocked: { color: 'error.main', text: 'Cannot connect to promptfoo API' },
     loading: { color: 'info.main', text: 'Checking connection...' },
-    unknown: { color: 'grey.500', text: 'API connection status unknown' },
+    unknown: { color: 'grey.500', text: 'Checking connection status...' },
   };
 
   const config = statusConfig[status];
@@ -82,7 +82,7 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
               </IconButton>
             </Tooltip>
           </Box>
-          {message && (
+          {message && status !== 'unknown' && status !== 'loading' && (
             <Alert severity={status === 'connected' ? 'success' : 'error'} sx={{ mt: 1 }}>
               {message}
             </Alert>
