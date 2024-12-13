@@ -18,6 +18,10 @@ describe('/api/remote-health endpoint', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
+    mockCloudConfig.isEnabled.mockReturnValue(false);
+    mockCloudConfig.getApiHost.mockReturnValue('https://custom.api.com');
     app = createApp();
   });
 
