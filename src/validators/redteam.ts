@@ -26,8 +26,21 @@ import { ProviderSchema } from '../validators/providers';
 const RedteamPluginObjectSchema = z.object({
   id: z
     .union([
-      z.enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]]),
-      z.string().startsWith('file://'),
+      z
+        .enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]])
+        .superRefine((val, ctx) => {
+          if (![...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].includes(val)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.invalid_enum_value,
+              options: [...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS],
+              received: val,
+              message: `Invalid plugin name. Must be one of: ${[...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].join(', ')} (or a path starting with file://)`,
+            });
+          }
+        }),
+      z.string().startsWith('file://', {
+        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      }),
     ])
     .describe('Name of the plugin'),
   numTests: z
@@ -45,8 +58,21 @@ const RedteamPluginObjectSchema = z.object({
 export const RedteamPluginSchema = z.union([
   z
     .union([
-      z.enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]]),
-      z.string().startsWith('file://'),
+      z
+        .enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]])
+        .superRefine((val, ctx) => {
+          if (![...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].includes(val)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.invalid_enum_value,
+              options: [...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS],
+              received: val,
+              message: `Invalid plugin name. Must be one of: ${[...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].join(', ')} (or a path starting with file://)`,
+            });
+          }
+        }),
+      z.string().startsWith('file://', {
+        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
   RedteamPluginObjectSchema,
@@ -54,13 +80,22 @@ export const RedteamPluginSchema = z.union([
 
 const strategyIdSchema = z
   .union([
-    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]),
+    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+      if (!ALL_STRATEGIES.includes(val as Strategy)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.invalid_enum_value,
+          options: [...ALL_STRATEGIES] as [string, ...string[]],
+          received: val,
+          message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
+        });
+      }
+    }),
     z.string().refine(
       (value) => {
         return value.startsWith('file://') && isJavascriptFile(value);
       },
       {
-        message: 'Strategy must be a valid file:// path to a .js/.ts file',
+        message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
       },
     ),
   ])

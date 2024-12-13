@@ -11,6 +11,7 @@ import {
   RedteamGenerateOptionsSchema,
   RedteamConfigSchema,
   RedteamPluginSchema,
+  RedteamStrategySchema,
 } from '../../src/validators/redteam';
 
 describe('redteamGenerateOptionsSchema', () => {
@@ -92,6 +93,48 @@ describe('redteamPluginSchema', () => {
       id: 'hijacking',
     };
     expect(RedteamPluginSchema.safeParse(input).success).toBe(true);
+  });
+
+  it('should provide helpful error message for invalid plugin names', () => {
+    const result = RedteamPluginSchema.safeParse('hate');
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    const errorMessage = result.error.errors[0].message;
+    expect(errorMessage).toContain('Custom plugins must start with file://');
+    expect(errorMessage).toContain('built-in plugins');
+  });
+
+  it('should provide helpful error message for invalid file:// paths', () => {
+    const result = RedteamPluginSchema.safeParse('path/to/plugin.js');
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    const errorMessage = result.error.errors[0].message;
+    expect(errorMessage).toContain('Custom plugins must start with file://');
+    expect(errorMessage).toContain('built-in plugins');
+  });
+
+  it('should provide helpful error message for invalid plugin object', () => {
+    const result = RedteamPluginSchema.safeParse({
+      id: 'invalid-plugin',
+      numTests: 5,
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    const errorMessage = result.error.errors[0].message;
+    expect(errorMessage).toContain('Custom plugins must start with file://');
+    expect(errorMessage).toContain('built-in plugins');
   });
 });
 
@@ -906,7 +949,8 @@ describe('RedteamConfigSchema transform', () => {
               validation: {
                 startsWith: 'file://',
               },
-              message: 'Invalid input: must start with "file://"',
+              message:
+                'Custom plugins must start with file:// (or use one of the built-in plugins)',
               path: ['plugins', 0],
             },
           ],
@@ -914,6 +958,87 @@ describe('RedteamConfigSchema transform', () => {
           2,
         ),
       );
+    });
+  });
+});
+
+describe('RedteamStrategySchema', () => {
+  it('should accept valid built-in strategy names', () => {
+    expect(RedteamStrategySchema.safeParse('jailbreak').success).toBe(true);
+    expect(RedteamStrategySchema.safeParse('prompt-injection').success).toBe(true);
+  });
+
+  it('should accept valid file:// paths', () => {
+    expect(RedteamStrategySchema.safeParse('file://path/to/strategy.js').success).toBe(true);
+    expect(RedteamStrategySchema.safeParse('file://path/to/strategy.ts').success).toBe(true);
+  });
+
+  it('should provide helpful error message for invalid strategy names', () => {
+    const result = RedteamStrategySchema.safeParse('invalid-strategy');
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    const errorMessage = result.error.errors[0].message;
+    expect(errorMessage).toContain('Custom strategies must start with file://');
+    expect(errorMessage).toContain('built-in strategies:');
+    REDTEAM_ALL_STRATEGIES.forEach((strategy) => {
+      expect(errorMessage).toContain(strategy);
+    });
+  });
+
+  it('should provide helpful error message for invalid file:// paths', () => {
+    const result = RedteamStrategySchema.safeParse('file://path/to/strategy.invalid');
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    const errorMessage = result.error.errors[0].message;
+    expect(errorMessage).toContain('Custom strategies must start with file://');
+    expect(errorMessage).toContain('.js or .ts');
+    expect(errorMessage).toContain('built-in strategies:');
+    REDTEAM_ALL_STRATEGIES.forEach((strategy) => {
+      expect(errorMessage).toContain(strategy);
+    });
+  });
+
+  it('should provide helpful error message for non-file:// paths', () => {
+    const result = RedteamStrategySchema.safeParse('path/to/strategy.js');
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    const errorMessage = result.error.errors[0].message;
+    expect(errorMessage).toContain('Custom strategies must start with file://');
+    expect(errorMessage).toContain('.js or .ts');
+    expect(errorMessage).toContain('built-in strategies:');
+    REDTEAM_ALL_STRATEGIES.forEach((strategy) => {
+      expect(errorMessage).toContain(strategy);
+    });
+  });
+
+  it('should provide helpful error message for invalid strategy object', () => {
+    const result = RedteamStrategySchema.safeParse({
+      id: 'invalid-strategy',
+      config: {},
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    const errorMessage = result.error.errors[0].message;
+    expect(errorMessage).toContain('Custom strategies must start with file://');
+    expect(errorMessage).toContain('built-in strategies:');
+    REDTEAM_ALL_STRATEGIES.forEach((strategy) => {
+      expect(errorMessage).toContain(strategy);
     });
   });
 });
