@@ -19,7 +19,11 @@ export function useApiHealth() {
       const response = await callApi('/remote-health');
       const data = (await response.json()) as HealthResponse;
 
-      setStatus(data.status === 'OK' ? 'connected' : 'blocked');
+      if (data.status === 'DISABLED') {
+        setStatus('disabled');
+      } else {
+        setStatus(data.status === 'OK' ? 'connected' : 'blocked');
+      }
       setMessage(data.message);
     } catch {
       setStatus('blocked');
@@ -34,7 +38,7 @@ export function useApiHealth() {
   const checkHealth = useCallback(async () => {
     setIsChecking(true);
     setStatus('loading');
-    debouncedHealthCheck();
+    await debouncedHealthCheck();
   }, [debouncedHealthCheck]);
 
   return { status, message, checkHealth, isChecking };
