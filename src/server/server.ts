@@ -43,8 +43,6 @@ import { userRouter } from './routes/user';
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
-export { getRemoteHealthUrl, checkRemoteHealth };
-
 export function createApp() {
   const app = express();
 

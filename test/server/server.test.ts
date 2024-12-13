@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { checkRemoteHealth, getRemoteHealthUrl } from '../../src/server/server';
+import { checkRemoteHealth, getRemoteHealthUrl } from '../../src/util/apiHealth';
 import { createApp } from '../../src/server/server';
 
 const mockedFetch = jest.mocked(jest.fn());
