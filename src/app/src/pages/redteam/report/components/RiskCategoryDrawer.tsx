@@ -19,6 +19,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
+import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getStrategyIdFromGradingResult } from './shared';
 import './RiskCategoryDrawer.css';
@@ -42,6 +43,7 @@ interface RiskCategoryDrawerProps {
   evalId: string;
   numPassed: number;
   numFailed: number;
+  strategyStats: Record<string, { pass: number; total: number }>;
 }
 
 function getPromptDisplayString(prompt: string): string {
@@ -89,6 +91,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   evalId,
   numPassed,
   numFailed,
+  strategyStats,
 }) => {
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
@@ -133,7 +136,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 500, p: 2 }} className="risk-category-drawer">
+      <Box sx={{ width: 750, p: 2 }} className="risk-category-drawer">
         <Typography variant="h6" gutterBottom>
           {displayName}
         </Typography>
@@ -277,6 +280,17 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
             <Typography variant="body1">No passed tests</Typography>
           </Box>
         )}
+
+        <Box sx={{ mt: 4, mb: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Strategy Flow
+          </Typography>
+          <PluginStrategyFlow
+            failuresByPlugin={failures}
+            passesByPlugin={passes}
+            strategyStats={strategyStats}
+          />
+        </Box>
       </Box>
       <SuggestionsDialog
         open={suggestionsDialogOpen}
