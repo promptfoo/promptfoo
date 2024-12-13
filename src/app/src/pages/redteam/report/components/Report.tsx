@@ -380,6 +380,7 @@ const App: React.FC = () => {
         <StrategyStats strategyStats={strategyStats} />
         <RiskCategories
           categoryStats={categoryStats}
+          strategyStats={strategyStats}
           evalId={evalId}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
