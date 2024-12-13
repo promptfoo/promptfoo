@@ -8,10 +8,10 @@ import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import { synthesize, resolvePluginConfig } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
-import { shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
+import { shouldGenerateRemote, getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
 import { Strategies } from '../../src/redteam/strategies';
 import { validateStrategies } from '../../src/redteam/strategies';
-import { checkRemoteHealth, getRemoteHealthUrl } from '../../src/util/apiHealth';
+import { checkRemoteHealth } from '../../src/util/apiHealth';
 
 jest.mock('cli-progress');
 jest.mock('../../src/logger');

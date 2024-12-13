@@ -1,32 +1,9 @@
-import { getEnvBool } from '../envars';
 import { fetchWithProxy } from '../fetch';
 import { CloudConfig } from '../globalConfig/cloud';
 
 export interface HealthResponse {
   status: string;
   message: string;
-}
-
-/**
- * Gets the URL for checking remote API health based on configuration.
- * @returns The health check URL, or null if remote generation is disabled.
- */
-export function getRemoteHealthUrl(): string | null {
-  if (getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION')) {
-    return null;
-  }
-
-  const customUrl = process.env.PROMPTFOO_REMOTE_GENERATION_URL;
-  if (customUrl) {
-    return customUrl.replace(/\/task$/, '/health');
-  }
-
-  const cloudConfig = new CloudConfig();
-  if (cloudConfig.isEnabled()) {
-    return `${cloudConfig.getApiHost()}/health`;
-  }
-
-  return 'https://api.promptfoo.app/health';
 }
 
 /**

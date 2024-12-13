@@ -18,6 +18,7 @@ import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import telemetry from '../telemetry';
 import { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCases';
@@ -30,7 +31,7 @@ import {
   getLatestEval,
   getStandaloneEvals,
 } from '../util';
-import { getRemoteHealthUrl, checkRemoteHealth } from '../util/apiHealth';
+import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { BrowserBehavior } from '../util/server';
 import { openBrowser } from '../util/server';
