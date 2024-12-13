@@ -978,7 +978,8 @@ describe('RedteamConfigSchema transform', () => {
               validation: {
                 startsWith: 'file://',
               },
-              message: 'Invalid input: must start with "file://"',
+              message:
+                'Custom plugins must start with file:// (or use one of the built-in plugins)',
               path: ['plugins', 0],
             },
           ],
