@@ -377,9 +377,14 @@ const App: React.FC = () => {
         </Card>
         <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
         <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
-        <StrategyStats strategyStats={strategyStats} />
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+        />
         <RiskCategories
           categoryStats={categoryStats}
+          strategyStats={strategyStats}
           evalId={evalId}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
