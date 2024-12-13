@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { safeJsonStringify } from 'src/util/json';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -12,6 +11,7 @@ import type {
   ProviderResponse,
 } from '../../types/providers';
 import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
