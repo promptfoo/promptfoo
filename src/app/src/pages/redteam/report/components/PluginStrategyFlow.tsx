@@ -71,13 +71,6 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any
   );
 };
 
-// Add these color constants at the top
-const COLORS = {
-  pass: '#2e7d32', // success.dark
-  fail: '#d32f2f', // error.dark
-  default: '#8884d8', // default purple
-};
-
 // Helper function to interpolate between colors
 const interpolateColor = (ratio: number) => {
   // Define colors: red -> yellow -> green
@@ -133,7 +126,7 @@ const CustomLink = (props: any) => {
           Z
         `}
         fill={color}
-        fillOpacity={0.5}
+        fillOpacity={1.0}
         strokeWidth="0"
       />
     </Layer>
