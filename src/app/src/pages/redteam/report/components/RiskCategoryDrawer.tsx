@@ -284,7 +284,12 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           )
         ) : (
           <Box sx={{ mt: 2 }}>
-            <Typography variant="h6" gutterBottom align="center" sx={{ mb: 3 }}>
+            <Typography
+              variant="h6"
+              gutterBottom
+              align="center"
+              sx={{ mb: 3, color: 'text.primary' }}
+            >
               Simulated User - Attack Performance
             </Typography>
             <PluginStrategyFlow

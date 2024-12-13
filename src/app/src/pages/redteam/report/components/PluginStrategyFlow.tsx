@@ -1,5 +1,6 @@
 // PluginStrategyFlow.tsx
 import React, { useMemo } from 'react';
+import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { type EvaluateResult, type GradingResult } from '@promptfoo/types';
 import { Sankey, Tooltip, ResponsiveContainer, Layer, Rectangle } from 'recharts';
@@ -20,6 +21,7 @@ interface PluginStrategyFlowProps {
 
 // Add custom node component
 const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any) => {
+  const theme = useTheme();
   const isOut = x + width + 6 > containerWidth;
   const displayName =
     payload.name === 'Pass'
@@ -46,7 +48,7 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any
         x={isOut ? x - 6 : x + width + 6}
         y={y + height / 2}
         fontSize="12"
-        fill="#000"
+        fill={theme.palette.text.primary}
       >
         {label}
       </text>
