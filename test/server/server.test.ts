@@ -5,13 +5,11 @@ import { createApp } from '../../src/server/server';
 const mockedFetch = jest.mocked(jest.fn());
 global.fetch = mockedFetch;
 
-// Create a simple mock implementation
 const mockCloudConfig = {
   isEnabled: jest.fn().mockReturnValue(false),
   getApiHost: jest.fn().mockReturnValue('https://custom.api.com'),
 };
 
-// Mock the entire CloudConfig class
 jest.mock('../../src/globalConfig/cloud', () => ({
   CloudConfig: jest.fn().mockImplementation(() => mockCloudConfig),
 }));

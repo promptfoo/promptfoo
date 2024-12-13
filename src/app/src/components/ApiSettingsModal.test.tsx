@@ -5,7 +5,6 @@ import useApiConfig from '@app/stores/apiConfig';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ApiSettingsModal from './ApiSettingsModal';
 
-// Mock the hooks
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: vi.fn(),
 }));
@@ -23,7 +22,6 @@ describe('ApiSettingsModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Mock useApiHealth hook
     vi.mocked(useApiHealth).mockReturnValue({
       status: 'unknown',
       message: null,
@@ -31,7 +29,6 @@ describe('ApiSettingsModal', () => {
       isChecking: false,
     });
 
-    // Mock useApiConfig hook
     vi.mocked(useApiConfig).mockReturnValue({
       apiBaseUrl: 'https://api.example.com',
       setApiBaseUrl: mockSetApiBaseUrl,
