@@ -1,4 +1,5 @@
 import { getEnvBool } from '../envars';
+import { fetchWithProxy } from '../fetch';
 import { CloudConfig } from '../globalConfig/cloud';
 
 export interface HealthResponse {
@@ -36,10 +37,12 @@ export function getRemoteHealthUrl(): string | null {
 export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
   try {
     const cloudConfig = new CloudConfig();
-    const response = await fetch(url, {
+    const response = await fetchWithProxy(url, {
       headers: {
         'Content-Type': 'application/json',
       },
+      // Increased timeout to 5 seconds for first request
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!response.ok) {
@@ -71,6 +74,14 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
       message: data.message || 'Unknown error',
     };
   } catch (err) {
+    // If it's a timeout error, return a softer message
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      return {
+        status: 'OK',
+        message: 'API health check timed out, proceeding anyway',
+      };
+    }
+
     return {
       status: 'ERROR',
       message: `Network error: ${err}`,
