@@ -1,5 +1,4 @@
-import React, { useEffect } from 'react';
-import { useVersionCheck } from '@app/hooks/useVersionCheck';
+import React from 'react';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ForumIcon from '@mui/icons-material/Forum';
@@ -7,7 +6,6 @@ import GitHubIcon from '@mui/icons-material/GitHub';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import WorkIcon from '@mui/icons-material/Work';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -53,14 +51,6 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
   open,
   onClose,
 }: T) {
-  const { currentVersion, latestVersion, checkVersion } = useVersionCheck();
-
-  useEffect(() => {
-    if (open) {
-      checkVersion();
-    }
-  }, [open]);
-
   return (
     <Dialog
       open={open}
@@ -80,21 +70,9 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
             }}
             target="_blank"
           >
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="subtitle2">Version {currentVersion}</Typography>
-              {latestVersion && latestVersion !== currentVersion && (
-                <Chip
-                  label={`${latestVersion} available`}
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                  component={Link}
-                  href="https://www.promptfoo.dev/docs/installation"
-                  target="_blank"
-                  clickable
-                />
-              )}
-            </Stack>
+            <Typography variant="subtitle2">
+              Version {import.meta.env.VITE_PROMPTFOO_VERSION}
+            </Typography>
           </Link>
         </Stack>
       </DialogTitle>

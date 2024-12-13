@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Navigation from '@app/components/Navigation';
 import { useApiHealth } from '@app/hooks/useApiHealth';
-import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 
@@ -76,11 +75,9 @@ export default function PageShell() {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const { checkHealth } = useApiHealth();
-  const { checkVersion } = useVersionCheck();
 
   useEffect(() => {
     checkHealth();
-    checkVersion(); // Check for updates when app loads
   }, []);
 
   useEffect(() => {

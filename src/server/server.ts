@@ -8,13 +8,11 @@ import type { Stats } from 'fs';
 import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
-import semverGt from 'semver/functions/gt';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION, DEFAULT_PORT } from '../constants';
 import { getDbSignalPath } from '../database';
-import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
@@ -23,7 +21,6 @@ import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCases';
-import { getLatestVersion } from '../updates';
 import {
   getPrompts,
   getPromptsForTestCasesHash,
@@ -56,14 +53,6 @@ export function createApp() {
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
   app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', version: VERSION });
-  });
-
-  app.get('/api/health', (req, res) => {
-    res.status(200).json({
-      status: 'OK',
-      version: VERSION,
-      timestamp: Date.now(),
-    });
   });
 
   app.get('/api/remote-health', async (req: Request, res: Response): Promise<void> => {
@@ -181,35 +170,6 @@ export function createApp() {
     };
     const results = await synthesizeFromTestSuite(testSuite, {});
     res.json({ results });
-  });
-
-  app.get('/api/version', async (req: Request, res: Response): Promise<void> => {
-    if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
-      res.json({
-        version: VERSION,
-        hasUpdate: false,
-        currentVersion: VERSION,
-        timestamp: Date.now(),
-      });
-      return;
-    }
-
-    try {
-      const latestVersion = await getLatestVersion();
-      const hasUpdate = semverGt(latestVersion, VERSION);
-      res.json({
-        version: latestVersion,
-        hasUpdate,
-        currentVersion: VERSION,
-        timestamp: Date.now(),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      res.status(503).json({
-        error: `Unable to fetch latest version: ${message}`,
-        timestamp: Date.now(),
-      });
-    }
   });
 
   app.use('/api/eval', evalRouter);
