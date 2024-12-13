@@ -595,7 +595,7 @@ function ResultsTable({
                     resourceId={prompt.id}
                   />
                   {details}
-                  {filterMode === 'failures' && (
+                  {filterMode === 'failures' && head.prompts.length > 1 && (
                     <FormControlLabel
                       sx={{
                         '& .MuiFormControlLabel-label': {
