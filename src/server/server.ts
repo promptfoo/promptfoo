@@ -84,7 +84,7 @@ export function createApp() {
       });
 
       if (!response.ok) {
-        res.status(503).json({
+        res.json({
           status: 'ERROR',
           message: `Failed to connect to ${apiUrl} (Status ${response.status}: ${response.statusText})`,
         });
@@ -101,14 +101,14 @@ export function createApp() {
         return;
       }
 
-      res.status(503).json({
+      res.json({
         status: 'ERROR',
         message: `${apiUrl} responded with an error status.\nTry visiting ${apiUrl} in your web browser to check if it's accessible`,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       const apiUrl = getRemoteHealthUrl();
-      res.status(503).json({
+      res.json({
         status: 'ERROR',
         message: `Failed to connect to ${apiUrl}: ${message}\nTry visiting ${apiUrl} in your web browser to check if it's accessible`,
       });

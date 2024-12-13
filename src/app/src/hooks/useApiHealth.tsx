@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { callApi } from '@app/utils/api';
+import { useDebounce } from 'use-debounce';
 
 export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'loading';
 
@@ -11,9 +12,9 @@ interface HealthResponse {
 export function useApiHealth() {
   const [status, setStatus] = useState<ApiHealthStatus>('unknown');
   const [message, setMessage] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
 
-  const checkHealth = async () => {
-    setStatus('loading');
+  const performHealthCheck = useCallback(async () => {
     try {
       const response = await callApi('/remote-health');
       const data = (await response.json()) as HealthResponse;
@@ -23,8 +24,18 @@ export function useApiHealth() {
     } catch {
       setStatus('blocked');
       setMessage('Network error: Unable to check API health');
+    } finally {
+      setIsChecking(false);
     }
-  };
+  }, []);
 
-  return { status, message, checkHealth };
+  const [debouncedHealthCheck] = useDebounce(performHealthCheck, 300);
+
+  const checkHealth = useCallback(async () => {
+    setIsChecking(true);
+    setStatus('loading');
+    debouncedHealthCheck();
+  }, [debouncedHealthCheck]);
+
+  return { status, message, checkHealth, isChecking };
 }

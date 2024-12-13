@@ -6,6 +6,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -39,13 +40,14 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
 }: T) {
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
   const [tempApiBaseUrl, setTempApiBaseUrl] = useState(apiBaseUrl || '');
-  const { status, message, checkHealth } = useApiHealth();
+  const { status, message, checkHealth, isChecking } = useApiHealth();
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       checkHealth();
     }
-  }, [open]);
+  }, [open, checkHealth]);
 
   useEffect(() => {
     setTempApiBaseUrl(apiBaseUrl || '');
@@ -55,11 +57,19 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
     setTempApiBaseUrl(event.target.value);
   };
 
-  const handleSave = () => {
-    setApiBaseUrl(tempApiBaseUrl);
-    enablePersistApiBaseUrl();
-    onClose();
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      setApiBaseUrl(tempApiBaseUrl);
+      enablePersistApiBaseUrl();
+      await checkHealth();
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const isFormDisabled = status === 'loading' || isChecking || isSaving;
 
   return (
     <Dialog
@@ -77,9 +87,11 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
           >
             <StatusIndicator status={status} />
             <Tooltip title="Check connection">
-              <IconButton onClick={checkHealth} size="small">
-                <RefreshIcon />
-              </IconButton>
+              <span>
+                <IconButton onClick={checkHealth} size="small" disabled={isChecking}>
+                  {isChecking ? <CircularProgress size={20} /> : <RefreshIcon />}
+                </IconButton>
+              </span>
             </Tooltip>
           </Box>
           {message && status !== 'unknown' && status !== 'loading' && (
@@ -97,11 +109,20 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
           onChange={handleApiBaseUrlChange}
           fullWidth
           margin="normal"
+          disabled={isFormDisabled}
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleSave}>Save</Button>
-        <Button onClick={onClose}>Close</Button>
+        <Button
+          onClick={handleSave}
+          disabled={isFormDisabled}
+          startIcon={isSaving && <CircularProgress size={20} />}
+        >
+          Save
+        </Button>
+        <Button onClick={onClose} disabled={isFormDisabled}>
+          Close
+        </Button>
       </DialogActions>
     </Dialog>
   );
