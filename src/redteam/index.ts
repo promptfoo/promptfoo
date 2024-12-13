@@ -15,6 +15,7 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
 import { redteamProviderManager } from './providers/shared';
+import { shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
@@ -381,17 +382,19 @@ export async function synthesize({
   }
 
   // Check API health before proceeding
-  const healthUrl = getRemoteHealthUrl();
-  if (healthUrl) {
-    logger.debug('Checking promptfoo API health...');
-    const healthResult = await checkRemoteHealth(healthUrl);
-    if (healthResult.status !== 'OK') {
-      throw new Error(
-        `Unable to proceed with test generation: ${healthResult.message}\n` +
-          'Please check your API configuration or try again later.',
-      );
+  if (shouldGenerateRemote()) {
+    const healthUrl = getRemoteHealthUrl();
+    if (healthUrl) {
+      logger.debug('Checking promptfoo API health...');
+      const healthResult = await checkRemoteHealth(healthUrl);
+      if (healthResult.status !== 'OK') {
+        throw new Error(
+          `Unable to proceed with test generation: ${healthResult.message}\n` +
+            'Please check your API configuration or try again later.',
+        );
+      }
+      logger.debug('API health check passed');
     }
-    logger.debug('API health check passed');
   }
 
   // Start the progress bar
