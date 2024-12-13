@@ -1,41 +1,30 @@
 import { useState } from 'react';
 import { callApi } from '@app/utils/api';
 
-export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked';
+export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'loading';
 
-interface RemoteHealthResponse {
+interface HealthResponse {
   status: string;
-  remoteVersion?: string;
-}
-
-interface ErrorResponse {
-  status: 'ERROR';
-  error: string;
+  message: string;
 }
 
 export function useApiHealth() {
   const [status, setStatus] = useState<ApiHealthStatus>('unknown');
-  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const checkHealth = async () => {
+    setStatus('loading');
     try {
       const response = await callApi('/remote-health');
-      const data = (await response.json()) as RemoteHealthResponse | ErrorResponse;
-
-      if ('error' in data) {
-        throw new Error(data.error);
-      }
+      const data = (await response.json()) as HealthResponse;
 
       setStatus(data.status === 'OK' ? 'connected' : 'blocked');
+      setMessage(data.message);
     } catch {
       setStatus('blocked');
+      setMessage('Network error: Unable to check API health');
     }
-    setLastChecked(new Date());
   };
 
-  return {
-    status,
-    lastChecked,
-    checkHealth,
-  };
+  return { status, message, checkHealth };
 }

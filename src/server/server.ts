@@ -13,7 +13,9 @@ import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION, DEFAULT_PORT } from '../constants';
 import { getDbSignalPath } from '../database';
+import { getEnvString } from '../envars';
 import { getDirectory } from '../esm';
+import { CloudConfig } from '../globalConfig/cloud';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -42,6 +44,21 @@ import { userRouter } from './routes/user';
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
+function getRemoteHealthUrl(): string {
+  // Check env var first
+  const envUrl = getEnvString('PROMPTFOO_REMOTE_GENERATION_URL');
+  if (envUrl) {
+    return envUrl.replace(/\/task$/, '/health');
+  }
+  // If logged into cloud use that url + /health
+  const cloudConfig = new CloudConfig();
+  if (cloudConfig.isEnabled()) {
+    return cloudConfig.getApiHost() + '/health';
+  }
+  // otherwise use the default
+  return 'https://api.promptfoo.app/health';
+}
+
 export function createApp() {
   const app = express();
 
@@ -57,35 +74,43 @@ export function createApp() {
 
   app.get('/api/remote-health', async (req: Request, res: Response): Promise<void> => {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
-
-      const response = await fetch('https://api.promptfoo.app/health', {
-        signal: controller.signal,
+      const apiUrl = getRemoteHealthUrl();
+      const response = await fetch(apiUrl, {
+        signal: AbortSignal.timeout(5000),
         headers: {
           'User-Agent': `promptfoo/${VERSION}`,
+          'Content-Type': 'application/json',
         },
       });
 
-      clearTimeout(timeout);
-
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        res.status(503).json({
+          status: 'ERROR',
+          message: `Failed to connect to ${apiUrl} (Status ${response.status}: ${response.statusText})`,
+        });
+        return;
       }
 
       const data = await response.json();
+      if (data.status === 'OK2') {
+        const cloudConfig = new CloudConfig();
+        res.json({
+          status: 'OK',
+          message: `Connected to promptfoo cloud service${cloudConfig.isEnabled() ? ' (using custom endpoint)' : ''}`,
+        });
+        return;
+      }
 
-      res.json({
-        status: data.status === 'OK2' ? 'OK' : 'ERROR',
-        remoteVersion: data.version,
-        timestamp: Date.now(),
+      res.status(503).json({
+        status: 'ERROR',
+        message: `${apiUrl} responded with an error status.\nTry visiting ${apiUrl} in your web browser to check if it's accessible`,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
+      const apiUrl = getRemoteHealthUrl();
       res.status(503).json({
         status: 'ERROR',
-        error: `Unable to connect to remote API: ${message}`,
-        timestamp: Date.now(),
+        message: `Failed to connect to ${apiUrl}: ${message}\nTry visiting ${apiUrl} in your web browser to check if it's accessible`,
       });
     }
   });

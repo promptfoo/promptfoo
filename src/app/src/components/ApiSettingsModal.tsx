@@ -16,32 +16,19 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 const StatusIndicator = ({ status }: { status: ApiHealthStatus }) => {
-  const getStatusColor = () => {
-    switch (status) {
-      case 'connected':
-        return 'success.main';
-      case 'blocked':
-        return 'error.main';
-      default:
-        return 'grey.500';
-    }
+  const statusConfig = {
+    connected: { color: 'success.main', text: 'Connected to promptfoo API' },
+    blocked: { color: 'error.main', text: 'Cannot connect to promptfoo API' },
+    loading: { color: 'info.main', text: 'Checking connection...' },
+    unknown: { color: 'grey.500', text: 'API connection status unknown' },
   };
 
-  const getStatusText = () => {
-    switch (status) {
-      case 'connected':
-        return 'Connected to promptfoo API';
-      case 'blocked':
-        return 'Cannot connect to promptfoo API';
-      default:
-        return 'API connection status unknown';
-    }
-  };
+  const config = statusConfig[status];
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <CircleIcon sx={{ color: getStatusColor(), fontSize: '12px' }} />
-      <Typography variant="body2">{getStatusText()}</Typography>
+      <CircleIcon sx={{ color: config.color, fontSize: '12px' }} />
+      <Typography variant="body2">{config.text}</Typography>
     </Box>
   );
 };
@@ -52,7 +39,7 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
 }: T) {
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
   const [tempApiBaseUrl, setTempApiBaseUrl] = useState(apiBaseUrl || '');
-  const { status, checkHealth } = useApiHealth();
+  const { status, message, checkHealth } = useApiHealth();
 
   useEffect(() => {
     if (open) {
@@ -95,10 +82,9 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
               </IconButton>
             </Tooltip>
           </Box>
-          {status === 'blocked' && (
-            <Alert severity="error" sx={{ mt: 1 }}>
-              Cannot connect to promptfoo API. This may be due to firewall settings or network
-              connectivity issues. Please ensure api.promptfoo.app is not blocked by your firewall.
+          {message && (
+            <Alert severity={status === 'connected' ? 'success' : 'error'} sx={{ mt: 1 }}>
+              {message}
             </Alert>
           )}
         </Box>
