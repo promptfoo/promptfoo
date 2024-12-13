@@ -1,8 +1,11 @@
 import React from 'react';
+import LightbulbIcon from '@mui/icons-material/Lightbulb';
+import { Tabs, Tab, List, ListItem, ListItemIcon, ListItemText } from '@mui/material';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Drawer from '@mui/material/Drawer';
+import Grid from '@mui/material/Grid';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -104,6 +107,71 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
       .sort((a, b) => b.failRate - a.failRate);
   };
 
+  const getExamplesByStrategy = (strategy: string) => {
+    const failures: (typeof failuresByPlugin)[string] = [];
+    const passes: (typeof passesByPlugin)[string] = [];
+
+    // Collect failures for this strategy
+    Object.values(failuresByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const testStrategy = getStrategyIdFromGradingResult(test.gradingResult);
+        if ((strategy === 'basic' && !testStrategy) || testStrategy === strategy) {
+          failures.push(test);
+        }
+      });
+    });
+
+    // Collect passes for this strategy
+    Object.values(passesByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const testStrategy = getStrategyIdFromGradingResult(test.gradingResult);
+        if ((strategy === 'basic' && !testStrategy) || testStrategy === strategy) {
+          passes.push(test);
+        }
+      });
+    });
+
+    return { failures, passes };
+  };
+
+  const getPromptDisplayString = (prompt: string): string => {
+    try {
+      const parsedPrompt = JSON.parse(prompt);
+      if (Array.isArray(parsedPrompt)) {
+        const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
+        if (lastPrompt.content) {
+          return lastPrompt.content || '-';
+        }
+      }
+    } catch {
+      // Ignore error
+    }
+    return prompt;
+  };
+
+  const getOutputDisplay = (output: string | object) => {
+    if (typeof output === 'string') {
+      return output;
+    }
+    if (Array.isArray(output)) {
+      const items = output.filter((item) => item.type === 'function');
+      if (items.length > 0) {
+        return (
+          <>
+            {items.map((item) => (
+              <div key={item.id}>
+                <strong>Used tool {item.function?.name}</strong>: ({item.function?.arguments})
+              </div>
+            ))}
+          </>
+        );
+      }
+    }
+    return JSON.stringify(output);
+  };
+
+  const [tabValue, setTabValue] = React.useState(0);
+
   return (
     <>
       <Card className="strategy-stats-card">
@@ -155,7 +223,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
 
       <Drawer anchor="right" open={Boolean(selectedStrategy)} onClose={handleDrawerClose}>
         <Box sx={{ width: 750, p: 3 }}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h5" gutterBottom>
             {selectedStrategy &&
               (displayNameOverrides[selectedStrategy as keyof typeof displayNameOverrides] ||
                 selectedStrategy)}
@@ -165,6 +233,42 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
               (subCategoryDescriptions[selectedStrategy as keyof typeof subCategoryDescriptions] ||
                 '')}
           </Typography>
+
+          <Box sx={{ mt: 3, mb: 4, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
+            <Grid container spacing={3}>
+              <Grid item xs={4}>
+                <Typography variant="h6" align="center">
+                  {selectedStrategy && strategyStats[selectedStrategy].total}
+                </Typography>
+                <Typography variant="body2" align="center" color="text.secondary">
+                  Total Attempts
+                </Typography>
+              </Grid>
+              <Grid item xs={4}>
+                <Typography variant="h6" align="center" color="error.main">
+                  {selectedStrategy &&
+                    strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass}
+                </Typography>
+                <Typography variant="body2" align="center" color="text.secondary">
+                  Successful Attacks
+                </Typography>
+              </Grid>
+              <Grid item xs={4}>
+                <Typography variant="h6" align="center">
+                  {selectedStrategy &&
+                    `${(
+                      ((strategyStats[selectedStrategy].total -
+                        strategyStats[selectedStrategy].pass) /
+                        strategyStats[selectedStrategy].total) *
+                      100
+                    ).toFixed(1)}%`}
+                </Typography>
+                <Typography variant="body2" align="center" color="text.secondary">
+                  Success Rate
+                </Typography>
+              </Grid>
+            </Grid>
+          </Box>
 
           <Typography variant="h6" gutterBottom sx={{ mt: 4, mb: 2 }}>
             Attack Performance by Plugin
@@ -196,6 +300,131 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                 </TableBody>
               </Table>
             </TableContainer>
+          )}
+
+          <Typography variant="h6" gutterBottom sx={{ mt: 4, mb: 2 }}>
+            Example Attacks
+          </Typography>
+
+          <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 2 }}>
+            <Tab
+              label={`Successful Attacks (${selectedStrategy ? strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass : 0})`}
+            />
+            <Tab
+              label={`Failed Attempts (${selectedStrategy ? strategyStats[selectedStrategy].pass : 0})`}
+            />
+          </Tabs>
+
+          {tabValue === 0 && selectedStrategy && (
+            <List>
+              {getExamplesByStrategy(selectedStrategy)
+                .failures.slice(0, 5)
+                .map((failure, index) => (
+                  <ListItem
+                    key={index}
+                    sx={{
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      bgcolor: 'background.paper',
+                      borderRadius: 1,
+                      mb: 2,
+                      p: 2,
+                    }}
+                  >
+                    <Box sx={{ width: '100%' }}>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Prompt:
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          mb: 2,
+                          p: 1.5,
+                          bgcolor: 'grey.50',
+                          borderRadius: 1,
+                          fontFamily: 'monospace',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {getPromptDisplayString(failure.prompt)}
+                      </Typography>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Response:
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          p: 1.5,
+                          bgcolor: 'grey.50',
+                          borderRadius: 1,
+                          fontFamily: 'monospace',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {getOutputDisplay(failure.output)}
+                      </Typography>
+                    </Box>
+                  </ListItem>
+                ))}
+            </List>
+          )}
+
+          {tabValue === 1 && selectedStrategy && (
+            <List>
+              {getExamplesByStrategy(selectedStrategy)
+                .passes.slice(0, 5)
+                .map((pass, index) => (
+                  <ListItem
+                    key={index}
+                    sx={{
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      bgcolor: 'background.paper',
+                      borderRadius: 1,
+                      mb: 2,
+                      p: 2,
+                    }}
+                  >
+                    <Box sx={{ width: '100%' }}>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Prompt:
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          mb: 2,
+                          p: 1.5,
+                          bgcolor: 'grey.50',
+                          borderRadius: 1,
+                          fontFamily: 'monospace',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {getPromptDisplayString(pass.prompt)}
+                      </Typography>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Response:
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          p: 1.5,
+                          bgcolor: 'grey.50',
+                          borderRadius: 1,
+                          fontFamily: 'monospace',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {getOutputDisplay(pass.output)}
+                      </Typography>
+                    </Box>
+                  </ListItem>
+                ))}
+            </List>
           )}
         </Box>
       </Drawer>
