@@ -11,6 +11,7 @@ import type {
   ProviderResponse,
 } from '../../types/providers';
 import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
@@ -52,7 +53,7 @@ export default class GoatProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     let response: Response | undefined = undefined;
-    logger.debug(`[GOAT] callApi context: ${JSON.stringify(context)}`);
+    logger.debug(`[GOAT] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 

@@ -32,111 +32,37 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
-type VariableValue = string | object | number | boolean;
-type Variables = Record<string, VariableValue>;
+export function resolveVariables(
+  variables: Record<string, string | object>,
+): Record<string, string | object> {
+  let resolved = true;
+  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
-/**
- * Helper function to remove trailing newlines from string values
- * This prevents issues with JSON prompts
- */
-export function trimTrailingNewlines(variables: Variables): Variables {
-  const trimmedVars: Variables = { ...variables };
-  for (const [key, value] of Object.entries(trimmedVars)) {
-    if (typeof value === 'string') {
-      trimmedVars[key] = value.replace(/\n$/, '');
-    }
-  }
-  return trimmedVars;
-}
-
-/**
- * Helper function that resolves variables within a single string.
- *
- * @param value - The string containing variables to resolve
- * @param variables - Object containing variable values
- * @param regex - Regular expression for matching variables
- * @returns The string with all resolvable variables replaced
- */
-function resolveString(value: string, variables: Variables, regex: RegExp): string {
-  let result = value;
-  let match: RegExpExecArray | null;
-
-  // Reset regex for new string
-  regex.lastIndex = 0;
-
-  // Find and replace all variables in the string
-  while ((match = regex.exec(result)) !== null) {
-    const [placeholder, varName] = match;
-
-    // Skip undefined variables (will be handled by nunjucks later)
-    if (variables[varName] === undefined) {
-      continue;
-    }
-
-    // Only replace if the replacement is a string
-    const replacement = variables[varName];
-    if (typeof replacement === 'string') {
-      result = result.replace(placeholder, replacement);
-    }
-  }
-
-  return result;
-}
-
-/**
- * Resolves variables within string values of an object, replacing {{varName}} with
- * the corresponding value from the variables object.
- *
- * Example:
- * Input: { greeting: "Hello {{name}}!", name: "World" }
- * Output: { greeting: "Hello World!", name: "World" }
- *
- * @param variables - Object containing variable names and their values
- * @returns A new object with all variables resolved
- */
-export function resolveVariables(variables: Variables): Variables {
-  const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
-  const resolvedVars: Variables = trimTrailingNewlines(variables);
-  const MAX_ITERATIONS = 5;
-
-  // Iterate up to MAX_ITERATIONS times to handle nested variables
-  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-    let hasChanges = false;
-
-    // Process each variable in the object
-    for (const [key, value] of Object.entries(resolvedVars)) {
-      // Skip non-string values as they can't contain variable references
-      if (typeof value !== 'string') {
+  let iterations = 0;
+  do {
+    resolved = true;
+    for (const key of Object.keys(variables)) {
+      if (typeof variables[key] !== 'string') {
         continue;
       }
-
-      // Try to resolve any variables in this string
-      const newValue = resolveString(value, resolvedVars, regex);
-
-      // Only update if the value actually changed
-      if (newValue !== value) {
-        resolvedVars[key] = newValue;
-        hasChanges = true;
+      const value = variables[key] as string;
+      const match = regex.exec(value);
+      if (match) {
+        const [placeholder, varName] = match;
+        if (variables[varName] === undefined) {
+          // Do nothing - final nunjucks render will fail if necessary.
+          // logger.warn(`Variable "${varName}" not found for substitution.`);
+        } else {
+          variables[key] = value.replace(placeholder, variables[varName] as string);
+          resolved = false; // Indicate that we've made a replacement and should check again
+        }
       }
     }
+    iterations++;
+  } while (!resolved && iterations < 5);
 
-    // If no changes were made in this iteration, we're done
-    if (!hasChanges) {
-      break;
-    }
-  }
-
-  return resolvedVars;
+  return variables;
 }
-
-const isStringPrompt = (s: string): boolean => {
-  // If it starts with { or [ it's likely JSON/YAML
-  const firstNonWhitespaceChar = s.trim()[0];
-  if (firstNonWhitespaceChar === '{' || firstNonWhitespaceChar === '[') {
-    return false;
-  }
-  return true;
-};
 
 export async function renderPrompt(
   prompt: Prompt,
@@ -230,16 +156,22 @@ export async function renderPrompt(
     }
   }
 
-  // Resolve variable mappings
-  const resolvedVars: Variables = resolveVariables(vars);
+  // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
+  for (const key of Object.keys(vars)) {
+    if (typeof vars[key] === 'string') {
+      vars[key] = (vars[key] as string).replace(/\n$/, '');
+    }
+  }
 
-  // Handle third party integrations first
+  // Resolve variable mappings
+  resolveVariables(vars);
+
+  // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const { getPrompt } = await import('./integrations/portkey');
-    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), resolvedVars);
+    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
     return JSON.stringify(portKeyResult.messages);
-  }
-  if (prompt.raw.startsWith('langfuse://')) {
+  } else if (prompt.raw.startsWith('langfuse://')) {
     const { getPrompt } = await import('./integrations/langfuse');
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
@@ -251,48 +183,38 @@ export async function renderPrompt(
 
     const langfuseResult = await getPrompt(
       helper,
-      resolvedVars,
+      vars,
       promptType,
       version === 'latest' ? undefined : Number(version),
     );
     return langfuseResult;
-  }
-  if (prompt.raw.startsWith('helicone://')) {
+  } else if (prompt.raw.startsWith('helicone://')) {
     const { getPrompt } = await import('./integrations/helicone');
     const heliconePrompt = prompt.raw.slice('helicone://'.length);
     const [id, version] = heliconePrompt.split(':');
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
     const heliconeResult = await getPrompt(
       id,
-      resolvedVars,
+      vars,
       majorVersion === undefined ? undefined : Number(majorVersion),
       minorVersion === undefined ? undefined : Number(minorVersion),
     );
     return heliconeResult;
   }
 
-  // If JSON autoescape is disabled, just render with nunjucks
-  // basic prompt is defined as something that does not contain JSON
-  // elements like { or [ before rendering
-  if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE') || isStringPrompt(basePrompt)) {
-    return nunjucks.renderString(basePrompt, resolvedVars);
-  }
+  // Render prompt
   try {
-    // Everything should be a JSON at this point. Use yaml parser because it's more forgiving
-    const parsed = yaml.load(basePrompt) as Record<string, any>;
+    if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
+      return nunjucks.renderString(basePrompt, vars);
+    }
+
+    const parsed = JSON.parse(basePrompt);
+
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    const rendered = renderVarsInObject<Variables>(parsed, resolvedVars);
-    if (typeof rendered === 'object' && rendered !== null) {
-      return JSON.stringify(rendered, null, 2);
-    }
-    if (typeof rendered === 'string') {
-      return rendered;
-    }
-    throw new Error(`Unknown rendered type: ${typeof rendered}`);
+    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
-    // If YAML/JSON parsing fails, render as basic text
-    return nunjucks.renderString(basePrompt, resolvedVars);
+    return nunjucks.renderString(basePrompt, vars);
   }
 }
 
