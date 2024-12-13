@@ -67,6 +67,7 @@
     "whatwg-url": "14.1.0"
   },
   "peerDependencies": {
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.496.0",
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
     "@aws-sdk/credential-provider-sso": "^3.686.0",
     "@azure/identity": "^4.0.0",
@@ -86,6 +87,7 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.496.0",
     "@aws-sdk/client-bedrock-runtime": "^3.706.0",
     "@aws-sdk/credential-provider-sso": "^3.699.0",
     "@azure/identity": "^4.5.0",
@@ -96,6 +98,7 @@
     "@swc/jest": "^0.2.37",
     "@trivago/prettier-plugin-sort-imports": "^5.2.0",
     "@types/async": "^3.2.24",
+    "@types/aws-sdk": "^0.0.42",
     "@types/better-sqlite3": "^7.6.12",
     "@types/cache-manager": "^4.0.6",
     "@types/cache-manager-fs-hash": "^0.0.4",
@@ -154,6 +157,7 @@
     "@adaline/vertex": "0.8.1",
     "@anthropic-ai/sdk": "^0.32.1",
     "@apidevtools/json-schema-ref-parser": "^11.7.3",
+    "@aws-sdk/client-bedrock-agent": "^3.712.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@googleapis/sheets": "^9.3.1",

@@ -193,6 +193,14 @@ export interface BedrockAI21GenerationOptions extends BedrockOptions {
   top_p?: number;
 }
 
+interface BedrockKnowledgeBaseOptions extends BedrockOptions {
+  maxResults?: number;
+  vectorSearchConfiguration?: {
+    numberOfResults?: number;
+    overrideSearchType?: string;
+  };
+}
+
 export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   interfaceConfig?: {
     max_new_tokens?: number;
@@ -899,9 +907,18 @@ export abstract class AwsBedrockGenericProvider {
 }
 
 export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
+  static KNOWLEDGE_BASE_PROVIDER_PREFIX = 'bedrock:knowledge-base:';
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
   async callApi(prompt: string): Promise<ProviderResponse> {
+    // Check if this is a knowledge base provider
+    if (this.modelName.startsWith(AwsBedrockCompletionProvider.KNOWLEDGE_BASE_PROVIDER_PREFIX)) {
+      const knowledgeBaseId = this.modelName.slice(
+        AwsBedrockCompletionProvider.KNOWLEDGE_BASE_PROVIDER_PREFIX.length,
+      );
+      return this.callKnowledgeBaseApi(knowledgeBaseId, prompt);
+    }
+
     let stop: string[];
     try {
       stop = getEnvString('AWS_BEDROCK_STOP') ? JSON.parse(getEnvString('AWS_BEDROCK_STOP')!) : [];
@@ -976,6 +993,51 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
+      };
+    }
+  }
+
+  private async callKnowledgeBaseApi(
+    knowledgeBaseId: string,
+    prompt: string,
+  ): Promise<ProviderResponse> {
+    try {
+      const { BedrockAgentRuntimeClient, RetrieveCommand } = await import(
+        '@aws-sdk/client-bedrock-agent-runtime'
+      );
+      const credentials = await this.getCredentials();
+      const client = new BedrockAgentRuntimeClient({
+        region: this.getRegion(),
+        ...(credentials ? { credentials } : {}),
+      });
+
+      const response = await client.send(
+        new RetrieveCommand({
+          knowledgeBaseId,
+          retrievalQuery: { text: prompt },
+          ...((this.config as BedrockKnowledgeBaseOptions)?.vectorSearchConfiguration && {
+            vectorSearchConfiguration: (this.config as BedrockKnowledgeBaseOptions)
+              .vectorSearchConfiguration,
+          }),
+        }),
+      );
+
+      if (!response.retrievalResults?.length) {
+        return {
+          output: '',
+          tokenUsage: undefined,
+        };
+      }
+
+      return {
+        output: response.retrievalResults
+          .map((result: { content: { text: string } }) => result.content.text)
+          .join('\n'),
+        tokenUsage: undefined,
+      };
+    } catch (err) {
+      return {
+        error: `Knowledge Base API call error: ${String(err)}`,
       };
     }
   }
