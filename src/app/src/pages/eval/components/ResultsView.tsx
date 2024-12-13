@@ -552,6 +552,7 @@ export default function ResultsView({
         searchText={debouncedSearchText}
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
+        setFilterMode={setFilterMode}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
