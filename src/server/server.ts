@@ -13,9 +13,7 @@ import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION, DEFAULT_PORT } from '../constants';
 import { getDbSignalPath } from '../database';
-import { getEnvString, getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
-import { CloudConfig } from '../globalConfig/cloud';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -32,6 +30,7 @@ import {
   getLatestEval,
   getStandaloneEvals,
 } from '../util';
+import { getRemoteHealthUrl, checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { BrowserBehavior } from '../util/server';
 import { openBrowser } from '../util/server';
@@ -44,65 +43,7 @@ import { userRouter } from './routes/user';
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
-export async function checkRemoteHealth(apiUrl: string): Promise<{
-  status: 'OK' | 'ERROR' | 'DISABLED';
-  message: string;
-}> {
-  try {
-    const response = await fetch(apiUrl, {
-      signal: AbortSignal.timeout(1000),
-      headers: {
-        'User-Agent': `promptfoo/${VERSION}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      return {
-        status: 'ERROR',
-        message: `Failed to connect to ${apiUrl} (Status ${response.status}: ${response.statusText})`,
-      };
-    }
-
-    const data = await response.json();
-    if (data.status === 'OK') {
-      const cloudConfig = new CloudConfig();
-      return {
-        status: 'OK',
-        message: `Cloud API is healthy${cloudConfig.isEnabled() ? ' (using custom endpoint)' : ''}`,
-      };
-    }
-
-    return {
-      status: 'ERROR',
-      message: `${apiUrl} responded with an error status.\nTry visiting ${apiUrl} in your web browser to check if it's accessible`,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return {
-      status: 'ERROR',
-      message: `Failed to connect to ${apiUrl}: ${message}\nTry visiting ${apiUrl} in your web browser to check if it's accessible`,
-    };
-  }
-}
-
-export function getRemoteHealthUrl(): string | null {
-  if (getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION')) {
-    return null;
-  }
-
-  const envUrl = getEnvString('PROMPTFOO_REMOTE_GENERATION_URL');
-  if (envUrl) {
-    return envUrl.replace(/\/task$/, '/health');
-  }
-
-  const cloudConfig = new CloudConfig();
-  if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost() + '/health';
-  }
-
-  return 'https://api.promptfoo.app/health';
-}
+export { getRemoteHealthUrl, checkRemoteHealth };
 
 export function createApp() {
   const app = express();
