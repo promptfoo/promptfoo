@@ -80,13 +80,22 @@ export const RedteamPluginSchema = z.union([
 
 const strategyIdSchema = z
   .union([
-    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]),
+    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+      if (!ALL_STRATEGIES.includes(val as Strategy)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.invalid_enum_value,
+          options: [...ALL_STRATEGIES] as [string, ...string[]],
+          received: val,
+          message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
+        });
+      }
+    }),
     z.string().refine(
       (value) => {
         return value.startsWith('file://') && isJavascriptFile(value);
       },
       {
-        message: 'Strategy must be a valid file:// path to a .js/.ts file',
+        message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
       },
     ),
   ])
