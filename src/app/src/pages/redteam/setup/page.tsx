@@ -222,6 +222,7 @@ const readFileAsText = (file: File): Promise<string> => {
 const StatusSection = styled(Box)(({ theme }) => ({
   padding: theme.spacing(2),
   borderBottom: `1px solid ${theme.palette.divider}`,
+  borderRight: `1px solid ${theme.palette.divider}`,
   backgroundColor: theme.palette.background.paper,
   width: '280px',
   minWidth: '280px',
