@@ -172,6 +172,7 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_LOG_DIR`                    | Directory to write error logs                                                                                                                    | `.`            |
 | `PROMPTFOO_PASS_RATE_THRESHOLD`        | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 0 failures                                                          | 0              |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`       | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior. |                |
+| `PROMPTFOO_SHARE_CHUNK_SIZE`           | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.         |                |
 
 :::tip
 promptfoo will load environment variables from the `.env` in your current working directory.
