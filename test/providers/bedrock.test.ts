@@ -5,7 +5,10 @@ import type {
   LlamaMessage,
   TextGenerationOptions,
 } from '../../src/providers/bedrock';
-import { AwsBedrockGenericProvider } from '../../src/providers/bedrock';
+import {
+  AwsBedrockGenericProvider,
+  BedrockKnowledgeBaseProvider,
+} from '../../src/providers/bedrock';
 import {
   addConfigParam,
   BEDROCK_MODEL,
@@ -20,6 +23,13 @@ jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
   BedrockRuntime: jest.fn().mockImplementation(() => ({
     invokeModel: jest.fn(),
   })),
+}));
+
+jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
+  BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => ({
+    send: jest.fn(),
+  })),
+  RetrieveCommand: jest.fn(),
 }));
 
 const { BedrockRuntime } = jest.requireMock('@aws-sdk/client-bedrock-runtime');
@@ -413,6 +423,146 @@ describe('AwsBedrockGenericProvider', () => {
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined();
     });
+  });
+});
+
+describe('BedrockKnowledgeBaseProvider', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should initialize with correct provider ID format', () => {
+    const provider = new BedrockKnowledgeBaseProvider('test-kb-id');
+    expect(provider.toString()).toBe('[Amazon Bedrock Provider bedrock:knowledge-base:test-kb-id]');
+  });
+
+  it('should handle successful knowledge base query', async () => {
+    const mockResponse = {
+      retrievalResults: [
+        {
+          content: {
+            text: 'Test response 1',
+          },
+        },
+        {
+          content: {
+            text: 'Test response 2',
+          },
+        },
+      ],
+    };
+
+    jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
+      BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => ({
+        send: jest.fn().mockResolvedValue(mockResponse),
+      })),
+      RetrieveCommand: jest.fn(),
+    }));
+
+    const provider = new BedrockKnowledgeBaseProvider('test-kb-id');
+    const response = await provider.callApi('What is AWS?');
+
+    expect(response.output).toBe('Test response 1\nTest response 2');
+    expect(response.error).toBeUndefined();
+  });
+
+  it('should handle empty response', async () => {
+    const mockResponse = {
+      retrievalResults: [],
+    };
+
+    const { BedrockAgentRuntimeClient, RetrieveCommand } = jest.requireMock(
+      '@aws-sdk/client-bedrock-agent-runtime',
+    );
+    BedrockAgentRuntimeClient.mockImplementation(() => ({
+      send: jest.fn().mockResolvedValue(mockResponse),
+    }));
+    RetrieveCommand.mockImplementation(() => ({
+      // Mock implementation
+    }));
+
+    const provider = new BedrockKnowledgeBaseProvider('test-kb-id');
+    const response = await provider.callApi('What is AWS?');
+
+    expect(response.output).toBe('');
+    expect(response.error).toBeUndefined();
+    expect(response.tokenUsage).toBeUndefined();
+  });
+
+  it('should handle API errors', async () => {
+    const mockError = new Error('API error');
+
+    const { BedrockAgentRuntimeClient, RetrieveCommand } = jest.requireMock(
+      '@aws-sdk/client-bedrock-agent-runtime',
+    );
+    BedrockAgentRuntimeClient.mockImplementation(() => ({
+      send: jest.fn().mockRejectedValue(mockError),
+    }));
+    RetrieveCommand.mockImplementation(() => ({
+      // Mock implementation
+    }));
+
+    const provider = new BedrockKnowledgeBaseProvider('test-kb-id');
+    const response = await provider.callApi('What is AWS?');
+
+    expect(response.output).toBeUndefined();
+    expect(response.error).toBe('Knowledge Base API call error: Error: API error');
+  });
+
+  it('should handle vector search configuration', async () => {
+    const mockResponse = {
+      retrievalResults: [
+        {
+          content: {
+            text: 'Test response',
+          },
+        },
+      ],
+    };
+
+    const mockSend = jest.fn().mockResolvedValue(mockResponse);
+    const mockRetrieveCommand = jest.fn();
+
+    const { BedrockAgentRuntimeClient, RetrieveCommand } = jest.requireMock(
+      '@aws-sdk/client-bedrock-agent-runtime',
+    );
+    BedrockAgentRuntimeClient.mockImplementation(() => ({
+      send: mockSend,
+    }));
+    RetrieveCommand.mockImplementation(
+      (params: {
+        knowledgeBaseId: string;
+        retrievalQuery: { text: string };
+        vectorSearchConfiguration?: { numberOfResults: number };
+      }) => {
+        mockRetrieveCommand(params);
+        return {};
+      },
+    );
+
+    const provider = new BedrockKnowledgeBaseProvider('test-kb-id', {
+      config: {
+        vectorSearchConfiguration: {
+          numberOfResults: 5,
+        },
+      },
+    });
+
+    await provider.callApi('What is AWS?');
+
+    expect(mockRetrieveCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        knowledgeBaseId: 'test-kb-id',
+        retrievalQuery: { text: 'What is AWS?' },
+        vectorSearchConfiguration: {
+          numberOfResults: 5,
+        },
+      }),
+    );
   });
 });
 

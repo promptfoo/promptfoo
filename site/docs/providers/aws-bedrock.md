@@ -217,6 +217,69 @@ config:
   top_k: 50
 ```
 
+### Knowledge Base
+
+For Knowledge Base retrieval (e.g., `bedrock:knowledge-base:<knowledge-base-id>`), you can use the following configuration options:
+
+```yaml
+providers:
+  - id: bedrock:knowledge-base:kb-12345
+    config:
+      region: 'us-east-1'
+      maxTokens: 5 # Optional: number of results to return
+      vectorSearchConfiguration: # Optional: vector search configuration
+        numberOfResults: 5
+        vectorField: 'embedding'
+```
+
+The Knowledge Base provider allows you to query your AWS Bedrock Knowledge Base. You'll need to:
+
+1. Create a Knowledge Base in the AWS Console
+2. Note your Knowledge Base ID (it will look like `kb-12345`)
+3. Configure the provider with the format `bedrock:knowledge-base:<knowledge-base-id>`
+
+#### Example Usage
+
+Here's an example of using the Knowledge Base provider to query a company's documentation:
+
+```yaml
+prompts:
+  - What are the system requirements?
+  - How do I reset my password?
+  - Tell me about the API rate limits.
+
+providers:
+  - id: bedrock:knowledge-base:kb-12345
+    config:
+      region: 'us-east-1'
+      maxTokens: 3 # Return top 3 results
+      vectorSearchConfiguration:
+        numberOfResults: 3
+        vectorField: 'embedding'
+
+tests:
+  - description: Query company documentation
+    assert:
+      - type: contains-any
+        value:
+          - minimum requirements
+          - system specs
+      - type: contains-any
+        value:
+          - password reset
+          - account settings
+      - type: contains-any
+        value:
+          - API limits
+          - rate limiting
+```
+
+This example demonstrates:
+
+1. Multiple prompts to query different aspects of documentation
+2. Configuration of result limits and vector search
+3. Basic assertions to validate the responses contain relevant information
+
 ## Model-graded tests
 
 You can use Bedrock models to grade outputs. By default, model-graded tests use OpenAI and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.

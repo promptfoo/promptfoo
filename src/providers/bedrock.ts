@@ -1,11 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
+import type { KnowledgeBaseRetrievalResult } from '@aws-sdk/client-bedrock-agent-runtime';
+import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
 import type { Agent } from 'http';
-import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
-import logger from '../logger';
 import telemetry from '../telemetry';
 import type {
   ApiProvider,
@@ -27,7 +26,6 @@ interface BedrockOptions {
   sessionToken?: string;
   guardrailIdentifier?: string;
   guardrailVersion?: string;
-  trace?: Trace;
 }
 
 export interface TextGenerationOptions {
@@ -906,93 +904,121 @@ export abstract class AwsBedrockGenericProvider {
   }
 }
 
-export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
+interface BedrockKnowledgeBaseOptions extends BedrockOptions {
+  vectorSearchConfiguration?: {
+    numberOfResults?: number;
+    overrideSearchType?: string;
+  };
+}
+
+// Define interfaces for dynamic imports to maintain type safety
+interface BedrockAgentRuntimeClientConstructor {
+  new (config: {
+    region: string;
+    credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider;
+  }): {
+    send: (command: unknown) => Promise<{
+      retrievalResults?: Array<KnowledgeBaseRetrievalResult>;
+    }>;
+  };
+}
+
+interface RetrieveCommandConstructor {
+  new (input: {
+    knowledgeBaseId: string;
+    retrievalQuery: { text: string };
+    vectorSearchConfiguration?: {
+      numberOfResults?: number;
+      overrideSearchType?: string;
+    };
+  }): unknown;
+}
+
+export class BedrockKnowledgeBaseProvider extends AwsBedrockGenericProvider implements ApiProvider {
+  constructor(
+    knowledgeBaseId: string,
+    options: { config?: BedrockKnowledgeBaseOptions; env?: EnvOverrides } = {},
+  ) {
+    super(BedrockKnowledgeBaseProvider.KNOWLEDGE_BASE_PROVIDER_PREFIX + knowledgeBaseId, options);
+  }
+
   static KNOWLEDGE_BASE_PROVIDER_PREFIX = 'bedrock:knowledge-base:';
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    try {
+      const { BedrockAgentRuntimeClient, RetrieveCommand } = await import(
+        '@aws-sdk/client-bedrock-agent-runtime'
+      );
+      const credentials = await this.getCredentials();
+      const client =
+        new (BedrockAgentRuntimeClient as unknown as BedrockAgentRuntimeClientConstructor)({
+          region: this.getRegion(),
+          ...(credentials ? { credentials } : {}),
+        });
+
+      const knowledgeBaseId = this.modelName.slice(
+        BedrockKnowledgeBaseProvider.KNOWLEDGE_BASE_PROVIDER_PREFIX.length,
+      );
+      const command = new (RetrieveCommand as unknown as RetrieveCommandConstructor)({
+        knowledgeBaseId,
+        retrievalQuery: { text: prompt },
+        ...((this.config as BedrockKnowledgeBaseOptions)?.vectorSearchConfiguration && {
+          vectorSearchConfiguration: (this.config as BedrockKnowledgeBaseOptions)
+            .vectorSearchConfiguration,
+        }),
+      });
+
+      const response = await client.send(command);
+
+      if (!response.retrievalResults?.length) {
+        return {
+          output: '',
+          tokenUsage: undefined,
+        };
+      }
+
+      const results = response.retrievalResults
+        .filter(
+          (result): result is KnowledgeBaseRetrievalResult & { content: { text: string } } =>
+            result?.content?.text !== undefined,
+        )
+        .map((result) => result.content.text);
+
+      return {
+        output: results.join('\n'),
+        tokenUsage: undefined,
+      };
+    } catch (err) {
+      return {
+        error: `Knowledge Base API call error: ${String(err)}`,
+      };
+    }
+  }
+}
+
+type BedrockModelHandler = (
+  bedrock: BedrockRuntime,
+  prompt: string,
+  config: BedrockOptions,
+) => Promise<ProviderResponse>;
+
+export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    // Check if this is a knowledge base provider
-    if (this.modelName.startsWith(AwsBedrockCompletionProvider.KNOWLEDGE_BASE_PROVIDER_PREFIX)) {
-      const knowledgeBaseId = this.modelName.slice(
-        AwsBedrockCompletionProvider.KNOWLEDGE_BASE_PROVIDER_PREFIX.length,
-      );
-      return this.callKnowledgeBaseApi(knowledgeBaseId, prompt);
+    const bedrock = await this.getBedrockInstance();
+    const handler = getHandlerForModel(this.modelName) as unknown as BedrockModelHandler;
+
+    if (!handler) {
+      throw new Error(`Unsupported model: ${this.modelName}`);
     }
 
-    let stop: string[];
     try {
-      stop = getEnvString('AWS_BEDROCK_STOP') ? JSON.parse(getEnvString('AWS_BEDROCK_STOP')!) : [];
-    } catch (err) {
-      throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
-    }
-
-    let model = getHandlerForModel(this.modelName);
-    if (!model) {
-      logger.warn(
-        `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,
-      );
-      model = BEDROCK_MODEL.CLAUDE_MESSAGES;
-    }
-    const params = model.params(this.config, prompt, stop);
-
-    logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
-
-    const cache = await getCache();
-    const cacheKey = `bedrock:${this.modelName}:${JSON.stringify(params)}`;
-
-    if (isCacheEnabled()) {
-      // Try to get the cached response
-      const cachedResponse = await cache.get(cacheKey);
-      if (cachedResponse) {
-        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return {
-          output: model.output(JSON.parse(cachedResponse as string)),
-          tokenUsage: {},
-        };
-      }
-    }
-
-    const bedrockInstance = await this.getBedrockInstance();
-    let response;
-    try {
-      // https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel
-      response = await bedrockInstance.invokeModel({
-        modelId: this.modelName,
-        ...(this.config.guardrailIdentifier
-          ? { guardrailIdentifier: this.config.guardrailIdentifier }
-          : {}),
-        ...(this.config.guardrailVersion ? { guardrailVersion: this.config.guardrailVersion } : {}),
-        ...(this.config.trace ? { trace: this.config.trace } : {}),
-        accept: 'application/json',
-        contentType: 'application/json',
-        body: JSON.stringify(params),
-      });
+      const response = await handler(bedrock, prompt, this.config);
+      return response;
     } catch (err) {
       return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
-    logger.debug(`\tAmazon Bedrock API response: ${response.body.transformToString()}`);
-    if (isCacheEnabled()) {
-      try {
-        await cache.set(cacheKey, new TextDecoder().decode(response.body));
-      } catch (err) {
-        logger.error(`Failed to cache response: ${String(err)}`);
-      }
-    }
-    try {
-      const output = JSON.parse(new TextDecoder().decode(response.body));
-      return {
-        output: model.output(output),
-        tokenUsage: {
-          total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
-          prompt: output.prompt_tokens ?? output.prompt_token_count,
-          completion: output.completion_tokens ?? output.generation_token_count,
-        },
-      };
-    } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
+        error: `Bedrock API call error: ${String(err)}`,
       };
     }
   }
@@ -1029,10 +1055,15 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         };
       }
 
+      const results = response.retrievalResults
+        .filter(
+          (result): result is KnowledgeBaseRetrievalResult & { content: { text: string } } =>
+            result?.content?.text !== undefined,
+        )
+        .map((result) => result.content.text);
+
       return {
-        output: response.retrievalResults
-          .map((result: { content: { text: string } }) => result.content.text)
-          .join('\n'),
+        output: results.join('\n'),
         tokenUsage: undefined,
       };
     } catch (err) {
@@ -1052,51 +1083,30 @@ export class AwsBedrockEmbeddingProvider
   }
 
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    const params = this.modelName.includes('cohere.embed')
-      ? {
-          texts: [text],
-        }
-      : {
-          inputText: text,
-        };
-
-    logger.debug(`Calling AWS Bedrock API for embeddings: ${JSON.stringify(params)}`);
-    let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();
-      response = await bedrockInstance.invokeModel({
+      const response = await bedrockInstance.invokeModel({
         modelId: this.modelName,
         accept: 'application/json',
         contentType: 'application/json',
-        body: JSON.stringify(params),
+        body: JSON.stringify({
+          inputText: text,
+        }),
       });
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
-    logger.debug(
-      `\tAWS Bedrock API response (embeddings): ${JSON.stringify(
-        response.body.transformToString(),
-      )}`,
-    );
 
-    try {
       const data = JSON.parse(response.body.transformToString());
-      // Titan Text API returns embeddings in the `embedding` field
-      // Cohere API returns embeddings in the `embeddings` field
-      const embedding = data?.embedding || data?.embeddings;
+      const embedding = data?.embedding || data?.embeddings?.[0];
       if (!embedding) {
-        throw new Error('No embedding found in AWS Bedrock API response');
+        return {
+          error: 'No embedding found in AWS Bedrock API response',
+        };
       }
       return {
         embedding,
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(
-          response.body.transformToString(),
-        )}`,
+        error: `API call error: ${String(err)}`,
       };
     }
   }
