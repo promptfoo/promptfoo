@@ -72,7 +72,6 @@ describe('createShareableUrl', () => {
       useOldResults: jest.fn().mockReturnValue(false),
       loadResults: jest.fn().mockResolvedValue(undefined),
       save: jest.fn().mockResolvedValue(undefined),
-      results: [],
     };
 
     const result = await createShareableUrl(mockEval as Eval);
@@ -108,7 +107,6 @@ describe('createShareableUrl', () => {
       useOldResults: jest.fn().mockReturnValue(false),
       loadResults: jest.fn().mockResolvedValue(undefined),
       save: jest.fn().mockResolvedValue(undefined),
-      results: [],
     };
 
     await createShareableUrl(mockEval as Eval);
