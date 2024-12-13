@@ -17,11 +17,12 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 const StatusIndicator = ({ status }: { status: ApiHealthStatus }) => {
-  const statusConfig = {
+  const statusConfig: Record<ApiHealthStatus, { color: string; text: string }> = {
     connected: { color: 'success.main', text: 'Connected to promptfoo API' },
     blocked: { color: 'error.main', text: 'Cannot connect to promptfoo API' },
     loading: { color: 'info.main', text: 'Checking connection...' },
     unknown: { color: 'grey.500', text: 'Checking connection status...' },
+    disabled: { color: 'grey.400', text: 'Remote generation is disabled' },
   };
 
   const config = statusConfig[status];

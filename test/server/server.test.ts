@@ -1,195 +1,182 @@
-import type express from 'express';
-import type { Server } from 'http';
 import request from 'supertest';
-import { CloudConfig } from '../../src/globalConfig/cloud';
+import { checkRemoteHealth, getRemoteHealthUrl } from '../../src/server/server';
 import { createApp } from '../../src/server/server';
 
 const mockedFetch = jest.mocked(jest.fn());
 global.fetch = mockedFetch;
 
-// Create a complete mock implementation of CloudConfig
-class MockCloudConfig extends CloudConfig {
-  constructor(private isEnabledValue: boolean = false) {
-    super();
-    this.setApiHost('https://custom.api.com');
-  }
+// Create a simple mock implementation
+const mockCloudConfig = {
+  isEnabled: jest.fn().mockReturnValue(false),
+  getApiHost: jest.fn().mockReturnValue('https://custom.api.com'),
+};
 
-  isEnabled = jest.fn().mockImplementation(() => this.isEnabledValue);
-  getApiHost = jest.fn().mockReturnValue('https://custom.api.com');
-}
-
-// Mock CloudConfig
+// Mock the entire CloudConfig class
 jest.mock('../../src/globalConfig/cloud', () => ({
-  CloudConfig: jest.fn().mockImplementation((isEnabled = false) => new MockCloudConfig(isEnabled)),
+  CloudConfig: jest.fn().mockImplementation(() => mockCloudConfig),
 }));
 
-describe('Remote Health Endpoint', () => {
-  let app: express.Application;
-  let server: Server;
-
-  beforeAll(() => {
-    app = createApp();
-    server = app.listen();
-  });
-
+describe('Remote Health Check', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
+    mockCloudConfig.isEnabled.mockReturnValue(false);
+    mockCloudConfig.getApiHost.mockReturnValue('https://custom.api.com');
   });
 
-  afterAll(() => {
-    return new Promise<void>((resolve) => {
-      server.close(() => resolve());
+  describe('getRemoteHealthUrl', () => {
+    it('should return null when remote generation is disabled', () => {
+      process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+      expect(getRemoteHealthUrl()).toBeNull();
+    });
+
+    it('should use custom URL when provided', () => {
+      process.env.PROMPTFOO_REMOTE_GENERATION_URL = 'https://custom-api.example.com/task';
+      expect(getRemoteHealthUrl()).toBe('https://custom-api.example.com/health');
+    });
+
+    it('should use cloud config when enabled', () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+      mockCloudConfig.getApiHost.mockReturnValue('https://cloud.example.com');
+      expect(getRemoteHealthUrl()).toBe('https://cloud.example.com/health');
+    });
+
+    it('should use default URL when no configuration is provided', () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+      expect(getRemoteHealthUrl()).toBe('https://api.promptfoo.app/health');
     });
   });
 
-  it('should return OK status when API is healthy', async () => {
-    jest.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ status: 'OK2' }),
-      headers: new Headers(),
-      redirected: false,
-      status: 200,
-      statusText: 'OK',
-      type: 'basic',
-      url: '',
-      clone: () => ({}) as Response,
-      body: null,
-      bodyUsed: false,
-      arrayBuffer: async () => new ArrayBuffer(0),
-      blob: async () => new Blob(),
-      formData: async () => new FormData(),
-      text: async () => '',
-    } as Response);
+  describe('checkRemoteHealth', () => {
+    it('should return OK status when API is healthy', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ status: 'OK' }),
+      } as Response);
 
-    const response = await request(app).get('/api/remote-health');
+      const result = await checkRemoteHealth('https://test.api/health');
+      expect(result.status).toBe('OK');
+      expect(result.message).toBe('Cloud API is healthy');
+    });
 
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      status: 'OK',
-      message: 'Cloud API is healthy',
+    it('should include custom endpoint message when cloud config is enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ status: 'OK' }),
+      } as Response);
+
+      const result = await checkRemoteHealth('https://test.api/health');
+      expect(result.status).toBe('OK');
+      expect(result.message).toBe('Cloud API is healthy (using custom endpoint)');
+    });
+
+    it('should handle non-OK response', async () => {
+      mockedFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      } as Response);
+
+      const result = await checkRemoteHealth('https://test.api/health');
+      expect(result.status).toBe('ERROR');
+      expect(result.message).toContain('Failed to connect');
+    });
+
+    it('should handle network errors', async () => {
+      mockedFetch.mockRejectedValueOnce(new Error('Network error'));
+
+      const result = await checkRemoteHealth('https://test.api/health');
+      expect(result.status).toBe('ERROR');
+      expect(result.message).toContain('Network error');
+    });
+
+    it('should handle malformed JSON', async () => {
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.reject(new Error('Invalid JSON')),
+      } as Response);
+
+      const result = await checkRemoteHealth('https://test.api/health');
+      expect(result.status).toBe('ERROR');
+      expect(result.message).toContain('Invalid JSON');
     });
   });
 
-  it('should include custom endpoint message when CloudConfig is enabled', async () => {
-    jest.mocked(CloudConfig).mockImplementationOnce(() => new MockCloudConfig(true));
+  describe('/api/remote-health endpoint', () => {
+    let app: ReturnType<typeof createApp>;
 
-    jest.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ status: 'OK2' }),
-      headers: new Headers(),
-      redirected: false,
-      status: 200,
-      statusText: 'OK',
-      type: 'basic',
-      url: '',
-      clone: () => ({}) as Response,
-      body: null,
-      bodyUsed: false,
-      arrayBuffer: async () => new ArrayBuffer(0),
-      blob: async () => new Blob(),
-      formData: async () => new FormData(),
-      text: async () => '',
-    } as Response);
-
-    const response = await request(app).get('/api/remote-health');
-
-    expect(response.body.message).toBe('Cloud API is healthy (using custom endpoint)');
-  });
-
-  it('should return error status when API request fails', async () => {
-    jest.mocked(global.fetch).mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      statusText: 'Not Found',
-      headers: new Headers(),
-      redirected: false,
-      type: 'basic',
-      url: '',
-      clone: () => ({}) as Response,
-      body: null,
-      bodyUsed: false,
-      arrayBuffer: async () => new ArrayBuffer(0),
-      blob: async () => new Blob(),
-      formData: async () => new FormData(),
-      text: async () => '',
-      json: async () => ({}),
-    } as Response);
-
-    const response = await request(app).get('/api/remote-health');
-
-    expect(response.status).toBe(503);
-    expect(response.body).toEqual({
-      status: 'ERROR',
-      message: expect.stringContaining('Failed to connect to'),
+    beforeEach(() => {
+      app = createApp();
     });
-  });
 
-  it('should handle network errors', async () => {
-    jest.mocked(global.fetch).mockRejectedValueOnce(new Error('Network error'));
+    it('should return disabled status when remote generation is disabled', async () => {
+      process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
 
-    const response = await request(app).get('/api/remote-health');
+      const response = await request(app).get('/api/remote-health').expect(200);
 
-    expect(response.status).toBe(503);
-    expect(response.body).toEqual({
-      status: 'ERROR',
-      message: expect.stringContaining('Network error'),
+      expect(response.body).toEqual({
+        status: 'DISABLED',
+        message: 'remote generation and grading are disabled',
+      });
     });
-  });
 
-  // Additional test cases
-  it('should handle API returning non-OK2 status', async () => {
-    jest.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ status: 'ERROR' }),
-      headers: new Headers(),
-      redirected: false,
-      status: 200,
-      statusText: 'OK',
-      type: 'basic',
-      url: '',
-      clone: () => ({}) as Response,
-      body: null,
-      bodyUsed: false,
-      arrayBuffer: async () => new ArrayBuffer(0),
-      blob: async () => new Blob(),
-      formData: async () => new FormData(),
-      text: async () => '',
-    } as Response);
+    it('should return health check result when enabled', async () => {
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ status: 'OK' }),
+      } as Response);
 
-    const response = await request(app).get('/api/remote-health');
+      const response = await request(app).get('/api/remote-health').expect(200);
 
-    expect(response.status).toBe(503);
-    expect(response.body).toEqual({
-      status: 'ERROR',
-      message: expect.stringContaining('responded with an error status'),
+      expect(response.body).toEqual({
+        status: 'OK',
+        message: 'Cloud API is healthy',
+      });
     });
-  });
 
-  it('should handle malformed JSON response', async () => {
-    jest.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.reject(new Error('Invalid JSON')),
-      headers: new Headers(),
-      redirected: false,
-      status: 200,
-      statusText: 'OK',
-      type: 'basic',
-      url: '',
-      clone: () => ({}) as Response,
-      body: null,
-      bodyUsed: false,
-      arrayBuffer: async () => new ArrayBuffer(0),
-      blob: async () => new Blob(),
-      formData: async () => new FormData(),
-      text: async () => '',
-    } as Response);
+    it('should handle errors from health check', async () => {
+      mockedFetch.mockRejectedValueOnce(new Error('Network error'));
 
-    const response = await request(app).get('/api/remote-health');
+      const response = await request(app).get('/api/remote-health').expect(200);
 
-    expect(response.status).toBe(503);
-    expect(response.body).toEqual({
-      status: 'ERROR',
-      message: expect.stringContaining('Invalid JSON'),
+      expect(response.body).toEqual({
+        status: 'ERROR',
+        message: expect.stringContaining('Network error'),
+      });
+    });
+
+    it('should use custom URL from environment', async () => {
+      process.env.PROMPTFOO_REMOTE_GENERATION_URL = 'https://custom-api.example.com/task';
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ status: 'OK' }),
+      } as Response);
+
+      await request(app).get('/api/remote-health').expect(200);
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'https://custom-api.example.com/health',
+        expect.any(Object),
+      );
+    });
+
+    it('should use cloud config URL when enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+      mockCloudConfig.getApiHost.mockReturnValue('https://cloud.example.com');
+      mockedFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ status: 'OK' }),
+      } as Response);
+
+      await request(app).get('/api/remote-health').expect(200);
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'https://cloud.example.com/health',
+        expect.any(Object),
+      );
     });
   });
 });

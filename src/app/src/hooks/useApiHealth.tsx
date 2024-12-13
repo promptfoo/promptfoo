@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { callApi } from '@app/utils/api';
 import { useDebounce } from 'use-debounce';
 
-export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'loading';
+export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'loading' | 'disabled';
 
 interface HealthResponse {
   status: string;
