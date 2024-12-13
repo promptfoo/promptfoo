@@ -139,12 +139,12 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
       const parsedPrompt = JSON.parse(prompt);
       if (Array.isArray(parsedPrompt)) {
         const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
-        if (lastPrompt?.content) {
+        if (lastPrompt.content) {
           return lastPrompt.content || '-';
         }
       }
     } catch {
-      console.debug('Failed to parse prompt as JSON, using raw string');
+      // Ignore error
     }
     return prompt;
   };
@@ -238,7 +238,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             <Grid container spacing={3}>
               <Grid item xs={4}>
                 <Typography variant="h6" align="center">
-                  {selectedStrategy && strategyStats[selectedStrategy]?.total}
+                  {selectedStrategy && strategyStats[selectedStrategy].total}
                 </Typography>
                 <Typography variant="body2" align="center" color="text.secondary">
                   Total Attempts
