@@ -96,13 +96,7 @@ const EXAMPLE_TARGET: ProviderOptions = {
 export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
-  const selectedTarget = config.target || DEFAULT_HTTP_TARGET;
-  const setSelectedTarget = (value: ProviderOptions) => {
-    updateConfig('target', value);
-  };
-  const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
-  const [urlError, setUrlError] = useState<string | null>(null);
-  const [bodyError, setBodyError] = useState<string | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(config.target || DEFAULT_HTTP_TARGET);
   const [testingTarget, setTestingTarget] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
@@ -117,18 +111,27 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       };
     };
   } | null>(null);
-  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
-  const [isJsonContentType, setIsJsonContentType] = useState(
-    selectedTarget.config.headers &&
-      selectedTarget.config.headers['Content-Type'] === 'application/json',
-  );
-  const [requestBody, setRequestBody] = useState(selectedTarget.config.body);
-
-  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [hasTestedTarget, setHasTestedTarget] = useState(false);
+  const [bodyError, setBodyError] = useState<string | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [requestBody, setRequestBody] = useState<string>(
+    typeof selectedTarget.config.body === 'string'
+      ? selectedTarget.config.body
+      : JSON.stringify(selectedTarget.config.body, null, 2),
+  );
+  const [isJsonContentType, setIsJsonContentType] = useState(true);
+  const [useRawRequest, setUseRawRequest] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
+  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
+
+  useEffect(() => {
+    if (selectedTarget.config.request) {
+      setUseRawRequest(true);
+    }
+  }, [selectedTarget]);
 
   const { recordEvent } = useTelemetry();
-
   const [rawConfigJson, setRawConfigJson] = useState<string>(
     JSON.stringify(selectedTarget.config, null, 2),
   );
@@ -515,6 +518,8 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             bodyError={bodyError}
             urlError={urlError}
             isJsonContentType={isJsonContentType || false}
+            useRawRequest={useRawRequest}
+            setUseRawRequest={setUseRawRequest}
           />
         )}
 
