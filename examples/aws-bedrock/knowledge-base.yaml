@@ -12,9 +12,9 @@ providers:
 tests:
   - vars:
       input:
-        - "What are the best practices for AWS security?"
-        - "How do I set up an S3 bucket?"
-        - "Explain AWS IAM roles and policies."
+        - 'What are the best practices for AWS security?'
+        - 'How do I set up an S3 bucket?'
+        - 'Explain AWS IAM roles and policies.'
     assert:
       - type: contains-any
         value:

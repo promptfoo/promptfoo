@@ -227,14 +227,27 @@ providers:
     config:
       region: 'us-east-1'
       vectorSearchConfiguration:
-        numberOfResults: 5  # Optional: number of results to return
+        numberOfResults: 5 # Optional: number of results to return
 ```
 
-The Knowledge Base provider allows you to query your AWS Bedrock Knowledge Base. You'll need to:
+The Knowledge Base provider allows you to query your AWS Bedrock Knowledge Base. To set up:
 
-1. Create a Knowledge Base in the AWS Console
-2. Note your Knowledge Base ID (it will look like `kb-12345`)
-3. Configure the provider with the format `bedrock:knowledge-base:<knowledge-base-id>`
+1. Create a Knowledge Base in the AWS Console:
+
+   - Navigate to AWS Bedrock Console
+   - Select "Knowledge bases" from the left sidebar
+   - Click "Create knowledge base"
+   - Follow the wizard to:
+     - Choose a data source (S3, etc.)
+     - Configure vector store settings
+     - Set up access permissions
+   - Note your Knowledge Base ID (format: `kb-12345`)
+
+2. Configure the provider with the format `bedrock:knowledge-base:<knowledge-base-id>`
+
+3. Ensure proper IAM permissions:
+   - Your IAM role/user needs `bedrock:RetrieveAndGenerate` permission
+   - Verify access to the Knowledge Base in your configured region
 
 #### Example Usage
 
@@ -252,32 +265,41 @@ providers:
 tests:
   - vars:
       input:
-        - "What are the best practices for AWS security?"
-
-tests:
-  - description: Query company documentation
+        - 'What are the best practices for AWS security?'
+        - 'How do I set up an S3 bucket?'
+        - 'Explain AWS IAM roles and policies.'
     assert:
       - type: contains-any
         value:
-          - minimum requirements
-          - system specs
+          - encryption
+          - authentication
+          - least privilege
       - type: contains-any
         value:
-          - password reset
-          - account settings
+          - bucket creation
+          - permissions
+          - access control
       - type: contains-any
         value:
-          - API limits
-          - rate limiting
+          - role-based access
+          - policy document
+          - permissions management
 ```
 
 This example demonstrates:
 
 1. Multiple prompts to query different aspects of documentation
 2. Configuration of result limits and vector search
-3. Basic assertions to validate the responses contain relevant information
+3. Comprehensive assertions to validate response content
 
-## Model-graded tests
+#### Troubleshooting Knowledge Base
+
+If you encounter issues:
+
+1. **Empty Results**: Check if your query is relevant to the ingested content
+2. **Access Denied**: Verify IAM permissions include `bedrock:RetrieveAndGenerate`
+3. **Region Mismatch**: Ensure the Knowledge Base exists in the configured region
+4. **Data Source Issues**: Verify your data source is properly ingested and indexed
 
 You can use Bedrock models to grade outputs. By default, model-graded tests use OpenAI and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
 

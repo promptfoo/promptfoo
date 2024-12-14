@@ -86,8 +86,9 @@ describe('BedrockKnowledgeBaseProvider', () => {
     const provider = new BedrockKnowledgeBaseProvider(knowledgeBaseId);
     const response = await provider.callApi(testPrompt);
 
-    expect(response.output).toBe('');
-    expect(response.error).toBeUndefined();
+    expect(response.error).toBe('Knowledge Base returned no results');
+    expect(response.output).toBeUndefined();
+    expect(response.sessionId).toMatch(/^bedrock-kb-\d+$/);
   });
 
   it('handles API errors gracefully', async () => {
