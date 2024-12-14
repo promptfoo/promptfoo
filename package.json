@@ -14,10 +14,6 @@
     ".": {
       "import": "./dist/src/index.js",
       "require": "./dist/src/index.js"
-    },
-    "./components": {
-      "import": "./dist/src/app/src/components/index.js",
-      "require": "./dist/src/app/src/components/index.js"
     }
   },
   "workspaces": [
