@@ -310,33 +310,33 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
       if (field === 'url') {
         updatedTarget.config.url = value;
-        if (!validateUrl(value)) {
-          setUrlError('Invalid URL format');
-        } else {
+        if (validateUrl(value)) {
           setUrlError(null);
+        } else {
+          setUrlError('Invalid URL format');
         }
       } else if (field === 'method') {
         updatedTarget.config.method = value;
       } else if (field === 'body') {
         updatedTarget.config.body = value;
-        if (!value.includes('{{prompt}}')) {
-          setBodyError('Request body must contain {{prompt}}');
-        } else {
+        if (value.includes('{{prompt}}')) {
           setBodyError(null);
+        } else {
+          setBodyError('Request body must contain {{prompt}}');
         }
       } else if (field === 'request') {
         try {
           const adjusted = value.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
           httpZ.parse(adjusted);
           updatedTarget.config.request = value;
-          if (!value.includes('{{prompt}}')) {
-            setBodyError('Request must contain {{prompt}} template variable');
-          } else {
+          if (value.includes('{{prompt}}')) {
             delete updatedTarget.config.url;
             delete updatedTarget.config.method;
             delete updatedTarget.config.headers;
             delete updatedTarget.config.body;
             setBodyError(null);
+          } else {
+            setBodyError('Request must contain {{prompt}} template variable');
           }
         } catch (err) {
           const errorMessage = String(err)

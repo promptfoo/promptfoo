@@ -55,7 +55,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   isJsonContentType,
   useRawRequest,
   onRawRequestToggle,
-}) => {
+}): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
@@ -86,11 +86,11 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
       const adjusted = code.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
       httpZ.parse(adjusted);
 
-      if (!code.includes('{{prompt}}')) {
-        setBodyError('Request must contain {{prompt}} template variable');
-      } else {
+      if (code.includes('{{prompt}}')) {
         setBodyError(null);
         updateCustomTarget('request', code);
+      } else {
+        setBodyError('Request must contain {{prompt}} template variable');
       }
     } catch (err) {
       const errorMessage = String(err)
