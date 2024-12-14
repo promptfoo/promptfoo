@@ -31,6 +31,7 @@ export interface ProviderOptions {
   transform?: string;
   delay?: number;
   env?: EnvOverrides;
+  provider?: ApiProvider; // Add provider property for provider chaining
 }
 
 export interface CallApiContextParams {

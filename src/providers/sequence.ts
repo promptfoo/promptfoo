@@ -18,8 +18,9 @@ export class SequenceProvider implements ApiProvider {
   private readonly inputs: string[];
   private readonly separator: string;
   private readonly identifier: string;
+  private readonly targetProvider?: ApiProvider; // Make optional to match ProviderOptions
 
-  constructor({ id, config }: ProviderOptions) {
+  constructor({ id, config, provider }: ProviderOptions) {
     invariant(
       config && Array.isArray(config.inputs),
       'Expected sequence provider config to contain an array of inputs',
@@ -29,6 +30,7 @@ export class SequenceProvider implements ApiProvider {
     this.inputs = typedConfig.inputs;
     this.separator = typedConfig.separator || '\n---\n';
     this.identifier = id || 'sequence-provider';
+    this.targetProvider = provider; // Store the provider passed in constructor
   }
 
   id() {
@@ -40,7 +42,9 @@ export class SequenceProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    invariant(context?.originalProvider, 'Expected originalProvider to be set');
+    // Use the stored target provider instead of context.originalProvider
+    const provider = this.targetProvider || context?.originalProvider;
+    invariant(provider, 'No provider available for sequence provider');
 
     const nunjucks = getNunjucksEngine();
     const responses: string[] = [];
@@ -52,7 +56,7 @@ export class SequenceProvider implements ApiProvider {
       cached: 0,
     };
 
-    // Send each input to the original provider
+    // Send each input to the target provider
     for (const input of this.inputs) {
       const renderedInput = nunjucks.renderString(input, {
         ...context?.vars,
@@ -61,7 +65,7 @@ export class SequenceProvider implements ApiProvider {
 
       logger.debug(`Sequence provider sending input: ${renderedInput}`);
 
-      const response = await context.originalProvider.callApi(renderedInput, context, options);
+      const response = await provider.callApi(renderedInput, context, options);
 
       if (response.error) {
         return response;
