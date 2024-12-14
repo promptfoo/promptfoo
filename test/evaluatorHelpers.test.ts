@@ -78,7 +78,30 @@ describe('renderPrompt', () => {
     const renderedPrompt = await renderPrompt(prompt, { var1: '{"nested": "value1"}' }, {});
     expect(renderedPrompt).toBe(
       JSON.stringify(
-        JSON.parse('[{"text":"Test prompt "},{"text":{"nested":"value1"}}]'),
+        JSON.parse('[{"text":"Test prompt "},{"text":"{\\"nested\\": \\"value1\\"}"}]'),
+        null,
+        2,
+      ),
+    );
+  });
+
+  it('should parse JSON only for schema variables', async () => {
+    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ schema }}"}, {"text": "{{ var1 }}"}]');
+    const renderedPrompt = await renderPrompt(
+      prompt,
+      {
+        schema: '{"nested": "value1"}',
+        var1: '{"other": "value2"}'
+      },
+      {}
+    );
+    expect(renderedPrompt).toBe(
+      JSON.stringify(
+        [
+          {"text": "Test prompt "},
+          {"text": {"nested": "value1"}},
+          {"text": "{\"other\": \"value2\"}"}
+        ],
         null,
         2,
       ),

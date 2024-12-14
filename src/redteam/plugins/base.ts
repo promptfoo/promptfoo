@@ -213,11 +213,18 @@ export abstract class RedteamGraderBase {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 
     try {
+      // First check if any required variables are undefined
+      const extractedVars = extractVariablesFromTemplate(this.rubric);
+      const missingVars = extractedVars.filter((v) => !(v in vars) || vars[v] === undefined);
+      if (missingVars.length > 0) {
+        throw new Error(`Missing required variables: ${missingVars.join(', ')}`);
+      }
+
       return nunjucks.renderString(this.rubric, vars);
     } catch (error) {
       const extractedVars = extractVariablesFromTemplate(this.rubric);
-      const missingVars = extractedVars.filter((v) => !(v in vars));
-      const availableVars = extractedVars.filter((v) => v in vars);
+      const missingVars = extractedVars.filter((v) => !(v in vars) || vars[v] === undefined);
+      const availableVars = extractedVars.filter((v) => v in vars && vars[v] !== undefined);
 
       logger.debug(dedent`
         Template variables analysis:

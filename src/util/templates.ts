@@ -2,14 +2,6 @@ import nunjucks from 'nunjucks';
 import { getEnvBool } from '../envars';
 import type { NunjucksFilterMap } from '../types';
 
-/**
- * Get a Nunjucks engine instance with optional filters and configuration.
- * @param filters - Optional map of custom Nunjucks filters.
- * @param throwOnUndefined - Whether to throw an error on undefined variables.
- * @param isGrader - Whether this engine is being used in a grader context.
- * Nunjucks is always enabled in grader mode.
- * @returns A configured Nunjucks environment.
- */
 export function getNunjucksEngine(
   filters?: NunjucksFilterMap,
   throwOnUndefined: boolean = false,
@@ -26,20 +18,87 @@ export function getNunjucksEngine(
     throwOnUndefined,
   });
 
-  // Configure environment variables as template globals unless disabled. Defaults to disabled in self-hosted mode
   if (
     !getEnvBool('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', getEnvBool('PROMPTFOO_SELF_HOSTED', false))
   ) {
     env.addGlobal('env', process.env);
   }
 
-  // Add default filters
   env.addFilter('dump', (obj) => {
-    // Always stringify objects for template rendering
-    return typeof obj === 'object' ? JSON.stringify(obj) : obj;
+    const hasTemplateVars = (value: unknown): boolean =>
+      typeof value === 'string' && value.includes('{{') && value.includes('}}');
+
+    const isSchemaVar = (value: unknown): boolean =>
+      typeof value === 'string' && value.includes('{{') && value.includes('schema') && value.includes('}}');
+
+    const formatValue = (value: unknown): string => {
+      if (typeof value === 'string') {
+        if (isSchemaVar(value)) {
+          return value;
+        }
+        if (hasTemplateVars(value)) {
+          return `'${value}'`;
+        }
+        if (value.includes('\n') || value.includes('"') || value.includes("'") || value.includes(':')) {
+          return JSON.stringify(value);
+        }
+        return value;
+      }
+
+      if (value === null) return 'null';
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+
+      if (Array.isArray(value)) {
+        const formattedItems = value.map(item => {
+          const formatted = formatValue(item);
+          if (typeof formatted === 'string' && isSchemaVar(formatted)) {
+            return formatted;
+          }
+          if (typeof formatted === 'string' &&
+              (formatted.startsWith('{') || formatted.startsWith('[') ||
+               formatted.startsWith('"{'))) {
+            try {
+              return JSON.parse(formatted.replace(/^'|'$/g, ''));
+            } catch {
+              return formatted;
+            }
+          }
+          return formatted;
+        });
+        return JSON.stringify(formattedItems);
+      }
+
+      if (typeof value === 'object') {
+        const result: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(value)) {
+          const formatted = formatValue(v);
+          if (typeof formatted === 'string' && isSchemaVar(formatted)) {
+            result[k] = formatted;
+          } else if (typeof formatted === 'string' &&
+              (formatted.startsWith('{') || formatted.startsWith('[') ||
+               formatted.startsWith('"{'))) {
+            try {
+              result[k] = JSON.parse(formatted.replace(/^'|'$/g, ''));
+            } catch {
+              result[k] = formatted;
+            }
+          } else {
+            result[k] = formatted;
+          }
+        }
+        return JSON.stringify(result);
+      }
+
+      return String(value);
+    };
+
+    if (typeof obj === 'string' && isSchemaVar(obj)) {
+      return obj;
+    }
+
+    return formatValue(obj);
   });
 
-  // Add custom filters if provided
   if (filters) {
     for (const [name, filter] of Object.entries(filters)) {
       env.addFilter(name, filter);
@@ -48,44 +107,31 @@ export function getNunjucksEngine(
   return env;
 }
 
-/**
- * Parse Nunjucks template to extract variables.
- * @param template - The Nunjucks template string.
- * @returns An array of variables used in the template.
- */
 export function extractVariablesFromTemplate(template: string): string[] {
   const variableSet = new Set<string>();
   const regex =
     /\{\{[\s]*([^{}\s|]+)[\s]*(?:\|[^}]+)?\}\}|\{%[\s]*(?:if|for)[\s]+([^{}\s]+)[\s]*.*?%\}/g;
   const commentRegex = /\{#[\s\S]*?#\}/g;
 
-  // Remove comments
   template = template.replace(commentRegex, '');
 
   let match;
   while ((match = regex.exec(template)) !== null) {
     const variable = match[1] || match[2];
     if (variable) {
-      // Split by dot and add only the full path
       variableSet.add(variable);
     }
   }
 
-  // Handle for loops separately
   const forLoopRegex = /\{%[\s]*for[\s]+(\w+)[\s]+in[\s]+(\w+)[\s]*%\}/g;
   while ((match = forLoopRegex.exec(template)) !== null) {
-    variableSet.delete(match[1]); // Remove loop variable
-    variableSet.add(match[2]); // Add the iterated variable
+    variableSet.delete(match[1]);
+    variableSet.add(match[2]);
   }
 
   return Array.from(variableSet);
 }
 
-/**
- * Extract variables from multiple Nunjucks templates.
- * @param templates - An array of Nunjucks template strings.
- * @returns An array of variables used in the templates.
- */
 export function extractVariablesFromTemplates(templates: string[]): string[] {
   const variableSet = new Set<string>();
   for (const template of templates) {
