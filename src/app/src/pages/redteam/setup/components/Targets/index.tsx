@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
+import httpZ from 'http-z';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Alert from '@mui/material/Alert';
@@ -142,24 +143,24 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   };
 
   const parseRawRequest = (input: string) => {
-    const [requestLine, ...rest] = input.split('\n');
-    const [method, path] = requestLine.split(' ');
-    const emptyLineIndex = rest.findIndex(line => line.trim() === '');
-    const headers = rest.slice(0, emptyLineIndex).reduce((acc, line) => {
-      const [key, value] = line.split(':').map(s => s.trim());
-      if (key && value) {
-        acc[key] = value;
-      }
-      return acc;
-    }, {} as Record<string, string>);
-    const body = rest.slice(emptyLineIndex + 1).join('\n').trim();
-
-    return {
-      method,
-      url: path,
-      headers,
-      body,
-    };
+    const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+    try {
+      const messageModel = httpZ.parse(adjusted) as httpZ.HttpZRequestModel;
+      return {
+        method: messageModel.method,
+        url: messageModel.target,
+        headers: messageModel.headers.reduce(
+          (acc, header) => {
+            acc[header.name.toLowerCase()] = header.value;
+            return acc;
+          },
+          {} as Record<string, string>,
+        ),
+        body: messageModel.body,
+      };
+    } catch (err) {
+      throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
+    }
   };
 
   useEffect(() => {
@@ -304,38 +305,49 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const updateCustomTarget = (field: string, value: any) => {
     if (typeof selectedTarget === 'object') {
       const updatedTarget = { ...selectedTarget } as ProviderOptions;
-      if (field === 'id') {
-        updatedTarget.id = value;
-        if (validateUrl(value, 'http')) {
-          setUrlError(null);
+
+      if (field === 'url') {
+        updatedTarget.config.url = value;
+        if (!validateUrl(value)) {
+          setUrlError('Invalid URL format');
         } else {
-          setUrlError('Please enter a valid HTTP URL (http:// or https://)');
+          setUrlError(null);
         }
+      } else if (field === 'method') {
+        updatedTarget.config.method = value;
       } else if (field === 'body') {
         updatedTarget.config.body = value;
-        setBodyError(null);
-        if (isJsonContentType) {
-          try {
-            const parsedBody = JSON.parse(value.trim());
-            updatedTarget.config.body = parsedBody;
-            setBodyError(null);
-          } catch {
-            setBodyError('Invalid JSON');
-          }
-        }
         if (!value.includes('{{prompt}}')) {
           setBodyError('Request body must contain {{prompt}}');
+        } else {
+          setBodyError(null);
         }
       } else if (field === 'request') {
-        updatedTarget.config.request = value;
-        delete updatedTarget.config.url;
-        delete updatedTarget.config.method;
-        delete updatedTarget.config.headers;
-        delete updatedTarget.config.body;
+        try {
+          const adjusted = value.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+          httpZ.parse(adjusted);
+          updatedTarget.config.request = value;
+          if (!value.includes('{{prompt}}')) {
+            setBodyError('Request must contain {{prompt}} template variable');
+          } else {
+            delete updatedTarget.config.url;
+            delete updatedTarget.config.method;
+            delete updatedTarget.config.headers;
+            delete updatedTarget.config.body;
+            setBodyError(null);
+          }
+        } catch (err) {
+          const errorMessage = String(err)
+            .replace(/^Error:\s*/, '')
+            .replace(/\bat\b.*$/, '')
+            .trim();
+          setBodyError(`Invalid HTTP request format: ${errorMessage}`);
+          return;
+        }
       } else if (field === 'label') {
         updatedTarget.label = value;
       } else {
-        (updatedTarget.config as any)[field] = value;
+        updatedTarget.config[field] = value;
       }
 
       setSelectedTarget(updatedTarget);

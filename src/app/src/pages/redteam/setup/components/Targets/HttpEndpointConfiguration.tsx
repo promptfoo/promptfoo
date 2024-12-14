@@ -1,5 +1,6 @@
 import React from 'react';
 import Editor from 'react-simple-code-editor';
+import httpZ from 'http-z';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
@@ -81,16 +82,23 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   };
 
   const handleRawRequestChange = (code: string) => {
-    if (!code.includes('{{prompt}}')) {
-      setBodyError('Request must contain {{prompt}} template variable');
-    } else if (!code.match(/^(GET|POST|PUT|DELETE|PATCH)\s+\S+\s+HTTP\/1\.1/)) {
-      setBodyError('Request must start with HTTP method and version (e.g., POST /path HTTP/1.1)');
-    } else if (!code.includes('\n\n') && code.trim() !== '') {
-      setBodyError('Request must have an empty line between headers and body');
-    } else {
-      setBodyError(null);
+    try {
+      const adjusted = code.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+      httpZ.parse(adjusted);
+
+      if (!code.includes('{{prompt}}')) {
+        setBodyError('Request must contain {{prompt}} template variable');
+      } else {
+        setBodyError(null);
+        updateCustomTarget('request', code);
+      }
+    } catch (err) {
+      const errorMessage = String(err)
+        .replace(/^Error:\s*/, '')
+        .replace(/\bat\b.*$/, '')
+        .trim();
+      setBodyError(`Invalid HTTP request format: ${errorMessage}`);
     }
-    updateCustomTarget('request', code);
   };
 
   const exampleRequest = `POST /v1/completions HTTP/1.1
