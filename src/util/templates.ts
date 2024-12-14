@@ -45,8 +45,12 @@ export function getNunjucksEngine(
         return value;
       }
 
-      if (value === null) return 'null';
-      if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+      if (value === null) {
+        return 'null';
+      }
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        return String(value);
+      }
 
       if (Array.isArray(value)) {
         const formattedItems = value.map(item => {
@@ -125,8 +129,12 @@ export function extractVariablesFromTemplate(template: string): string[] {
 
   const forLoopRegex = /\{%[\s]*for[\s]+(\w+)[\s]+in[\s]+(\w+)[\s]*%\}/g;
   while ((match = forLoopRegex.exec(template)) !== null) {
-    variableSet.delete(match[1]);
-    variableSet.add(match[2]);
+    if (match[1]) {
+      variableSet.delete(match[1]);
+    }
+    if (match[2]) {
+      variableSet.add(match[2]);
+    }
   }
 
   return Array.from(variableSet);

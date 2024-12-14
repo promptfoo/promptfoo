@@ -8,7 +8,6 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import NodeCache from 'node-cache';
-import nunjucks from 'nunjucks';
 import * as path from 'path';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
