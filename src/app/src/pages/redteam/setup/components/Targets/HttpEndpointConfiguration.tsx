@@ -36,7 +36,7 @@ interface HttpEndpointConfigurationProps {
   urlError: string | null;
   isJsonContentType: boolean;
   useRawRequest: boolean;
-  setUseRawRequest: (value: boolean) => void;
+  onRawRequestToggle: (enabled: boolean) => void;
 }
 
 const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
@@ -53,7 +53,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   isJsonContentType,
   useRawRequest,
-  setUseRawRequest,
+  onRawRequestToggle,
 }) => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
@@ -121,7 +121,16 @@ ${exampleRequest}`;
         control={
           <Switch
             checked={useRawRequest}
-            onChange={(e) => setUseRawRequest(e.target.checked)}
+            onChange={(e) => {
+              const enabled = e.target.checked;
+              if (enabled && !selectedTarget.config.request) {
+                if (window.confirm('Switch to raw HTTP request mode? This will convert your current configuration.')) {
+                  onRawRequestToggle(enabled);
+                }
+              } else {
+                onRawRequestToggle(enabled);
+              }
+            }}
           />
         }
         label="Use Raw HTTP Request"

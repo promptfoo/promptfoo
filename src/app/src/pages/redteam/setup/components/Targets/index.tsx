@@ -125,11 +125,78 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
   const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
 
+  const convertToRawRequest = (config: any) => {
+    const headers = config.headers || {};
+    const headerLines = Object.entries(headers)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+
+    const method = config.method || 'POST';
+    const url = config.url || '/';
+    let body = config.body;
+    if (typeof body === 'object') {
+      body = JSON.stringify(body, null, 2);
+    }
+
+    return `${method} ${url} HTTP/1.1\n${headerLines}\n\n${body || ''}`;
+  };
+
+  const parseRawRequest = (input: string) => {
+    const [requestLine, ...rest] = input.split('\n');
+    const [method, path] = requestLine.split(' ');
+    const emptyLineIndex = rest.findIndex(line => line.trim() === '');
+    const headers = rest.slice(0, emptyLineIndex).reduce((acc, line) => {
+      const [key, value] = line.split(':').map(s => s.trim());
+      if (key && value) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, string>);
+    const body = rest.slice(emptyLineIndex + 1).join('\n').trim();
+
+    return {
+      method,
+      url: path,
+      headers,
+      body,
+    };
+  };
+
   useEffect(() => {
     if (selectedTarget.config.request) {
       setUseRawRequest(true);
     }
   }, [selectedTarget]);
+
+  const handleRawRequestToggle = (enabled: boolean) => {
+    const updatedTarget = { ...selectedTarget } as ProviderOptions;
+
+    if (enabled) {
+      const rawRequest = convertToRawRequest(updatedTarget.config);
+      updatedTarget.config.request = rawRequest;
+      delete updatedTarget.config.url;
+      delete updatedTarget.config.method;
+      delete updatedTarget.config.headers;
+      delete updatedTarget.config.body;
+    } else if (updatedTarget.config.request) {
+      try {
+        const parsed = parseRawRequest(updatedTarget.config.request);
+        updatedTarget.config.url = parsed.url;
+        updatedTarget.config.method = parsed.method;
+        updatedTarget.config.headers = parsed.headers;
+        updatedTarget.config.body = parsed.body;
+        delete updatedTarget.config.request;
+        setBodyError(null);
+      } catch (err) {
+        setBodyError(`Failed to parse raw request: ${String(err)}`);
+        return;
+      }
+    }
+
+    setSelectedTarget(updatedTarget);
+    updateConfig('target', updatedTarget);
+    setUseRawRequest(enabled);
+  };
 
   const { recordEvent } = useTelemetry();
   const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -148,7 +215,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       missingFields.push('Target Name');
     }
 
-    // Make sure we have a url target is a valid HTTP or WebSocket endpoint
     if (
       (selectedTarget.id.startsWith('http') || selectedTarget.id.startsWith('websocket')) &&
       (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url))
@@ -260,6 +326,12 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         if (!value.includes('{{prompt}}')) {
           setBodyError('Request body must contain {{prompt}}');
         }
+      } else if (field === 'request') {
+        updatedTarget.config.request = value;
+        delete updatedTarget.config.url;
+        delete updatedTarget.config.method;
+        delete updatedTarget.config.headers;
+        delete updatedTarget.config.body;
       } else if (field === 'label') {
         updatedTarget.label = value;
       } else {
@@ -267,6 +339,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       }
 
       setSelectedTarget(updatedTarget);
+      updateConfig('target', updatedTarget);
     }
   };
 
@@ -377,7 +450,11 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   const handleTryExample = () => {
     setSelectedTarget(EXAMPLE_TARGET);
-    setRequestBody(EXAMPLE_TARGET.config.body);
+    setRequestBody(
+      typeof EXAMPLE_TARGET.config.body === 'string'
+        ? EXAMPLE_TARGET.config.body
+        : JSON.stringify(EXAMPLE_TARGET.config.body, null, 2),
+    );
     setIsJsonContentType(true);
     recordEvent('feature_used', { feature: 'redteam_config_try_example' });
   };
@@ -520,7 +597,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             urlError={urlError}
             isJsonContentType={isJsonContentType || false}
             useRawRequest={useRawRequest}
-            setUseRawRequest={setUseRawRequest}
+            onRawRequestToggle={handleRawRequestToggle}
           />
         )}
 
