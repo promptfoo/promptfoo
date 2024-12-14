@@ -35,6 +35,10 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
+    lib: {
+      entry: './src/components/index.ts',
+      formats: ['es', 'cjs'],
+    }
   },
   test: {
     environment: 'jsdom',
