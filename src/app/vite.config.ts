@@ -40,7 +40,28 @@ export default defineConfig({
       formats: ['es'],
     },
     rollupOptions: {
-      external: ['react', 'react-dom', '@mui/material'],
+      external: [
+        'react',
+        'react-dom',
+        '@mui/material',
+        '@mui/icons-material',
+        '@tanstack/react-table',
+        'react-markdown',
+        'react-router-dom',
+        'zustand'
+      ],
+      output: {
+        globals: {
+          react: 'React',
+          'react-dom': 'ReactDOM',
+          '@mui/material': 'MaterialUI',
+          '@mui/icons-material': 'MaterialIcons',
+          '@tanstack/react-table': 'ReactTable',
+          'react-markdown': 'ReactMarkdown',
+          'react-router-dom': 'ReactRouterDOM',
+          'zustand': 'Zustand'
+        },
+      },
     },
   },
   test: {
