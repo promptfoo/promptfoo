@@ -203,6 +203,31 @@ describe('TestSuiteConfigSchema', () => {
   }
 });
 
+// Test specific provider configurations
+describe('provider configurations', () => {
+  it('should validate sequence provider configuration', () => {
+    const config = {
+      providers: [
+        {
+          id: 'sequence',
+          config: {
+            inputs: [],
+            targetProvider: 'openai:gpt-4',
+            strategy: 'crescendo',
+            maxTurns: 3,
+            systemPrompt: 'test prompt',
+          },
+        },
+      ],
+      prompts: ['test prompt'],
+      tests: [],
+    };
+
+    const result = TestSuiteConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+});
+
 describe('TestSuiteSchema', () => {
   const baseTestSuite: TestSuite = {
     providers: [

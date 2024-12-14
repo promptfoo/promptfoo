@@ -10,8 +10,12 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 
 interface SequenceProviderConfig {
-  inputs: string[];
+  inputs?: string[];
   separator?: string;
+  targetProvider?: string;
+  strategy?: string;
+  maxTurns?: number;
+  systemPrompt?: string;
 }
 
 export class SequenceProvider implements ApiProvider {
@@ -19,18 +23,21 @@ export class SequenceProvider implements ApiProvider {
   private readonly separator: string;
   private readonly identifier: string;
   private readonly targetProvider?: ApiProvider;
+  private readonly strategy?: string;
+  private readonly maxTurns?: number;
+  private readonly systemPrompt?: string;
 
   constructor({ id, config, provider }: ProviderOptions) {
-    invariant(
-      config && Array.isArray(config.inputs),
-      'Expected sequence provider config to contain an array of inputs',
-    );
+    invariant(config, 'Expected sequence provider config');
 
     const typedConfig = config as SequenceProviderConfig;
-    this.inputs = typedConfig.inputs;
+    this.inputs = typedConfig.inputs || [];
     this.separator = typedConfig.separator || '\n---\n';
     this.identifier = id || 'sequence-provider';
     this.targetProvider = provider;
+    this.strategy = typedConfig.strategy;
+    this.maxTurns = typedConfig.maxTurns;
+    this.systemPrompt = typedConfig.systemPrompt;
   }
 
   id() {

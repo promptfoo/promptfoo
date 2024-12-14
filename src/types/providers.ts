@@ -111,6 +111,15 @@ export interface ProviderClassificationResponse {
   classification?: Record<string, number>;
 }
 
+export interface SequenceProviderConfig {
+  inputs?: string[];
+  separator?: string;
+  targetProvider?: string;
+  strategy?: string;
+  maxTurns?: number;
+  systemPrompt?: string;
+}
+
 export type FilePath = string;
 
 export type CallApiFunction = {

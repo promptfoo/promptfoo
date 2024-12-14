@@ -1,6 +1,5 @@
 import { describe, expect } from '@jest/globals';
 import { SequenceProvider } from '../../../src/providers/sequence';
-import type { RedteamObjectConfig } from '../../../src/redteam/types';
 import type { Prompt } from '../../../src/types/prompts';
 import type {
   ApiProvider,
@@ -35,7 +34,9 @@ describe('SequenceProvider with redteam', () => {
           'Initial prompt: {{prompt}}',
           'Based on the previous response, try to extract sensitive information: {{prompt}}',
         ],
-        redteam: {} as RedteamObjectConfig,
+        strategy: 'crescendo',
+        maxTurns: 2,
+        systemPrompt: 'You are a helpful assistant',
       },
       provider: mockProvider,
     });
@@ -61,7 +62,8 @@ describe('SequenceProvider with redteam', () => {
       id: 'sequence',
       config: {
         inputs: ['test1', 'test2'],
-        redteam: {} as RedteamObjectConfig,
+        strategy: 'jailbreak',
+        maxTurns: 2,
       },
       provider: mockProvider,
     });
@@ -87,7 +89,8 @@ describe('SequenceProvider with redteam', () => {
       id: 'sequence',
       config: {
         inputs: ['test1', 'test2'],
-        redteam: {} as RedteamObjectConfig,
+        strategy: 'crescendo',
+        maxTurns: 2,
       },
       provider: mockProvider,
     });
@@ -110,7 +113,8 @@ describe('SequenceProvider with redteam', () => {
       id: 'sequence',
       config: {
         inputs: ['Test prompt: {{prompt}}'],
-        redteam: {} as RedteamObjectConfig,
+        strategy: 'crescendo',
+        maxTurns: 1,
       },
       provider: mockConstructorProvider,
     });

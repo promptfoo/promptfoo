@@ -9,6 +9,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
   ProviderSimilarityResponse,
+  SequenceProviderConfig,
 } from '../types/providers';
 import { PromptSchema } from './prompts';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from './shared';
@@ -155,13 +156,24 @@ export const ProviderClassificationResponseSchema = z.object({
   classification: z.record(z.number()).optional(),
 });
 
+export const SequenceProviderConfigSchema = z
+  .object({
+    inputs: z.array(z.string()).optional(),
+    separator: z.string().optional(),
+    targetProvider: z.string().optional(),
+    strategy: z.string().optional(),
+    maxTurns: z.number().optional(),
+    systemPrompt: z.string().optional(),
+  })
+  .strict();
+
 export const ProvidersSchema = z.union([
   z.string(),
   CallApiFunctionSchema,
   z.array(
     z.union([
       z.string(),
-      z.record(z.string(), ProviderOptionsSchema),
+      z.record(z.string(), z.union([ProviderOptionsSchema, SequenceProviderConfigSchema])),
       ProviderOptionsSchema,
       CallApiFunctionSchema,
     ]),
@@ -191,3 +203,6 @@ assert<
   >
 >();
 assert<TypeEqualityGuard<ApiProvider, z.infer<typeof ApiProviderSchema>>>();
+
+// Ensure SequenceProviderConfig schema matches its type
+assert<TypeEqualityGuard<SequenceProviderConfig, z.infer<typeof SequenceProviderConfigSchema>>>();
