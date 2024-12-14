@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "exports": {
+    "./components": "./src/components/index.ts"
+  },
   "scripts": {
     "dev": "vite",
     "tsc": "tsc",

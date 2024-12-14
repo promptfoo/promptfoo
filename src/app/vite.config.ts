@@ -36,8 +36,11 @@ export default defineConfig({
     emptyOutDir: true,
     outDir: '../../dist/src/app',
     lib: {
-      entry: './src/components/index.ts',
-      formats: ['es', 'cjs'],
+      entry: path.resolve(__dirname, 'src/components/index.ts'),
+      formats: ['es']
+    },
+    rollupOptions: {
+      external: ['react', 'react-dom', '@mui/material']
     }
   },
   test: {
