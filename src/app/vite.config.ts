@@ -37,11 +37,11 @@ export default defineConfig({
     outDir: '../../dist/src/app',
     lib: {
       entry: path.resolve(__dirname, 'src/components/index.ts'),
-      formats: ['es']
+      formats: ['es'],
     },
     rollupOptions: {
-      external: ['react', 'react-dom', '@mui/material']
-    }
+      external: ['react', 'react-dom', '@mui/material'],
+    },
   },
   test: {
     environment: 'jsdom',
