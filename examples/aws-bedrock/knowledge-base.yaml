@@ -1,44 +1,33 @@
-# Example configuration for AWS Bedrock Knowledge Base
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - What are the best practices for AWS security?
-  - How do I set up an S3 bucket?
-  - Explain AWS IAM roles and policies.
+  - file://prompts.txt
 
 providers:
   - id: bedrock:knowledge-base:kb-12345 # Replace with your Knowledge Base ID
     config:
-      region: us-east-1 # Replace with your AWS region
-      maxTokens: 5 # Number of results to return
+      region: us-east-1
       vectorSearchConfiguration:
         numberOfResults: 5
-        vectorField: embedding
 
 tests:
-  - description: Query AWS documentation
+  - vars:
+      input:
+        - "What are the best practices for AWS security?"
+        - "How do I set up an S3 bucket?"
+        - "Explain AWS IAM roles and policies."
     assert:
-      - type: contains-any # Verify security best practices response
+      - type: contains-any
         value:
           - encryption
           - authentication
           - least privilege
-      - type: contains-any # Verify S3 setup response
+      - type: contains-any
         value:
           - bucket creation
           - permissions
           - access control
-      - type: contains-any # Verify IAM explanation
+      - type: contains-any
         value:
           - role-based access
           - policy document
           - permissions management
-
-  - description: Response format validation
-    assert:
-      - type: javascript
-        value: |
-          // Verify response is not empty
-          if (!output) {
-            return false;
-          }
-          // Verify response contains relevant information
-          return output.toLowerCase().includes('aws');

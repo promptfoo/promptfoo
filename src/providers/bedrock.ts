@@ -29,6 +29,7 @@ interface BedrockOptions {
   sessionToken?: string;
   guardrailIdentifier?: string;
   guardrailVersion?: string;
+  trace?: boolean;
 }
 
 export interface TextGenerationOptions {
@@ -998,7 +999,7 @@ export class BedrockKnowledgeBaseProvider extends AwsBedrockGenericProvider impl
 
       if (!response.retrievalResults?.length) {
         return {
-          output: '',
+          error: 'Knowledge Base returned no results',
           tokenUsage: undefined,
           sessionId: this.getSessionId(),
         };

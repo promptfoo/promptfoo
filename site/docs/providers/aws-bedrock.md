@@ -226,10 +226,8 @@ providers:
   - id: bedrock:knowledge-base:kb-12345
     config:
       region: 'us-east-1'
-      maxTokens: 5 # Optional: number of results to return
-      vectorSearchConfiguration: # Optional: vector search configuration
-        numberOfResults: 5
-        vectorField: 'embedding'
+      vectorSearchConfiguration:
+        numberOfResults: 5  # Optional: number of results to return
 ```
 
 The Knowledge Base provider allows you to query your AWS Bedrock Knowledge Base. You'll need to:
@@ -240,22 +238,21 @@ The Knowledge Base provider allows you to query your AWS Bedrock Knowledge Base.
 
 #### Example Usage
 
-Here's an example of using the Knowledge Base provider to query a company's documentation:
-
 ```yaml
 prompts:
-  - What are the system requirements?
-  - How do I reset my password?
-  - Tell me about the API rate limits.
+  - file://prompts.txt
 
 providers:
   - id: bedrock:knowledge-base:kb-12345
     config:
-      region: 'us-east-1'
-      maxTokens: 3 # Return top 3 results
+      region: us-east-1
       vectorSearchConfiguration:
-        numberOfResults: 3
-        vectorField: 'embedding'
+        numberOfResults: 5
+
+tests:
+  - vars:
+      input:
+        - "What are the best practices for AWS security?"
 
 tests:
   - description: Query company documentation
