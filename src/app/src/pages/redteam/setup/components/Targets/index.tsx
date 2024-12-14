@@ -516,6 +516,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             requestBody={requestBody || ''}
             setRequestBody={setRequestBody}
             bodyError={bodyError}
+            setBodyError={setBodyError}
             urlError={urlError}
             isJsonContentType={isJsonContentType || false}
             useRawRequest={useRawRequest}

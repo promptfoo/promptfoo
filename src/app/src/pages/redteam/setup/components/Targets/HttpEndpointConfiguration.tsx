@@ -18,6 +18,7 @@ import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-http';
 import type { ProviderOptions } from '../../types';
 import 'prismjs/themes/prism.css';
 
@@ -31,6 +32,7 @@ interface HttpEndpointConfigurationProps {
   requestBody: string | object;
   setRequestBody: (value: string) => void;
   bodyError: string | null;
+  setBodyError: (error: string | null) => void;
   urlError: string | null;
   isJsonContentType: boolean;
   useRawRequest: boolean;
@@ -47,6 +49,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   requestBody,
   setRequestBody,
   bodyError,
+  setBodyError,
   urlError,
   isJsonContentType,
   useRawRequest,
@@ -59,29 +62,55 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
     setRequestBody(code);
 
     if (isJsonContentType) {
-      // Try to parse as YAML first
       try {
         const parsedYaml = yaml.load(code);
-        // If it's valid YAML, convert to JSON and update
-        // Don't stringify the parsed object - send it as is
         updateCustomTarget('body', parsedYaml);
       } catch (yamlError) {
         console.error('YAML parsing failed:', yamlError);
-        // If YAML parsing fails, try JSON parse as fallback
         try {
           const parsedJson = JSON.parse(code);
           updateCustomTarget('body', parsedJson);
         } catch (jsonError) {
           console.error('JSON parsing failed:', jsonError);
-          // If both YAML and JSON parsing fail, use the raw text
           updateCustomTarget('body', code);
         }
       }
     } else {
-      // For non-JSON content types, use raw text
       updateCustomTarget('body', code);
     }
   };
+
+  const handleRawRequestChange = (code: string) => {
+    if (!code.includes('{{prompt}}')) {
+      setBodyError('Request must contain {{prompt}} template variable');
+    } else if (!code.match(/^(GET|POST|PUT|DELETE|PATCH)\s+\S+\s+HTTP\/1\.1/)) {
+      setBodyError('Request must start with HTTP method and version (e.g., POST /path HTTP/1.1)');
+    } else if (!code.includes('\n\n') && code.trim() !== '') {
+      setBodyError('Request must have an empty line between headers and body');
+    } else {
+      setBodyError(null);
+    }
+    updateCustomTarget('request', code);
+  };
+
+  const exampleRequest = `POST /v1/completions HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+Authorization: Bearer {{api_key}}
+
+{
+  "model": "gpt-3.5-turbo",
+  "prompt": "{{prompt}}",
+  "max_tokens": 100
+}`;
+
+  const placeholderText = `# Example HTTP/1.1 Request Format:
+# Method Path HTTP/1.1
+# Header-Name: Header-Value
+#
+# Request Body (if any)
+
+${exampleRequest}`;
 
   return (
     <Box mt={2}>
@@ -97,7 +126,52 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
         }
         label="Use Raw HTTP Request"
       />
-      {!useRawRequest && (
+      {useRawRequest ? (
+        <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+          <Typography variant="subtitle1" gutterBottom>
+            Raw HTTP Request
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{
+              display: 'block',
+              mb: 1,
+              color: (theme) => theme.palette.text.secondary,
+            }}
+          >
+            Use HTTP/1.1 format. Include {'{{'} prompt {'}}'} where you want the prompt to be inserted.
+            You can also use {'{{'} api_key {'}}'} for authentication tokens.
+          </Typography>
+          <Box
+            sx={{
+              border: 1,
+              borderColor: bodyError ? 'error.main' : 'grey.300',
+              borderRadius: 1,
+              mt: 1,
+              position: 'relative',
+              backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+            }}
+          >
+            <Editor
+              value={selectedTarget.config.request || placeholderText}
+              onValueChange={handleRawRequestChange}
+              highlight={(code) => highlight(code, languages.http)}
+              padding={10}
+              style={{
+                fontFamily: '"Fira code", "Fira Mono", monospace',
+                fontSize: 14,
+                minHeight: '200px',
+              }}
+              placeholder="Enter your HTTP/1.1 request here..."
+            />
+          </Box>
+          {bodyError && (
+            <Typography color="error" variant="caption" sx={{ mt: 0.5, display: 'block' }}>
+              {bodyError}
+            </Typography>
+          )}
+        </Box>
+      ) : (
         <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
           <TextField
             fullWidth
@@ -169,9 +243,6 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
           >
             <Editor
               value={
-                /*
-                Should always be a string, but there might be some bad state in localStorage as of 2024-12-07
-                */
                 typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody, null, 2)
               }
               onValueChange={handleRequestBodyChange}
