@@ -218,16 +218,30 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       missingFields.push('Target Name');
     }
 
-    if (
-      (selectedTarget.id.startsWith('http') || selectedTarget.id.startsWith('websocket')) &&
-      (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url))
-    ) {
-      missingFields.push('URL');
+    if (selectedTarget.id.startsWith('http')) {
+      if (useRawRequest && selectedTarget.config.request) {
+        try {
+          const adjusted = selectedTarget.config.request.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+          const parsed = httpZ.parse(adjusted);
+          // Check if it's a request model and validate the URL from target
+          if ('method' in parsed && parsed.target) {
+            if (!validateUrl(parsed.target)) {
+              missingFields.push('URL');
+            }
+          } else {
+            missingFields.push('URL');
+          }
+        } catch {
+          missingFields.push('URL');
+        }
+      } else if (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url)) {
+        missingFields.push('URL');
+      }
     }
 
     setMissingFields(missingFields);
     setPromptRequired(requiresPrompt(selectedTarget));
-  }, [selectedTarget, updateConfig]);
+  }, [selectedTarget, updateConfig, useRawRequest]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;

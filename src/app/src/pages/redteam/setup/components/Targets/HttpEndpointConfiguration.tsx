@@ -84,13 +84,34 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   const handleRawRequestChange = (code: string) => {
     try {
       const adjusted = code.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
-      httpZ.parse(adjusted);
+      const parsed = httpZ.parse(adjusted) as { method?: string; requestLine?: string };
+      const errors: string[] = [];
 
-      if (code.includes('{{prompt}}')) {
+      if (!code.includes('{{prompt}}')) {
+        errors.push('Request must contain {{prompt}} template variable');
+      }
+
+      // Extract URL from the request line and validate it
+      const requestLine = parsed.requestLine?.split(' ');
+      if (requestLine && requestLine.length > 1) {
+        const url = requestLine[1];
+        try {
+          const parsedUrl = new URL(url);
+          if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+            errors.push('Invalid URL protocol in request line (must be http or https)');
+          }
+        } catch {
+          errors.push('Invalid URL format in request line');
+        }
+      } else {
+        errors.push('Missing URL in request line');
+      }
+
+      if (errors.length > 0) {
+        setBodyError(errors.join('. '));
+      } else {
         setBodyError(null);
         updateCustomTarget('request', code);
-      } else {
-        setBodyError('Request must contain {{prompt}} template variable');
       }
     } catch (err) {
       const errorMessage = String(err)
