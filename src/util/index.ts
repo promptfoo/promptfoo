@@ -996,7 +996,7 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
       if (rendered.trim().startsWith('{') || rendered.trim().startsWith('[')) {
         return JSON.parse(rendered) as unknown as T;
       }
-    } catch (e) {
+    } catch {
       // If parsing fails, return as string
     }
     return rendered as unknown as T;

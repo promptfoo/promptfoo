@@ -3099,9 +3099,9 @@ describe('runAssertion', () => {
         type: 'object',
         properties: {
           x: { type: 'number' },
-          y: { type: 'number' }
+          y: { type: 'number' },
         },
-        required: ['x', 'y']
+        required: ['x', 'y'],
       };
       const output = { arguments: '{"x": 10, "y": 20}', name: 'add' };
 
@@ -3112,23 +3112,23 @@ describe('runAssertion', () => {
             functions: [
               {
                 name: 'add',
-                parameters: '{{ schema | dump | safe }}'
-              }
-            ]
-          }
+                parameters: '{{ schema | dump | safe }}',
+              },
+            ],
+          },
         }),
         assertion: {
-          type: 'is-valid-openai-function-call'
+          type: 'is-valid-openai-function-call',
         },
         test: {
-          vars: { schema }
+          vars: { schema },
         } as AtomicTestCase,
-        providerResponse: { output }
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
         pass: true,
-        reason: 'Assertion passed'
+        reason: 'Assertion passed',
       });
     });
   });
