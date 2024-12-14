@@ -3093,6 +3093,44 @@ describe('runAssertion', () => {
         reason: expect.stringContaining('Call to "add" does not match schema'),
       });
     });
+
+    it('should handle schema variables in function calls', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          x: { type: 'number' },
+          y: { type: 'number' }
+        },
+        required: ['x', 'y']
+      };
+      const output = { arguments: '{"x": 10, "y": 20}', name: 'add' };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('foo', {
+          config: {
+            functions: [
+              {
+                name: 'add',
+                parameters: '{{ schema | dump | safe }}'
+              }
+            ]
+          }
+        }),
+        assertion: {
+          type: 'is-valid-openai-function-call'
+        },
+        test: {
+          vars: { schema }
+        } as AtomicTestCase,
+        providerResponse: { output }
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed'
+      });
+    });
   });
 
   describe('is-valid-openai-tools-call assertion', () => {

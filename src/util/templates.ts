@@ -33,6 +33,13 @@ export function getNunjucksEngine(
     env.addGlobal('env', process.env);
   }
 
+  // Add default filters
+  env.addFilter('dump', (obj) => {
+    // Always stringify objects for template rendering
+    return typeof obj === 'object' ? JSON.stringify(obj) : obj;
+  });
+
+  // Add custom filters if provided
   if (filters) {
     for (const [name, filter] of Object.entries(filters)) {
       env.addFilter(name, filter);

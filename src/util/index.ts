@@ -990,7 +990,16 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return obj;
   }
   if (typeof obj === 'string') {
-    return nunjucks.renderString(obj, vars) as unknown as T;
+    const rendered = nunjucks.renderString(obj, vars);
+    // Try to parse the result if it looks like JSON
+    try {
+      if (rendered.trim().startsWith('{') || rendered.trim().startsWith('[')) {
+        return JSON.parse(rendered) as unknown as T;
+      }
+    } catch (e) {
+      // If parsing fails, return as string
+    }
+    return rendered as unknown as T;
   }
   if (Array.isArray(obj)) {
     return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
