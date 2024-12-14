@@ -488,8 +488,8 @@ describe('BedrockKnowledgeBaseProvider', () => {
     const provider = new BedrockKnowledgeBaseProvider('test-kb-id');
     const response = await provider.callApi('What is AWS?');
 
-    expect(response.output).toBe('');
-    expect(response.error).toBeUndefined();
+    expect(response.output).toBeUndefined();
+    expect(response.error).toBe('Knowledge Base returned no results');
     expect(response.tokenUsage).toBeUndefined();
   });
 
