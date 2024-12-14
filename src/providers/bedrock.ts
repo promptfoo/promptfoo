@@ -4,15 +4,18 @@ import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
 import type { Agent } from 'http';
+import { v4 as uuidv4 } from 'uuid';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import telemetry from '../telemetry';
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   ApiEmbeddingProvider,
   ProviderResponse,
   ProviderEmbeddingResponse,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
+  CallApiContextParams,
+  CallApiOptionsParams,
+} from '../types/providers';
 import { maybeLoadFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
@@ -815,6 +818,7 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
+  private sessionId: string;
 
   constructor(
     modelName: string,
@@ -825,6 +829,7 @@ export abstract class AwsBedrockGenericProvider {
     this.modelName = modelName;
     this.config = config || {};
     this.id = id ? () => id : this.id;
+    this.sessionId = uuidv4();
 
     if (this.config.guardrailIdentifier) {
       telemetry.recordAndSendOnce('feature_used', {
@@ -840,6 +845,10 @@ export abstract class AwsBedrockGenericProvider {
 
   toString(): string {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
+  }
+
+  getSessionId(): string {
+    return this.sessionId;
   }
 
   async getCredentials(): Promise<
@@ -912,7 +921,7 @@ interface BedrockKnowledgeBaseOptions extends BedrockOptions {
 }
 
 // Define interfaces for dynamic imports to maintain type safety
-interface BedrockAgentRuntimeClientConstructor {
+interface _BedrockAgentRuntimeClientConstructor {
   new (config: {
     region: string;
     credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider;
@@ -923,7 +932,7 @@ interface BedrockAgentRuntimeClientConstructor {
   };
 }
 
-interface RetrieveCommandConstructor {
+interface _RetrieveCommandConstructor {
   new (input: {
     knowledgeBaseId: string;
     retrievalQuery: { text: string };
@@ -935,32 +944,49 @@ interface RetrieveCommandConstructor {
 }
 
 export class BedrockKnowledgeBaseProvider extends AwsBedrockGenericProvider implements ApiProvider {
+  private static nextSessionId = 1;
+  private knowledgeBaseId: string;
+
   constructor(
     knowledgeBaseId: string,
     options: { config?: BedrockKnowledgeBaseOptions; env?: EnvOverrides } = {},
   ) {
-    super(BedrockKnowledgeBaseProvider.KNOWLEDGE_BASE_PROVIDER_PREFIX + knowledgeBaseId, options);
+    super(knowledgeBaseId, options);
+    this.knowledgeBaseId = knowledgeBaseId;
   }
 
-  static KNOWLEDGE_BASE_PROVIDER_PREFIX = 'bedrock:knowledge-base:';
+  static KNOWLEDGE_BASE_PROVIDER_PREFIX = 'knowledge-base:';
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  id(): string {
+    return `bedrock:${BedrockKnowledgeBaseProvider.KNOWLEDGE_BASE_PROVIDER_PREFIX}${this.knowledgeBaseId}`;
+  }
+
+  toString(): string {
+    return `[Amazon Bedrock Provider ${this.id()}]`;
+  }
+
+  getSessionId(): string {
+    return `bedrock-kb-${BedrockKnowledgeBaseProvider.nextSessionId++}`;
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     try {
       const { BedrockAgentRuntimeClient, RetrieveCommand } = await import(
         '@aws-sdk/client-bedrock-agent-runtime'
       );
       const credentials = await this.getCredentials();
-      const client =
-        new (BedrockAgentRuntimeClient as unknown as BedrockAgentRuntimeClientConstructor)({
-          region: this.getRegion(),
-          ...(credentials ? { credentials } : {}),
-        });
+      const client = new BedrockAgentRuntimeClient({
+        region: this.getRegion(),
+        ...(credentials ? { credentials } : {}),
+      });
 
-      const knowledgeBaseId = this.modelName.slice(
-        BedrockKnowledgeBaseProvider.KNOWLEDGE_BASE_PROVIDER_PREFIX.length,
-      );
-      const command = new (RetrieveCommand as unknown as RetrieveCommandConstructor)({
-        knowledgeBaseId,
+      // Use the stored knowledgeBaseId directly
+      const command = new RetrieveCommand({
+        knowledgeBaseId: this.knowledgeBaseId,
         retrievalQuery: { text: prompt },
         ...((this.config as BedrockKnowledgeBaseOptions)?.vectorSearchConfiguration && {
           vectorSearchConfiguration: (this.config as BedrockKnowledgeBaseOptions)
@@ -974,6 +1000,7 @@ export class BedrockKnowledgeBaseProvider extends AwsBedrockGenericProvider impl
         return {
           output: '',
           tokenUsage: undefined,
+          sessionId: this.getSessionId(),
         };
       }
 
@@ -987,10 +1014,12 @@ export class BedrockKnowledgeBaseProvider extends AwsBedrockGenericProvider impl
       return {
         output: results.join('\n'),
         tokenUsage: undefined,
+        sessionId: this.getSessionId(),
       };
     } catch (err) {
       return {
         error: `Knowledge Base API call error: ${String(err)}`,
+        sessionId: this.getSessionId(),
       };
     }
   }

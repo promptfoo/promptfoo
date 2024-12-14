@@ -1,6 +1,6 @@
 import type { RetrieveCommand, RetrieveCommandOutput } from '@aws-sdk/client-bedrock-agent-runtime';
 import { jest } from '@jest/globals';
-import { BedrockKnowledgeBaseProvider } from '../../src/providers/bedrockKnowledgeBase';
+import { BedrockKnowledgeBaseProvider } from '../../src/providers/bedrock';
 import type { CallApiContextParams, CallApiOptionsParams, Prompt } from '../../src/types';
 
 // Create mock response
@@ -47,9 +47,8 @@ describe('BedrockKnowledgeBaseProvider', () => {
         numberOfResults: 5,
       },
     };
-    const label = 'Test KB';
-    const provider = new BedrockKnowledgeBaseProvider(knowledgeBaseId, { config, label });
-    expect(provider.label).toBe(label);
+    const provider = new BedrockKnowledgeBaseProvider(knowledgeBaseId, { config });
+    expect(provider.config).toEqual(config);
   });
 
   it('generates and returns session id', () => {

@@ -1,1 +1,1 @@
-export * from './bedrockKnowledgeBase';
+export { BedrockKnowledgeBaseProvider } from './bedrock';
