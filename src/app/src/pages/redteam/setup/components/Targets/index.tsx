@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
-import httpZ from 'http-z';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Alert from '@mui/material/Alert';
@@ -17,6 +16,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import httpZ from 'http-z';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
@@ -97,7 +97,9 @@ const EXAMPLE_TARGET: ProviderOptions = {
 export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
-  const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(config.target || DEFAULT_HTTP_TARGET);
+  const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
+    config.target || DEFAULT_HTTP_TARGET,
+  );
   const [testingTarget, setTestingTarget] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;

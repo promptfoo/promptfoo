@@ -1,6 +1,5 @@
 import React from 'react';
 import Editor from 'react-simple-code-editor';
-import httpZ from 'http-z';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
@@ -15,11 +14,12 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import httpZ from 'http-z';
 import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
-import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-http';
+import 'prismjs/components/prism-json';
 import type { ProviderOptions } from '../../types';
 import 'prismjs/themes/prism.css';
 
@@ -132,7 +132,11 @@ ${exampleRequest}`;
             onChange={(e) => {
               const enabled = e.target.checked;
               if (enabled && !selectedTarget.config.request) {
-                if (window.confirm('Switch to raw HTTP request mode? This will convert your current configuration.')) {
+                if (
+                  window.confirm(
+                    'Switch to raw HTTP request mode? This will convert your current configuration.',
+                  )
+                ) {
                   onRawRequestToggle(enabled);
                 }
               } else {
@@ -156,8 +160,8 @@ ${exampleRequest}`;
               color: (theme) => theme.palette.text.secondary,
             }}
           >
-            Use HTTP/1.1 format. Include {'{{'} prompt {'}}'} where you want the prompt to be inserted.
-            You can also use {'{{'} api_key {'}}'} for authentication tokens.
+            Use HTTP/1.1 format. Include {'{{'} prompt {'}}'} where you want the prompt to be
+            inserted. You can also use {'{{'} api_key {'}}'} for authentication tokens.
           </Typography>
           <Box
             sx={{
