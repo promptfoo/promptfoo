@@ -1,7 +1,12 @@
 import { describe, expect } from '@jest/globals';
 import { SequenceProvider } from '../../../src/providers/sequence';
 import type { RedteamObjectConfig } from '../../../src/redteam/types';
-import type { ApiProvider, ProviderResponse } from '../../../src/types/providers';
+import type { Prompt } from '../../../src/types/prompts';
+import type {
+  ApiProvider,
+  ProviderResponse,
+  CallApiContextParams,
+} from '../../../src/types/providers';
 
 class MockProvider implements ApiProvider {
   public calls: string[] = [];
@@ -118,5 +123,34 @@ describe('SequenceProvider with redteam', () => {
       numRequests: 2,
       cached: 0,
     });
+  });
+
+  it('uses context.originalProvider when available', async () => {
+    const mockOriginalProvider = new MockProvider(['Original response']);
+    const mockConstructorProvider = new MockProvider(['Constructor response']);
+
+    const sequenceProvider = new SequenceProvider({
+      id: 'sequence',
+      config: {
+        inputs: ['Test prompt: {{prompt}}'],
+        redteam: {} as RedteamObjectConfig,
+      },
+      provider: mockConstructorProvider,
+    });
+
+    const result = await sequenceProvider.callApi('test input', {
+      originalProvider: mockOriginalProvider,
+      prompt: {
+        raw: 'test input',
+        label: 'test-prompt',
+      } as Prompt,
+      vars: {},
+    } as CallApiContextParams);
+
+    expect(result.error).toBeUndefined();
+    expect(mockOriginalProvider.calls).toHaveLength(1);
+    expect(mockConstructorProvider.calls).toHaveLength(0);
+    expect(mockOriginalProvider.calls[0]).toBe('Test prompt: test input');
+    expect(result.output).toBe('Original response');
   });
 });

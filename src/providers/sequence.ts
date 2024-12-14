@@ -18,7 +18,7 @@ export class SequenceProvider implements ApiProvider {
   private readonly inputs: string[];
   private readonly separator: string;
   private readonly identifier: string;
-  private readonly targetProvider?: ApiProvider; // Make optional to match ProviderOptions
+  private readonly targetProvider?: ApiProvider;
 
   constructor({ id, config, provider }: ProviderOptions) {
     invariant(
@@ -30,7 +30,7 @@ export class SequenceProvider implements ApiProvider {
     this.inputs = typedConfig.inputs;
     this.separator = typedConfig.separator || '\n---\n';
     this.identifier = id || 'sequence-provider';
-    this.targetProvider = provider; // Store the provider passed in constructor
+    this.targetProvider = provider;
   }
 
   id() {
@@ -42,8 +42,7 @@ export class SequenceProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Use the stored target provider instead of context.originalProvider
-    const provider = this.targetProvider || context?.originalProvider;
+    const provider = context?.originalProvider || this.targetProvider;
     invariant(provider, 'No provider available for sequence provider');
 
     const nunjucks = getNunjucksEngine();
@@ -56,7 +55,6 @@ export class SequenceProvider implements ApiProvider {
       cached: 0,
     };
 
-    // Send each input to the target provider
     for (const input of this.inputs) {
       const renderedInput = nunjucks.renderString(input, {
         ...context?.vars,
@@ -73,7 +71,6 @@ export class SequenceProvider implements ApiProvider {
 
       responses.push(response.output);
 
-      // Accumulate token usage if available
       if (response.tokenUsage) {
         totalTokenUsage.total += response.tokenUsage.total || 0;
         totalTokenUsage.prompt += response.tokenUsage.prompt || 0;
