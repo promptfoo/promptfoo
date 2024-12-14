@@ -78,7 +78,7 @@ describe('renderPrompt', () => {
     const renderedPrompt = await renderPrompt(prompt, { var1: '{"nested": "value1"}' }, {});
     expect(renderedPrompt).toBe(
       JSON.stringify(
-        JSON.parse('[{"text":"Test prompt "},{"text":"{\\"nested\\": \\"value1\\"}"}]'),
+        JSON.parse('[{"text":"Test prompt "},{"text":{"nested":"value1"}}]'),
         null,
         2,
       ),
