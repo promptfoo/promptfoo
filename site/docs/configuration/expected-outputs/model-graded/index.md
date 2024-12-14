@@ -33,7 +33,6 @@ Example of `llm-rubric` and/or `model-graded-closedqa`:
 ```yaml
 assert:
   - type: model-graded-closedqa # or llm-rubric
-    # Make sure the LLM output adheres to this criteria:
     value: Is not apologetic
 ```
 
@@ -42,116 +41,66 @@ Example of factuality check:
 ```yaml
 assert:
   - type: factuality
-    # Make sure the LLM output is consistent with this statement:
-    value: Sacramento is the capital of California
+    value: The capital of France is Paris
 ```
-
-For more information on factuality, see the [guide on LLM factuality](/docs/guides/factuality-eval).
 
 ### Using variables in the rubric
 
-You can use test `vars` in the LLM rubric. This example uses the `question` variable to help detect hallucinations:
+You can use test `vars` in the LLM rubric:
 
 ```yaml
 providers:
   - openai:gpt-4
 prompts:
   - file://prompt1.txt
-  - file://prompt2.txt
-defaultTest:
-  assert:
-    - type: llm-rubric
-      value: 'Says that it is uncertain or unable to answer the question: "{{question}}"'
 tests:
   - vars:
-      question: What's the weather in New York?
-  - vars:
-      question: Who won the latest football match between the Giants and 49ers?
+      question: What is quantum computing?
+    assert:
+      - type: llm-rubric
+        value: Accurately answers {{question}} without technical jargon
 ```
 
 ## Examples (RAG-based)
 
-RAG metrics require variables named `context` and `query`. You must also set the `threshold` property on your test (all scores are normalized between 0 and 1).
-
-Here's an example config of a RAG-based knowledge bot:
+RAG metrics require variables named `context` and `query`. Here's an example:
 
 ```yaml
 prompts:
   - |
-    You are an internal corporate chatbot.
-    Respond to this query: {{query}}
-    Here is some context that you can use to write your response: {{context}}
-providers:
-  - openai:gpt-4
+    Question: {{query}}
+    Context: {{context}}
+    Answer the question using only the provided context.
 tests:
   - vars:
-      query: What is the max purchase that doesn't require approval?
-      context: file://docs/reimbursement.md
+      query: What is our refund policy?
+      context: |
+        Refunds are processed within 30 days.
+        All returns must include original packaging.
     assert:
-      - type: contains
-        value: '$500'
-      - type: factuality
-        value: the employee's manager is responsible for approvals
-      - type: answer-relevance
-        threshold: 0.9
-      - type: context-recall
-        threshold: 0.9
-        value: max purchase price without approval is $500. Talk to Fred before submitting anything.
-      - type: context-relevance
-        threshold: 0.9
       - type: context-faithfulness
         threshold: 0.9
+      - type: context-relevance
+        threshold: 0.8
 ```
 
-## Examples (comparison)
+## Customizing Providers
 
-The `select-best` assertion type compares multiple outputs and selects the one that best meets specified criteria:
+### Basic Provider Configuration
+
+You can customize provider settings:
 
 ```yaml
-prompts:
-  - 'Write a tweet about {{topic}}'
-  - 'Write a very concise, funny tweet about {{topic}}'
-
-providers:
-  - openai:gpt-4
-
-tests:
-  - vars:
-      topic: bananas
-    assert:
-      - type: select-best
-        value: choose the funniest tweet
+provider:
+  - id: openai:gpt-4
+    config:
+      temperature: 0
+      max_tokens: 500
 ```
 
-## Overriding the LLM grader
+### Multiple Graders
 
-By default, model-graded asserts use GPT-4. You can override the grader in several ways:
-
-1. Using the CLI:
-
-   ```sh
-   promptfoo eval --grader openai:gpt-4
-   ```
-
-2. Using test options:
-
-   ```yaml
-   defaultTest:
-     options:
-       provider: openai:gpt-4
-   ```
-
-3. Using assertion-level override:
-   ```yaml
-   assert:
-     - type: llm-rubric
-       value: Is spoken like a pirate
-       provider: openai:gpt-4
-   ```
-
-### Multiple graders
-
-Some assertions use multiple types of providers. To override both embedding and text providers:
+Some assertions use multiple types of providers:
 
 ```yaml
 defaultTest:
@@ -166,6 +115,22 @@ defaultTest:
         config:
           apiHost: xxx.openai.azure.com
 ```
+
+### Available Variables
+
+When customizing prompts, you can use these variables:
+
+- `{{output}}` - The LLM output
+- `{{rubric}}` - The assertion value
+- For select-best: `{{outputs}}` and `{{criteria}}`
+
+## Troubleshooting
+
+Common issues:
+
+- Missing required variables (check Requirements section of each metric)
+- Incorrect provider configuration
+- Threshold values out of range (should be between 0 and 1)
 
 ## Further Reading
 
