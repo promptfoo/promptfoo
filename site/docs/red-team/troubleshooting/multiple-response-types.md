@@ -31,7 +31,7 @@ For the simple case above you can use a response parser with a little bit of log
     method: 'POST'
     headers: { 'Content-Type': 'application/json' }
     body: { 'message': '{{prompt}}' }
-    responseParser: json.response ?? json.error
+    transformResponse: json.response ?? json.error
 ```
 
 For more complex cases, you can use a custom provider. See the [custom provider docs](/docs/providers/custom-api/).

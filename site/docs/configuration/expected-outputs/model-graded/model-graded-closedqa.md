@@ -1,6 +1,6 @@
-# Model Graded Closed QA
+# Model-graded Closed QA
 
-The `model-graded-closedqa` assertion type evaluates whether an LLM's output meets specific criteria, using OpenAI's closed-ended question-answering evaluation methodology. While similar to `llm-rubric`, this evaluator is specifically optimized for yes/no criteria checking rather than nuanced scoring.
+The `model-graded-closedqa` assertion evaluates whether an LLM's output meets specific criteria, using OpenAI's closed-ended question-answering evaluation methodology. While similar to `llm-rubric`, this evaluator is specifically optimized for yes/no criteria checking rather than nuanced scoring.
 
 ### Key differences from llm-rubric
 
@@ -16,8 +16,7 @@ Add the assertion to your test configuration:
 ```yaml
 assert:
   - type: model-graded-closedqa
-    # Specify the criteria for grading the output:
-    value: Is written in a professional tone without technical jargon
+    value: 'Is written in a professional tone without technical jargon'
 ```
 
 ### How it works
@@ -28,13 +27,18 @@ Based on OpenAI's [closedqa evaluation](https://github.com/openai/evals/blob/mai
 2. Uses an LLM to evaluate if the output satisfies the criteria
 3. Returns a binary pass/fail result with explanation
 
-Similar to `llm-rubric` but with a more focused evaluation approach specifically designed for closed-ended criteria checking.
+The grader will return:
 
-### Example with variables
+- `Y` if the output meets the criterion
+- `N` if the output does not meet the criterion
+
+### Example Configuration
+
+Here's a complete example showing how to use model-graded-closedqa:
 
 ```yaml
 providers:
-  - openai:gpt-4o
+  - openai:gpt-4
 prompts:
   - file://prompts/customer_service.txt
 tests:
@@ -50,27 +54,48 @@ tests:
           3. Maintains professional tone
 ```
 
-### Customizing the prompt
+### Customizing the Grader
 
-You can override the default grading prompt:
+Like other model-graded assertions, you can override the default grader in three ways:
+
+1. Using the CLI:
+
+   ```sh
+   promptfoo eval --grader openai:gpt-4
+   ```
+
+2. Using test options:
+
+   ```yaml
+   defaultTest:
+     options:
+       provider: openai:gpt-4
+   ```
+
+3. Using assertion-level override:
+   ```yaml
+   assert:
+     - type: model-graded-closedqa
+       value: Is concise and clear
+       provider: openai:gpt-4
+   ```
+
+### Customizing the Prompt
+
+You can customize the evaluation prompt using the `rubricPrompt` property:
 
 ```yaml
 defaultTest:
   options:
-    rubricPrompt: >
-      [
-        {
-          "role": "system",
-          "content": "You are evaluating if an output meets specific criteria. Output JSON with {pass: boolean, score: number, reason: string}"
-        },
-        {
-          "role": "user",
-          "content": "Criteria: {{rubric}}\n\nOutput to evaluate: {{output}}"
-        }
-      ]
+    rubricPrompt: |
+      Question: {{input}}
+      Criterion: {{criteria}}
+      Response: {{completion}}
+
+      Does this response meet the criterion? Answer Y or N.
 ```
 
-### References
+### Further Reading
 
 - Based on [OpenAI's closedqa evaluation](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/closedqa.yaml)
 - See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more configuration options

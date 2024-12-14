@@ -145,7 +145,7 @@ export class Telemetry {
         throw new Error(`Failed to save consent: ${response.statusText}`);
       }
     } catch (err) {
-      logger.error(`Error saving consent: ${(err as Error).message}`);
+      logger.debug(`Failed to save consent: ${(err as Error).message}`);
     }
   }
 }

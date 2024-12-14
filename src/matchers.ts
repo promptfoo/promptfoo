@@ -1,5 +1,5 @@
-import invariant from 'tiny-invariant';
 import cliState from './cliState';
+import { getEnvString } from './envars';
 import logger from './logger';
 import {
   ANSWER_RELEVANCY_GENERATE,
@@ -16,7 +16,8 @@ import {
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
-import { shouldGenerateRemote } from './redteam/util';
+import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
+import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import type {
   ApiClassificationProvider,
@@ -32,6 +33,7 @@ import type {
   ApiModerationProvider,
 } from './types';
 import { maybeLoadFromExternalFile } from './util';
+import invariant from './util/invariant';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 
@@ -924,10 +926,21 @@ export async function matchesModeration(
   { userPrompt, assistantResponse, categories = [] }: ModerationMatchOptions,
   grading?: GradingConfig,
 ) {
+  // Get default providers
+  const defaultProviders = await getDefaultProviders();
+
+  // Only try to use Replicate if OpenAI is not available
+  const hasOpenAiKey = getEnvString('OPENAI_API_KEY');
+  const hasReplicateKey =
+    !hasOpenAiKey && (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN'));
+  const defaultModerationProvider = hasReplicateKey
+    ? await loadApiProvider(LLAMA_GUARD_REPLICATE_PROVIDER)
+    : defaultProviders.moderationProvider;
+
   const moderationProvider = (await getAndCheckProvider(
     'moderation',
     grading?.provider,
-    (await getDefaultProviders()).moderationProvider,
+    defaultModerationProvider,
     'moderation check',
   )) as ApiModerationProvider;
 

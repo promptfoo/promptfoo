@@ -17,6 +17,7 @@ import {
 } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
+import type { EnvOverrides } from './env';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -25,6 +26,7 @@ export * from './prompts';
 export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
+
 export type { EnvOverrides } from './env';
 
 export const CommandLineOptionsSchema = z.object({
@@ -158,6 +160,7 @@ const PromptMetricsSchema = z.object({
   score: z.number(),
   testPassCount: z.number(),
   testFailCount: z.number(),
+  testErrorCount: z.number(),
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
@@ -198,6 +201,15 @@ export interface PromptWithMetadata {
   count: number;
 }
 
+export enum ResultFailureReason {
+  // The test passed, or we don't know exactly why the test case failed.
+  NONE = 0,
+  // The test case failed because an assertion rejected it.
+  ASSERT = 1,
+  // Test case failed due to some other error.
+  ERROR = 2,
+}
+
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
   description?: string; // on the new version 2, this is stored per-result // FIXME(ian): The EvalResult model doesn't pass this through, but that's ok since we can use testCase.description?
@@ -210,6 +222,7 @@ export interface EvaluateResult {
   vars: Record<string, string | object>;
   response?: ProviderResponse;
   error?: string | null;
+  failureReason: ResultFailureReason;
   success: boolean;
   score: number;
   latencyMs: number;
@@ -222,6 +235,7 @@ export interface EvaluateResult {
 export interface EvaluateTableOutput {
   id: string;
   pass: boolean;
+  failureReason: ResultFailureReason;
   score: number;
   namedScores: Record<string, number>;
   text: string;
@@ -253,6 +267,7 @@ export interface EvaluateTable {
 export interface EvaluateStats {
   successes: number;
   failures: number;
+  errors: number;
   tokenUsage: Required<TokenUsage>;
 }
 
@@ -274,7 +289,7 @@ export interface EvaluateSummaryV2 {
 
 export interface ResultSuggestion {
   type: string;
-  action: 'replace-prompt';
+  action: 'replace-prompt' | 'pre-filter' | 'post-filter' | 'note';
   value: string;
 }
 
@@ -381,11 +396,20 @@ type NotPrefixed<T extends string> = `not-${T}`;
 // and selects the highest scoring one after all other assertions have completed.
 export type SpecialAssertionTypes = 'select-best' | 'human';
 
-export type AssertionType =
-  | BaseAssertionTypes
-  | NotPrefixed<BaseAssertionTypes>
-  | SpecialAssertionTypes
-  | RedteamAssertionTypes;
+export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human']);
+
+export const NotPrefixedAssertionTypesSchema = BaseAssertionTypesSchema.transform(
+  (baseType) => `not-${baseType}` as NotPrefixed<BaseAssertionTypes>,
+);
+
+export const AssertionTypeSchema = z.union([
+  BaseAssertionTypesSchema,
+  NotPrefixedAssertionTypesSchema,
+  SpecialAssertionTypesSchema,
+  z.custom<RedteamAssertionTypes>(),
+]);
+
+export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
@@ -404,7 +428,7 @@ export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
-  type: z.custom<AssertionType>(),
+  type: AssertionTypeSchema,
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
@@ -852,3 +876,9 @@ export interface Job {
 // used for writing eval results
 export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'jsonl', 'txt', 'yaml', 'yml']);
 export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
+
+export interface LoadApiProviderContext {
+  options?: ProviderOptions;
+  basePath?: string;
+  env?: EnvOverrides;
+}

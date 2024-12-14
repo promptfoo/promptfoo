@@ -8,14 +8,15 @@ import {
   PII_PLUGINS,
 } from '../../../src/redteam/constants';
 import { Plugins } from '../../../src/redteam/plugins';
-import { shouldGenerateRemote, neverGenerateRemote } from '../../../src/redteam/util';
+import { shouldGenerateRemote, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');
-jest.mock('../../../src/redteam/util', () => ({
+jest.mock('../../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
+  getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
 }));
 jest.mock('../../../src/cliState', () => ({
   __esModule: true,
@@ -220,7 +221,7 @@ describe('Plugins', () => {
       expect(result![0].assert).toBeDefined();
       expect(result![0].assert).toEqual([
         { metric: 'Harmful', type: 'promptfoo:redteam:harmful' },
-        { metric: 'Harmful', type: 'moderation' },
+        expect.objectContaining({ metric: 'Harmful', type: 'moderation' }),
       ]);
     });
 

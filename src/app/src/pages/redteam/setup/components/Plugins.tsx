@@ -11,8 +11,6 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
@@ -61,7 +59,7 @@ const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
-  const [isCustomMode, setIsCustomMode] = useState(false);
+  const [isCustomMode, setIsCustomMode] = useState(true);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
       config.plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)) as Plugin[],
@@ -79,6 +77,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   });
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   const [debouncedPlugins] = useDebounce(
     useMemo(
@@ -203,7 +202,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       name: 'MITRE',
       plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
     },
-    { name: 'Custom', plugins: new Set() },
   ];
 
   const updatePluginConfig = useCallback(
@@ -279,12 +277,76 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     if (pluginsToShow.length === 0) {
       return null;
     }
+
+    const isExpanded = expandedCategories.has(category);
+    const selectedCount = pluginsToShow.filter((plugin) => selectedPlugins.has(plugin)).length;
+
     return (
-      <Accordion key={category} defaultExpanded>
+      <Accordion
+        key={category}
+        expanded={isExpanded}
+        onChange={(event, expanded) => {
+          setExpandedCategories((prev) => {
+            const newSet = new Set(prev);
+            if (expanded) {
+              newSet.add(category);
+            } else {
+              newSet.delete(category);
+            }
+            return newSet;
+          });
+        }}
+      >
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-            {category}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+            <Typography variant="h6" sx={{ fontWeight: 'medium', flex: 1 }}>
+              {category} ({selectedCount}/{pluginsToShow.length})
+            </Typography>
+            {isExpanded && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 2,
+                  mr: 2,
+                  '& > *': {
+                    color: 'primary.main',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    textDecoration: 'none',
+                    '&:hover': {
+                      textDecoration: 'underline',
+                    },
+                  },
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Box
+                  component="span"
+                  onClick={() => {
+                    pluginsToShow.forEach((plugin) => {
+                      if (!selectedPlugins.has(plugin)) {
+                        handlePluginToggle(plugin);
+                      }
+                    });
+                  }}
+                >
+                  Select all
+                </Box>
+                <Box
+                  component="span"
+                  onClick={() => {
+                    pluginsToShow.forEach((plugin) => {
+                      if (selectedPlugins.has(plugin)) {
+                        handlePluginToggle(plugin);
+                      }
+                    });
+                  }}
+                >
+                  Select none
+                </Box>
+              </Box>
+            )}
+          </Box>
         </AccordionSummary>
         <AccordionDetails>
           <Grid container spacing={2}>
@@ -403,60 +465,118 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           Plugin Configuration
         </Typography>
 
-        <Grid container spacing={2} sx={{ mb: 4 }}>
-          {presets.map((preset) => {
-            const isSelected =
-              preset.name === 'Custom'
-                ? isCustomMode
-                : preset.name === currentlySelectedPreset?.name;
-            return (
-              <Grid item xs={6} sm={4} md={2} key={preset.name}>
-                <PresetCard
-                  name={preset.name}
-                  isSelected={isSelected}
-                  onClick={() => handlePresetSelect(preset)}
-                />
-              </Grid>
-            );
-          })}
-        </Grid>
+        <Box sx={{ mb: 4 }}>
+          <Typography
+            variant="h5"
+            sx={{
+              mb: 3,
+              fontWeight: 500,
+              color: 'text.primary',
+            }}
+          >
+            Available presets
+          </Typography>
 
-        {isCustomMode ? (
-          <>
-            <TextField
-              fullWidth
-              variant="outlined"
-              label="Filter Plugins"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: <SearchIcon />,
+          <Box>
+            <Grid
+              container
+              spacing={3}
+              sx={{
+                mb: 4,
+                justifyContent: {
+                  xs: 'center',
+                  sm: 'flex-start',
+                },
               }}
-              sx={{ mb: 3 }}
-            />
-            <Box sx={{ mb: 3 }}>
-              {Object.entries(riskCategories).map(([category, plugins]) =>
-                renderPluginCategory(category, plugins),
-              )}
-            </Box>
-          </>
-        ) : (
-          <Card variant="outlined" sx={{ mb: 3 }}>
-            <CardContent>
-              {currentlySelectedPreset && (
-                <Typography variant="h6" gutterBottom>
-                  Selected Preset: {currentlySelectedPreset.name}
-                </Typography>
-              )}
-              <Typography variant="body2">
-                Number of selected plugins: {selectedPlugins.size}
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                To customize your plugin selection, choose the "Custom" preset.
-              </Typography>
-            </CardContent>
-          </Card>
-        )}
+            >
+              {presets.map((preset) => {
+                const isSelected =
+                  preset.name === 'Custom'
+                    ? isCustomMode
+                    : preset.name === currentlySelectedPreset?.name;
+                return (
+                  <Grid
+                    item
+                    xs={12}
+                    sm={6}
+                    md={4}
+                    lg={3}
+                    key={preset.name}
+                    sx={{
+                      minWidth: { xs: '280px', sm: '320px' },
+                      maxWidth: { xs: '100%', sm: '380px' },
+                    }}
+                  >
+                    <PresetCard
+                      name={preset.name}
+                      isSelected={isSelected}
+                      onClick={() => handlePresetSelect(preset)}
+                    />
+                  </Grid>
+                );
+              })}
+            </Grid>
+          </Box>
+        </Box>
+
+        <TextField
+          fullWidth
+          variant="outlined"
+          label="Filter Plugins"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: <SearchIcon />,
+          }}
+          sx={{ mb: 3 }}
+        />
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 2,
+            mb: 2,
+            '& > *': {
+              color: 'primary.main',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              textDecoration: 'none',
+              '&:hover': {
+                textDecoration: 'underline',
+              },
+            },
+          }}
+        >
+          <Box
+            component="span"
+            onClick={() => {
+              filteredPlugins.forEach((plugin) => {
+                if (!selectedPlugins.has(plugin)) {
+                  handlePluginToggle(plugin);
+                }
+              });
+            }}
+          >
+            Select all
+          </Box>
+          <Box
+            component="span"
+            onClick={() => {
+              filteredPlugins.forEach((plugin) => {
+                if (selectedPlugins.has(plugin)) {
+                  handlePluginToggle(plugin);
+                }
+              });
+            }}
+          >
+            Select none
+          </Box>
+        </Box>
+        <Box sx={{ mb: 3 }}>
+          {Object.entries(riskCategories).map(([category, plugins]) =>
+            renderPluginCategory(category, plugins),
+          )}
+        </Box>
 
         {selectedPlugins.has('policy') && (
           <Box sx={{ mb: 4 }}>
@@ -468,14 +588,21 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           <Button variant="outlined" onClick={onBack} startIcon={<KeyboardArrowLeftIcon />}>
             Back
           </Button>
-          <Button
-            variant="contained"
-            onClick={onNext}
-            endIcon={<KeyboardArrowRightIcon />}
-            disabled={!isConfigValid()}
-          >
-            Next
-          </Button>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {selectedPlugins.size === 0 && (
+              <Typography variant="body2" color="text.secondary">
+                Select at least one plugin to continue.
+              </Typography>
+            )}
+            <Button
+              variant="contained"
+              onClick={onNext}
+              endIcon={<KeyboardArrowRightIcon />}
+              disabled={!isConfigValid() || selectedPlugins.size === 0}
+            >
+              Next
+            </Button>
+          </Box>
         </Box>
 
         <PluginConfigDialog

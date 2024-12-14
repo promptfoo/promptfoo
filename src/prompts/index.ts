@@ -1,5 +1,4 @@
 import { globSync } from 'glob';
-import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
   UnifiedConfig,
@@ -10,6 +9,7 @@ import type {
 } from '../types';
 import { parsePathOrGlob } from '../util';
 import { isJavascriptFile } from '../util/file';
+import invariant from '../util/invariant';
 import { processJsFile } from './processors/javascript';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';

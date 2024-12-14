@@ -8,6 +8,7 @@ import {
   formatPrompts,
   RedTeamGenerationResponse,
 } from '../../../src/redteam/extraction/util';
+import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/logger', () => ({
@@ -20,6 +21,10 @@ jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
+jest.mock('../../../src/redteam/remoteGeneration', () => ({
+  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),
+}));
+
 describe('fetchRemoteGeneration', () => {
   beforeAll(() => {
     delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
@@ -27,6 +32,7 @@ describe('fetchRemoteGeneration', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/task');
   });
 
   it('should fetch remote generation for purpose task', async () => {
@@ -45,7 +51,7 @@ describe('fetchRemoteGeneration', () => {
 
     expect(result).toBe('This is a purpose');
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/v1/generate',
+      'https://api.promptfoo.app/task',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,7 +82,7 @@ describe('fetchRemoteGeneration', () => {
 
     expect(result).toEqual(['Entity1', 'Entity2']);
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/v1/generate',
+      'https://api.promptfoo.app/task',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -116,6 +122,31 @@ describe('fetchRemoteGeneration', () => {
     await expect(fetchRemoteGeneration('purpose', ['prompt'])).rejects.toThrow('Invalid input');
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("Error using remote generation for task 'purpose':"),
+    );
+  });
+
+  it('should use custom remote generation URL when provided', async () => {
+    const customUrl = 'https://custom-api.example.com/generate';
+    jest.mocked(getRemoteGenerationUrl).mockReturnValue(customUrl);
+
+    const mockResponse = {
+      data: {
+        task: 'purpose',
+        result: 'This is a purpose',
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    await fetchRemoteGeneration('purpose', ['prompt1']);
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      customUrl,
+      expect.any(Object),
+      REQUEST_TIMEOUT_MS,
+      'json',
     );
   });
 });

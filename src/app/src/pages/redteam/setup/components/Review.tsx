@@ -1,8 +1,14 @@
 import React, { useCallback, useMemo } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
+import SaveIcon from '@mui/icons-material/Save';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
@@ -10,6 +16,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { strategyDisplayNames } from '@promptfoo/redteam/constants';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
@@ -25,13 +32,14 @@ export default function Review() {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
+  const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
+  const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
   };
 
   const handleSaveYaml = () => {
-    const yamlContent = generateOrderedYaml(config);
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -45,6 +53,14 @@ export default function Review() {
       numStrategies: config.strategies.length,
       targetType: config.target.id,
     });
+  };
+
+  const handleOpenYamlDialog = () => {
+    setIsYamlDialogOpen(true);
+  };
+
+  const handleCloseYamlDialog = () => {
+    setIsYamlDialogOpen(false);
   };
 
   const getPluginSummary = useCallback((plugin: string | RedteamPlugin) => {
@@ -87,6 +103,22 @@ export default function Review() {
       .filter((intent): intent is string => typeof intent === 'string' && intent.trim() !== '');
   }, [config.plugins]);
 
+  const getStrategyId = (strategy: string | { id: string }): string => {
+    return typeof strategy === 'string' ? strategy : strategy.id;
+  };
+
+  const strategySummary = useMemo(() => {
+    const summary = new Map<string, number>();
+
+    config.strategies.forEach((strategy) => {
+      const id = getStrategyId(strategy);
+      const label = strategyDisplayNames[id as keyof typeof strategyDisplayNames] || id;
+      summary.set(label, (summary.get(label) || 0) + 1);
+    });
+
+    return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
+  }, [config.strategies]);
+
   return (
     <Box maxWidth="lg" mx="auto">
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 4 }}>
@@ -126,6 +158,19 @@ export default function Review() {
                       label === 'Custom Policy' ? theme.palette.primary.contrastText : undefined,
                   }}
                 />
+              ))}
+            </Box>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+            <Typography variant="h6" gutterBottom>
+              Strategies ({strategySummary.length})
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {strategySummary.map(([label, count]) => (
+                <Chip key={label} label={count > 1 ? `${label} (${count})` : label} size="small" />
               ))}
             </Box>
           </Paper>
@@ -209,7 +254,9 @@ export default function Review() {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={12}>
                 <Typography variant="subtitle2">Purpose</Typography>
-                <Typography variant="body2">{config.purpose || 'Not specified'}</Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {config.purpose || 'Not specified'}
+                </Typography>
               </Grid>
             </Grid>
           </Paper>
@@ -231,9 +278,24 @@ export default function Review() {
             <Typography variant="body1" paragraph>
               Save your configuration as a YAML file:
             </Typography>
-            <Button variant="contained" color="primary" onClick={handleSaveYaml} sx={{ mb: 2 }}>
-              Save YAML
-            </Button>
+            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleSaveYaml}
+                startIcon={<SaveIcon />}
+              >
+                Save YAML
+              </Button>
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<VisibilityIcon />}
+                onClick={handleOpenYamlDialog}
+              >
+                View YAML
+              </Button>
+            </Box>
           </li>
           <li>
             <Typography variant="body1" paragraph>
@@ -254,6 +316,13 @@ export default function Review() {
           </li>
         </ol>
       </Paper>
+
+      <Dialog open={isYamlDialogOpen} onClose={handleCloseYamlDialog} maxWidth="lg" fullWidth>
+        <DialogTitle>YAML Configuration</DialogTitle>
+        <DialogContent>
+          <YamlEditor initialYaml={yamlContent} readOnly />
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }

@@ -1,6 +1,6 @@
 # Context Recall
 
-The `context-recall` assertion type evaluates whether the provided context contains the necessary ground truth information. This metric is inspired by [RAGAS's Context Recall](https://docs.ragas.io/en/v0.1.21/concepts/metrics/context_recall.html) evaluation methodology.
+The `context-recall` assertion evaluates whether key information from a ground truth statement appears in the provided context. This is particularly useful for RAG (Retrieval-Augmented Generation) applications to ensure that important facts are being retrieved. This metric is inspired by [RAGAS's Context Recall](https://docs.ragas.io/en/v0.1.21/concepts/metrics/context_recall.html) methodology.
 
 ### How to use it
 
@@ -9,8 +9,8 @@ Add the assertion to your test configuration:
 ```yaml
 assert:
   - type: context-recall
-    threshold: 0.7 # Score between 0.0 and 1.0
-    value: 'The ground truth statement to check for'
+    threshold: 0.9 # Score between 0.0 and 1.0
+    value: 'Key facts that should appear in the context'
 ```
 
 ### Requirements
@@ -23,13 +23,18 @@ The assertion requires:
 
 ### How it works
 
-Under the hood, `context-recall` evaluates:
+The context recall checker:
 
-1. Whether the ground truth information appears in the context
-2. The semantic similarity between the ground truth and context segments
-3. The completeness of information coverage
+1. Breaks down the ground truth into individual statements
+2. Evaluates whether each statement appears in the context
+3. Calculates semantic similarity between the ground truth and context segments
+4. Computes a recall score based on the proportion of supported statements
 
-Example configuration:
+A higher threshold requires more of the ground truth information to be present in the context.
+
+### Example Configuration
+
+Here's a complete example showing how to use context recall:
 
 ```yaml
 tests:
@@ -45,21 +50,50 @@ tests:
         value: max purchase price without approval is $500
 ```
 
-### Overriding providers
+### Customizing the Grader
 
-Like other model-graded metrics, you can override both the embedding and text providers:
+Like other model-graded assertions, you can override the default grader in three ways:
+
+1. Using the CLI:
+
+   ```sh
+   promptfoo eval --grader openai:gpt-4
+   ```
+
+2. Using test options:
+
+   ```yaml
+   defaultTest:
+     options:
+       provider: openai:gpt-4
+   ```
+
+3. Using assertion-level override:
+   ```yaml
+   assert:
+     - type: context-recall
+       threshold: 0.9
+       value: 'Key facts to check'
+       provider: openai:gpt-4
+   ```
+
+### Customizing the Prompt
+
+You can customize the evaluation prompt using the `rubricPrompt` property:
 
 ```yaml
 defaultTest:
   options:
-    provider:
-      text:
-        id: openai:gpt-4o
-      embedding:
-        id: openai:text-embedding-ada-002
+    rubricPrompt: |
+      Context: {{context}}
+      Ground Truth: {{groundTruth}}
+
+      Break down the ground truth into atomic statements.
+      For each statement, mark it with [FOUND] if it appears in the context,
+      or [NOT FOUND] if it does not.
 ```
 
-### References
+### Further Reading
 
-- Based on [RAGAS Context Recall](https://docs.ragas.io/en/v0.1.21/concepts/metrics/context_recall.html) methodology
 - See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more configuration options
+- Learn more about [RAGAS Context Recall](https://docs.ragas.io/en/v0.1.21/concepts/metrics/context_recall.html)

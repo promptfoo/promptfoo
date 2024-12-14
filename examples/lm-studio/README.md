@@ -30,7 +30,7 @@ This example demonstrates how to use Promptfoo with LM Studio for prompt evaluat
            model: 'bartowski/gemma-2-9b-it-GGUF'
            temperature: 0.7
            max_tokens: -1
-         responseParser: 'json.choices[0].message.content'
+         transformResponse: 'json.choices[0].message.content'
    ```
 
    Note that you can view the specific configuration for each model within LM Studio's examples in the server tab.

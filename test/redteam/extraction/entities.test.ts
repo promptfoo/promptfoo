@@ -2,6 +2,7 @@ import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
 import { extractEntities } from '../../../src/redteam/extraction/entities';
+import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/logger', () => ({
@@ -22,6 +23,11 @@ jest.mock('../../../src/envars', () => {
   };
 });
 
+jest.mock('../../../src/redteam/remoteGeneration', () => ({
+  ...jest.requireActual('../../../src/redteam/remoteGeneration'),
+  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),
+}));
+
 describe('Entities Extractor', () => {
   let provider: ApiProvider;
   let originalEnv: NodeJS.ProcessEnv;
@@ -38,6 +44,7 @@ describe('Entities Extractor', () => {
       id: jest.fn().mockReturnValue('test-provider'),
     };
     jest.clearAllMocks();
+    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/task');
   });
 
   afterEach(() => {
@@ -58,7 +65,7 @@ describe('Entities Extractor', () => {
 
     expect(result).toEqual(['Apple', 'Google']);
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/v1/generate',
+      'https://api.promptfoo.app/task',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({

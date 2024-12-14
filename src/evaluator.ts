@@ -5,7 +5,6 @@ import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
-import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
@@ -17,19 +16,21 @@ import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
-import type {
-  ApiProvider,
-  Assertion,
-  CompletedPrompt,
-  EvaluateOptions,
-  EvaluateResult,
-  EvaluateStats,
-  Prompt,
-  ProviderResponse,
-  RunEvalOptions,
-  TestSuite,
+import {
+  ResultFailureReason,
+  type ApiProvider,
+  type Assertion,
+  type CompletedPrompt,
+  type EvaluateOptions,
+  type EvaluateResult,
+  type EvaluateStats,
+  type Prompt,
+  type ProviderResponse,
+  type RunEvalOptions,
+  type TestSuite,
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
+import invariant from './util/invariant';
 import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
@@ -119,6 +120,7 @@ class Evaluator {
     this.stats = {
       successes: 0,
       failures: 0,
+      errors: 0,
       tokenUsage: {
         total: 0,
         prompt: 0,
@@ -152,9 +154,15 @@ class Evaluator {
     // Use the original prompt to set the label, not renderedPrompt
     const promptLabel = prompt.label;
 
+    provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
+    invariant(
+      typeof provider.delay === 'number',
+      `Provider delay should be set for ${provider.label}`,
+    );
+
     // Set up the special _conversation variable
     const vars = test.vars || {};
-    const conversationKey = `${provider.label || provider.id()}:${prompt.id}`;
+    const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
     const usesConversation = prompt.raw.includes('_conversation');
     if (
       !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
@@ -166,10 +174,8 @@ class Evaluator {
 
     // Overwrite vars with any saved register values
     Object.assign(vars, this.registers);
-
     // Render the prompt
     const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
-
     let renderedJson = undefined;
     try {
       renderedJson = JSON.parse(renderedPrompt);
@@ -240,21 +246,16 @@ class Evaluator {
         output: response.output || '',
       });
 
-      if (!response.cached) {
-        let sleepMs = provider.delay ?? delay;
-        if (!sleepMs) {
-          sleepMs = getEnvInt('PROMPTFOO_DELAY_MS', 0);
-        }
-        if (sleepMs) {
-          logger.debug(`Sleeping for ${sleepMs}ms`);
-          await sleep(sleepMs);
-        }
+      if (!response.cached && provider.delay > 0) {
+        logger.debug(`Sleeping for ${provider.delay}ms`);
+        await sleep(provider.delay);
       }
 
       const ret: EvaluateResult = {
         ...setup,
         response,
         success: false,
+        failureReason: ResultFailureReason.NONE,
         score: 0,
         namedScores: {},
         latencyMs,
@@ -298,6 +299,7 @@ class Evaluator {
         });
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
+          ret.failureReason = ResultFailureReason.ASSERT;
         }
         ret.success = checkResult.pass;
         ret.score = checkResult.score;
@@ -324,6 +326,8 @@ class Evaluator {
 
       if (ret.success) {
         this.stats.successes++;
+      } else if (ret.failureReason === ResultFailureReason.ERROR) {
+        this.stats.errors++;
       } else {
         this.stats.failures++;
       }
@@ -335,11 +339,12 @@ class Evaluator {
 
       return ret;
     } catch (err) {
-      this.stats.failures++;
+      this.stats.errors++;
       return {
         ...setup,
         error: String(err) + '\n\n' + (err as Error).stack,
         success: false,
+        failureReason: ResultFailureReason.ERROR,
         score: 0,
         namedScores: {},
         latencyMs,
@@ -420,6 +425,7 @@ class Evaluator {
             score: 0,
             testPassCount: 0,
             testFailCount: 0,
+            testErrorCount: 0,
             assertPassCount: 0,
             assertFailCount: 0,
             totalLatencyMs: 0,
@@ -504,6 +510,7 @@ class Evaluator {
     const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
     const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
+      testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
@@ -548,7 +555,6 @@ class Evaluator {
         `testCase.assert is not an array in test case #${index + 1}`,
       );
       // Handle default properties
-      testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase.vars };
       testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
       testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
@@ -687,7 +693,13 @@ class Evaluator {
         }
       }
       metrics.testPassCount += row.success ? 1 : 0;
-      metrics.testFailCount += row.success ? 0 : 1;
+      if (!row.success) {
+        if (row.failureReason === ResultFailureReason.ERROR) {
+          metrics.testErrorCount += 1;
+        } else {
+          metrics.testFailCount += 1;
+        }
+      }
       metrics.assertPassCount +=
         row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
       metrics.assertFailCount +=
@@ -895,7 +907,11 @@ class Evaluator {
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
       numTests: prompts.reduce(
-        (acc, p) => acc + (p.metrics?.testPassCount || 0) + (p.metrics?.testFailCount || 0),
+        (acc, p) =>
+          acc +
+          (p.metrics?.testPassCount || 0) +
+          (p.metrics?.testFailCount || 0) +
+          (p.metrics?.testErrorCount || 0),
         0,
       ),
       numVars: varNames.size,

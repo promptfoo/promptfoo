@@ -1,16 +1,6 @@
 # Context Faithfulness
 
-The `context-faithfulness` assertion type evaluates whether the LLM's response is faithful to the provided context, ensuring that the generated answer doesn't include information not present in the context. This metric is inspired by [RAGAS's Faithfulness metric](https://docs.ragas.io/en/latest/concepts/metrics/available_metrics/faithfulness/).
-
-### How to use it
-
-Add the assertion to your test configuration:
-
-```yaml
-assert:
-  - type: context-faithfulness
-    threshold: 0.7 # Score between 0.0 and 1.0
-```
+The `context-faithfulness` assertion evaluates whether the LLM's response is faithful to the provided context, ensuring that the generated answer doesn't include information not present in the context. This metric is essential for RAG (Retrieval-Augmented Generation) applications to prevent hallucination and is inspired by [RAGAS's Faithfulness metric](https://docs.ragas.io/en/latest/concepts/metrics/available_metrics/faithfulness/).
 
 ### Requirements
 
@@ -20,15 +10,27 @@ The assertion requires three variables in your test:
 - `context`: The retrieved context/documents
 - `output`: The LLM's response to evaluate
 
+### How to use it
+
+Add the assertion to your test configuration:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    threshold: 0.9 # Score between 0.0 and 1.0
+```
+
 ### How it works
 
-Under the hood, `context-faithfulness` evaluates:
+The context faithfulness checker evaluates:
 
 1. Whether claims in the output are supported by the context
 2. The degree of hallucination or fabrication in the response
 3. The accuracy of information attribution
 
-Example configuration:
+A higher threshold requires the output to be more strictly supported by the context.
+
+### Example Configuration
 
 ```yaml
 tests:
@@ -48,21 +50,49 @@ tests:
         threshold: 0.9
 ```
 
-### Overriding providers
+### Customizing the Provider
 
-Like other model-graded metrics, you can override the text provider:
+You can override the default provider in several ways:
 
 ```yaml
 defaultTest:
   options:
     provider:
       text:
-        id: openai:gpt-4o
+        id: openai:gpt-4
         config:
           temperature: 0
 ```
 
-### References
+Or at the assertion level:
 
-- Based on [RAGAS Faithfulness metric](https://docs.ragas.io/en/latest/concepts/metrics/available_metrics/faithfulness/)
+```yaml
+assert:
+  - type: context-faithfulness
+    threshold: 0.9
+    provider: openai:gpt-4
+```
+
+### Customizing the Prompt
+
+You can customize the evaluation prompts using `rubricPrompt`:
+
+```yaml
+defaultTest:
+  options:
+    rubricPrompt:
+      - |
+        Question: {{question}}
+        Answer: {{answer}}
+        Extract all factual claims from the answer, one per line.
+      - |
+        Context: {{context}}
+        Statements: {{statements}}
+        For each statement, determine if it is supported by the context.
+        Answer YES if the statement is fully supported, NO if not.
+```
+
+### Further Reading
+
 - See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more configuration options
+- Learn more about [RAGAS Faithfulness metric](https://docs.ragas.io/en/latest/concepts/metrics/available_metrics/faithfulness/)

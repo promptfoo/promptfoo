@@ -1,5 +1,4 @@
 import type Cloudflare from 'cloudflare';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -11,6 +10,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
+import invariant from '../util/invariant';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 /**

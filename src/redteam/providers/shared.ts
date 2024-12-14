@@ -9,9 +9,10 @@ import {
   type TokenUsage,
   type CallApiContextParams,
 } from '../../types';
+import { sleep } from '../../util/time';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
-export async function loadRedteamProvider({
+async function loadRedteamProvider({
   provider,
   jsonOnly = false,
   preferSmallModel = false,
@@ -20,8 +21,6 @@ export async function loadRedteamProvider({
   jsonOnly?: boolean;
   preferSmallModel?: boolean;
 } = {}) {
-  // FIXME(ian): This approach only works on CLI, it doesn't work when running via node module.
-  // That's ok for now because we only officially support redteams from CLI.
   let ret;
   const redteamProvider = provider || cliState.config?.redteam?.provider;
   if (isApiProvider(redteamProvider)) {
@@ -46,6 +45,49 @@ export async function loadRedteamProvider({
   }
   return ret;
 }
+
+class RedteamProviderManager {
+  private provider: ApiProvider | undefined;
+  private jsonOnlyProvider: ApiProvider | undefined;
+
+  clearProvider() {
+    this.provider = undefined;
+    this.jsonOnlyProvider = undefined;
+  }
+
+  async setProvider(provider: RedteamFileConfig['provider']) {
+    this.provider = await loadRedteamProvider({ provider });
+    this.jsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+  }
+
+  async getProvider({
+    provider,
+    jsonOnly = false,
+    preferSmallModel = false,
+  }: {
+    provider?: RedteamFileConfig['provider'];
+    jsonOnly?: boolean;
+    preferSmallModel?: boolean;
+  }): Promise<ApiProvider> {
+    if (this.provider && this.jsonOnlyProvider) {
+      logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
+      return jsonOnly ? this.jsonOnlyProvider : this.provider;
+    }
+
+    logger.debug(
+      `[RedteamProviderManager] Loading redteam provider: ${JSON.stringify({
+        providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
+        jsonOnly,
+        preferSmallModel,
+      })}`,
+    );
+    const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
+    logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
+    return redteamProvider;
+  }
+}
+
+export const redteamProviderManager = new RedteamProviderManager();
 
 export type TargetResponse = {
   output: string;
@@ -73,7 +115,10 @@ export async function getTargetResponse(
   } catch (error) {
     return { output: '', error: (error as Error).message, tokenUsage: { numRequests: 1 } };
   }
-
+  if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
+    logger.debug(`Sleeping for ${targetProvider.delay}ms`);
+    await sleep(targetProvider.delay);
+  }
   if (targetRespRaw?.output) {
     return {
       output:

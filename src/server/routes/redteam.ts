@@ -1,15 +1,13 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import logger from '../../logger';
+import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 
 export const redteamRouter = Router();
 
-const CLOUD_FUNCTION_URL =
-  process.env.PROMPTFOO_REMOTE_GENERATION_URL || 'https://api.promptfoo.dev/v1/generate';
-
 redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> => {
   const { task } = req.params;
-
+  const cloudFunctionUrl = getRemoteGenerationUrl();
   logger.debug(`Received ${task} task request:`, {
     method: req.method,
     url: req.url,
@@ -17,8 +15,8 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
   });
 
   try {
-    logger.debug(`Sending request to cloud function: ${CLOUD_FUNCTION_URL}`);
-    const response = await fetch(CLOUD_FUNCTION_URL, {
+    logger.debug(`Sending request to cloud function: ${cloudFunctionUrl}`);
+    const response = await fetch(cloudFunctionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

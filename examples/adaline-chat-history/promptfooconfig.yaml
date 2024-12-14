@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway Chat History Example'
 prompts:
   - file://prompt.json
 providers:

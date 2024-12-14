@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Nova Eval'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - id: bedrock:amazon.nova-micro-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+  - id: bedrock:amazon.nova-lite-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+  - id: bedrock:amazon.nova-pro-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+
+tests:
+  - vars:
+      topic: Our eco-friendly packaging
+  - vars:
+      topic: A sneak peek at our secret menu item
+  - vars:
+      topic: Behind-the-scenes at our latest photoshoot
+  - vars:
+      topic: the impact of autonomous drones on wildlife conservation
+  - vars:
+      topic: the emerging trend of virtual reality courtrooms
+  - vars:
+      topic: the ethical implications of AI-generated art
+  - vars:
+      topic: the unexpected health benefits of daily meditation
+  - vars:
+      topic: how AI is changing the way we play board games
+  - vars:
+      topic: unconventional productivity hacks involving household items
+  - vars:
+      topic: An underground art exhibition in an abandoned subway station
+  - vars:
+      topic: A webinar on the impact of AI on traditional marketing strategies
+  - vars:
+      topic: The launch of a new eco-friendly sneaker made from ocean plastic
+  - vars:
+      topic: the correlation between social media usage and self-esteem in teenagers
+  - vars:
+      topic: the impact of urban noise pollution on migratory bird patterns
+  - vars:
+      topic: the role of gut microbiota in moderating anxiety and depression

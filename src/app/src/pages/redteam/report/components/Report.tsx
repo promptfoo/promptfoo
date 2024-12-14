@@ -22,6 +22,7 @@ import {
   type ResultLightweightWithLabel,
   type EvaluateSummaryV2,
   isProviderOptions,
+  ResultFailureReason,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import FrameworkCompliance from './FrameworkCompliance';
@@ -95,14 +96,20 @@ const App: React.FC = () => {
         console.warn(`Could not get failures for plugin ${pluginId}`);
         return;
       }
-      if (pluginId && !result.gradingResult?.pass) {
+      if (
+        pluginId &&
+        !result.gradingResult?.pass &&
+        result.failureReason !== ResultFailureReason.ERROR
+      ) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
+        // Backwards compatibility for old evals that used 'query' instead of 'prompt'. 2024-12-12
+        const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
+        const injectVarValue =
+          result.vars[injectVar]?.toString() || result.vars['query']?.toString();
         failures[pluginId].push({
-          // FIXME(ian): Use injectVar (and contextVar), not hardcoded query
-          prompt:
-            result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
+          prompt: injectVarValue || result.prompt.raw,
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,
@@ -333,7 +340,7 @@ const App: React.FC = () => {
                   <>
                     <strong>Depth:</strong>{' '}
                     {(
-                      selectedPrompt.metrics?.tokenUsage.numRequests || tableData.length
+                      selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
                     ).toLocaleString()}{' '}
                     probes
                   </>
@@ -370,16 +377,25 @@ const App: React.FC = () => {
             )}
           </Box>
         </Card>
-        <Overview categoryStats={categoryStats} />
+        <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
         <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
-        <StrategyStats strategyStats={strategyStats} />
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+        />
         <RiskCategories
           categoryStats={categoryStats}
+          strategyStats={strategyStats}
           evalId={evalId}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
         />
-        <TestSuites evalId={evalId} categoryStats={categoryStats} />
+        <TestSuites
+          evalId={evalId}
+          categoryStats={categoryStats}
+          plugins={evalData.config.redteam.plugins || []}
+        />
       </Stack>
       <Modal
         open={isPromptModalOpen}

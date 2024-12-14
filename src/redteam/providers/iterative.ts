@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -10,11 +9,12 @@ import {
   type NunjucksFilterMap,
   type RedteamFileConfig,
 } from '../../types';
-import { extractFirstJsonObject } from '../../util/json';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { shouldGenerateRemote } from '../util';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
-import { getTargetResponse, loadRedteamProvider } from './shared';
+import { getTargetResponse, redteamProviderManager } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -83,6 +83,7 @@ async function runRedteamConversation({
     if (redteamResp.error) {
       throw new Error(`Error from redteam provider: ${redteamResp.error}`);
     }
+    logger.debug(`[Iterative] Redteam response: ${JSON.stringify(redteamResp)}`);
     invariant(
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
@@ -122,15 +123,21 @@ async function runRedteamConversation({
       },
       vars: {},
     });
+    logger.debug(`[Iterative] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
     if (isOnTopicResp.error) {
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
     }
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
     const isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean })
       .onTopic;
+    logger.debug(`[Iterative] Parsed onTopic value: ${JSON.stringify(isOnTopic)}`);
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
     const targetResponse = await getTargetResponse(targetProvider, targetPrompt, context, options);
+    if (targetResponse.error) {
+      throw new Error(`[Iterative] Target returned an error: ${targetResponse.error}`);
+    }
+    invariant(targetResponse.output, '[Iterative] Target did not return an output');
     const penalizedPhrases = ['in the face of impending doom'];
     const containsPenalizedPhrase = penalizedPhrases.some((phrase) =>
       targetResponse.output.toLowerCase().includes(phrase),
@@ -240,6 +247,7 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly injectVar: string;
 
   constructor(readonly config: Record<string, string | object>) {
+    logger.debug(`[Iterative] Constructor config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
@@ -268,6 +276,7 @@ class RedteamIterativeProvider implements ApiProvider {
    * @returns
    */
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+    logger.debug(`[Iterative] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context.vars, 'Expected vars to be set');
 
@@ -275,7 +284,7 @@ class RedteamIterativeProvider implements ApiProvider {
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: await loadRedteamProvider({
+      redteamProvider: await redteamProviderManager.getProvider({
         provider: this.redteamProvider,
         jsonOnly: true,
       }),
