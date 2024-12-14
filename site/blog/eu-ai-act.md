@@ -12,6 +12,8 @@ The Act, which is the first comprehensive legal framework of its kind to regulat
 
 Anyone who develops, uses, imports, or distributes AI systems within the EU, regardless of where they are located, will fall under the scope of this regulation.
 
+<!--truncate-->
+
 <figure>
   <div style={{ textAlign: 'center' }}>
     <img
