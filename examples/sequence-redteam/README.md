@@ -1,6 +1,7 @@
 # Sequence Provider Example
 
 This example demonstrates how to use the sequence provider for testing multi-turn redteam scenarios. The sequence provider allows you to:
+
 - Chain multiple prompts together in a conversation
 - Test different redteam strategies (crescendo, jailbreak, prompt-injection)
 - Maintain context between conversation turns
@@ -14,15 +15,16 @@ The example uses the following key configurations:
 providers:
   - id: sequence
     config:
-      targetProvider: openai:gpt-4  # The base provider to test against
-      strategy: crescendo           # The redteam strategy to use
-      maxTurns: 3                  # Maximum number of conversation turns
-      systemPrompt: ...            # System prompt for the conversation
+      targetProvider: openai:gpt-4 # The base provider to test against
+      strategy: crescendo # The redteam strategy to use
+      maxTurns: 3 # Maximum number of conversation turns
+      systemPrompt: ... # System prompt for the conversation
 ```
 
 ## Test Cases
 
 1. Basic crescendo strategy test:
+
    - Tests how the model responds to increasingly complex security questions
    - Evaluates ethical boundaries using llm-rubric
    - Verifies focus on defensive security practices
@@ -41,6 +43,7 @@ promptfoo eval -c promptfooconfig.yaml
 ## Expected Behavior
 
 The sequence provider will:
+
 1. Start with the initial user prompt
 2. Generate follow-up prompts based on the chosen strategy
 3. Maintain conversation context between turns
