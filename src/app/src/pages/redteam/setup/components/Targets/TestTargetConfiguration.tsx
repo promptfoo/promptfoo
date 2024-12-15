@@ -172,9 +172,14 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
         </Button>
       </Stack>
 
-      {!selectedTarget.config.url && (
+      {!selectedTarget.config.url && !selectedTarget.config.request && (
         <Alert severity="info">
           Please configure the HTTP endpoint above and click "Test Target" to proceed.
+        </Alert>
+      )}
+      {selectedTarget.config.request && (
+        <Alert severity="info">
+          Automated target testing is not available in raw request mode.
         </Alert>
       )}
 
