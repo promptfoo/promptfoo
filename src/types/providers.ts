@@ -115,7 +115,7 @@ export interface ProviderClassificationResponse {
 export interface SequenceProviderConfig {
   inputs?: string[];
   separator?: string;
-  targetProvider?: string;
+  provider: string;  // Changed from targetProvider and made required
   strategy?: string;
   maxTurns?: number;
   systemPrompt?: string;

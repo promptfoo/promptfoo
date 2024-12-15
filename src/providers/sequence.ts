@@ -21,7 +21,7 @@ export class SequenceProvider implements ApiProvider {
   private readonly inputs: string[];
   private readonly separator: string;
   private readonly identifier: string;
-  private readonly targetProvider?: ProviderDefinition;
+  private readonly provider?: ProviderDefinition;
 
   constructor({ id, config }: ProviderOptions) {
     invariant(config, 'Expected sequence provider config');
@@ -31,7 +31,7 @@ export class SequenceProvider implements ApiProvider {
     this.inputs = typedConfig.inputs || [];
     this.separator = typedConfig.separator || '\n---\n';
     this.identifier = id || 'sequence-provider';
-    this.targetProvider = typedConfig.provider;
+    this.provider = typedConfig.provider;
   }
 
   id() {
@@ -44,7 +44,7 @@ export class SequenceProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Use originalProvider from context if available, otherwise use configured provider
-    const providerToUse = context?.originalProvider || this.targetProvider;
+    const providerToUse = context?.originalProvider || this.provider;
     invariant(providerToUse, 'No provider available for sequence provider');
 
     // Handle different provider types
