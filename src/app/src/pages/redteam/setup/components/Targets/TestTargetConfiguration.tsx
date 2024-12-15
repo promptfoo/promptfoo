@@ -18,6 +18,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import dedent from 'dedent';
 import 'prismjs/components/prism-clike';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
@@ -69,7 +70,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 onValueChange={(code) => updateCustomTarget('transformRequest', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder="Optional: A JavaScript expression to transform the prompt before sending. E.g. `{ messages: [{ role: 'user', content: prompt }] }`"
+                placeholder={dedent`Optional: A JavaScript expression to transform the prompt before sending.
+
+                  e.g. \`{ messages: [{ role: 'user', content: prompt }] }\``}
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
@@ -101,7 +104,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 onValueChange={(code) => updateCustomTarget('transformResponse', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder="Optional: A JavaScript expression to parse the response. E.g. json.choices[0].message.content"
+                placeholder={dedent`Optional: A JavaScript expression to parse the response.
+
+                  e.g. \`json.choices[0].message.content\``}
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
