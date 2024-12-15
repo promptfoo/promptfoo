@@ -43,10 +43,20 @@ export class SequenceProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // FIXME(ian): Provider types are totally messed up and we're doing this
-    // instead of a 3-part if statement to figure out what type of provider it
-    // is.
-    const [provider] = await loadApiProviders([this.targetProvider as any]);
+    // Use originalProvider from context if available, otherwise use configured provider
+    const providerToUse = context?.originalProvider || this.targetProvider;
+    invariant(providerToUse, 'No provider available for sequence provider');
+
+    // Handle different provider types
+    let provider: ApiProvider;
+    if (typeof providerToUse === 'function') {
+      provider = { id: () => 'function-provider', callApi: providerToUse };
+    } else if (typeof providerToUse === 'object' && 'callApi' in providerToUse && typeof providerToUse.callApi === 'function') {
+      provider = providerToUse as ApiProvider;
+    } else {
+      [provider] = await loadApiProviders([providerToUse as any]);
+    }
+
     invariant(provider, 'No provider available for sequence provider');
 
     const nunjucks = getNunjucksEngine();

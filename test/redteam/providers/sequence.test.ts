@@ -34,8 +34,8 @@ describe('SequenceProvider', () => {
           'Initial prompt: {{prompt}}',
           'Based on the previous response, do this: {{prompt}}',
         ],
+        provider: async (prompt: string) => mockProvider.callApi(prompt),
       },
-      provider: mockProvider,
     });
 
     const result = await sequenceProvider.callApi('test input');
@@ -61,8 +61,8 @@ describe('SequenceProvider', () => {
         inputs: ['test1', 'test2'],
         strategy: 'jailbreak',
         maxTurns: 2,
+        provider: async (prompt: string) => mockProvider.callApi(prompt),
       },
-      provider: mockProvider,
     });
 
     const result = await sequenceProvider.callApi('test input');
@@ -88,8 +88,8 @@ describe('SequenceProvider', () => {
         inputs: ['test1', 'test2'],
         strategy: 'crescendo',
         maxTurns: 2,
+        provider: async (prompt: string) => mockProvider.callApi(prompt),
       },
-      provider: mockProvider,
     });
 
     const result = await sequenceProvider.callApi('test input');
@@ -112,8 +112,8 @@ describe('SequenceProvider', () => {
         inputs: ['Test prompt: {{prompt}}'],
         strategy: 'crescendo',
         maxTurns: 1,
+        provider: async (prompt: string) => mockConstructorProvider.callApi(prompt),
       },
-      provider: mockConstructorProvider,
     });
 
     const result = await sequenceProvider.callApi('test input', {
