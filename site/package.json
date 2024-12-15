@@ -33,7 +33,7 @@
     "dedent": "^1.5.3",
     "docusaurus-plugin-image-zoom": "^2.0.0",
     "framer-motion": "^11.13.3",
-    "glob": "^11.0.0",
+    "glob": "^10.4.3",
     "gray-matter": "^4.0.3",
     "lucide-react": "^0.468.0",
     "prism-react-renderer": "^2.4.0",
