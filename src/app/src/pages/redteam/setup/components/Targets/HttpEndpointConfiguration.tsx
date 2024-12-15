@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import Editor from 'react-simple-code-editor';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -79,9 +79,12 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
       if (isRawMode) {
         // Convert structured request to raw format
         const headers = selectedTarget.config?.headers
-          ? Object.entries(selectedTarget.config.headers).map(
-              ([key, value]) => `${key}: ${value}`
-            )
+          ? Object.entries(selectedTarget.config.headers)
+              .filter((entry, index, self) =>
+                // Remove duplicate headers
+                self.findIndex(([key]) => key.toLowerCase() === entry[0].toLowerCase()) === index
+              )
+              .map(([key, value]) => `${key}: ${value}`)
           : [];
 
         // Ensure body is properly formatted without double serialization
@@ -108,7 +111,6 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
         const rawReq = [
           `POST ${url} HTTP/1.1`,
           `Host: ${host}`,
-          'Content-Type: application/json',
           ...headers,
           '',
           body || '',
@@ -139,7 +141,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
         }
       }
     },
-    [selectedTarget.config, updateCustomTarget, setRequestBody, setBodyError, setUrlError]
+    [selectedTarget.config, updateCustomTarget, setRequestBody, setBodyError, setUrlError],
   );
 
   useEffect(() => {
@@ -246,69 +248,6 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
     }
   };
 
-  const handleRawRequestChange = (value: string) => {
-    try {
-      // Split request into headers and body
-      const [headersPart, ...bodyParts] = value.split(/\r?\n\r?\n/);
-      if (!headersPart || bodyParts.length === 0) {
-        throw new Error('Request must include headers and body separated by a blank line');
-      }
-
-      // Keep the original body exactly as it was
-      const body = bodyParts.join('\n\n');
-
-      // Process headers while preserving the method line
-      const headerLines = headersPart.split(/\r?\n/);
-      const [methodLine, ...otherHeaders] = headerLines;
-
-      if (!methodLine || !methodLine.includes('HTTP/')) {
-        throw new Error('Invalid request line format');
-      }
-
-      // Format headers consistently
-      const formattedHeaders = otherHeaders.map(header => {
-        const [key, ...valueParts] = header.split(':');
-        if (!key || valueParts.length === 0) {
-          throw new Error('Invalid header format');
-        }
-        return `${key.trim()}: ${valueParts.join(':').trim()}`;
-      });
-
-      // Reconstruct request with minimal formatting
-      const formattedRequest = [
-        methodLine.trim(),
-        ...formattedHeaders,
-        '',
-        body
-      ].join('\n');
-
-      // Validate request format
-      const parsed = httpZ.parse(formattedRequest);
-      if (!isHttpZRequestModel(parsed)) {
-        throw new Error('Invalid HTTP request format');
-      }
-
-      // Extract URL from request line
-      const match = methodLine.match(/^[A-Z]+ (.+?) HTTP\/\d\.\d$/);
-      if (match) {
-        const url = match[1].trim();
-        try {
-          new URL(url); // Validate URL format
-          setBodyError(null);
-          setRequestBody(formattedRequest);
-          updateCustomTarget('request', formattedRequest);
-        } catch {
-          throw new Error('Invalid URL format');
-        }
-      } else {
-        throw new Error('Invalid request line format');
-      }
-    } catch (error) {
-      console.error('Failed to parse raw request:', error);
-      setBodyError(String(error));
-    }
-  };
-
   const exampleRequest = `POST https://api.example.com/v1/chat/completions HTTP/1.1
 Content-Type: application/json
 Authorization: Bearer {{api_key}}
@@ -369,7 +308,18 @@ Authorization: Bearer {{api_key}}
           <Editor
             value={selectedTarget.config.request || exampleRequest}
             onValueChange={(value) => {
-              updateCustomTarget('request', value);
+              try {
+                const parsed = httpZ.parse(value);
+                if (!isHttpZRequestModel(parsed)) {
+                  setBodyError('Invalid HTTP request format');
+                  return;
+                }
+                setBodyError(null);
+                updateCustomTarget('request', value);
+              } catch (error) {
+                console.error('Failed to parse raw request:', error);
+                setBodyError(String(error));
+              }
             }}
             highlight={(code) => highlight(code, languages.http)}
             padding={10}
@@ -459,7 +409,9 @@ Authorization: Bearer {{api_key}}
           >
             <Editor
               value={
-                typeof requestBody === 'object' ? JSON.stringify(requestBody, null, 2) : requestBody || ''
+                typeof requestBody === 'object'
+                  ? JSON.stringify(requestBody, null, 2)
+                  : requestBody || ''
               }
               onValueChange={handleRequestBodyChange}
               highlight={(code) =>
