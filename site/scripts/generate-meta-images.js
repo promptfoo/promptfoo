@@ -85,28 +85,44 @@ async function generateMetaImages() {
           const preview =
             markdown
               .replace(/^#.*$/m, '')
-              .replace(/^(?:import|require).*$/gm, '')
-              .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-              .replace(/`[^`]+`/g, '')
-              .replace(/```[\s\S]*?```/g, '')
-              .replace(/https?:\/\/\S+/g, '')
               .replace(/[#\[\]*]/g, '')
+              .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove markdown links but keep link text
+              .replace(/^import.*$/gm, '')
+              .replace(/\n{3,}/g, '\n\n') // Replace 3 or more newlines with 2
               .trim()
-              .split('\n')
-              .filter((line) => line.trim() && !line.trim().startsWith('import'))
-              .slice(0, 3)
-              .join(' ')
-              .replace(/\s+/g, ' ')
+              .replace(/\n/g, '<br>')
               .slice(0, 200) + '...';
 
           const safeFilename = file.replace(/[^a-z0-9]/gi, '-').toLowerCase() + '.png';
           const outputPath = path.join(outputDir, safeFilename);
           const relativePath = path.join('img/meta/docs', safeFilename);
 
+          const isRedTeam = file.includes('red-team') || file.includes('redteam');
+          const gradientColors = isRedTeam
+            ? `
+              135deg,
+              #571a1a 0%,
+              #702525 25%,
+              #852e2e 50%,
+              #a04f4f 75%,
+              #bb6b6b 100%
+            `
+            : `
+              135deg,
+              #1a4557 0%,
+              #255d70 25%,
+              #2e6585 50%,
+              #4f8ca0 75%,
+              #6ba5bb 100%
+            `;
+
           const html = template
             .replace('{{title}}', title)
+            .replace('{{#breadcrumbs}}', breadcrumbs ? '' : '<!--')
+            .replace('{{/breadcrumbs}}', breadcrumbs ? '' : '-->')
             .replace('{{breadcrumbs}}', breadcrumbs)
-            .replace('{{preview}}', preview);
+            .replace('{{preview}}', preview)
+            .replace('{{gradientColors}}', gradientColors);
 
           // Try screenshot with retries
           let retries = 3;

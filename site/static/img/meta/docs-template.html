@@ -2,12 +2,23 @@
 <html>
   <head>
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <style>
       body {
         margin: 0;
+      }
+      @keyframes gradientShift {
+        0% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0% 50%;
+        }
       }
     </style>
   </head>
@@ -16,7 +27,11 @@
       style="
         width: 1200px;
         height: 630px;
-        background: linear-gradient(135deg, #255d70 0%, #2e6585 50%, #4f8ca0 100%);
+        background: linear-gradient(
+          {{gradientColors}}
+        );
+        background-size: 200% 200%;
+        animation: gradientShift 15s ease infinite;
         display: flex;
         flex-direction: column;
         padding: 60px;
@@ -32,26 +47,59 @@
           left: 0;
           right: 0;
           bottom: 0;
-          background-image: radial-gradient(
-            circle at 50% 50%,
-            rgba(255, 255, 255, 0.1) 0%,
-            rgba(255, 255, 255, 0) 60%
-          );
+          background: radial-gradient(
+              circle at 10% 0%,
+              rgba(255, 255, 255, 0.1) 0%,
+              rgba(255, 255, 255, 0) 50%
+            ),
+            radial-gradient(
+              circle at 90% 90%,
+              rgba(255, 255, 255, 0.1) 0%,
+              rgba(255, 255, 255, 0) 50%
+            );
           z-index: 1;
         "
       ></div>
       <div
         style="position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column"
       >
-        <div style="display: flex; align-items: center; margin-bottom: 40px">
-          <img
-            src="/img/logo-panda.svg"
-            alt="promptfoo logo"
-            style="width: 80px; height: 80px; margin-right: 20px"
-          />
-          <div style="color: rgba(255, 255, 255, 0.9); font-size: 18px; font-weight: 600">
+        <div style="display: flex; flex-direction: column">
+          <div style="display: flex; align-items: center; margin-bottom: 24px">
+            <div style="display: flex; align-items: center">
+              <img
+                src="https://www.promptfoo.dev/img/logo-panda.svg"
+                alt="promptfoo logo"
+                style="width: 80px; height: 80px; margin-right: 20px"
+              />
+              <div
+                style="
+                  color: white;
+                  font-size: 32px;
+                  font-weight: 700;
+                  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                "
+              >
+                promptfoo
+              </div>
+            </div>
+          </div>
+          {{#breadcrumbs}}
+          <div
+            style="
+              color: rgba(255, 255, 255, 0.9);
+              font-size: 18px;
+              font-weight: 500;
+              background: rgba(255, 255, 255, 0.1);
+              padding: 8px 24px;
+              border-radius: 8px;
+              backdrop-filter: blur(10px);
+              max-width: 900px;
+              margin-bottom: 40px;
+            "
+          >
             {{breadcrumbs}}
           </div>
+          {{/breadcrumbs}}
         </div>
         <h1
           style="
@@ -61,6 +109,7 @@
             max-width: 900px;
             font-weight: 700;
             line-height: 1.2;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
           "
         >
           {{title}}
@@ -72,6 +121,10 @@
             max-width: 900px;
             line-height: 1.5;
             margin-bottom: auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 24px;
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
           "
         >
           {{preview}}
@@ -83,8 +136,19 @@
             margin-top: 40px;
             border-top: 1px solid rgba(255, 255, 255, 0.2);
             padding-top: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
           "
         >
+          <div
+            style="
+              width: 8px;
+              height: 8px;
+              background: rgba(255, 255, 255, 0.8);
+              border-radius: 50%;
+            "
+          ></div>
           promptfoo Documentation
         </div>
       </div>
