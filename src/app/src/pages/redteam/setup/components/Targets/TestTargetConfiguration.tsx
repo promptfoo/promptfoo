@@ -90,7 +90,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               can be used to format the prompt into a specific structure required by your API.
             </Typography>
           </Box>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" gutterBottom mt={4}>
             Configure Response Parser
           </Typography>
           <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
