@@ -48,7 +48,7 @@ export default defineConfig({
         '@tanstack/react-table',
         'react-markdown',
         'react-router-dom',
-        'zustand'
+        'zustand',
       ],
       output: {
         globals: {
@@ -59,7 +59,7 @@ export default defineConfig({
           '@tanstack/react-table': 'ReactTable',
           'react-markdown': 'ReactMarkdown',
           'react-router-dom': 'ReactRouterDOM',
-          'zustand': 'Zustand'
+          zustand: 'Zustand',
         },
       },
     },
