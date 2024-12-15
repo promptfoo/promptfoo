@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
@@ -1035,6 +1036,161 @@ export class AwsBedrockEmbeddingProvider
         error: `API response error: ${String(err)}: ${JSON.stringify(
           response.body.transformToString(),
         )}`,
+      };
+    }
+  }
+}
+
+interface BedrockKnowledgeBaseOptions extends BedrockOptions {
+  maxTokens?: number;
+  temperature?: number;
+  modelArn?: string;
+  topP?: number;
+  stopSequences?: string[];
+  retrievalConfiguration?: {
+    vectorSearchConfiguration: {
+      numberOfResults?: number;
+      approximateMaxTokens?: number;
+    };
+  };
+  promptTemplate?: {
+    textPromptTemplate: string;
+  };
+  orchestrationConfiguration?: {
+    promptTemplate?: {
+      textPromptTemplate: string;
+    };
+    queryTransformationConfiguration?: {
+      type: 'QUERY_DECOMPOSITION';
+    };
+  };
+}
+
+export class AwsBedrockKnowledgeBaseProvider
+  extends AwsBedrockGenericProvider
+  implements ApiProvider
+{
+  private bedrockAgent?: BedrockAgentRuntimeClient;
+  config: BedrockKnowledgeBaseOptions;
+
+  constructor(modelName: string, options: { config?: BedrockKnowledgeBaseOptions } = {}) {
+    super(modelName, options);
+    this.config = options.config || {};
+  }
+
+  async getBedrockAgentInstance() {
+    if (!this.bedrockAgent) {
+      try {
+        const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
+        const credentials = await this.getCredentials();
+        const agent = new BedrockAgentRuntimeClient({
+          region: this.getRegion(),
+          ...(credentials ? { credentials } : {}),
+        });
+        this.bedrockAgent = agent;
+      } catch {
+        throw new Error(
+          'The @aws-sdk/client-bedrock-agent-runtime package is required as a peer dependency. Please install it in your project or globally.',
+        );
+      }
+    }
+    return this.bedrockAgent;
+  }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    const params = {
+      knowledgeBaseId: this.modelName,
+      text: prompt,
+    };
+
+    logger.debug(`Calling Amazon Bedrock Knowledge Base API: ${JSON.stringify(params)}`);
+
+    const cache = await getCache();
+    const cacheKey = `bedrock-kb:${this.modelName}:${JSON.stringify(params)}`;
+
+    if (isCacheEnabled()) {
+      const cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+        return {
+          output: JSON.parse(cachedResponse as string).answer,
+          tokenUsage: {},
+        };
+      }
+    }
+
+    const bedrockAgentInstance = await this.getBedrockAgentInstance();
+    let response;
+    try {
+      const { RetrieveAndGenerateCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
+
+      // Build inference config from options
+      const inferenceConfig = {
+        textInferenceConfig: {
+          temperature: this.config.temperature || getEnvFloat('AWS_BEDROCK_TEMPERATURE') || 0,
+          maxTokens: this.config.maxTokens || getEnvInt('AWS_BEDROCK_MAX_TOKENS') || 1024,
+          ...(this.config.topP !== undefined && { topP: this.config.topP }),
+          ...(this.config.stopSequences && { stopSequences: this.config.stopSequences }),
+        },
+      };
+
+      const command = new RetrieveAndGenerateCommand({
+        input: { text: prompt },
+        retrieveAndGenerateConfiguration: {
+          type: 'KNOWLEDGE_BASE',
+          knowledgeBaseConfiguration: {
+            knowledgeBaseId: this.modelName,
+            modelArn:
+              this.config.modelArn ||
+              'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2',
+            ...(this.config.retrievalConfiguration && {
+              retrievalConfiguration: this.config.retrievalConfiguration,
+            }),
+            ...(this.config.promptTemplate && {
+              generationConfiguration: {
+                promptTemplate: this.config.promptTemplate,
+                inferenceConfig,
+              },
+            }),
+            ...(this.config.orchestrationConfiguration && {
+              orchestrationConfiguration: this.config.orchestrationConfiguration,
+            }),
+          },
+        },
+      });
+
+      response = await bedrockAgentInstance.send(command);
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
+    logger.debug(`\tAmazon Bedrock Knowledge Base API response: ${JSON.stringify(response)}`);
+
+    if (isCacheEnabled()) {
+      try {
+        await cache.set(cacheKey, JSON.stringify(response));
+      } catch (err) {
+        logger.error(`Failed to cache response: ${String(err)}`);
+      }
+    }
+
+    try {
+      return {
+        output: response.output?.text || '',
+        /*
+        citations: response.citations || [],
+        tokenUsage: {
+          total: response.inferenceStats?.totalTokens || 0,
+          prompt: response.inferenceStats?.inputTokens || 0,
+          completion: response.inferenceStats?.outputTokens || 0,
+        },
+        */
+      };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
       };
     }
   }

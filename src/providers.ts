@@ -20,6 +20,7 @@ import {
 } from './providers/azure';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
+import { AwsBedrockKnowledgeBaseProvider } from './providers/bedrock';
 import { BrowserProvider } from './providers/browser';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
@@ -256,6 +257,8 @@ export async function loadApiProvider(
       ret = new AwsBedrockCompletionProvider(modelName, providerOptions);
     } else if (modelType === 'embeddings' || modelType === 'embedding') {
       ret = new AwsBedrockEmbeddingProvider(modelName, providerOptions);
+    } else if (modelType === 'knowledge-base') {
+      ret = new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
     } else {
       ret = new AwsBedrockCompletionProvider(
         `${modelType}${modelName ? `:${modelName}` : ''}`,
@@ -598,6 +601,7 @@ export default {
 
   AwsBedrockCompletionProvider,
   AwsBedrockEmbeddingProvider,
+  AwsBedrockKnowledgeBaseProvider,
   BrowserProvider,
   CohereChatCompletionProvider,
   CohereEmbeddingProvider,

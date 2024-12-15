@@ -1,6 +1,6 @@
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.1, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` provider lets you use Amazon Bedrock in your evals. This includes access to foundation models like Anthropic's Claude, Meta's Llama 3.1, Amazon's Nova, AI21's Jamba, as well as Bedrock Knowledge Bases. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -216,6 +216,40 @@ config:
   top_p: 0.9
   top_k: 50
 ```
+
+### Knowledge Base
+
+To use a Bedrock Knowledge Base, specify the knowledge base ID after `bedrock:knowledge-base:`:
+
+```yaml
+providers:
+  - id: bedrock:knowledge-base:my-knowledge-base-id
+    config:
+      region: 'us-east-1'
+      modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2' # Optional
+      maxTokens: 1024 # Optional
+      temperature: 0.7 # Optional
+      topP: 0.9 # Optional
+      stopSequences: ["\n", '---'] # Optional
+      retrievalConfiguration: # Optional
+        vectorSearchConfiguration:
+          numberOfResults: 3
+          approximateMaxTokens: 1000
+      promptTemplate: # Optional
+        textPromptTemplate: "Answer the question using the following context: {{context}}\nQuestion: {{question}}"
+      orchestrationConfiguration: # Optional
+        promptTemplate:
+          textPromptTemplate: "Answer the question using the following context: {{context}}\nQuestion: {{question}}"
+        queryTransformationConfiguration:
+          type: 'QUERY_DECOMPOSITION'
+```
+
+The Knowledge Base provider requires:
+
+- A valid knowledge base ID
+- The `@aws-sdk/client-bedrock-agent-runtime` package installed
+
+The Knowledge Base provider will use the specified model to generate responses based on the content in your knowledge base. You can customize the retrieval and generation process using the configuration options shown above.
 
 ## Model-graded tests
 

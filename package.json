@@ -67,6 +67,8 @@
     "whatwg-url": "14.1.0"
   },
   "peerDependencies": {
+    "@aws-sdk/client-bedrock-agent": "^3.712.0",
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.712.0",
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
     "@aws-sdk/credential-provider-sso": "^3.686.0",
     "@azure/identity": "^4.0.0",
@@ -86,7 +88,9 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
+    "@aws-sdk/client-bedrock-agent": "^3.712.0",
     "@aws-sdk/client-bedrock-runtime": "^3.706.0",
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.712.0",
     "@aws-sdk/credential-provider-sso": "^3.699.0",
     "@azure/identity": "^4.5.0",
     "@eslint/js": "^9.16.0",
