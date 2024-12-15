@@ -256,7 +256,9 @@
                         "type": "string"
                       }
                     },
-                    "required": ["id"],
+                    "required": [
+                      "id"
+                    ],
                     "additionalProperties": false
                   },
                   {
@@ -276,7 +278,10 @@
                       },
                       "config": {}
                     },
-                    "required": ["raw", "label"],
+                    "required": [
+                      "raw",
+                      "label"
+                    ],
                     "additionalProperties": false
                   }
                 ]
@@ -451,7 +456,10 @@
                                           },
                                           {
                                             "type": "string",
-                                            "enum": ["select-best", "human"]
+                                            "enum": [
+                                              "select-best",
+                                              "human"
+                                            ]
                                           },
                                           {}
                                         ]
@@ -489,7 +497,10 @@
                                   "type": "number"
                                 }
                               },
-                              "required": ["type", "assert"],
+                              "required": [
+                                "type",
+                                "assert"
+                              ],
                               "additionalProperties": false
                             },
                             {
@@ -554,7 +565,10 @@
                                           "type": "string"
                                         }
                                       },
-                                      "required": ["role", "content"],
+                                      "required": [
+                                        "role",
+                                        "content"
+                                      ],
                                       "additionalProperties": false
                                     }
                                   }
@@ -704,7 +718,10 @@
                     }
                   }
                 },
-                "required": ["config", "tests"],
+                "required": [
+                  "config",
+                  "tests"
+                ],
                 "additionalProperties": false
               }
             ]
@@ -794,7 +811,10 @@
                 ]
               }
             },
-            "required": ["name", "value"],
+            "required": [
+              "name",
+              "value"
+            ],
             "additionalProperties": false
           }
         },
@@ -1097,13 +1117,17 @@
                         "description": "Plugin-specific configuration"
                       }
                     },
-                    "required": ["id"],
+                    "required": [
+                      "id"
+                    ],
                     "additionalProperties": false
                   }
                 ]
               },
               "description": "Plugins to use for redteam generation",
-              "default": ["default"]
+              "default": [
+                "default"
+              ]
             },
             "strategies": {
               "type": "array",
@@ -1149,13 +1173,17 @@
                         "description": "Strategy-specific configuration"
                       }
                     },
-                    "required": ["id"],
+                    "required": [
+                      "id"
+                    ],
                     "additionalProperties": false
                   }
                 ]
               },
               "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, prompt-injection\nSupports basic, default, jailbreak, prompt-injection, ascii-smuggling, base64, citation, crescendo, goat, jailbreak:composite, jailbreak:tree, leetspeak, math-prompt, multilingual, rot13",
-              "default": ["default"]
+              "default": [
+                "default"
+              ]
             },
             "maxConcurrency": {
               "type": "integer",
@@ -1331,7 +1359,9 @@
           "$ref": "#/definitions/PromptfooConfigSchema/properties/providers"
         }
       },
-      "required": ["prompts"],
+      "required": [
+        "prompts"
+      ],
       "additionalProperties": false
     }
   },
