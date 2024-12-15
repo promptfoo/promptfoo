@@ -12,7 +12,6 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
@@ -22,7 +21,6 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-http';
@@ -34,31 +32,11 @@ import 'prismjs/themes/prism.css';
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: any) => void;
-  updateHeaderKey: (index: number, newKey: string) => void;
-  updateHeaderValue: (index: number, newValue: string) => void;
-  addHeader: () => void;
-  removeHeader: (index: number) => void;
-  requestBody: string | object;
-  setRequestBody: (value: string) => void;
   bodyError: string | null;
   setBodyError: (error: string | null) => void;
   urlError: string | null;
   setUrlError: (error: string | null) => void;
   forceStructured?: boolean;
-  setForceStructured: (force: boolean) => void;
-  updateFullTarget: (target: ProviderOptions) => void;
-}
-
-interface GeneratedConfig {
-  id: string;
-  config: {
-    url?: string;
-    method?: string;
-    headers?: Record<string, string>;
-    body?: any;
-    request?: string;
-    transformResponse?: string;
-  };
 }
 
 const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
@@ -69,50 +47,236 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   setUrlError,
   forceStructured,
-  setForceStructured,
-  updateFullTarget,
 }): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
+  // Internal state management
+  const [useRawRequest, setUseRawRequest] = useState(
+    forceStructured ? false : !!selectedTarget.config.request,
+  );
+  const [rawRequestValue, setRawRequestValue] = useState(selectedTarget.config.request || '');
+  const [requestBody, setRequestBody] = useState(
+    typeof selectedTarget.config.body === 'string'
+      ? selectedTarget.config.body
+      : JSON.stringify(selectedTarget.config.body, null, 2) || '',
+  );
+  const [headers, setHeaders] = useState<Array<{ key: string; value: string }>>(
+    Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
+      key,
+      value: String(value),
+    })),
+  );
+  const [isJsonContentType] = useState(true); // Used for syntax highlighting
+
+  const resetState = useCallback(
+    (isRawMode: boolean) => {
+      setBodyError(null);
+      setUrlError(null);
+
+      if (isRawMode) {
+        // Reset to empty raw request
+        setRawRequestValue('');
+        updateCustomTarget('request', '');
+
+        // Clear structured mode fields
+        updateCustomTarget('url', undefined);
+        updateCustomTarget('method', undefined);
+        updateCustomTarget('headers', undefined);
+        updateCustomTarget('body', undefined);
+      } else {
+        // Reset to empty structured fields
+        setRawRequestValue('');
+        setHeaders([]);
+        setRequestBody('');
+
+        // Clear raw request
+        updateCustomTarget('request', undefined);
+
+        // Reset structured fields
+        updateCustomTarget('url', '');
+        updateCustomTarget('method', 'POST');
+        updateCustomTarget('headers', {});
+        updateCustomTarget('body', '');
+      }
+    },
+    [updateCustomTarget, setBodyError, setUrlError],
+  );
+
+  // Header management
+  const addHeader = useCallback(() => {
+    setHeaders((prev) => [...prev, { key: '', value: '' }]);
+  }, []);
+
+  const removeHeader = useCallback(
+    (index: number) => {
+      setHeaders((prev) => {
+        const newHeaders = [...prev];
+        newHeaders.splice(index, 1);
+        return newHeaders;
+      });
+
+      // Update target configuration
+      const headerObj = headers.reduce(
+        (acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        },
+        {} as Record<string, string>,
+      );
+      updateCustomTarget('headers', headerObj);
+    },
+    [headers, updateCustomTarget],
+  );
+
+  const updateHeaderKey = useCallback(
+    (index: number, newKey: string) => {
+      setHeaders((prev) => {
+        const newHeaders = [...prev];
+        newHeaders[index] = { ...newHeaders[index], key: newKey };
+        return newHeaders;
+      });
+
+      // Update target configuration
+      const headerObj = headers.reduce(
+        (acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        },
+        {} as Record<string, string>,
+      );
+      updateCustomTarget('headers', headerObj);
+    },
+    [headers, updateCustomTarget],
+  );
+
+  const updateHeaderValue = useCallback(
+    (index: number, newValue: string) => {
+      setHeaders((prev) => {
+        const newHeaders = [...prev];
+        newHeaders[index] = { ...newHeaders[index], value: newValue };
+        return newHeaders;
+      });
+
+      // Update target configuration
+      const headerObj = headers.reduce(
+        (acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        },
+        {} as Record<string, string>,
+      );
+      updateCustomTarget('headers', headerObj);
+    },
+    [headers, updateCustomTarget],
+  );
+
   const handleRequestBodyChange = (code: string) => {
     setRequestBody(code);
-
-    if (isJsonContentType) {
-      // Try to parse as YAML first
-      try {
-        const parsedYaml = yaml.load(code);
-        // If it's valid YAML, convert to JSON and update
-        // Don't stringify the parsed object - send it as is
-        updateCustomTarget('body', parsedYaml);
-      } catch (yamlError) {
-        console.error('YAML parsing failed:', yamlError);
-        // If YAML parsing fails, try JSON parse as fallback
-        try {
-          const parsedJson = JSON.parse(code);
-          updateCustomTarget('body', parsedJson);
-        } catch (jsonError) {
-          console.error('JSON parsing failed:', jsonError);
-          // If both YAML and JSON parsing fail, use the raw text
-          updateCustomTarget('body', code);
-        }
-      }
-    } else {
-      // For non-JSON content types, use raw text
-      updateCustomTarget('body', code);
-    }
+    // Update state immediately without validation
+    updateCustomTarget('body', code);
   };
+
+  const handleRawRequestChange = (value: string) => {
+    setRawRequestValue(value);
+    // Update state immediately without validation
+    updateCustomTarget('request', value);
+  };
+
+  // Separate validation from state updates
+  useEffect(() => {
+    if (!useRawRequest) {
+      setBodyError(null);
+      return;
+    }
+
+    // Don't show errors while typing short content
+    if (!rawRequestValue.trim() || rawRequestValue.trim().length < 20) {
+      setBodyError(null);
+      return;
+    }
+
+    // Debounce validation to avoid blocking input
+    const timeoutId = setTimeout(() => {
+      const request = rawRequestValue.trim();
+
+      // Check for required template variable
+      if (!request.includes('{{prompt}}')) {
+        setBodyError('Request must include {{prompt}} template variable');
+        return;
+      }
+
+      // Check for basic HTTP request format
+      const firstLine = request.split('\n')[0];
+      const hasValidFirstLine = /^(POST|GET|PUT|DELETE)\s+\S+/.test(firstLine);
+      if (!hasValidFirstLine) {
+        setBodyError('First line must be in format: METHOD URL');
+        return;
+      }
+
+      setBodyError(null);
+    }, 750);
+
+    return () => clearTimeout(timeoutId);
+  }, [useRawRequest, rawRequestValue]);
+
+  // Note to Michael: don't dedent this, we want to preserve JSON formatting.
+  const placeholderText = `Enter your HTTP request here. Example:
+
+POST /v1/chat/completions HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+Authorization: Bearer {{api_key}}
+
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "{{prompt}}"
+    }
+  ]
+}`;
+
+  // Add effect to handle forceStructured changes
+  useEffect(() => {
+    if (forceStructured) {
+      // Reset all state to structured mode
+      setUseRawRequest(false);
+      setRawRequestValue('');
+      // Clear any validation errors
+      setUrlError(null);
+      setBodyError(null);
+
+      setHeaders(
+        Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
+          key,
+          value: String(value),
+        })),
+      );
+      setRequestBody(
+        typeof selectedTarget.config.body === 'string'
+          ? selectedTarget.config.body
+          : JSON.stringify(selectedTarget.config.body, null, 2) || '',
+      );
+
+      // Only update the target config if we need to clear the raw request
+      if (selectedTarget.config.request) {
+        updateCustomTarget('request', undefined);
+      }
+    }
+  }, [forceStructured, selectedTarget.config]);
 
   return (
     <Box mt={2}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">HTTP Endpoint Configuration</Typography>
-        <Box>
-          <Button variant="outlined" onClick={() => setConfigDialogOpen(true)}>
-            Generate Config
-          </Button>
-        </Box>
-      </Box>
+      <Typography variant="h6" gutterBottom>
+        HTTP Endpoint Configuration
+      </Typography>
       <FormControlLabel
         control={
           <Switch
@@ -205,41 +369,8 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
             Add Header
           </Button>
 
-        <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-          Request Body
-        </Typography>
-        <Box
-          sx={{
-            border: 1,
-            borderColor: bodyError ? 'error.main' : 'grey.300',
-            borderRadius: 1,
-            mt: 1,
-            position: 'relative',
-            backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-          }}
-        >
-          <Editor
-            value={
-              /*
-              Should always be a string, but there might be some bad state in localStorage as of 2024-12-07
-              */
-              typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody, null, 2)
-            }
-            onValueChange={handleRequestBodyChange}
-            highlight={(code) =>
-              highlight(code, isJsonContentType ? languages.json : languages.text)
-            }
-            padding={10}
-            style={{
-              fontFamily: '"Fira code", "Fira Mono", monospace',
-              fontSize: 14,
-              minHeight: '100px',
-            }}
-          />
-        </Box>
-        {bodyError && (
-          <Typography color="error" variant="caption" sx={{ mt: 0.5 }}>
-            {bodyError}
+          <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+            Request Body
           </Typography>
           <Box
             sx={{
@@ -276,104 +407,6 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
           )}
         </Box>
       )}
-      <Dialog
-        open={configDialogOpen}
-        onClose={() => setConfigDialogOpen(false)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle>Generate HTTP Configuration</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={6}>
-              <Typography variant="h6" gutterBottom>
-                Example Request
-              </Typography>
-              <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
-                <Editor
-                  value={request}
-                  onValueChange={(val) => setRequest(val)}
-                  highlight={(code) => highlight(code, languages.http)}
-                  padding={10}
-                  style={{
-                    fontFamily: '"Fira code", "Fira Mono", monospace',
-                    fontSize: 14,
-                    backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
-                    minHeight: '100%',
-                  }}
-                />
-              </Paper>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <Typography variant="h6" gutterBottom>
-                Example Response
-              </Typography>
-              <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
-                <Editor
-                  value={response}
-                  onValueChange={(val) => setResponse(val)}
-                  highlight={(code) => highlight(code, languages.json)}
-                  padding={10}
-                  style={{
-                    fontFamily: '"Fira code", "Fira Mono", monospace',
-                    fontSize: 14,
-                    backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
-                    minHeight: '100%',
-                  }}
-                />
-              </Paper>
-            </Grid>
-            {error && (
-              <Grid item xs={12}>
-                <Typography color="error">Error: {error}</Typography>
-              </Grid>
-            )}
-            {generatedConfig && (
-              <Grid item xs={12}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
-                  <Typography variant="h6" sx={{ flexGrow: 1 }}>
-                    Generated Configuration
-                  </Typography>
-                  <IconButton
-                    onClick={handleCopy}
-                    size="small"
-                    title={copied ? 'Copied!' : 'Copy to clipboard'}
-                    color={copied ? 'success' : 'default'}
-                  >
-                    {copied ? <CheckIcon /> : <ContentCopyIcon />}
-                  </IconButton>
-                </Box>
-                <Paper elevation={3} sx={{ height: '20rem', overflow: 'auto' }}>
-                  <Editor
-                    value={yaml.dump(generatedConfig.config)}
-                    onValueChange={() => {}} // Read-only
-                    highlight={(code) => highlight(code, languages.yaml)}
-                    padding={10}
-                    style={{
-                      fontFamily: '"Fira code", "Fira Mono", monospace',
-                      fontSize: 14,
-                      backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
-                      minHeight: '100%',
-                    }}
-                    readOnly
-                  />
-                </Paper>
-              </Grid>
-            )}
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfigDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleGenerateConfig} disabled={generating} variant="outlined">
-            {generating ? 'Generating...' : 'Generate'}
-          </Button>
-          {generatedConfig && (
-            <Button onClick={handleApply} variant="contained" color="primary">
-              Apply Configuration
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

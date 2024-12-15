@@ -113,14 +113,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       };
     };
   } | null>(null);
-  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
-  const [isJsonContentType, setIsJsonContentType] = useState(
-    selectedTarget.config.headers &&
-      selectedTarget.config.headers['Content-Type'] === 'application/json',
-  );
-  const [requestBody, setRequestBody] = useState(selectedTarget.config.body);
-
-  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [hasTestedTarget, setHasTestedTarget] = useState(false);
   const [bodyError, setBodyError] = useState<string | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -352,9 +344,14 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   };
 
   const handleTryExample = () => {
-    setSelectedTarget(EXAMPLE_TARGET);
-    setRequestBody(EXAMPLE_TARGET.config.body);
-    setIsJsonContentType(true);
+    setSelectedTarget({
+      ...EXAMPLE_TARGET,
+      config: {
+        ...EXAMPLE_TARGET.config,
+        request: undefined, // Ensure raw request is cleared
+      },
+    });
+    setForceStructuredHttp(true);
     recordEvent('feature_used', { feature: 'redteam_config_try_example' });
   };
 
@@ -490,8 +487,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             urlError={urlError}
             setUrlError={setUrlError}
             forceStructured={forceStructuredHttp}
-            setForceStructured={setForceStructuredHttp}
-            updateFullTarget={setSelectedTarget}
           />
         )}
 
