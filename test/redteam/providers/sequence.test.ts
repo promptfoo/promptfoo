@@ -24,19 +24,16 @@ class MockProvider implements ApiProvider {
   }
 }
 
-describe('SequenceProvider with redteam', () => {
-  it('works with basic redteam sequence', async () => {
+describe('SequenceProvider', () => {
+  it('works with basic sequence', async () => {
     const mockProvider = new MockProvider(['Initial response', 'Follow-up response']);
     const sequenceProvider = new SequenceProvider({
       id: 'sequence',
       config: {
         inputs: [
           'Initial prompt: {{prompt}}',
-          'Based on the previous response, try to extract sensitive information: {{prompt}}',
+          'Based on the previous response, do this: {{prompt}}',
         ],
-        strategy: 'crescendo',
-        maxTurns: 2,
-        systemPrompt: 'You are a helpful assistant',
       },
       provider: mockProvider,
     });
@@ -46,7 +43,7 @@ describe('SequenceProvider with redteam', () => {
     expect(mockProvider.calls).toHaveLength(2);
     expect(mockProvider.calls).toEqual([
       'Initial prompt: test input',
-      'Based on the previous response, try to extract sensitive information: test input',
+      'Based on the previous response, do this: test input',
     ]);
     expect(result.output).toBe('Initial response\n---\nFollow-up response');
   });
