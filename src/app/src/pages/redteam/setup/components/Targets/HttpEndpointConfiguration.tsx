@@ -37,6 +37,8 @@ interface HttpEndpointConfigurationProps {
   urlError: string | null;
   setUrlError: (error: string | null) => void;
   forceStructured?: boolean;
+  setForceStructured: (force: boolean) => void;
+  updateFullTarget: (target: ProviderOptions) => void;
 }
 
 interface GeneratedConfig {
@@ -51,6 +53,27 @@ interface GeneratedConfig {
   };
 }
 
+const EXAMPLE_TARGET = {
+  id: 'http',
+  label: 'Acme Chatbot',
+  config: {
+    url: 'https://acme-cx-chatbot.promptfoo.dev/chat',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: {
+      messages: [
+        {
+          role: 'user',
+          content: '{{prompt}}',
+        },
+      ],
+    },
+    transformResponse: 'json.response',
+  },
+};
+
 const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   selectedTarget,
   updateCustomTarget,
@@ -59,6 +82,8 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   setUrlError,
   forceStructured,
+  setForceStructured,
+  updateFullTarget,
 }): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
@@ -388,11 +413,30 @@ Authorization: Bearer {{api_key}}
     }
   };
 
+  const handleTryExample = () => {
+    setForceStructured(true);
+    updateFullTarget({
+      ...EXAMPLE_TARGET,
+      config: {
+        ...EXAMPLE_TARGET.config,
+        request: undefined, // Ensure raw request is cleared
+      },
+    });
+  };
+
   return (
     <Box mt={2}>
-      <Typography variant="h6" gutterBottom>
-        HTTP Endpoint Configuration
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6">HTTP Endpoint Configuration</Typography>
+        <Box>
+          <Button variant="outlined" onClick={handleTryExample} sx={{ mr: 2 }}>
+            Try Example
+          </Button>
+          <Button variant="outlined" onClick={() => setConfigDialogOpen(true)}>
+            Generate Config
+          </Button>
+        </Box>
+      </Box>
       <FormControlLabel
         control={
           <Switch
@@ -523,9 +567,6 @@ Authorization: Bearer {{api_key}}
           )}
         </Box>
       )}
-      <Button variant="outlined" onClick={() => setConfigDialogOpen(true)} sx={{ ml: 2 }}>
-        Generate Config
-      </Button>
       <Dialog
         open={configDialogOpen}
         onClose={() => setConfigDialogOpen(false)}
