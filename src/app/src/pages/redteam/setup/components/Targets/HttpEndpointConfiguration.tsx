@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import Editor from 'react-simple-code-editor';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -70,6 +70,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
 }): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
+  const [rawRequestValue, setRawRequestValue] = useState(selectedTarget.config.request || '');
 
   const resetState = useCallback(
     (isRawMode: boolean) => {
@@ -77,31 +78,25 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
       setUrlError(null);
 
       if (isRawMode) {
-        // Convert structured request to raw format
         const headers = selectedTarget.config?.headers
           ? Object.entries(selectedTarget.config.headers)
               .filter(
                 (entry, index, self) =>
-                  // Remove duplicate headers
                   self.findIndex(([key]) => key.toLowerCase() === entry[0].toLowerCase()) === index,
               )
               .map(([key, value]) => `${key}: ${value}`)
           : [];
 
-        // Ensure body is properly formatted without double serialization
         let body = selectedTarget.config?.body;
         if (body) {
           if (typeof body === 'string') {
             try {
-              // If it's a JSON string, parse it to prevent double serialization
               const parsed = JSON.parse(body);
               body = JSON.stringify(parsed, null, 2);
             } catch {
-              // If parsing fails, use the string as-is
               body = body.trim();
             }
           } else {
-            // If it's an object, stringify it once
             body = JSON.stringify(body, null, 2);
           }
         }
@@ -116,7 +111,6 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
         setRequestBody(rawReq);
         updateCustomTarget('request', rawReq);
       } else {
-        // Reset to structured mode with default template
         const template = {
           messages: [
             {
@@ -132,7 +126,6 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
           'Content-Type': 'application/json',
         });
 
-        // Preserve URL if it exists
         if (selectedTarget.config?.url) {
           updateCustomTarget('url', selectedTarget.config.url);
         }
@@ -145,80 +138,34 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
     if (useRawRequest !== undefined) {
       resetState(useRawRequest);
     }
-  }, [useRawRequest]); // Remove resetState from dependencies to prevent loop
+  }, [useRawRequest]);
 
   useEffect(() => {
-    if (!useRawRequest && selectedTarget.config?.request) {
+    if (useRawRequest && rawRequestValue) {
       try {
-        // Only attempt to parse if there's a request to parse
-        const adjusted = String(selectedTarget.config.request)
-          .split(/\r?\n/)
-          .filter(Boolean)
-          .join('\r\n');
-
-        const parsedRaw = httpZ.parse(adjusted) as unknown;
-        const parsed = parsedRaw as {
-          method?: string;
-          requestLine?: string;
-          headers?: Record<string, string | string[]>;
-          body?: unknown;
-        };
-
-        // Extract URL from request line and headers
-        const requestLine = parsed.requestLine?.split(' ');
-        if (requestLine && requestLine.length > 1) {
-          const url = requestLine[1];
-          const host = parsed.headers?.['Host'] || parsed.headers?.['host'];
-          if (url.startsWith('/') && host) {
-            updateCustomTarget('url', `https://${host}${url}`);
-          } else if (url.startsWith('http')) {
-            updateCustomTarget('url', url);
-          } else if (host) {
-            updateCustomTarget('url', `https://${host}${url.startsWith('/') ? '' : '/'}${url}`);
-          }
+        const parsed = httpZ.parse(rawRequestValue);
+        if (!isHttpZRequestModel(parsed)) {
+          setBodyError('Please enter a valid HTTP request');
+          return;
         }
-
-        // Extract method
-        if (requestLine && requestLine.length > 0) {
-          updateCustomTarget('method', requestLine[0]);
+        if (!rawRequestValue.includes('{{prompt}}')) {
+          setBodyError('Request must contain {{prompt}} template variable');
+          return;
         }
-
-        // Extract headers (excluding Host)
-        if (parsed.headers) {
-          const headers: Record<string, string> = {};
-          for (const [key, value] of Object.entries(parsed.headers)) {
-            if (key.toLowerCase() !== 'host') {
-              headers[key] = Array.isArray(value) ? value[0] : String(value);
-            }
-          }
-          updateCustomTarget('headers', headers);
-        }
-
-        // Extract and parse body
-        if (parsed.body) {
-          const bodyStr = String(parsed.body).trim();
-          try {
-            const parsedBody = JSON.parse(bodyStr);
-            setRequestBody(JSON.stringify(parsedBody, null, 2));
-            updateCustomTarget('body', parsedBody);
-          } catch {
-            setRequestBody(bodyStr);
-            updateCustomTarget('body', bodyStr);
-          }
-        }
+        setBodyError(null);
+        updateCustomTarget('request', rawRequestValue);
       } catch (error) {
         console.error('Failed to parse raw request:', error);
-        setBodyError(`Failed to parse raw request: ${String(error)}`);
+        setBodyError('Please enter a valid HTTP request');
       }
     }
-  }, [selectedTarget.config?.request, useRawRequest]); // Remove updateCustomTarget, setRequestBody, setBodyError from dependencies
+  }, [useRawRequest, rawRequestValue, updateCustomTarget, setBodyError]);
 
   const handleRequestBodyChange = (code: string) => {
     setRequestBody(code);
 
     if (isJsonContentType) {
       try {
-        // Try parsing as YAML first
         const parsedYaml = yaml.load(code);
         if (parsedYaml && typeof parsedYaml === 'object') {
           updateCustomTarget('body', parsedYaml);
@@ -230,33 +177,17 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
       }
 
       try {
-        // Try parsing as JSON
         const parsedJson = JSON.parse(code);
         updateCustomTarget('body', parsedJson);
         setBodyError(null);
       } catch (jsonError) {
         console.error('JSON parsing failed:', jsonError);
-        // Keep the raw string if parsing fails
         updateCustomTarget('body', code);
       }
     } else {
-      // For non-JSON content types, use the raw string
       updateCustomTarget('body', code);
     }
   };
-
-  const exampleRequest = `POST https://api.example.com/v1/chat/completions HTTP/1.1
-Content-Type: application/json
-Authorization: Bearer {{api_key}}
-
-{
-  "messages": [
-    {
-      "role": "user",
-      "content": "{{prompt}}"
-    }
-  ]
-}`;
 
   const placeholderText = `Enter your HTTP request here. Example:
 POST https://api.example.com/v1/chat/completions HTTP/1.1
@@ -305,20 +236,9 @@ Authorization: Bearer {{api_key}}
       {useRawRequest ? (
         <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
           <Editor
-            value={selectedTarget.config.request || exampleRequest}
+            value={rawRequestValue}
             onValueChange={(value) => {
-              try {
-                const parsed = httpZ.parse(value);
-                if (!isHttpZRequestModel(parsed)) {
-                  setBodyError('Invalid HTTP request format');
-                  return;
-                }
-                setBodyError(null);
-                updateCustomTarget('request', value);
-              } catch (error) {
-                console.error('Failed to parse raw request:', error);
-                setBodyError(String(error));
-              }
+              setRawRequestValue(value);
             }}
             highlight={(code) => highlight(code, languages.http)}
             padding={10}
