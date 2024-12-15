@@ -1,8 +1,10 @@
 import logger from '../logger';
+import { loadApiProviders } from '../providers';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderDefinition,
   ProviderOptions,
   ProviderResponse,
 } from '../types';
@@ -12,32 +14,24 @@ import { getNunjucksEngine } from '../util/templates';
 interface SequenceProviderConfig {
   inputs?: string[];
   separator?: string;
-  targetProvider?: string;
-  strategy?: string;
-  maxTurns?: number;
-  systemPrompt?: string;
+  provider: ProviderDefinition;
 }
 
 export class SequenceProvider implements ApiProvider {
   private readonly inputs: string[];
   private readonly separator: string;
   private readonly identifier: string;
-  private readonly targetProvider?: ApiProvider;
-  private readonly strategy?: string;
-  private readonly maxTurns?: number;
-  private readonly systemPrompt?: string;
+  private readonly targetProvider?: ProviderDefinition;
 
-  constructor({ id, config, provider }: ProviderOptions) {
+  constructor({ id, config }: ProviderOptions) {
     invariant(config, 'Expected sequence provider config');
+    invariant(config.provider, 'Expected sequence provider config to have a provider');
 
     const typedConfig = config as SequenceProviderConfig;
     this.inputs = typedConfig.inputs || [];
     this.separator = typedConfig.separator || '\n---\n';
     this.identifier = id || 'sequence-provider';
-    this.targetProvider = provider;
-    this.strategy = typedConfig.strategy;
-    this.maxTurns = typedConfig.maxTurns;
-    this.systemPrompt = typedConfig.systemPrompt;
+    this.targetProvider = typedConfig.provider;
   }
 
   id() {
@@ -49,7 +43,10 @@ export class SequenceProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const provider = context?.originalProvider || this.targetProvider;
+    // FIXME(ian): Provider types are totally messed up and we're doing this
+    // instead of a 3-part if statement to figure out what type of provider it
+    // is.
+    const [provider] = await loadApiProviders([this.targetProvider as any]);
     invariant(provider, 'No provider available for sequence provider');
 
     const nunjucks = getNunjucksEngine();

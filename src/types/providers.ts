@@ -7,6 +7,7 @@ export type ProviderId = string;
 export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
+export type ProviderDefinition = ApiProvider | ProviderOptions | string;
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
