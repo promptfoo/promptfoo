@@ -22,10 +22,12 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-http';
 import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-yaml';
 import type { ProviderOptions } from '../../types';
 import 'prismjs/themes/prism.css';
 
@@ -365,7 +367,7 @@ Authorization: Bearer {{api_key}}
 
   const handleCopy = () => {
     if (generatedConfig) {
-      navigator.clipboard.writeText(JSON.stringify(generatedConfig.config, null, 2));
+      navigator.clipboard.writeText(yaml.dump(generatedConfig.config));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -636,9 +638,9 @@ Authorization: Bearer {{api_key}}
                 </Box>
                 <Paper elevation={3} sx={{ height: '20rem', overflow: 'auto' }}>
                   <Editor
-                    value={JSON.stringify(generatedConfig.config, null, 2)}
+                    value={yaml.dump(generatedConfig.config)}
                     onValueChange={() => {}} // Read-only
-                    highlight={(code) => highlight(code, languages.json)}
+                    highlight={(code) => highlight(code, languages.yaml)}
                     padding={10}
                     style={{
                       fontFamily: '"Fira code", "Fira Mono", monospace',
