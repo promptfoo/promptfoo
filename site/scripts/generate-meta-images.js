@@ -126,7 +126,7 @@ async function generateMetaImages() {
                 throw error;
               }
               console.warn(`Retrying screenshot for ${file}, ${retries} attempts remaining`);
-              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+              await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second before retry
             }
           }
           console.log(`Generated image for ${file} at ${outputPath}`);
