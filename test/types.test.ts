@@ -205,26 +205,116 @@ describe('TestSuiteConfigSchema', () => {
 
 // Test specific provider configurations
 describe('provider configurations', () => {
-  it('should validate sequence provider configuration', () => {
-    const config = {
-      providers: [
-        {
-          id: 'sequence',
-          config: {
-            inputs: [],
-            targetProvider: 'openai:gpt-4',
-            strategy: 'crescendo',
-            maxTurns: 3,
-            systemPrompt: 'test prompt',
+  describe('sequence provider', () => {
+    it('should validate sequence provider with string provider', () => {
+      const config = {
+        providers: [
+          {
+            id: 'sequence',
+            config: {
+              inputs: [],
+              provider: 'openai:gpt-4',
+              strategy: 'crescendo',
+              maxTurns: 3,
+              systemPrompt: 'test prompt',
+            },
           },
-        },
-      ],
-      prompts: ['test prompt'],
-      tests: [],
-    };
+        ],
+        prompts: ['test prompt'],
+        tests: [],
+      };
 
-    const result = TestSuiteConfigSchema.safeParse(config);
-    expect(result.success).toBe(true);
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate sequence provider with function provider', () => {
+      const config = {
+        providers: [
+          {
+            id: 'sequence',
+            config: {
+              inputs: [],
+              provider: async (prompt: string) => ({ output: prompt }),
+              strategy: 'crescendo',
+              maxTurns: 3,
+            },
+          },
+        ],
+        prompts: ['test prompt'],
+        tests: [],
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate sequence provider with object provider', () => {
+      const config = {
+        providers: [
+          {
+            id: 'sequence',
+            config: {
+              inputs: [],
+              provider: {
+                id: 'test-provider',
+                config: {
+                  apiKey: 'test-key',
+                },
+              },
+              strategy: 'crescendo',
+              maxTurns: 3,
+            },
+          },
+        ],
+        prompts: ['test prompt'],
+        tests: [],
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('should fail validation when provider is missing', () => {
+      const config = {
+        providers: [
+          {
+            id: 'sequence',
+            config: {
+              inputs: [],
+              strategy: 'crescendo',
+              maxTurns: 3,
+            },
+          },
+        ],
+        prompts: ['test prompt'],
+        tests: [],
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
+    it('should fail validation with invalid provider type', () => {
+      const config = {
+        providers: [
+          {
+            id: 'sequence',
+            config: {
+              inputs: [],
+              provider: 123, // Invalid provider type
+              strategy: 'crescendo',
+              maxTurns: 3,
+            },
+          },
+        ],
+        prompts: ['test prompt'],
+        tests: [],
+      };
+
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
   });
 });
 

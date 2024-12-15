@@ -51,7 +51,11 @@ export class SequenceProvider implements ApiProvider {
     let provider: ApiProvider;
     if (typeof providerToUse === 'function') {
       provider = { id: () => 'function-provider', callApi: providerToUse };
-    } else if (typeof providerToUse === 'object' && 'callApi' in providerToUse && typeof providerToUse.callApi === 'function') {
+    } else if (
+      typeof providerToUse === 'object' &&
+      'callApi' in providerToUse &&
+      typeof providerToUse.callApi === 'function'
+    ) {
       provider = providerToUse as ApiProvider;
     } else {
       [provider] = await loadApiProviders([providerToUse as any]);

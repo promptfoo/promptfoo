@@ -160,7 +160,7 @@ export const SequenceProviderConfigSchema = z
   .object({
     inputs: z.array(z.string()).optional(),
     separator: z.string().optional(),
-    provider: z.string(),  // Required provider field
+    provider: z.string(), // Required provider field
     strategy: z.string().optional(),
     maxTurns: z.number().optional(),
     systemPrompt: z.string().optional(),

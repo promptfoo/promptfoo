@@ -233,7 +233,7 @@
                             "separator": {
                               "type": "string"
                             },
-                            "targetProvider": {
+                            "provider": {
                               "type": "string"
                             },
                             "strategy": {
@@ -246,6 +246,9 @@
                               "type": "string"
                             }
                           },
+                          "required": [
+                            "provider"
+                          ],
                           "additionalProperties": false
                         }
                       ]
