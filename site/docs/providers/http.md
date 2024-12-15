@@ -486,3 +486,11 @@ Supported config options:
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
+
+## Configuration Generator
+
+Use the generator below to create an HTTP provider configuration based on your endpoint:
+
+import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
+
+<HttpConfigGenerator />

@@ -28,8 +28,8 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import invariant from '@promptfoo/util/invariant';
 import type { VisibilityState } from '@tanstack/table-core';
-import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
@@ -552,6 +552,7 @@ export default function ResultsView({
         searchText={debouncedSearchText}
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
+        setFilterMode={setFilterMode}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

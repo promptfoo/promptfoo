@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
@@ -13,7 +12,8 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
-import { extractFirstJsonObject } from '../../../util/json';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
@@ -132,6 +132,7 @@ class CrescendoProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+    logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -390,13 +391,17 @@ class CrescendoProvider implements ApiProvider {
     if (response.error) {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
-    invariant(typeof response.output === 'string', 'Expected output to be a string');
 
-    const parsedOutput = extractFirstJsonObject<{
-      generatedQuestion: string;
-      rationaleBehindJailbreak: string;
-      lastResponseSummary: string;
-    }>(response.output);
+    const parsedOutput =
+      typeof response.output === 'string'
+        ? extractFirstJsonObject<{
+            generatedQuestion: string;
+            rationaleBehindJailbreak: string;
+            lastResponseSummary: string;
+          }>(response.output)
+        : Array.isArray(response.output)
+          ? response.output[0]
+          : response.output;
     const expectedKeys = ['generatedQuestion', 'rationaleBehindJailbreak', 'lastResponseSummary'];
 
     for (const key of expectedKeys) {
@@ -421,7 +426,7 @@ class CrescendoProvider implements ApiProvider {
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
       role: 'assistant',
-      content: response.output,
+      content: JSON.stringify(response.output),
     });
 
     return {
@@ -477,7 +482,11 @@ class CrescendoProvider implements ApiProvider {
     logger.debug(targetPrompt);
 
     const targetResponse = await getTargetResponse(provider, targetPrompt, context, options);
-    invariant(targetResponse.output, 'Expected output to be defined');
+    logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
+    if (targetResponse.error) {
+      throw new Error(`[Crescendo] Target returned an error: ${targetResponse.error}`);
+    }
+    invariant(targetResponse.output, '[Crescendo] Target did not return an output');
     logger.debug(`[Crescendo] Received response from target: ${targetResponse.output}`);
 
     this.memory.addMessage(this.targetConversationId, {
@@ -536,6 +545,7 @@ class CrescendoProvider implements ApiProvider {
       rationale: string;
     }>(refusalResponse.output);
 
+    logger.debug(`[Crescendo] Refusal score parsed response: ${JSON.stringify(parsed)}`);
     invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
     invariant(
       typeof parsed.metadata === 'number',
@@ -584,6 +594,7 @@ class CrescendoProvider implements ApiProvider {
       metadata: number;
     }>(evalResponse.output);
 
+    logger.debug(`[Crescendo] Eval score parsed response: ${JSON.stringify(parsed)}`);
     invariant(typeof parsed.value === 'boolean', 'Expected eval grader value to be a boolean');
     invariant(typeof parsed.metadata === 'number', 'Expected eval grader metadata to be a number');
 
@@ -598,7 +609,11 @@ class CrescendoProvider implements ApiProvider {
     const messages = this.memory.getConversation(conversationId);
     logger.debug(`[Crescendo] Memory for conversation ${conversationId}:`);
     for (const message of messages) {
-      logger.debug(`... ${message.role}: ${message.content.slice(0, 100)} ...`);
+      try {
+        logger.debug(`... ${message.role}: ${message.content.slice(0, 100)} ...`);
+      } catch (error) {
+        logger.warn(`Error logging message in conversation: ${error}`);
+      }
     }
   }
 }

@@ -341,6 +341,7 @@ describe('readTest', () => {
 describe('readTests', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    jest.mocked(globSync).mockReturnValue([]);
   });
 
   it('readTests with string input (CSV file path)', async () => {
@@ -555,6 +556,44 @@ describe('readTests', () => {
   it('should not log a warning if tests is undefined', async () => {
     await readTests(undefined);
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('should read tests from multiple Google Sheets URLs', async () => {
+    jest.mocked(globSync).mockReturnValueOnce([]);
+    const mockFetchCsvFromGoogleSheet = jest.mocked(fetchCsvFromGoogleSheet);
+    mockFetchCsvFromGoogleSheet
+      .mockResolvedValueOnce([
+        { var1: 'value1', var2: 'value2', __expected: 'expected1' },
+        { var1: 'value3', var2: 'value4', __expected: 'expected2' },
+      ])
+      .mockResolvedValueOnce([
+        { var1: 'value5', var2: 'value6', __expected: 'expected3' },
+        { var1: 'value7', var2: 'value8', __expected: 'expected4' },
+      ]);
+
+    const result = await readTests([
+      'https://docs.google.com/spreadsheets/d/example1',
+      'https://docs.google.com/spreadsheets/d/example2',
+    ]);
+
+    expect(mockFetchCsvFromGoogleSheet).toHaveBeenCalledTimes(2);
+    expect(mockFetchCsvFromGoogleSheet).toHaveBeenCalledWith(
+      'https://docs.google.com/spreadsheets/d/example1',
+    );
+    expect(mockFetchCsvFromGoogleSheet).toHaveBeenCalledWith(
+      'https://docs.google.com/spreadsheets/d/example2',
+    );
+    expect(result).toHaveLength(4);
+    expect(result[0]).toMatchObject({
+      description: 'Row #1',
+      vars: { var1: 'value1', var2: 'value2' },
+      assert: [{ type: 'equals', value: 'expected1' }],
+    });
+    expect(result[2]).toMatchObject({
+      description: 'Row #1',
+      vars: { var1: 'value5', var2: 'value6' },
+      assert: [{ type: 'equals', value: 'expected3' }],
+    });
   });
 });
 

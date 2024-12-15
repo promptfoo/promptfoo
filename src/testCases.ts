@@ -7,7 +7,6 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
-import invariant from 'tiny-invariant';
 import { testCaseFromCsvRow } from './csv';
 import { getEnvBool, getEnvString } from './envars';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
@@ -26,6 +25,7 @@ import type {
   ProviderOptions,
 } from './types';
 import { retryWithDeduplication, sampleArray } from './util/generation';
+import invariant from './util/invariant';
 import { extractJsonObjects } from './util/json';
 import { extractVariablesFromTemplates } from './util/templates';
 
@@ -181,6 +181,11 @@ export async function readTests(
     const testFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
+
+    if (loadTestsGlob.startsWith('https://docs.google.com/spreadsheets/')) {
+      testFiles.push(loadTestsGlob);
+    }
+
     const _deref = async (testCases: TestCase[], file: string) => {
       logger.debug(`Dereferencing test file: ${file}`);
       return (await $RefParser.dereference(testCases)) as TestCase[];
@@ -193,7 +198,10 @@ export async function readTests(
     }
     for (const testFile of testFiles) {
       let testCases: TestCase[] | undefined;
-      if (testFile.endsWith('.csv')) {
+      if (
+        testFile.endsWith('.csv') ||
+        testFile.startsWith('https://docs.google.com/spreadsheets/')
+      ) {
         testCases = await readStandaloneTestsFile(testFile, basePath);
       } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
         testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];

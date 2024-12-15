@@ -1,7 +1,6 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
-import invariant from 'tiny-invariant';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {
@@ -10,6 +9,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
+import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;

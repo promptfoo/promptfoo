@@ -19,6 +19,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
+import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getStrategyIdFromGradingResult } from './shared';
 import './RiskCategoryDrawer.css';
@@ -42,6 +43,7 @@ interface RiskCategoryDrawerProps {
   evalId: string;
   numPassed: number;
   numFailed: number;
+  strategyStats: Record<string, { pass: number; total: number }>;
 }
 
 function getPromptDisplayString(prompt: string): string {
@@ -89,6 +91,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   evalId,
   numPassed,
   numFailed,
+  strategyStats,
 }) => {
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
@@ -133,7 +136,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 500, p: 2 }} className="risk-category-drawer">
+      <Box sx={{ width: 750, p: 2 }} className="risk-category-drawer">
         <Typography variant="h6" gutterBottom>
           {displayName}
         </Typography>
@@ -178,6 +181,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
         >
           <Tab label={`Flagged Tests (${failures.length})`} />
           <Tab label={`Passed Tests (${passes.length})`} />
+          <Tab label="Flow Diagram" />
         </Tabs>
 
         {activeTab === 0 ? (
@@ -255,26 +259,44 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
               <Typography variant="body1">No failed tests</Typography>
             </Box>
           )
-        ) : passes.length > 0 ? (
-          <List>
-            {passes.map((pass, index) => (
-              <ListItem key={index} className="failure-item">
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="subtitle1" className="prompt">
-                      {getPromptDisplayString(pass.prompt)}
-                    </Typography>
-                    <Typography variant="body2" className="output">
-                      {getOutputDisplay(pass.output)}
-                    </Typography>
+        ) : activeTab === 1 ? (
+          passes.length > 0 ? (
+            <List>
+              {passes.map((pass, index) => (
+                <ListItem key={index} className="failure-item">
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="subtitle1" className="prompt">
+                        {getPromptDisplayString(pass.prompt)}
+                      </Typography>
+                      <Typography variant="body2" className="output">
+                        {getOutputDisplay(pass.output)}
+                      </Typography>
+                    </Box>
                   </Box>
-                </Box>
-              </ListItem>
-            ))}
-          </List>
+                </ListItem>
+              ))}
+            </List>
+          ) : (
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
+              <Typography variant="body1">No passed tests</Typography>
+            </Box>
+          )
         ) : (
-          <Box sx={{ mt: 2, textAlign: 'center' }}>
-            <Typography variant="body1">No passed tests</Typography>
+          <Box sx={{ mt: 2 }}>
+            <Typography
+              variant="h6"
+              gutterBottom
+              align="center"
+              sx={{ mb: 3, color: 'text.primary' }}
+            >
+              Simulated User - Attack Performance
+            </Typography>
+            <PluginStrategyFlow
+              failuresByPlugin={failures}
+              passesByPlugin={passes}
+              strategyStats={strategyStats}
+            />
           </Box>
         )}
       </Box>

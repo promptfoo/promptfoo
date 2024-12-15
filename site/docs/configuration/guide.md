@@ -303,6 +303,24 @@ defaultTest:
     provider: openai:gpt-4o-mini-0613
 ```
 
+### Default variables
+
+Use `defaultTest` to define variables that are shared across all tests:
+
+```yaml
+defaultTest:
+  vars:
+    template: 'A reusable prompt template with {{shared_var}}'
+    shared_var: 'some shared content'
+
+tests:
+  - vars:
+      unique_var: value1
+  - vars:
+      unique_var: value2
+      shared_var: 'override shared content' # Optionally override defaults
+```
+
 ### YAML references
 
 promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.

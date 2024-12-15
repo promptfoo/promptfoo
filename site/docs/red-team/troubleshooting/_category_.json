@@ -3,7 +3,7 @@
   "label": "Troubleshooting",
   "collapsed": true,
   "link": {
-    "type": "generated-index",
-    "description": "Common issues and how to resolve them."
+    "type": "doc",
+    "id": "overview"
   }
 }

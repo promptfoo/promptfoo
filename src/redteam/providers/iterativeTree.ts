@@ -14,7 +14,6 @@
  * @module RedteamIterative
  */
 import type { Environment } from 'nunjucks';
-import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -26,7 +25,8 @@ import type {
   NunjucksFilterMap,
   TokenUsage,
 } from '../../types';
-import { extractFirstJsonObject } from '../../util/json';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { PENALIZED_PHRASES } from './constants';
@@ -108,6 +108,7 @@ export async function evaluateResponse(
     },
     vars: {},
   });
+  logger.debug(`[IterativeTree] Judge response: ${JSON.stringify(judgeResp)}`);
   if (judgeResp.error) {
     throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
   }
@@ -140,6 +141,7 @@ export async function getNewPrompt(
     },
     vars: {},
   });
+  logger.debug(`[IterativeTree] Redteam response: ${JSON.stringify(redteamResp)}`);
   if (redteamResp.error) {
     throw new Error(`Error from redteam provider: ${redteamResp.error}`);
   }
@@ -182,11 +184,13 @@ export async function checkIfOnTopic(
     },
     vars: {},
   });
+  logger.debug(`[IterativeTree] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
   if (isOnTopicResp.error) {
     throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
   }
   invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
   const { onTopic } = extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output);
+  logger.debug(`[IterativeTree] Parsed onTopic value: ${JSON.stringify(onTopic)}`);
   invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
   return {
     isOnTopic: onTopic,
@@ -444,6 +448,10 @@ export async function runRedteamConversation({
           context,
           options,
         );
+        if (targetResponse.error) {
+          throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
+        }
+        invariant(targetResponse.output, '[IterativeTree] Target did not return an output');
         if (targetResponse.tokenUsage) {
           totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
           totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
@@ -594,7 +602,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
    * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
   constructor(readonly config: Record<string, string | object>) {
-    logger.debug(`RedteamIterativeTreeProvider config: ${JSON.stringify(config)}`);
+    logger.debug(`[IterativeTree] Constructor config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
   }
@@ -619,6 +627,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
+    logger.debug(`[IterativeTree] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
