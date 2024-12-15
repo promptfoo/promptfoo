@@ -53,14 +53,15 @@ async function generateMetaImages() {
   const template = fs.readFileSync(templatePath, 'utf8');
   const browser = await puppeteer.launch({
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    protocolTimeout: 60000, // Increase timeout to 60 seconds
   });
 
   try {
     const files = glob.sync('**/*.md', { cwd: docsDir });
     console.log(`Found ${files.length} markdown files`);
 
-    // Process files in batches of 10
-    const batchSize = 10;
+    // Process files in batches of 5
+    const batchSize = 5;
     for (let i = 0; i < files.length; i += batchSize) {
       const batch = files.slice(i, i + batchSize);
       const promises = batch.map(async (file) => {
@@ -107,11 +108,27 @@ async function generateMetaImages() {
             .replace('{{breadcrumbs}}', breadcrumbs)
             .replace('{{preview}}', preview);
 
-          await page.setContent(html, { waitUntil: 'domcontentloaded' });
-          await page.screenshot({
-            path: outputPath,
-            type: 'png',
-          });
+          // Try screenshot with retries
+          let retries = 3;
+          while (retries > 0) {
+            try {
+              await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
+              await page.screenshot({
+                path: outputPath,
+                type: 'png',
+                timeout: 30000,
+              });
+              break;
+            } catch (error) {
+              retries--;
+              if (retries === 0) {
+                console.error(`Failed to generate image for ${file} after 3 retries:`, error);
+                throw error;
+              }
+              console.warn(`Retrying screenshot for ${file}, ${retries} attempts remaining`);
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+            }
+          }
           console.log(`Generated image for ${file} at ${outputPath}`);
 
           const newFrontMatter = {
