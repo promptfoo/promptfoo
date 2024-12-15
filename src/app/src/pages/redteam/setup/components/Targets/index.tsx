@@ -16,7 +16,6 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import httpZ from 'http-z';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
@@ -117,127 +116,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [hasTestedTarget, setHasTestedTarget] = useState(false);
   const [bodyError, setBodyError] = useState<string | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
-  const [requestBody, setRequestBody] = useState<string>(
-    typeof selectedTarget.config.body === 'string'
-      ? selectedTarget.config.body
-      : JSON.stringify(selectedTarget.config.body, null, 2),
-  );
-  const [isJsonContentType, setIsJsonContentType] = useState(true);
-  const [useRawRequest, setUseRawRequest] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
   const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
-
-  const convertToRawRequest = (config: any) => {
-    const headers = config.headers || {};
-    const headerLines = Object.entries(headers)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('\n');
-
-    const method = config.method || 'POST';
-    const url = config.url || '/';
-    let body = config.body;
-
-    // Only stringify if body is an object and not already a string
-    if (body && typeof body === 'object') {
-      body = JSON.stringify(body, null, 2);
-    } else if (typeof body === 'string') {
-      // Ensure we don't double-stringify JSON strings
-      try {
-        const parsed = JSON.parse(body);
-        body = JSON.stringify(parsed, null, 2);
-      } catch {
-        // If it's not valid JSON, keep it as is
-      }
-    }
-
-    return `${method} ${url} HTTP/1.1\n${headerLines}\n\n${body || ''}`;
-  };
-
-  const parseRawRequest = (input: string) => {
-    const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
-    try {
-      const messageModel = httpZ.parse(adjusted) as httpZ.HttpZRequestModel;
-      return {
-        method: messageModel.method,
-        url: messageModel.target,
-        headers: messageModel.headers.reduce(
-          (acc, header) => {
-            acc[header.name.toLowerCase()] = header.value;
-            return acc;
-          },
-          {} as Record<string, string>,
-        ),
-        body: messageModel.body,
-      };
-    } catch (err) {
-      throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedTarget.config.request) {
-      setUseRawRequest(true);
-    }
-  }, [selectedTarget]);
-
-  const handleRawRequestToggle = (enabled: boolean) => {
-    const updatedTarget = { ...selectedTarget } as ProviderOptions;
-
-    // Reset state before mode switch
-    setBodyError(null);
-    setUrlError(null);
-    setRequestBody('');
-    setIsJsonContentType(true);
-
-    if (enabled) {
-      // Convert to raw request format
-      const rawRequest = convertToRawRequest(updatedTarget.config);
-      updatedTarget.config = {
-        ...updatedTarget.config,
-        request: rawRequest,
-      };
-      // Clear structured mode fields to prevent state conflicts
-      delete updatedTarget.config.url;
-      delete updatedTarget.config.method;
-      delete updatedTarget.config.headers;
-      delete updatedTarget.config.body;
-    } else {
-      // Convert from raw to structured format
-      if (updatedTarget.config.request) {
-        try {
-          const parsed = parseRawRequest(updatedTarget.config.request);
-          updatedTarget.config = {
-            ...updatedTarget.config,
-            url: parsed.url,
-            method: parsed.method,
-            headers: parsed.headers,
-            body: parsed.body,
-          };
-
-          // Parse body if it's JSON, keeping it as string if not
-          if (parsed.body) {
-            const bodyStr = String(parsed.body).trim();
-            try {
-              updatedTarget.config.body = JSON.parse(bodyStr);
-            } catch {
-              updatedTarget.config.body = bodyStr;
-            }
-          }
-
-          // Remove raw request after successful parsing
-          delete updatedTarget.config.request;
-        } catch (err) {
-          setBodyError(`Failed to parse raw request: ${String(err)}`);
-          return;
-        }
-      }
-    }
-
-    setSelectedTarget(updatedTarget);
-    updateConfig('target', updatedTarget);
-    setUseRawRequest(enabled);
-  };
 
   const { recordEvent } = useTelemetry();
   const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -252,26 +133,15 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     updateConfig('target', selectedTarget);
     const missingFields: string[] = [];
 
-    if (!selectedTarget.label) {
+    if (selectedTarget.label) {
+      // Label is valid
+    } else {
       missingFields.push('Target Name');
     }
 
     if (selectedTarget.id.startsWith('http')) {
-      if (useRawRequest && selectedTarget.config.request) {
-        try {
-          const adjusted = selectedTarget.config.request.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
-          const parsed = httpZ.parse(adjusted);
-          // Check if it's a request model and validate the URL from target
-          if ('method' in parsed && parsed.target) {
-            if (!validateUrl(parsed.target)) {
-              missingFields.push('URL');
-            }
-          } else {
-            missingFields.push('URL');
-          }
-        } catch {
-          missingFields.push('URL');
-        }
+      if (selectedTarget.config.request) {
+        // Skip URL validation for raw request mode
       } else if (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url)) {
         missingFields.push('URL');
       }
@@ -279,7 +149,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
     setMissingFields(missingFields);
     setPromptRequired(requiresPrompt(selectedTarget));
-  }, [selectedTarget, updateConfig, useRawRequest]);
+  }, [selectedTarget, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;
@@ -346,14 +216,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   useEffect(() => {
     setTestingEnabled(selectedTarget.id === 'http');
-
-    const hasJsonContentType = Object.keys(selectedTarget.config.headers || {}).some(
-      (header) =>
-        header.toLowerCase() === 'content-type' &&
-        selectedTarget.config.headers?.[header].toLowerCase().includes('application/json'),
-    );
-
-    setIsJsonContentType(hasJsonContentType);
   }, [selectedTarget]);
 
   const updateCustomTarget = (field: string, value: any) => {
@@ -427,42 +289,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     }
   };
 
-  const updateHeaderKey = (index: number, newKey: string) => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers };
-      const oldKey = Object.keys(updatedHeaders)[index];
-      const value = updatedHeaders[oldKey];
-      delete updatedHeaders[oldKey];
-      updatedHeaders[newKey] = value;
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
-  const updateHeaderValue = (index: number, newValue: string) => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers };
-      const key = Object.keys(updatedHeaders)[index];
-      updatedHeaders[key] = newValue;
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
-  const addHeader = () => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers, '': '' };
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
-  const removeHeader = (index: number) => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers };
-      const key = Object.keys(updatedHeaders)[index];
-      delete updatedHeaders[key];
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
   const handleTestTarget = async () => {
     setTestingTarget(true);
     setTestResult(null);
@@ -517,12 +343,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   const handleTryExample = () => {
     setSelectedTarget(EXAMPLE_TARGET);
-    setRequestBody(
-      typeof EXAMPLE_TARGET.config.body === 'string'
-        ? EXAMPLE_TARGET.config.body
-        : JSON.stringify(EXAMPLE_TARGET.config.body, null, 2),
-    );
-    setIsJsonContentType(true);
     recordEvent('feature_used', { feature: 'redteam_config_try_example' });
   };
 
@@ -653,19 +473,10 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           <HttpEndpointConfiguration
             selectedTarget={selectedTarget}
             updateCustomTarget={updateCustomTarget}
-            updateHeaderKey={updateHeaderKey}
-            updateHeaderValue={updateHeaderValue}
-            addHeader={addHeader}
-            removeHeader={removeHeader}
-            requestBody={requestBody || ''}
-            setRequestBody={setRequestBody}
             bodyError={bodyError}
             setBodyError={setBodyError}
             urlError={urlError}
             setUrlError={setUrlError}
-            isJsonContentType={isJsonContentType || false}
-            useRawRequest={useRawRequest}
-            onRawRequestToggle={handleRawRequestToggle}
           />
         )}
 

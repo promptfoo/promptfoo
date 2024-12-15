@@ -15,7 +15,6 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import httpZ from 'http-z';
-import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-http';
@@ -36,41 +35,83 @@ function isHttpZRequestModel(obj: any): obj is HttpZRequestModel {
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: any) => void;
-  updateHeaderKey: (index: number, newKey: string) => void;
-  updateHeaderValue: (index: number, newValue: string) => void;
-  addHeader: () => void;
-  removeHeader: (index: number) => void;
-  requestBody: string | object;
-  setRequestBody: (value: string) => void;
   bodyError: string | null;
   setBodyError: (error: string | null) => void;
   urlError: string | null;
   setUrlError: (error: string | null) => void;
-  isJsonContentType: boolean;
-  useRawRequest: boolean;
-  onRawRequestToggle: (enabled: boolean) => void;
 }
 
 const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   selectedTarget,
   updateCustomTarget,
-  updateHeaderKey,
-  updateHeaderValue,
-  addHeader,
-  removeHeader,
-  requestBody,
-  setRequestBody,
   bodyError,
   setBodyError,
   urlError,
   setUrlError,
-  isJsonContentType,
-  useRawRequest,
-  onRawRequestToggle,
 }): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
+
+  // Internal state management
+  const [useRawRequest, setUseRawRequest] = useState(!!selectedTarget.config.request);
   const [rawRequestValue, setRawRequestValue] = useState(selectedTarget.config.request || '');
+  const [requestBody, setRequestBody] = useState(
+    typeof selectedTarget.config.body === 'string'
+      ? selectedTarget.config.body
+      : JSON.stringify(selectedTarget.config.body, null, 2) || '',
+  );
+  const [headers, setHeaders] = useState<Array<{ key: string; value: string }>>(
+    Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
+      key,
+      value: String(value),
+    })),
+  );
+  const [isJsonContentType] = useState(true); // Used for syntax highlighting
+
+  const convertToRawRequest = (config: any) => {
+    const headers = config.headers || {};
+    const headerLines = Object.entries(headers)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+
+    const method = config.method || 'POST';
+    const url = config.url || '/';
+    let body = config.body;
+
+    if (body && typeof body === 'object') {
+      body = JSON.stringify(body, null, 2);
+    } else if (typeof body === 'string') {
+      try {
+        const parsed = JSON.parse(body);
+        body = JSON.stringify(parsed, null, 2);
+      } catch {
+        // If it's not valid JSON, keep it as is
+      }
+    }
+
+    return `${method} ${url} HTTP/1.1\n${headerLines}\n\n${body || ''}`;
+  };
+
+  const parseRawRequest = (input: string) => {
+    const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+    try {
+      const messageModel = httpZ.parse(adjusted) as httpZ.HttpZRequestModel;
+      return {
+        method: messageModel.method,
+        url: messageModel.target,
+        headers: messageModel.headers.reduce(
+          (acc, header) => {
+            acc[header.name.toLowerCase()] = header.value;
+            return acc;
+          },
+          {} as Record<string, string>,
+        ),
+        body: messageModel.body,
+      };
+    } catch (err) {
+      throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
+    }
+  };
 
   const resetState = useCallback(
     (isRawMode: boolean) => {
@@ -78,116 +119,186 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
       setUrlError(null);
 
       if (isRawMode) {
-        const headers = selectedTarget.config?.headers
-          ? Object.entries(selectedTarget.config.headers)
-              .filter(
-                (entry, index, self) =>
-                  self.findIndex(([key]) => key.toLowerCase() === entry[0].toLowerCase()) === index,
-              )
-              .map(([key, value]) => `${key}: ${value}`)
-          : [];
+        const rawReq = convertToRawRequest(selectedTarget.config);
+        setRawRequestValue(rawReq);
+        updateCustomTarget('request', rawReq);
 
-        let body = selectedTarget.config?.body;
-        if (body) {
-          if (typeof body === 'string') {
-            try {
-              const parsed = JSON.parse(body);
-              body = JSON.stringify(parsed, null, 2);
-            } catch {
-              body = body.trim();
+        // Clear structured mode fields
+        updateCustomTarget('url', undefined);
+        updateCustomTarget('method', undefined);
+        updateCustomTarget('headers', undefined);
+        updateCustomTarget('body', undefined);
+      } else {
+        if (selectedTarget.config.request) {
+          try {
+            const parsed = parseRawRequest(selectedTarget.config.request);
+            updateCustomTarget('url', parsed.url);
+            updateCustomTarget('method', parsed.method);
+            updateCustomTarget('headers', parsed.headers);
+            updateCustomTarget('body', parsed.body);
+
+            setHeaders(
+              Object.entries(parsed.headers || {}).map(([key, value]) => ({
+                key,
+                value: String(value),
+              })),
+            );
+
+            if (parsed.body) {
+              const bodyStr = String(parsed.body).trim();
+              try {
+                const parsedBody = JSON.parse(bodyStr);
+                setRequestBody(JSON.stringify(parsedBody, null, 2));
+              } catch {
+                setRequestBody(bodyStr);
+              }
             }
-          } else {
-            body = JSON.stringify(body, null, 2);
+          } catch {
+            setBodyError('Failed to parse HTTP request. Please check the format.');
+            return;
           }
         }
-
-        const url = selectedTarget.config?.url || 'https://api.example.com/v1/chat/completions';
-        const host = new URL(url).host;
-
-        const rawReq = [`POST ${url} HTTP/1.1`, `Host: ${host}`, ...headers, '', body || ''].join(
-          '\n',
-        );
-
-        setRequestBody(rawReq);
-        updateCustomTarget('request', rawReq);
-      } else {
-        const template = {
-          messages: [
-            {
-              role: 'user',
-              content: '{{prompt}}',
-            },
-          ],
-        };
-
-        setRequestBody(JSON.stringify(template, null, 2));
-        updateCustomTarget('body', template);
-        updateCustomTarget('headers', {
-          'Content-Type': 'application/json',
-        });
-
-        if (selectedTarget.config?.url) {
-          updateCustomTarget('url', selectedTarget.config.url);
-        }
+        setRawRequestValue('');
+        updateCustomTarget('request', undefined);
       }
     },
-    [selectedTarget.config, updateCustomTarget, setRequestBody, setBodyError, setUrlError],
+    [selectedTarget.config, updateCustomTarget, setBodyError, setUrlError],
   );
 
-  useEffect(() => {
-    if (useRawRequest !== undefined) {
-      resetState(useRawRequest);
-    }
-  }, [useRawRequest]);
+  // Header management
+  const addHeader = useCallback(() => {
+    setHeaders((prev) => [...prev, { key: '', value: '' }]);
+  }, []);
 
+  const removeHeader = useCallback(
+    (index: number) => {
+      setHeaders((prev) => {
+        const newHeaders = [...prev];
+        newHeaders.splice(index, 1);
+        return newHeaders;
+      });
+
+      // Update target configuration
+      const headerObj = headers.reduce(
+        (acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        },
+        {} as Record<string, string>,
+      );
+      updateCustomTarget('headers', headerObj);
+    },
+    [headers, updateCustomTarget],
+  );
+
+  const updateHeaderKey = useCallback(
+    (index: number, newKey: string) => {
+      setHeaders((prev) => {
+        const newHeaders = [...prev];
+        newHeaders[index] = { ...newHeaders[index], key: newKey };
+        return newHeaders;
+      });
+
+      // Update target configuration
+      const headerObj = headers.reduce(
+        (acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        },
+        {} as Record<string, string>,
+      );
+      updateCustomTarget('headers', headerObj);
+    },
+    [headers, updateCustomTarget],
+  );
+
+  const updateHeaderValue = useCallback(
+    (index: number, newValue: string) => {
+      setHeaders((prev) => {
+        const newHeaders = [...prev];
+        newHeaders[index] = { ...newHeaders[index], value: newValue };
+        return newHeaders;
+      });
+
+      // Update target configuration
+      const headerObj = headers.reduce(
+        (acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        },
+        {} as Record<string, string>,
+      );
+      updateCustomTarget('headers', headerObj);
+    },
+    [headers, updateCustomTarget],
+  );
+
+  const handleRequestBodyChange = (code: string) => {
+    setRequestBody(code);
+    // Update state immediately without validation
+    updateCustomTarget('body', code);
+  };
+
+  const handleRawRequestChange = (value: string) => {
+    setRawRequestValue(value);
+    // Update state immediately without validation
+    updateCustomTarget('request', value);
+  };
+
+  // Separate validation from state updates
   useEffect(() => {
-    if (useRawRequest && rawRequestValue) {
+    if (!useRawRequest) {
+      setBodyError(null);
+      return;
+    }
+
+    // Don't show errors while typing short content
+    if (!rawRequestValue.trim() || rawRequestValue.trim().length < 20) {
+      setBodyError(null);
+      return;
+    }
+
+    // Debounce validation to avoid blocking input
+    const timeoutId = setTimeout(() => {
       try {
         const parsed = httpZ.parse(rawRequestValue);
         if (!isHttpZRequestModel(parsed)) {
           setBodyError('Please enter a valid HTTP request');
           return;
         }
+
+        // Check for required template variable
         if (!rawRequestValue.includes('{{prompt}}')) {
-          setBodyError('Request must contain {{prompt}} template variable');
+          setBodyError('Request must include {{prompt}} template variable');
           return;
         }
+
+        // Check for URL presence without blocking input
+        const urlMatch = rawRequestValue.match(/^(POST|GET|PUT|DELETE)\s+(\S+)/);
+        if (!urlMatch) {
+          setBodyError('Please include a URL in your request');
+          return;
+        }
+
         setBodyError(null);
-        updateCustomTarget('request', rawRequestValue);
-      } catch (error) {
-        console.error('Failed to parse raw request:', error);
-        setBodyError('Please enter a valid HTTP request');
-      }
-    }
-  }, [useRawRequest, rawRequestValue, updateCustomTarget, setBodyError]);
-
-  const handleRequestBodyChange = (code: string) => {
-    setRequestBody(code);
-
-    if (isJsonContentType) {
-      try {
-        const parsedYaml = yaml.load(code);
-        if (parsedYaml && typeof parsedYaml === 'object') {
-          updateCustomTarget('body', parsedYaml);
+      } catch {
+        // Only show format error for longer content
+        if (rawRequestValue.trim().length > 50) {
+          setBodyError('Please check your request format');
+        } else {
           setBodyError(null);
-          return;
         }
-      } catch (yamlError) {
-        console.error('YAML parsing failed:', yamlError);
       }
+    }, 750); // Increased debounce time for better typing experience
 
-      try {
-        const parsedJson = JSON.parse(code);
-        updateCustomTarget('body', parsedJson);
-        setBodyError(null);
-      } catch (jsonError) {
-        console.error('JSON parsing failed:', jsonError);
-        updateCustomTarget('body', code);
-      }
-    } else {
-      updateCustomTarget('body', code);
-    }
-  };
+    return () => clearTimeout(timeoutId);
+  }, [useRawRequest, rawRequestValue]);
 
   const placeholderText = `Enter your HTTP request here. Example:
 POST https://api.example.com/v1/chat/completions HTTP/1.1
@@ -221,11 +332,11 @@ Authorization: Bearer {{api_key}}
                   )
                 ) {
                   resetState(enabled);
-                  onRawRequestToggle(enabled);
+                  setUseRawRequest(enabled);
                 }
               } else {
                 resetState(enabled);
-                onRawRequestToggle(enabled);
+                setUseRawRequest(enabled);
               }
             }}
           />
@@ -237,9 +348,7 @@ Authorization: Bearer {{api_key}}
         <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
           <Editor
             value={rawRequestValue}
-            onValueChange={(value) => {
-              setRawRequestValue(value);
-            }}
+            onValueChange={handleRawRequestChange}
             highlight={(code) => highlight(code, languages.http)}
             padding={10}
             style={{
@@ -288,26 +397,25 @@ Authorization: Bearer {{api_key}}
           <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
             Headers
           </Typography>
-          {selectedTarget.config.headers &&
-            Object.entries(selectedTarget.config.headers).map(([key, value], index) => (
-              <Box key={index} display="flex" alignItems="center" mb={1}>
-                <TextField
-                  label="Name"
-                  value={key}
-                  onChange={(e) => updateHeaderKey(index, e.target.value)}
-                  sx={{ mr: 1, flex: 1 }}
-                />
-                <TextField
-                  label="Value"
-                  value={value as string}
-                  onChange={(e) => updateHeaderValue(index, e.target.value)}
-                  sx={{ mr: 1, flex: 1 }}
-                />
-                <IconButton onClick={() => removeHeader(index)}>
-                  <DeleteIcon />
-                </IconButton>
-              </Box>
-            ))}
+          {headers.map(({ key, value }, index) => (
+            <Box key={index} display="flex" alignItems="center" mb={1}>
+              <TextField
+                label="Name"
+                value={key}
+                onChange={(e) => updateHeaderKey(index, e.target.value)}
+                sx={{ mr: 1, flex: 1 }}
+              />
+              <TextField
+                label="Value"
+                value={value}
+                onChange={(e) => updateHeaderValue(index, e.target.value)}
+                sx={{ mr: 1, flex: 1 }}
+              />
+              <IconButton onClick={() => removeHeader(index)}>
+                <DeleteIcon />
+              </IconButton>
+            </Box>
+          ))}
 
           <Button startIcon={<AddIcon />} onClick={addHeader} variant="outlined" sx={{ mt: 1 }}>
             Add Header
