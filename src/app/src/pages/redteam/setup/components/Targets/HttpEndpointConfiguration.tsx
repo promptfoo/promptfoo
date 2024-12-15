@@ -80,9 +80,10 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
         // Convert structured request to raw format
         const headers = selectedTarget.config?.headers
           ? Object.entries(selectedTarget.config.headers)
-              .filter((entry, index, self) =>
-                // Remove duplicate headers
-                self.findIndex(([key]) => key.toLowerCase() === entry[0].toLowerCase()) === index
+              .filter(
+                (entry, index, self) =>
+                  // Remove duplicate headers
+                  self.findIndex(([key]) => key.toLowerCase() === entry[0].toLowerCase()) === index,
               )
               .map(([key, value]) => `${key}: ${value}`)
           : [];
@@ -108,13 +109,9 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
         const url = selectedTarget.config?.url || 'https://api.example.com/v1/chat/completions';
         const host = new URL(url).host;
 
-        const rawReq = [
-          `POST ${url} HTTP/1.1`,
-          `Host: ${host}`,
-          ...headers,
-          '',
-          body || '',
-        ].join('\n');
+        const rawReq = [`POST ${url} HTTP/1.1`, `Host: ${host}`, ...headers, '', body || ''].join(
+          '\n',
+        );
 
         setRequestBody(rawReq);
         updateCustomTarget('request', rawReq);
@@ -289,12 +286,14 @@ Authorization: Bearer {{api_key}}
               if (enabled && !selectedTarget.config.request) {
                 if (
                   window.confirm(
-                    'Switch to raw HTTP request mode? This will convert your current configuration.',
+                    'Switch to raw HTTP request mode? This will reset your current configuration.',
                   )
                 ) {
+                  resetState(enabled);
                   onRawRequestToggle(enabled);
                 }
               } else {
+                resetState(enabled);
                 onRawRequestToggle(enabled);
               }
             }}
