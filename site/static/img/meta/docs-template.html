@@ -13,10 +13,15 @@
   </style>
 </head>
 <body>
-  <div style="width: 1200px; height: 630px; background: white; display: flex; flex-direction: column; padding: 60px; font-family: 'Inter', sans-serif;">
-    <img src="/img/logo-panda.svg" alt="promptfoo logo" style="width: 80px; height: 80px; margin-bottom: 40px;"/>
-    <h1 style="font-size: 60px; color: #000; margin: 0 0 20px 0; max-width: 900px; font-weight: 700;">{{title}}</h1>
-    <div style="font-size: 32px; color: #666;">promptfoo Documentation</div>
+  <div style="width: 1200px; height: 630px; background: linear-gradient(to bottom right, #fff, #f8f9fa); display: flex; flex-direction: column; padding: 60px; font-family: 'Inter', sans-serif;">
+    <img src="file:///home/ubuntu/repos/promptfoo/site/static/img/logo-panda.svg" alt="promptfoo logo" style="width: 80px; height: 80px; margin-bottom: 30px;"/>
+    <div style="color: #2e6585; font-size: 16px; margin-bottom: 24px; font-weight: 600;">{{breadcrumbs}}</div>
+    <h1 style="font-size: 60px; color: #000; margin: 0 0 24px 0; max-width: 900px; font-weight: 700; line-height: 1.2;">{{title}}</h1>
+    <div style="font-size: 24px; color: #666; max-width: 800px; line-height: 1.4; margin-bottom: 40px;">{{preview}}</div>
+    <div style="font-size: 32px; color: #255d70; margin-top: auto; display: flex; align-items: center; gap: 12px;">
+      <span style="width: 8px; height: 8px; background: #4f8ca0; border-radius: 50%;"></span>
+      promptfoo Documentation
+    </div>
   </div>
 </body>
 </html>
