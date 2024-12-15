@@ -137,8 +137,18 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     const method = config.method || 'POST';
     const url = config.url || '/';
     let body = config.body;
-    if (typeof body === 'object') {
+
+    // Only stringify if body is an object and not already a string
+    if (body && typeof body === 'object') {
       body = JSON.stringify(body, null, 2);
+    } else if (typeof body === 'string') {
+      // Ensure we don't double-stringify JSON strings
+      try {
+        const parsed = JSON.parse(body);
+        body = JSON.stringify(parsed, null, 2);
+      } catch {
+        // If it's not valid JSON, keep it as is
+      }
     }
 
     return `${method} ${url} HTTP/1.1\n${headerLines}\n\n${body || ''}`;
@@ -174,25 +184,53 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const handleRawRequestToggle = (enabled: boolean) => {
     const updatedTarget = { ...selectedTarget } as ProviderOptions;
 
+    // Reset state before mode switch
+    setBodyError(null);
+    setUrlError(null);
+    setRequestBody('');
+    setIsJsonContentType(true);
+
     if (enabled) {
+      // Convert to raw request format
       const rawRequest = convertToRawRequest(updatedTarget.config);
-      updatedTarget.config.request = rawRequest;
+      updatedTarget.config = {
+        ...updatedTarget.config,
+        request: rawRequest,
+      };
+      // Clear structured mode fields to prevent state conflicts
       delete updatedTarget.config.url;
       delete updatedTarget.config.method;
       delete updatedTarget.config.headers;
       delete updatedTarget.config.body;
-    } else if (updatedTarget.config.request) {
-      try {
-        const parsed = parseRawRequest(updatedTarget.config.request);
-        updatedTarget.config.url = parsed.url;
-        updatedTarget.config.method = parsed.method;
-        updatedTarget.config.headers = parsed.headers;
-        updatedTarget.config.body = parsed.body;
-        delete updatedTarget.config.request;
-        setBodyError(null);
-      } catch (err) {
-        setBodyError(`Failed to parse raw request: ${String(err)}`);
-        return;
+    } else {
+      // Convert from raw to structured format
+      if (updatedTarget.config.request) {
+        try {
+          const parsed = parseRawRequest(updatedTarget.config.request);
+          updatedTarget.config = {
+            ...updatedTarget.config,
+            url: parsed.url,
+            method: parsed.method,
+            headers: parsed.headers,
+            body: parsed.body,
+          };
+
+          // Parse body if it's JSON, keeping it as string if not
+          if (parsed.body) {
+            const bodyStr = String(parsed.body).trim();
+            try {
+              updatedTarget.config.body = JSON.parse(bodyStr);
+            } catch {
+              updatedTarget.config.body = bodyStr;
+            }
+          }
+
+          // Remove raw request after successful parsing
+          delete updatedTarget.config.request;
+        } catch (err) {
+          setBodyError(`Failed to parse raw request: ${String(err)}`);
+          return;
+        }
       }
     }
 
@@ -333,17 +371,17 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         updatedTarget.config.method = value;
       } else if (field === 'body') {
         updatedTarget.config.body = value;
-        if (value.includes('{{prompt}}')) {
+        const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        if (bodyStr.includes('{{prompt}}')) {
           setBodyError(null);
         } else {
           setBodyError('Request body must contain {{prompt}}');
         }
       } else if (field === 'request') {
         try {
-          const adjusted = value.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
-          httpZ.parse(adjusted);
-          updatedTarget.config.request = value;
-          if (value.includes('{{prompt}}')) {
+          const requestStr = String(value).trim();
+          if (requestStr.includes('{{prompt}}')) {
+            updatedTarget.config.request = requestStr;
             delete updatedTarget.config.url;
             delete updatedTarget.config.method;
             delete updatedTarget.config.headers;
@@ -351,6 +389,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             setBodyError(null);
           } else {
             setBodyError('Request must contain {{prompt}} template variable');
+            return;
           }
         } catch (err) {
           const errorMessage = String(err)
@@ -623,6 +662,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             bodyError={bodyError}
             setBodyError={setBodyError}
             urlError={urlError}
+            setUrlError={setUrlError}
             isJsonContentType={isJsonContentType || false}
             useRawRequest={useRawRequest}
             onRawRequestToggle={handleRawRequestToggle}
