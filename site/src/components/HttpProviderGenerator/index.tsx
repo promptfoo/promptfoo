@@ -1,14 +1,42 @@
 import { Editor } from '@monaco-editor/react';
 import React, { useState } from 'react';
 import { Box, Button, Grid, Paper, Typography } from '@mui/material';
+import { dump as yamlDump } from 'js-yaml';
 
-interface HttpProviderGeneratorProps {
+interface HttpConfigGeneratorProps {
   className?: string;
 }
 
-export function HttpProviderGenerator({ className }: HttpProviderGeneratorProps): JSX.Element {
-  const [request, setRequest] = useState('Example request with {{prompt}} template variable');
-  const [response, setResponse] = useState('Example response that would be returned by the API');
+export function HttpConfigGenerator({ className }: HttpConfigGeneratorProps): JSX.Element {
+  const [request, setRequest] = useState(
+    `POST /v1/weather HTTP/1.1
+Host: api.weather-example.com
+Content-Type: application/json
+
+{
+  "location": "{{prompt}}",
+  "units": "metric",
+  "include_forecast": true
+}`,
+  );
+  const [response, setResponse] = useState(
+    `{
+  "location": "San Francisco, CA",
+  "current": {
+    "temperature": 18,
+    "conditions": "Partly cloudy",
+    "humidity": 75,
+    "wind_speed": 12
+  },
+  "forecast": {
+    "tomorrow": {
+      "high": 20,
+      "low": 14,
+      "conditions": "Sunny"
+    }
+  }
+}`,
+  );
   const [config, setConfig] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,7 +45,7 @@ export function HttpProviderGenerator({ className }: HttpProviderGeneratorProps)
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('https://api.promptfoo.app/http-provider-generator', {
+      const res = await fetch('https://api.promptfoo.app/http-config-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -32,7 +60,7 @@ export function HttpProviderGenerator({ className }: HttpProviderGeneratorProps)
 
       const data = await res.json();
       setConfig(
-        JSON.stringify(
+        yamlDump(
           {
             providers: [
               {
@@ -41,8 +69,11 @@ export function HttpProviderGenerator({ className }: HttpProviderGeneratorProps)
               },
             ],
           },
-          null,
-          2,
+          {
+            indent: 2,
+            lineWidth: -1,
+            noRefs: true,
+          },
         ),
       );
     } catch (e) {
@@ -110,7 +141,7 @@ export function HttpProviderGenerator({ className }: HttpProviderGeneratorProps)
         {config && (
           <Grid item xs={12}>
             <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-              Generated Configuration
+              Generated HTTP Configuration
             </Typography>
             <Paper elevation={3} sx={{ height: '200px' }}>
               <Editor
