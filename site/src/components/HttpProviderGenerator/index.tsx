@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
 import { Editor } from '@monaco-editor/react';
+import React, { useState } from 'react';
 import { Box, Button, Grid, Paper, Typography } from '@mui/material';
 
 interface HttpProviderGeneratorProps {
@@ -7,8 +7,12 @@ interface HttpProviderGeneratorProps {
 }
 
 export function HttpProviderGenerator({ className }: HttpProviderGeneratorProps): JSX.Element {
-  const [request, setRequest] = useState('{\n  "url": "https://api.example.com/chat",\n  "method": "POST",\n  "headers": {\n    "Content-Type": "application/json"\n  },\n  "body": {\n    "messages": [{\n      "role": "user",\n      "content": "{{prompt}}"\n    }]\n  }\n}');
-  const [response, setResponse] = useState('{\n  "choices": [{\n    "message": {\n      "content": "Sample response content"\n    }\n  }]\n}');
+  const [request, setRequest] = useState(
+    '{\n  "url": "https://api.example.com/chat",\n  "method": "POST",\n  "headers": {\n    "Content-Type": "application/json"\n  },\n  "body": {\n    "messages": [{\n      "role": "user",\n      "content": "{{prompt}}"\n    }]\n  }\n}',
+  );
+  const [response, setResponse] = useState(
+    '{\n  "choices": [{\n    "message": {\n      "content": "Sample response content"\n    }\n  }]\n}',
+  );
   const [config, setConfig] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,8 +28,8 @@ export function HttpProviderGenerator({ className }: HttpProviderGeneratorProps)
           config: JSON.parse(request),
           providerResponse: JSON.parse(response),
           parsedResponse: null,
-          error: null
-        })
+          error: null,
+        }),
       });
 
       if (!res.ok) {
@@ -53,13 +57,13 @@ export function HttpProviderGenerator({ className }: HttpProviderGeneratorProps)
               height="100%"
               defaultLanguage="json"
               value={request}
-              onChange={val => setRequest(val || '')}
+              onChange={(val) => setRequest(val || '')}
               options={{
                 minimap: { enabled: false },
                 fontSize: 14,
                 lineNumbers: 'on',
                 scrollBeyondLastLine: false,
-                automaticLayout: true
+                automaticLayout: true,
               }}
             />
           </Paper>
@@ -73,24 +77,19 @@ export function HttpProviderGenerator({ className }: HttpProviderGeneratorProps)
               height="100%"
               defaultLanguage="json"
               value={response}
-              onChange={val => setResponse(val || '')}
+              onChange={(val) => setResponse(val || '')}
               options={{
                 minimap: { enabled: false },
                 fontSize: 14,
                 lineNumbers: 'on',
                 scrollBeyondLastLine: false,
-                automaticLayout: true
+                automaticLayout: true,
               }}
             />
           </Paper>
         </Grid>
         <Grid item xs={12}>
-          <Button
-            variant="contained"
-            onClick={generateConfig}
-            disabled={loading}
-            sx={{ mr: 2 }}
-          >
+          <Button variant="contained" onClick={generateConfig} disabled={loading} sx={{ mr: 2 }}>
             {loading ? 'Generating...' : 'Generate Configuration'}
           </Button>
         </Grid>
@@ -117,7 +116,7 @@ export function HttpProviderGenerator({ className }: HttpProviderGeneratorProps)
                   fontSize: 14,
                   lineNumbers: 'on',
                   scrollBeyondLastLine: false,
-                  automaticLayout: true
+                  automaticLayout: true,
                 }}
               />
             </Paper>

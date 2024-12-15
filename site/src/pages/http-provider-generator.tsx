@@ -1,7 +1,7 @@
 import React from 'react';
-import Layout from '@theme/Layout';
 import { Container, Typography } from '@mui/material';
 import { HttpProviderGenerator } from '@site/src/components/HttpProviderGenerator';
+import Layout from '@theme/Layout';
 
 export default function HttpProviderGeneratorPage(): JSX.Element {
   return (
@@ -14,7 +14,8 @@ export default function HttpProviderGeneratorPage(): JSX.Element {
           HTTP Provider Generator
         </Typography>
         <Typography variant="body1" align="center" sx={{ mb: 4 }}>
-          Enter your HTTP request configuration and sample response to generate a promptfoo HTTP provider configuration.
+          Enter your HTTP request configuration and sample response to generate a promptfoo HTTP
+          provider configuration.
         </Typography>
         <HttpProviderGenerator />
       </Container>

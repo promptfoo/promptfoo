@@ -22,7 +22,7 @@ providers:
       body:
         messages:
           - role: user
-            content: "{{prompt}}"
+            content: '{{prompt}}'
       transformResponse: json.choices[0].message.content
 ```
 
