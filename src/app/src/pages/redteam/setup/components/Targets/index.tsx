@@ -72,27 +72,6 @@ const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-const EXAMPLE_TARGET: ProviderOptions = {
-  id: 'http',
-  label: 'Acme Chatbot',
-  config: {
-    url: 'https://acme-cx-chatbot.promptfoo.dev/chat',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: {
-      messages: [
-        {
-          role: 'user',
-          content: '{{prompt}}',
-        },
-      ],
-    },
-    transformResponse: 'json.response',
-  },
-};
-
 export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
@@ -343,18 +322,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     }
   };
 
-  const handleTryExample = () => {
-    setSelectedTarget({
-      ...EXAMPLE_TARGET,
-      config: {
-        ...EXAMPLE_TARGET.config,
-        request: undefined, // Ensure raw request is cleared
-      },
-    });
-    setForceStructuredHttp(true);
-    recordEvent('feature_used', { feature: 'redteam_config_try_example' });
-  };
-
   return (
     <Stack direction="column" spacing={3}>
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
@@ -417,16 +384,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
                 ))}
               </Select>
             </Box>
-            <Button
-              variant="outlined"
-              onClick={handleTryExample}
-              sx={{
-                height: '56px',
-                mt: 0,
-              }}
-            >
-              Try Example
-            </Button>
           </Box>
         </FormControl>
         {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
@@ -487,6 +444,8 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             urlError={urlError}
             setUrlError={setUrlError}
             forceStructured={forceStructuredHttp}
+            setForceStructured={setForceStructuredHttp}
+            updateFullTarget={setSelectedTarget}
           />
         )}
 
