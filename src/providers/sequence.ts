@@ -1,12 +1,14 @@
 import logger from '../logger';
-import { loadApiProviders } from '../providers';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderDefinition,
-  ProviderOptions,
-  ProviderResponse,
+import { loadApiProvider, loadApiProviders } from '../providers';
+import {
+  isApiProvider,
+  isProviderOptions,
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  type ProviderDefinition,
+  type ProviderOptions,
+  type ProviderResponse,
 } from '../types';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -46,7 +48,25 @@ export class SequenceProvider implements ApiProvider {
     // FIXME(ian): Provider types are totally messed up and we're doing this
     // instead of a 3-part if statement to figure out what type of provider it
     // is.
-    const [provider] = await loadApiProviders([this.targetProvider as any]);
+    let provider;
+    if (typeof this.targetProvider === 'string') {
+      provider = await loadApiProvider(this.targetProvider, {
+        options: {
+          id: this.identifier,
+          config: {
+            provider: this.targetProvider,
+          },
+        },
+      });
+    } else if (isProviderOptions(this.targetProvider)) {
+      provider = await loadApiProvider(this.targetProvider.config.provider, {
+        options: this.targetProvider,
+      });
+    } else if (isApiProvider(this.targetProvider)) {
+      provider = this.targetProvider;
+    } else {
+      throw new Error(`Sequence provider received invalid provider type: ${this.targetProvider}`);
+    }
     invariant(provider, 'No provider available for sequence provider');
 
     const nunjucks = getNunjucksEngine();

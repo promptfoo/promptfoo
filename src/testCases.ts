@@ -14,15 +14,16 @@ import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
 import telemetry from './telemetry';
-import type {
-  CsvRow,
-  TestCase,
-  TestCaseWithVarsFile,
-  TestSuite,
-  TestSuiteConfig,
-  VarMapping,
-  ApiProvider,
-  ProviderOptions,
+import {
+  type CsvRow,
+  type TestCase,
+  type TestCaseWithVarsFile,
+  type TestSuite,
+  type TestSuiteConfig,
+  type VarMapping,
+  type ApiProvider,
+  type ProviderOptions,
+  isProviderOptions,
 } from './types';
 import { retryWithDeduplication, sampleArray } from './util/generation';
 import invariant from './util/invariant';
@@ -136,7 +137,7 @@ export async function readTest(
     // Load provider
     if (typeof testCase.provider === 'string') {
       testCase.provider = await loadApiProvider(testCase.provider);
-    } else if (typeof testCase.provider.id === 'string') {
+    } else if (isProviderOptions(testCase.provider)) {
       testCase.provider = await loadApiProvider(testCase.provider.id, {
         options: testCase.provider as ProviderOptions,
         basePath,

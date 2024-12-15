@@ -141,7 +141,9 @@ export function isApiProvider(provider: any): provider is ApiProvider {
   );
 }
 
-export function isProviderOptions(provider: any): provider is ProviderOptions {
+export function isProviderOptions(provider: any): provider is ProviderOptions & {
+  id: string;
+} {
   return (
     typeof provider === 'object' &&
     provider != null &&
