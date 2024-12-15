@@ -1,5 +1,6 @@
 ---
 sidebar_label: Mocha/Chai
+image: /img/meta/docs/integrations-mocha-chai-md.png
 ---
 
 import Tabs from '@theme/Tabs';

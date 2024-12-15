@@ -1,5 +1,6 @@
 ---
 sidebar_position: 5
+image: /img/meta/docs/getting-started-md.png
 ---
 
 import CodeBlock from '@theme/CodeBlock';

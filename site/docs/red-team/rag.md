@@ -1,6 +1,7 @@
 ---
 sidebar_label: How to red team RAG applications
 sidebar_position: 10000
+image: /img/meta/docs/red-team-rag-md.png
 ---
 
 # How to red team RAG applications

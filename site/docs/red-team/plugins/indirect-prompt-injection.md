@@ -1,5 +1,6 @@
 ---
 sidebar_label: Indirect Prompt Injection
+image: /img/meta/docs/red-team-plugins-indirect-prompt-injection-md.png
 ---
 
 # Indirect Prompt Injection Plugin

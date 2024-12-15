@@ -1,5 +1,6 @@
 ---
 sidebar_label: Prompt Injection
+image: /img/meta/docs/red-team-strategies-prompt-injection-md.png
 ---
 
 # Prompt Injection Strategy

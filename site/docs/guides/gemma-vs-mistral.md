@@ -1,5 +1,6 @@
 ---
 sidebar_label: Gemma vs Mistral/Mixtral
+image: /img/meta/docs/guides-gemma-vs-mistral-md.png
 ---
 
 # Gemma vs Mistral: benchmark on your own data

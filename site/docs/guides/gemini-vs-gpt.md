@@ -1,5 +1,6 @@
 ---
 sidebar_label: Gemini vs GPT
+image: /img/meta/docs/guides-gemini-vs-gpt-md.png
 ---
 
 # Gemini vs GPT: benchmark on your own data

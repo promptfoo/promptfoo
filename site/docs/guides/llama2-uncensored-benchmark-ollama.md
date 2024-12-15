@@ -1,5 +1,6 @@
 ---
 sidebar_label: Uncensored Llama2 benchmark
+image: /img/meta/docs/guides-llama2-uncensored-benchmark-ollama-md.png
 ---
 
 # How to benchmark Llama2 Uncensored vs. GPT-3.5 on your own inputs

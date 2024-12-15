@@ -1,6 +1,7 @@
 ---
 sidebar_position: 20
 sidebar_label: Echo
+image: /img/meta/docs/providers-echo-md.png
 ---
 
 # Echo Provider

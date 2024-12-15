@@ -2,6 +2,7 @@
 sidebar_position: 1
 sidebar_label: Intro
 title: LLM red teaming guide (open source)
+image: /img/meta/docs/red-team-index-md.png
 ---
 
 # LLM red teaming

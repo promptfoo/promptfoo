@@ -1,3 +1,6 @@
+---
+image: /img/meta/docs/providers-websocket-md.png
+---
 # WebSockets
 
 The WebSocket provider allows you to connect to a WebSocket endpoint for inference. This is useful for real-time, bidirectional communication with a server that supports WebSocket connections.

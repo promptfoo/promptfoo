@@ -1,5 +1,6 @@
 ---
 sidebar_position: 40
+image: /img/meta/docs/usage-sharing-md.png
 ---
 
 # Sharing

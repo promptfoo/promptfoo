@@ -1,5 +1,6 @@
 ---
 sidebar_position: 41
+image: /img/meta/docs/providers-ollama-md.png
 ---
 
 # Ollama

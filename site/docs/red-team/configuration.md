@@ -1,6 +1,7 @@
 ---
 sidebar_position: 3
-sidebar_label: 'Configuration'
+sidebar_label: Configuration
+image: /img/meta/docs/red-team-configuration-md.png
 ---
 
 # Redteam Configuration

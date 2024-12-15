@@ -1,5 +1,6 @@
 ---
 sidebar_position: 4
+image: /img/meta/docs/installation-md.png
 ---
 
 # Installation

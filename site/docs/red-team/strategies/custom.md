@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Strategies
+image: /img/meta/docs/red-team-strategies-custom-md.png
 ---
 
 # Custom Strategies

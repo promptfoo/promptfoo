@@ -1,5 +1,6 @@
 ---
 sidebar_position: 7
+image: /img/meta/docs/configuration-expected-outputs-model-graded-index-md.png
 ---
 
 # Model-graded metrics

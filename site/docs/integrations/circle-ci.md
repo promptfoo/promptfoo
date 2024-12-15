@@ -1,5 +1,6 @@
 ---
 sidebar_label: CircleCI
+image: /img/meta/docs/integrations-circle-ci-md.png
 ---
 
 # Setting up promptfoo with CircleCI

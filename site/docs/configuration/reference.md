@@ -1,5 +1,6 @@
 ---
 sidebar_position: 2
+image: /img/meta/docs/configuration-reference-md.png
 ---
 
 # Reference

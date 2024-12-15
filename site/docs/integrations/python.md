@@ -1,5 +1,6 @@
 ---
 sidebar_label: Python Notebook
+image: /img/meta/docs/integrations-python-md.png
 ---
 
 # Python

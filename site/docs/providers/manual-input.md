@@ -1,5 +1,6 @@
 ---
 sidebar_label: Manual Input
+image: /img/meta/docs/providers-manual-input-md.png
 ---
 
 # Manual Input Provider

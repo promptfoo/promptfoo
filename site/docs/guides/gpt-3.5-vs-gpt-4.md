@@ -1,5 +1,6 @@
 ---
 sidebar_label: GPT 3.5 vs GPT 4
+image: /img/meta/docs/guides-gpt-3-5-vs-gpt-4-md.png
 ---
 
 # GPT 3.5 vs GPT 4: benchmark on your own data

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 200
+image: /img/meta/docs/configuration-telemetry-md.png
 ---
 
 # Telemetry

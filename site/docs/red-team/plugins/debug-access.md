@@ -1,5 +1,6 @@
 ---
 sidebar_label: Debug Access
+image: /img/meta/docs/red-team-plugins-debug-access-md.png
 ---
 
 # Debug Access Plugin

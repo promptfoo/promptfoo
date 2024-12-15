@@ -1,5 +1,6 @@
 ---
 sidebar_label: Shell Injection
+image: /img/meta/docs/red-team-plugins-shell-injection-md.png
 ---
 
 # Shell Injection Plugin

@@ -1,5 +1,6 @@
 ---
 sidebar_label: CI/CD
+image: /img/meta/docs/integrations-ci-cd-md.png
 ---
 
 # Setting up CI/CD for LLM evaluation

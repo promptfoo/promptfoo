@@ -1,5 +1,6 @@
 ---
 sidebar_label: Attack Generation
+image: /img/meta/docs/red-team-troubleshooting-attack-generation-md.png
 ---
 
 # Attack Generation

@@ -1,3 +1,6 @@
+---
+image: /img/meta/docs/providers-litellm-md.png
+---
 # LiteLLM
 
 The [LiteLLM](https://docs.litellm.ai/docs/) provides access to hundreds of LLMs.

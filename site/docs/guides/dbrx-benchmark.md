@@ -1,5 +1,6 @@
 ---
 sidebar_label: DBRX benchmarks
+image: /img/meta/docs/guides-dbrx-benchmark-md.png
 ---
 
 # DBRX vs Mixtral vs GPT: create your own benchmark

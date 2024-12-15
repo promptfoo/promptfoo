@@ -1,5 +1,6 @@
 ---
 sidebar_label: Intent
+image: /img/meta/docs/red-team-plugins-intent-md.png
 ---
 
 # Intent Plugin

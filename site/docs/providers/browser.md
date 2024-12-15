@@ -1,6 +1,7 @@
 ---
 sidebar_position: 54
 sidebar_label: Web Browser
+image: /img/meta/docs/providers-browser-md.png
 ---
 
 # Browser Provider

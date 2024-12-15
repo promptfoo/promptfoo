@@ -1,5 +1,6 @@
 ---
 sidebar_label: Langfuse
+image: /img/meta/docs/integrations-langfuse-md.png
 ---
 
 # Langfuse integration

@@ -1,5 +1,6 @@
 ---
 sidebar_label: SSRF
+image: /img/meta/docs/red-team-plugins-ssrf-md.png
 ---
 
 # Server-Side Request Forgery (SSRF) Plugin

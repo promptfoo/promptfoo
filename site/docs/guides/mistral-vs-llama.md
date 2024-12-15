@@ -1,5 +1,6 @@
 ---
 sidebar_label: Mistral vs Llama
+image: /img/meta/docs/guides-mistral-vs-llama-md.png
 ---
 
 # Mistral vs Llama: benchmark on your own data

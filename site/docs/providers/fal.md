@@ -1,3 +1,6 @@
+---
+image: /img/meta/docs/providers-fal-md.png
+---
 # fal.ai
 
 The [fal.ai] inference API is integrated into promptfoo as a provider using the [fal-js](https://github.com/fal-ai/fal-js) client, providing a native experience for using fal.ai models in your evaluations.

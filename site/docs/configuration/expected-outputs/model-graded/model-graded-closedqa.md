@@ -1,3 +1,7 @@
+---
+image: >-
+  /img/meta/docs/configuration-expected-outputs-model-graded-model-graded-closedqa-md.png
+---
 # Model-graded Closed QA
 
 `model-graded-closedqa` is a criteria-checking evaluation that uses OpenAI's public evals prompt to determine if an LLM output meets specific requirements.

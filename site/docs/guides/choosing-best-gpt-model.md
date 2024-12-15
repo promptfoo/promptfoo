@@ -1,5 +1,6 @@
 ---
 sidebar_label: Choosing the best GPT model
+image: /img/meta/docs/guides-choosing-best-gpt-model-md.png
 ---
 
 # Choosing the best GPT model: benchmark on your own data

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Tree-based Jailbreaks
+image: /img/meta/docs/red-team-strategies-tree-md.png
 ---
 
 # Tree-based Jailbreaks Strategy

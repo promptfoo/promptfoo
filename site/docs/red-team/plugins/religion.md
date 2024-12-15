@@ -1,5 +1,6 @@
 ---
 sidebar_label: Religion
+image: /img/meta/docs/red-team-plugins-religion-md.png
 ---
 
 # Religion Plugin

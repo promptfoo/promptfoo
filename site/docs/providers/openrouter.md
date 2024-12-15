@@ -1,3 +1,6 @@
+---
+image: /img/meta/docs/providers-openrouter-md.png
+---
 # OpenRouter
 
 [OpenRouter](https://openrouter.ai/) provides a unified interface for LLM APIs.

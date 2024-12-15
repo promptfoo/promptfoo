@@ -1,6 +1,9 @@
 ---
-sidebar_label: 'gpt-4o vs o1'
-description: 'Learn how to benchmark OpenAI o1 and o1-mini. Discover which model performs best for your specific use case.'
+sidebar_label: gpt-4o vs o1
+description: >-
+  Learn how to benchmark OpenAI o1 and o1-mini. Discover which model performs
+  best for your specific use case.
+image: /img/meta/docs/guides-gpt-vs-o1-md.png
 ---
 
 # gpt-4o vs o1: Benchmark on Your Own Data

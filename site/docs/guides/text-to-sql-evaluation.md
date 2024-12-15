@@ -1,3 +1,6 @@
+---
+image: /img/meta/docs/guides-text-to-sql-evaluation-md.png
+---
 # Evaluating LLM text-to-SQL performance
 
 Promptfoo is a command-line tool that allows you to test and validate text-to-SQL conversions.

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Hijacking
+image: /img/meta/docs/red-team-plugins-hijacking-md.png
 ---
 
 # Hijacking Plugin

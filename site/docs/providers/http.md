@@ -1,6 +1,7 @@
 ---
 sidebar_position: 53
 sidebar_label: HTTP API
+image: /img/meta/docs/providers-http-md.png
 ---
 
 # HTTP/HTTPS API

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Llama vs GPT benchmark
+image: /img/meta/docs/guides-compare-llama2-vs-gpt-md.png
 ---
 
 # Llama 3.1 vs GPT: Benchmark on your own data

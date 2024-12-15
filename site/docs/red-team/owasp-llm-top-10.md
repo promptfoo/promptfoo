@@ -1,5 +1,6 @@
 ---
 sidebar_position: 20
+image: /img/meta/docs/red-team-owasp-llm-top-10-md.png
 ---
 
 # OWASP LLM Top 10

@@ -1,5 +1,6 @@
 ---
 sidebar_label: GPT-4o vs GPT-4o-mini
+image: /img/meta/docs/guides-gpt-4-vs-gpt-4o-md.png
 ---
 
 # GPT-4o vs GPT-4o-mini: Benchmark on Your Own Data

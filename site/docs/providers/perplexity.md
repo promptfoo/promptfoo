@@ -1,3 +1,6 @@
+---
+image: /img/meta/docs/providers-perplexity-md.png
+---
 # Perplexity
 
 The [Perplexity API](https://blog.perplexity.ai/blog/introducing-pplx-api) (pplx-api) offers access to Perplexity, Mistral, Llama, and other models.

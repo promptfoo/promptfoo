@@ -1,5 +1,6 @@
 ---
 sidebar_position: 10
+image: /img/meta/docs/providers-anthropic-md.png
 ---
 
 # Anthropic

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom policy
+image: /img/meta/docs/red-team-plugins-policy-md.png
 ---
 
 # Policy Plugin

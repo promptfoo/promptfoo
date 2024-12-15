@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Plugin
+image: /img/meta/docs/red-team-plugins-custom-md.png
 ---
 
 # Custom Plugin

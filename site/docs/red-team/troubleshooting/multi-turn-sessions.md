@@ -1,5 +1,6 @@
 ---
 sidebar_label: Multi-Turn Session Management
+image: /img/meta/docs/red-team-troubleshooting-multi-turn-sessions-md.png
 ---
 
 # Session Management

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Prompt Extraction
+image: /img/meta/docs/red-team-plugins-prompt-extraction-md.png
 ---
 
 # Prompt Extraction Plugin

@@ -1,3 +1,6 @@
+---
+image: /img/meta/docs/providers-togetherai-md.png
+---
 # Together AI
 
 [Together AI](https://www.together.ai/) provides access to a wide range of open-source language models through an API compatible with OpenAI's interface.

@@ -1,6 +1,7 @@
 ---
 sidebar_label: How to red team Agents
 sidebar_position: 10001
+image: /img/meta/docs/red-team-agents-md.png
 ---
 
 # How to red team LLM Agents

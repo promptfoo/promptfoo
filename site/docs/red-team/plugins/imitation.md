@@ -1,5 +1,6 @@
 ---
 sidebar_label: Imitation
+image: /img/meta/docs/red-team-plugins-imitation-md.png
 ---
 
 # Imitation Plugin

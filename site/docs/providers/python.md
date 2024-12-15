@@ -1,6 +1,7 @@
 ---
 sidebar_position: 51
 sidebar_label: Custom Python
+image: /img/meta/docs/providers-python-md.png
 ---
 
 # Python Provider

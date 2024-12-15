@@ -1,3 +1,6 @@
+---
+image: /img/meta/docs/providers-groq-md.png
+---
 # Groq
 
 The [Groq API](https://wow.groq.com) is integrated into promptfoo using the Groq SDK, providing a native experience for using Groq models in your evaluations. Groq offers high-performance inference for various large language models.

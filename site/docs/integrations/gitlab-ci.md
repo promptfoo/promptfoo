@@ -1,5 +1,6 @@
 ---
 sidebar_label: GitLab CI
+image: /img/meta/docs/integrations-gitlab-ci-md.png
 ---
 
 # Setting up Promptfoo with GitLab CI

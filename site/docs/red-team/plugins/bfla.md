@@ -1,5 +1,6 @@
 ---
 sidebar_label: Function-Level Authorization
+image: /img/meta/docs/red-team-plugins-bfla-md.png
 ---
 
 # Broken Function Level Authorization (BFLA) Plugin

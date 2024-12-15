@@ -1,5 +1,6 @@
 ---
 sidebar_label: Hallucination
+image: /img/meta/docs/red-team-plugins-hallucination-md.png
 ---
 
 # Hallucination Plugin

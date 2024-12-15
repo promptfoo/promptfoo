@@ -1,6 +1,7 @@
 ---
-sidebar_label: LocalAI (Llama, Alpaca, GPT4All, ...)
+sidebar_label: 'LocalAI (Llama, Alpaca, GPT4All, ...)'
 sidebar_position: 99
+image: /img/meta/docs/providers-localai-md.png
 ---
 
 # Local AI

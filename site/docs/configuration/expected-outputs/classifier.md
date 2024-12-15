@@ -1,6 +1,7 @@
 ---
 sidebar_position: 99
 sidebar_label: Classification
+image: /img/meta/docs/configuration-expected-outputs-classifier-md.png
 ---
 
 # Classifier grading

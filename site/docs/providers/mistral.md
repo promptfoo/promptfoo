@@ -1,3 +1,6 @@
+---
+image: /img/meta/docs/providers-mistral-md.png
+---
 # Mistral AI
 
 The [Mistral AI API](https://docs.mistral.ai/api/) offers access to various Mistral models.

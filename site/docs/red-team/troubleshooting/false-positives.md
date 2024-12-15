@@ -1,5 +1,6 @@
 ---
 sidebar_label: False Positives
+image: /img/meta/docs/red-team-troubleshooting-false-positives-md.png
 ---
 
 # False Positives

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Contracts
+image: /img/meta/docs/red-team-plugins-contracts-md.png
 ---
 
 # Contracts Plugin

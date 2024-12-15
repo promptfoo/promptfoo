@@ -1,5 +1,6 @@
 ---
 sidebar_label: Politics
+image: /img/meta/docs/red-team-plugins-politics-md.png
 ---
 
 # Politics Plugin

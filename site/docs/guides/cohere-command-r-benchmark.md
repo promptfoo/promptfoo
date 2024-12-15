@@ -1,5 +1,6 @@
 ---
 sidebar_label: Cohere Command-R benchmarks
+image: /img/meta/docs/guides-cohere-command-r-benchmark-md.png
 ---
 
 # Command R vs GPT vs Claude: create your own benchmark

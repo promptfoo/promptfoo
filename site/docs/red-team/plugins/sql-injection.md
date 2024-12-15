@@ -1,5 +1,6 @@
 ---
 sidebar_label: SQL injection
+image: /img/meta/docs/red-team-plugins-sql-injection-md.png
 ---
 
 # SQL Injection Plugin

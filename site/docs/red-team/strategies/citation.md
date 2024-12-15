@@ -1,5 +1,6 @@
 ---
 sidebar_label: Citation
+image: /img/meta/docs/red-team-strategies-citation-md.png
 ---
 
 # Authority-based Jailbreaking

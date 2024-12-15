@@ -1,5 +1,6 @@
 ---
 sidebar_position: 99
+image: /img/meta/docs/providers-huggingface-md.png
 ---
 
 # HuggingFace

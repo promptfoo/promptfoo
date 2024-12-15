@@ -1,5 +1,6 @@
 ---
 sidebar_label: Preventing hallucinations
+image: /img/meta/docs/guides-prevent-llm-hallucations-md.png
 ---
 
 # How to Measure and Prevent LLM Hallucinations
