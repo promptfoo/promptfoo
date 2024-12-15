@@ -86,18 +86,19 @@
           {{#breadcrumbs}}
           <div
             style="
-              color: rgba(255, 255, 255, 0.9);
-              font-size: 18px;
-              font-weight: 500;
-              background: rgba(255, 255, 255, 0.1);
-              padding: 8px 24px;
-              border-radius: 8px;
-              backdrop-filter: blur(10px);
-              max-width: 900px;
+              display: flex;
+              align-items: center;
+              gap: 12px;
               margin-bottom: 40px;
+              font-size: 16px;
+              font-weight: 500;
             "
           >
-            {{breadcrumbs}}
+            <div
+              style="display: flex; align-items: center; gap: 12px; color: rgba(255, 255, 255, 0.9)"
+            >
+              {{breadcrumbsHtml}}
+            </div>
           </div>
           {{/breadcrumbs}}
         </div>

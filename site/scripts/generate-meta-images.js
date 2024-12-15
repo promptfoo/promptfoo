@@ -116,11 +116,34 @@ async function generateMetaImages() {
               #6ba5bb 100%
             `;
 
+          const breadcrumbsHtml = breadcrumbs
+            ? breadcrumbs
+                .split(' › ')
+                .map((part, index, array) => {
+                  const pill = `
+                    <div
+                      style="
+                        background: rgba(255, 255, 255, 0.15);
+                        padding: 6px 16px;
+                        border-radius: 100px;
+                        backdrop-filter: blur(10px);
+                      "
+                    >
+                      ${part}
+                    </div>
+                  `;
+                  return index === array.length - 1
+                    ? pill
+                    : pill + '<div style="color: rgba(255, 255, 255, 0.6)">›</div>';
+                })
+                .join('')
+            : '';
+
           const html = template
             .replace('{{title}}', title)
             .replace('{{#breadcrumbs}}', breadcrumbs ? '' : '<!--')
             .replace('{{/breadcrumbs}}', breadcrumbs ? '' : '-->')
-            .replace('{{breadcrumbs}}', breadcrumbs)
+            .replace('{{breadcrumbsHtml}}', breadcrumbsHtml)
             .replace('{{preview}}', preview)
             .replace('{{gradientColors}}', gradientColors);
 
