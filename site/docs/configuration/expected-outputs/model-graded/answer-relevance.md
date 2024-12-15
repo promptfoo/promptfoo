@@ -2,6 +2,7 @@
 image: >-
   /img/meta/docs/configuration-expected-outputs-model-graded-answer-relevance-md.png
 ---
+
 # Answer Relevance
 
 The `answer-relevance` assertion evaluates whether an LLM's output is relevant to the original query. It uses a combination of embedding similarity and LLM evaluation to determine relevance.

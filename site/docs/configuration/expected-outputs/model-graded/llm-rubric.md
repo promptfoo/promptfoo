@@ -1,6 +1,7 @@
 ---
 image: /img/meta/docs/configuration-expected-outputs-model-graded-llm-rubric-md.png
 ---
+
 # LLM Rubric
 
 `llm-rubric` is promptfoo's general-purpose grader for "LLM as a judge" evaluation.

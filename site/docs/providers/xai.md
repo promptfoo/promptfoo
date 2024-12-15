@@ -1,6 +1,7 @@
 ---
 image: /img/meta/docs/providers-xai-md.png
 ---
+
 # xAI (Grok)
 
 [xAI](https://x.ai/) provides access to the Grok language model through an API compatible with OpenAI's interface.

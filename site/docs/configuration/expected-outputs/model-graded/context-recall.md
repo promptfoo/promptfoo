@@ -2,6 +2,7 @@
 image: >-
   /img/meta/docs/configuration-expected-outputs-model-graded-context-recall-md.png
 ---
+
 # Context Recall
 
 The `context-recall` assertion evaluates whether key information from a ground truth statement appears in the provided context. This is particularly useful for RAG (Retrieval-Augmented Generation) applications to ensure that important facts are being retrieved.

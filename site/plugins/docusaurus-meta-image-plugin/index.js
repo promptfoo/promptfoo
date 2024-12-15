@@ -2,7 +2,7 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 
-module.exports = function(context, options) {
+module.exports = function (context, options) {
   return {
     name: 'docusaurus-meta-image-plugin',
     async loadContent() {
@@ -19,7 +19,7 @@ module.exports = function(context, options) {
 
       const template = fs.readFileSync(
         path.join(context.siteDir, 'static/img/meta/docs-template.html'),
-        'utf8'
+        'utf8',
       );
 
       return {
@@ -37,7 +37,7 @@ module.exports = function(context, options) {
       try {
         const docs = await actions.createData(
           'docs.json',
-          JSON.stringify(await actions.getDocuments())
+          JSON.stringify(await actions.getDocuments()),
         );
 
         for (const doc of docs) {

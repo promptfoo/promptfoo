@@ -1,25 +1,93 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>
-    body { margin: 0; }
-  </style>
-</head>
-<body>
-  <div style="width: 1200px; height: 630px; background: linear-gradient(135deg, #255d70 0%, #2e6585 50%, #4f8ca0 100%); display: flex; flex-direction: column; padding: 60px; font-family: 'Inter', sans-serif; position: relative; overflow: hidden;">
-    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-image: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 60%); z-index: 1;"></div>
-    <div style="position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column;">
-      <div style="display: flex; align-items: center; margin-bottom: 40px;">
-        <img src="/img/logo-panda.svg" alt="promptfoo logo" style="width: 80px; height: 80px; margin-right: 20px;"/>
-        <div style="color: rgba(255,255,255,0.9); font-size: 18px; font-weight: 600;">{{breadcrumbs}}</div>
-      </div>
-      <h1 style="font-size: 56px; color: white; margin: 0 0 30px 0; max-width: 900px; font-weight: 700; line-height: 1.2;">{{title}}</h1>
-      <div style="font-size: 24px; color: rgba(255,255,255,0.9); max-width: 900px; line-height: 1.5; margin-bottom: auto;">{{preview}}</div>
-      <div style="font-size: 28px; color: rgba(255,255,255,0.8); margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 20px;">
-        promptfoo Documentation
+  <head>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      style="
+        width: 1200px;
+        height: 630px;
+        background: linear-gradient(135deg, #255d70 0%, #2e6585 50%, #4f8ca0 100%);
+        display: flex;
+        flex-direction: column;
+        padding: 60px;
+        font-family: 'Inter', sans-serif;
+        position: relative;
+        overflow: hidden;
+      "
+    >
+      <div
+        style="
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-image: radial-gradient(
+            circle at 50% 50%,
+            rgba(255, 255, 255, 0.1) 0%,
+            rgba(255, 255, 255, 0) 60%
+          );
+          z-index: 1;
+        "
+      ></div>
+      <div
+        style="position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column"
+      >
+        <div style="display: flex; align-items: center; margin-bottom: 40px">
+          <img
+            src="/img/logo-panda.svg"
+            alt="promptfoo logo"
+            style="width: 80px; height: 80px; margin-right: 20px"
+          />
+          <div style="color: rgba(255, 255, 255, 0.9); font-size: 18px; font-weight: 600">
+            {{breadcrumbs}}
+          </div>
+        </div>
+        <h1
+          style="
+            font-size: 56px;
+            color: white;
+            margin: 0 0 30px 0;
+            max-width: 900px;
+            font-weight: 700;
+            line-height: 1.2;
+          "
+        >
+          {{title}}
+        </h1>
+        <div
+          style="
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.9);
+            max-width: 900px;
+            line-height: 1.5;
+            margin-bottom: auto;
+          "
+        >
+          {{preview}}
+        </div>
+        <div
+          style="
+            font-size: 28px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 40px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            padding-top: 20px;
+          "
+        >
+          promptfoo Documentation
+        </div>
       </div>
     </div>
-  </div>
-</body>
+  </body>
 </html>
