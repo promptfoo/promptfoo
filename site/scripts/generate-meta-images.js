@@ -54,68 +54,77 @@ async function generateMetaImages() {
   const browser = await puppeteer.launch({
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1200, height: 630 });
 
   try {
     const files = glob.sync('**/*.md', { cwd: docsDir });
     console.log(`Found ${files.length} markdown files`);
 
-    for (const file of files) {
-      const filePath = path.join(docsDir, file);
-      const content = fs.readFileSync(filePath, 'utf8');
-      const { data: frontMatter, content: markdown } = matter(content);
+    // Process files in batches of 10
+    const batchSize = 10;
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + batchSize);
+      const promises = batch.map(async (file) => {
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1200, height: 630 });
 
-      const existingImage = frontMatter.image?.replace(/^\//, '');
-      if (existingImage && fs.existsSync(path.join(__dirname, '..', existingImage))) {
-        console.log(`Skipping ${file} - already has image: ${existingImage}`);
-        continue;
-      }
+        try {
+          const filePath = path.join(docsDir, file);
+          const content = fs.readFileSync(filePath, 'utf8');
+          const { data: frontMatter, content: markdown } = matter(content);
 
-      const title =
-        frontMatter.title || markdown.match(/^#\s+(.+)/m)?.[1] || path.basename(file, '.md');
+          const existingImage = frontMatter.image?.replace(/^\//, '');
+          if (existingImage && fs.existsSync(path.join(__dirname, '..', existingImage))) {
+            console.log(`Skipping ${file} - already has image: ${existingImage}`);
+            return;
+          }
 
-      const breadcrumbs = getBreadcrumbs(file, sidebars);
+          const title = frontMatter.title || markdown.match(/^#\s+(.+)/m)?.[1] || path.basename(file, '.md');
+          const breadcrumbs = getBreadcrumbs(file, sidebars);
+          const preview = markdown
+            .replace(/^#.*$/m, '')
+            .replace(/^(?:import|require).*$/gm, '')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/`[^`]+`/g, '')
+            .replace(/```[\s\S]*?```/g, '')
+            .replace(/https?:\/\/\S+/g, '')
+            .replace(/[#\[\]*]/g, '')
+            .trim()
+            .split('\n')
+            .filter((line) => line.trim() && !line.trim().startsWith('import'))
+            .slice(0, 3)
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .slice(0, 200) + '...';
 
-      const preview =
-        markdown
-          .replace(/^#.*$/m, '')
-          .replace(/^(?:import|require).*$/gm, '')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-          .replace(/`[^`]+`/g, '')
-          .replace(/```[\s\S]*?```/g, '')
-          .replace(/https?:\/\/\S+/g, '')
-          .replace(/[#\[\]*]/g, '')
-          .trim()
-          .split('\n')
-          .filter((line) => line.trim() && !line.trim().startsWith('import'))
-          .slice(0, 3)
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .slice(0, 200) + '...';
+          const safeFilename = file.replace(/[^a-z0-9]/gi, '-').toLowerCase() + '.png';
+          const outputPath = path.join(outputDir, safeFilename);
+          const relativePath = path.join('img/meta/docs', safeFilename);
 
-      const safeFilename = file.replace(/[^a-z0-9]/gi, '-').toLowerCase() + '.png';
-      const outputPath = path.join(outputDir, safeFilename);
-      const relativePath = path.join('img/meta/docs', safeFilename);
+          const html = template
+            .replace('{{title}}', title)
+            .replace('{{breadcrumbs}}', breadcrumbs)
+            .replace('{{preview}}', preview);
 
-      const html = template
-        .replace('{{title}}', title)
-        .replace('{{breadcrumbs}}', breadcrumbs)
-        .replace('{{preview}}', preview);
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      await page.screenshot({
-        path: outputPath,
-        type: 'png',
+          await page.setContent(html, { waitUntil: 'domcontentloaded' });
+          await page.screenshot({
+            path: outputPath,
+            type: 'png',
+          });
+          console.log(`Generated image for ${file} at ${outputPath}`);
+
+          const newFrontMatter = {
+            ...frontMatter,
+            image: '/' + relativePath.replace(/\\/g, '/'),
+          };
+
+          const updatedContent = matter.stringify(markdown, newFrontMatter);
+          fs.writeFileSync(filePath, updatedContent);
+        } finally {
+          await page.close();
+        }
       });
-      console.log(`Generated image for ${file} at ${outputPath}`);
 
-      const newFrontMatter = {
-        ...frontMatter,
-        image: '/' + relativePath.replace(/\\/g, '/'),
-      };
-
-      const updatedContent = matter.stringify(markdown, newFrontMatter);
-      fs.writeFileSync(filePath, updatedContent);
+      await Promise.all(promises);
     }
   } finally {
     await browser.close();
