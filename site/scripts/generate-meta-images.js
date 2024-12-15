@@ -78,23 +78,25 @@ async function generateMetaImages() {
             return;
           }
 
-          const title = frontMatter.title || markdown.match(/^#\s+(.+)/m)?.[1] || path.basename(file, '.md');
+          const title =
+            frontMatter.title || markdown.match(/^#\s+(.+)/m)?.[1] || path.basename(file, '.md');
           const breadcrumbs = getBreadcrumbs(file, sidebars);
-          const preview = markdown
-            .replace(/^#.*$/m, '')
-            .replace(/^(?:import|require).*$/gm, '')
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-            .replace(/`[^`]+`/g, '')
-            .replace(/```[\s\S]*?```/g, '')
-            .replace(/https?:\/\/\S+/g, '')
-            .replace(/[#\[\]*]/g, '')
-            .trim()
-            .split('\n')
-            .filter((line) => line.trim() && !line.trim().startsWith('import'))
-            .slice(0, 3)
-            .join(' ')
-            .replace(/\s+/g, ' ')
-            .slice(0, 200) + '...';
+          const preview =
+            markdown
+              .replace(/^#.*$/m, '')
+              .replace(/^(?:import|require).*$/gm, '')
+              .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+              .replace(/`[^`]+`/g, '')
+              .replace(/```[\s\S]*?```/g, '')
+              .replace(/https?:\/\/\S+/g, '')
+              .replace(/[#\[\]*]/g, '')
+              .trim()
+              .split('\n')
+              .filter((line) => line.trim() && !line.trim().startsWith('import'))
+              .slice(0, 3)
+              .join(' ')
+              .replace(/\s+/g, ' ')
+              .slice(0, 200) + '...';
 
           const safeFilename = file.replace(/[^a-z0-9]/gi, '-').toLowerCase() + '.png';
           const outputPath = path.join(outputDir, safeFilename);
