@@ -491,6 +491,6 @@ In addition to a full URL, the provider `id` field accepts `http` or `https` as 
 
 Use the generator below to create an HTTP provider configuration based on your endpoint:
 
-import { HttpProviderGenerator } from '@site/src/components/HttpProviderGenerator';
+import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
 
-<HttpProviderGenerator />
+<HttpConfigGenerator />

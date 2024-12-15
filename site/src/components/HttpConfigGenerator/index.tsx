@@ -1,6 +1,8 @@
 import { Editor } from '@monaco-editor/react';
 import React, { useState } from 'react';
-import { Box, Button, Grid, Paper, Typography } from '@mui/material';
+import CheckIcon from '@mui/icons-material/Check';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { Box, Button, Grid, Paper, Typography, IconButton } from '@mui/material';
 import { dump as yamlDump } from 'js-yaml';
 
 interface HttpConfigGeneratorProps {
@@ -40,12 +42,13 @@ Content-Type: application/json
   const [config, setConfig] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const handleSubmit = async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('https://api.promptfoo.app/http-config-generator', {
+      const res = await fetch('https://api.promptfoo.app/http-provider-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,6 +86,14 @@ Content-Type: application/json
     }
   };
 
+  const handleCopy = () => {
+    navigator.clipboard.writeText(config);
+    setCopied(true);
+    setTimeout(() => {
+      setCopied(false);
+    }, 2000);
+  };
+
   return (
     <Box sx={{ my: 4 }} className={className}>
       <Grid container spacing={3}>
@@ -93,7 +104,7 @@ Content-Type: application/json
           <Paper elevation={3} sx={{ height: '300px' }}>
             <Editor
               height="100%"
-              defaultLanguage="plaintext"
+              defaultLanguage="http"
               value={request}
               onChange={(val) => setRequest(val || '')}
               options={{
@@ -113,7 +124,7 @@ Content-Type: application/json
           <Paper elevation={3} sx={{ height: '300px' }}>
             <Editor
               height="100%"
-              defaultLanguage="plaintext"
+              defaultLanguage="json"
               value={response}
               onChange={(val) => setResponse(val || '')}
               options={{
@@ -140,10 +151,20 @@ Content-Type: application/json
         )}
         {config && (
           <Grid item xs={12}>
-            <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-              Generated HTTP Configuration
-            </Typography>
-            <Paper elevation={3} sx={{ height: '200px' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
+              <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                Generated HTTP Configuration
+              </Typography>
+              <IconButton
+                onClick={handleCopy}
+                size="small"
+                title={copied ? 'Copied!' : 'Copy to clipboard'}
+                color={copied ? 'success' : 'default'}
+              >
+                {copied ? <CheckIcon /> : <ContentCopyIcon />}
+              </IconButton>
+            </Box>
+            <Paper elevation={3} sx={{ height: '20rem' }}>
               <Editor
                 height="100%"
                 defaultLanguage="yaml"
