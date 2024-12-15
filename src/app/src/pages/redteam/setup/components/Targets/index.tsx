@@ -119,6 +119,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
   const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
+  const [forceStructuredHttp, setForceStructuredHttp] = useState(false);
 
   const { recordEvent } = useTelemetry();
   const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -152,6 +153,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   }, [selectedTarget, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
+    setForceStructuredHttp(false);
     const value = event.target.value as string;
     const currentLabel = selectedTarget.label;
     recordEvent('feature_used', { feature: 'redteam_config_target_changed', target: value });
@@ -342,7 +344,14 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   };
 
   const handleTryExample = () => {
-    setSelectedTarget(EXAMPLE_TARGET);
+    setSelectedTarget({
+      ...EXAMPLE_TARGET,
+      config: {
+        ...EXAMPLE_TARGET.config,
+        request: undefined, // Ensure raw request is cleared
+      },
+    });
+    setForceStructuredHttp(true);
     recordEvent('feature_used', { feature: 'redteam_config_try_example' });
   };
 
@@ -477,6 +486,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             setBodyError={setBodyError}
             urlError={urlError}
             setUrlError={setUrlError}
+            forceStructured={forceStructuredHttp}
           />
         )}
 

@@ -14,23 +14,13 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import httpZ from 'http-z';
+import dedent from 'dedent';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-http';
 import 'prismjs/components/prism-json';
 import type { ProviderOptions } from '../../types';
 import 'prismjs/themes/prism.css';
-
-interface HttpZRequestModel {
-  raw: string;
-  headers?: Record<string, string | string[]>;
-  body?: unknown;
-}
-
-function isHttpZRequestModel(obj: any): obj is HttpZRequestModel {
-  return obj && typeof obj.raw === 'string';
-}
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -39,6 +29,7 @@ interface HttpEndpointConfigurationProps {
   setBodyError: (error: string | null) => void;
   urlError: string | null;
   setUrlError: (error: string | null) => void;
+  forceStructured?: boolean;
 }
 
 const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
@@ -48,12 +39,15 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   setBodyError,
   urlError,
   setUrlError,
+  forceStructured,
 }): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
   // Internal state management
-  const [useRawRequest, setUseRawRequest] = useState(!!selectedTarget.config.request);
+  const [useRawRequest, setUseRawRequest] = useState(
+    forceStructured ? false : !!selectedTarget.config.request,
+  );
   const [rawRequestValue, setRawRequestValue] = useState(selectedTarget.config.request || '');
   const [requestBody, setRequestBody] = useState(
     typeof selectedTarget.config.body === 'string'
@@ -68,60 +62,15 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   );
   const [isJsonContentType] = useState(true); // Used for syntax highlighting
 
-  const convertToRawRequest = (config: any) => {
-    const headers = config.headers || {};
-    const headerLines = Object.entries(headers)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('\n');
-
-    const method = config.method || 'POST';
-    const url = config.url || '/';
-    let body = config.body;
-
-    if (body && typeof body === 'object') {
-      body = JSON.stringify(body, null, 2);
-    } else if (typeof body === 'string') {
-      try {
-        const parsed = JSON.parse(body);
-        body = JSON.stringify(parsed, null, 2);
-      } catch {
-        // If it's not valid JSON, keep it as is
-      }
-    }
-
-    return `${method} ${url} HTTP/1.1\n${headerLines}\n\n${body || ''}`;
-  };
-
-  const parseRawRequest = (input: string) => {
-    const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
-    try {
-      const messageModel = httpZ.parse(adjusted) as httpZ.HttpZRequestModel;
-      return {
-        method: messageModel.method,
-        url: messageModel.target,
-        headers: messageModel.headers.reduce(
-          (acc, header) => {
-            acc[header.name.toLowerCase()] = header.value;
-            return acc;
-          },
-          {} as Record<string, string>,
-        ),
-        body: messageModel.body,
-      };
-    } catch (err) {
-      throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
-    }
-  };
-
   const resetState = useCallback(
     (isRawMode: boolean) => {
       setBodyError(null);
       setUrlError(null);
 
       if (isRawMode) {
-        const rawReq = convertToRawRequest(selectedTarget.config);
-        setRawRequestValue(rawReq);
-        updateCustomTarget('request', rawReq);
+        // Reset to empty raw request
+        setRawRequestValue('');
+        updateCustomTarget('request', '');
 
         // Clear structured mode fields
         updateCustomTarget('url', undefined);
@@ -129,40 +78,22 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
         updateCustomTarget('headers', undefined);
         updateCustomTarget('body', undefined);
       } else {
-        if (selectedTarget.config.request) {
-          try {
-            const parsed = parseRawRequest(selectedTarget.config.request);
-            updateCustomTarget('url', parsed.url);
-            updateCustomTarget('method', parsed.method);
-            updateCustomTarget('headers', parsed.headers);
-            updateCustomTarget('body', parsed.body);
-
-            setHeaders(
-              Object.entries(parsed.headers || {}).map(([key, value]) => ({
-                key,
-                value: String(value),
-              })),
-            );
-
-            if (parsed.body) {
-              const bodyStr = String(parsed.body).trim();
-              try {
-                const parsedBody = JSON.parse(bodyStr);
-                setRequestBody(JSON.stringify(parsedBody, null, 2));
-              } catch {
-                setRequestBody(bodyStr);
-              }
-            }
-          } catch {
-            setBodyError('Failed to parse HTTP request. Please check the format.');
-            return;
-          }
-        }
+        // Reset to empty structured fields
         setRawRequestValue('');
+        setHeaders([]);
+        setRequestBody('');
+
+        // Clear raw request
         updateCustomTarget('request', undefined);
+
+        // Reset structured fields
+        updateCustomTarget('url', '');
+        updateCustomTarget('method', 'POST');
+        updateCustomTarget('headers', {});
+        updateCustomTarget('body', '');
       }
     },
-    [selectedTarget.config, updateCustomTarget, setBodyError, setUrlError],
+    [updateCustomTarget, setBodyError, setUrlError],
   );
 
   // Header management
@@ -266,42 +197,33 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
 
     // Debounce validation to avoid blocking input
     const timeoutId = setTimeout(() => {
-      try {
-        const parsed = httpZ.parse(rawRequestValue);
-        if (!isHttpZRequestModel(parsed)) {
-          setBodyError('Please enter a valid HTTP request');
-          return;
-        }
+      const request = rawRequestValue.trim();
 
-        // Check for required template variable
-        if (!rawRequestValue.includes('{{prompt}}')) {
-          setBodyError('Request must include {{prompt}} template variable');
-          return;
-        }
-
-        // Check for URL presence without blocking input
-        const urlMatch = rawRequestValue.match(/^(POST|GET|PUT|DELETE)\s+(\S+)/);
-        if (!urlMatch) {
-          setBodyError('Please include a URL in your request');
-          return;
-        }
-
-        setBodyError(null);
-      } catch {
-        // Only show format error for longer content
-        if (rawRequestValue.trim().length > 50) {
-          setBodyError('Please check your request format');
-        } else {
-          setBodyError(null);
-        }
+      // Check for required template variable
+      if (!request.includes('{{prompt}}')) {
+        setBodyError('Request must include {{prompt}} template variable');
+        return;
       }
-    }, 750); // Increased debounce time for better typing experience
+
+      // Check for basic HTTP request format
+      const firstLine = request.split('\n')[0];
+      const hasValidFirstLine = /^(POST|GET|PUT|DELETE)\s+\S+/.test(firstLine);
+      if (!hasValidFirstLine) {
+        setBodyError('First line must be in format: METHOD URL');
+        return;
+      }
+
+      setBodyError(null);
+    }, 750);
 
     return () => clearTimeout(timeoutId);
   }, [useRawRequest, rawRequestValue]);
 
+  // Note to Michael: don't dedent this, we want to preserve JSON formatting.
   const placeholderText = `Enter your HTTP request here. Example:
-POST https://api.example.com/v1/chat/completions HTTP/1.1
+
+POST /v1/chat/completions HTTP/1.1
+Host: api.example.com
 Content-Type: application/json
 Authorization: Bearer {{api_key}}
 
@@ -314,6 +236,35 @@ Authorization: Bearer {{api_key}}
   ]
 }`;
 
+  // Add effect to handle forceStructured changes
+  useEffect(() => {
+    if (forceStructured) {
+      // Reset all state to structured mode
+      setUseRawRequest(false);
+      setRawRequestValue('');
+      // Clear any validation errors
+      setUrlError(null);
+      setBodyError(null);
+
+      setHeaders(
+        Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
+          key,
+          value: String(value),
+        })),
+      );
+      setRequestBody(
+        typeof selectedTarget.config.body === 'string'
+          ? selectedTarget.config.body
+          : JSON.stringify(selectedTarget.config.body, null, 2) || '',
+      );
+
+      // Only update the target config if we need to clear the raw request
+      if (selectedTarget.config.request) {
+        updateCustomTarget('request', undefined);
+      }
+    }
+  }, [forceStructured, selectedTarget.config]);
+
   return (
     <Box mt={2}>
       <Typography variant="h6" gutterBottom>
@@ -325,19 +276,8 @@ Authorization: Bearer {{api_key}}
             checked={useRawRequest}
             onChange={(e) => {
               const enabled = e.target.checked;
-              if (enabled && !selectedTarget.config.request) {
-                if (
-                  window.confirm(
-                    'Switch to raw HTTP request mode? This will reset your current configuration.',
-                  )
-                ) {
-                  resetState(enabled);
-                  setUseRawRequest(enabled);
-                }
-              } else {
-                resetState(enabled);
-                setUseRawRequest(enabled);
-              }
+              resetState(enabled);
+              setUseRawRequest(enabled);
             }}
           />
         }
@@ -356,6 +296,7 @@ Authorization: Bearer {{api_key}}
               fontSize: 14,
               backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
               borderRadius: 4,
+              minHeight: '10rem',
             }}
             placeholder={placeholderText}
           />
