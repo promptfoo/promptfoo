@@ -1,5 +1,5 @@
 import logger from '../logger';
-import { loadApiProvider, loadApiProviders } from '../providers';
+import { loadApiProvider } from '../providers';
 import {
   isApiProvider,
   isProviderOptions,
