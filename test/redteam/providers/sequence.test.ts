@@ -1,6 +1,7 @@
 import { describe, expect } from '@jest/globals';
 import { SequenceProvider } from '../../../src/providers/sequence';
-import type { ApiProvider, ProviderResponse } from '../../../src/types/providers';
+import type { ApiProvider, ProviderResponse, CallApiContextParams } from '../../../src/types/providers';
+import type { Prompt } from '../../../src/types/prompts';
 
 class MockProvider implements ApiProvider {
   public calls: string[] = [];
@@ -93,31 +94,28 @@ describe('SequenceProvider', () => {
     });
   });
 
-  it('uses context.originalProvider when available', async () => {
+  it('should prioritize originalProvider over config.provider', async () => {
     const mockOriginalProvider = new MockProvider(['Original response']);
-    const mockConstructorProvider = new MockProvider(['Constructor response']);
+    const mockConfigProvider = new MockProvider(['Config response']);
 
     const sequenceProvider = new SequenceProvider({
       id: 'sequence',
       config: {
-        inputs: ['Test prompt: {{prompt}}'],
-        provider: mockConstructorProvider,
-      },
+        inputs: ['Test prompt'],
+        provider: mockConfigProvider
+      }
     });
 
     const result = await sequenceProvider.callApi('test input', {
       originalProvider: mockOriginalProvider,
-      prompt: {
-        raw: 'test input',
-        label: 'test-prompt',
-      } as Prompt,
-      vars: {},
+      prompt: { raw: 'test input', label: 'test' } as Prompt,
+      vars: {}
     } as CallApiContextParams);
 
     expect(result.error).toBeUndefined();
     expect(mockOriginalProvider.calls).toHaveLength(1);
-    expect(mockConstructorProvider.calls).toHaveLength(0);
-    expect(mockOriginalProvider.calls[0]).toBe('Test prompt: test input');
+    expect(mockConfigProvider.calls).toHaveLength(0);
+    expect(mockOriginalProvider.calls[0]).toBe('Test prompt');
     expect(result.output).toBe('Original response');
   });
 });
