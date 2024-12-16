@@ -32,7 +32,13 @@ export function getRemoteHealthUrl(): string | null {
 
   const envUrl = getEnvString('PROMPTFOO_REMOTE_GENERATION_URL');
   if (envUrl) {
-    return envUrl.replace(/\/task$/, '/health');
+    try {
+      const url = new URL(envUrl);
+      url.pathname = '/health';
+      return url.toString();
+    } catch {
+      return 'https://api.promptfoo.app/health';
+    }
   }
 
   const cloudConfig = new CloudConfig();
