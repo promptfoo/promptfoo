@@ -203,7 +203,9 @@ async function applyStrategies(
             strategyId: t?.metadata?.strategyId || strategy.id,
             ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
             ...(t?.metadata?.pluginConfig && { pluginConfig: t.metadata.pluginConfig }),
-            ...(strategy.config && { strategyConfig: strategy.config }),
+            ...(strategy.config && {
+              strategyConfig: { ...strategy.config, ...(t?.metadata?.strategyConfig || {}) },
+            }),
           },
         })),
     );
@@ -455,6 +457,7 @@ export async function synthesize({
       logger.info(`Generating tests for ${plugin.id}...`);
     }
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
+
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
       let pluginTests = await action({

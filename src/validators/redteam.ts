@@ -315,11 +315,12 @@ export const RedteamConfigSchema = z
       numTests: data.numTests,
       plugins: uniquePlugins,
       strategies,
+      ...(data.delay ? { delay: data.delay } : {}),
+      ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
-      ...(data.delay ? { delay: data.delay } : {}),
     };
   });
 

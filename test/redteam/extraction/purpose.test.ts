@@ -72,15 +72,16 @@ describe('System Purpose Extractor', () => {
     );
   });
 
-  it('should fall back to local extraction when remote generation fails', async () => {
+  it('should not fall back to local extraction when remote generation fails', async () => {
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
+    const originalOpenaiKey = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = undefined;
     jest.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
-
     const result = await extractSystemPurpose(provider, ['prompt1', 'prompt2']);
 
-    expect(result).toBe('Extracted system purpose');
-    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt1'));
-    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt2'));
+    expect(result).toBe('');
+    expect(provider.callApi).not.toHaveBeenCalled();
+    process.env.OPENAI_API_KEY = originalOpenaiKey;
   });
 
   it('should use local extraction when remote generation is disabled', async () => {

@@ -49,11 +49,13 @@ const StyledTabs = styled(Tabs)(({ theme }) => ({
     left: 0,
     right: 'auto',
   },
-  width: '280px',
-  minWidth: '280px',
+  width: '100%',
   backgroundColor: theme.palette.background.paper,
   '& .MuiTab-root': {
     minHeight: '48px',
+  },
+  '& .MuiTabs-scrollButtons': {
+    display: 'none',
   },
 }));
 
@@ -559,7 +561,6 @@ export default function RedTeamSetupPage() {
                 variant="scrollable"
                 value={value}
                 onChange={handleChange}
-                sx={{ width: 200 }}
               >
                 <StyledTab
                   icon={<AppIcon />}

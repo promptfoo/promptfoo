@@ -163,25 +163,27 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           your application's interaction model.
         </Typography>
         <Box sx={{ ml: 2, mb: 2 }}>
-          <Typography variant="body2" color="text.secondary" paragraph>
+          <Typography variant="body2" color="text.secondary">
             <strong>Single-turn strategies</strong> test individual prompts in isolation. These are
             ideal for:
-            <Box component="ul" sx={{ mt: 1, mb: 2 }}>
-              <li>Systems where each prompt is independent</li>
-              <li>API endpoints (e.g., text classification, content generation)</li>
-              <li>Completion tasks (e.g., code generation, text summarization)</li>
-            </Box>
           </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
+          <Box component="ul" sx={{ mt: 1, mb: 2, typography: 'body2', color: 'text.secondary' }}>
+            <li>Systems where each prompt is independent</li>
+            <li>API endpoints (e.g., text classification, content generation)</li>
+            <li>Completion tasks (e.g., code generation, text summarization)</li>
+          </Box>
+
+          <Typography variant="body2" color="text.secondary">
             <strong>Multi-turn strategies</strong> simulate realistic back-and-forth conversations.
             These are ideal for:
-            <Box component="ul" sx={{ mt: 1, mb: 2 }}>
-              <li>Chatbots and conversational agents</li>
-              <li>Systems that maintain conversation history</li>
-              <li>Applications where context builds over time</li>
-            </Box>
           </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
+          <Box component="ul" sx={{ mt: 1, mb: 2, typography: 'body2', color: 'text.secondary' }}>
+            <li>Chatbots and conversational agents</li>
+            <li>Systems that maintain conversation history</li>
+            <li>Applications where context builds over time</li>
+          </Box>
+
+          <Typography variant="body2" color="text.secondary">
             <strong>Agentic strategies</strong> have reasoning capabilities that are better at
             circumventing guardrails.
           </Typography>

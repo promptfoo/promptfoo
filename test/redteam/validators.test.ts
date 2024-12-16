@@ -989,6 +989,118 @@ describe('RedteamConfigSchema transform', () => {
       );
     });
   });
+
+  it('should include all optional fields in transformed output', () => {
+    const input = {
+      plugins: ['harmful:hate'],
+      delay: 1000,
+      entities: ['ACME Corp', 'John Doe'],
+      injectVar: 'system',
+      language: 'en',
+      provider: 'openai:gpt-4',
+      purpose: 'Testing',
+      numTests: 5,
+    };
+
+    const result = RedteamConfigSchema.parse(input);
+
+    expect(result).toEqual({
+      plugins: [{ id: 'harmful:hate', numTests: 5 }],
+      strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      delay: 1000,
+      entities: ['ACME Corp', 'John Doe'],
+      injectVar: 'system',
+      language: 'en',
+      provider: 'openai:gpt-4',
+      purpose: 'Testing',
+      numTests: 5,
+    });
+  });
+
+  it('should omit undefined optional fields from transformed output', () => {
+    const input = {
+      plugins: ['harmful:hate'],
+      numTests: 5,
+    };
+
+    const result = RedteamConfigSchema.parse(input);
+
+    expect(result).toEqual({
+      plugins: [{ id: 'harmful:hate', numTests: 5 }],
+      strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      numTests: 5,
+    });
+
+    // Verify optional fields are not present
+    expect(result).not.toHaveProperty('delay');
+    expect(result).not.toHaveProperty('entities');
+    expect(result).not.toHaveProperty('injectVar');
+    expect(result).not.toHaveProperty('language');
+    expect(result).not.toHaveProperty('provider');
+    expect(result).not.toHaveProperty('purpose');
+  });
+
+  it('should handle entities array in configuration', () => {
+    const input = {
+      plugins: ['harmful:hate'],
+      entities: ['Company X', 'Jane Smith', 'Acme Industries'],
+      numTests: 3,
+    };
+
+    const result = RedteamConfigSchema.parse(input);
+
+    expect(result).toEqual({
+      plugins: [{ id: 'harmful:hate', numTests: 3 }],
+      strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      entities: ['Company X', 'Jane Smith', 'Acme Industries'],
+      numTests: 3,
+    });
+  });
+
+  it('should handle empty entities array', () => {
+    const input = {
+      plugins: ['harmful:hate'],
+      entities: [],
+      numTests: 3,
+    };
+
+    const result = RedteamConfigSchema.parse(input);
+
+    expect(result).toEqual({
+      plugins: [{ id: 'harmful:hate', numTests: 3 }],
+      strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      entities: [],
+      numTests: 3,
+    });
+  });
+
+  it('should preserve order of optional fields in transformed output', () => {
+    const input = {
+      plugins: ['harmful:hate'],
+      delay: 1000,
+      entities: ['ACME Corp'],
+      injectVar: 'system',
+      language: 'en',
+      provider: 'openai:gpt-4',
+      purpose: 'Testing',
+    };
+
+    const result = RedteamConfigSchema.parse(input);
+    const keys = Object.keys(result);
+    const optionalFields = keys.filter((key) =>
+      ['delay', 'entities', 'injectVar', 'language', 'provider', 'purpose'].includes(key),
+    );
+
+    // Verify the order matches the spread order in the transform
+    expect(optionalFields).toEqual([
+      'delay',
+      'entities',
+      'injectVar',
+      'language',
+      'provider',
+      'purpose',
+    ]);
+  });
 });
 
 describe('RedteamStrategySchema', () => {
