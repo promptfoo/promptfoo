@@ -163,24 +163,24 @@ export const SequenceProviderConfigSchema = z
       .union([
         z.string(),
         z.custom<CallApiFunction>((val): val is CallApiFunction => {
-          return (
-            typeof val === 'function' &&
-            (!('label' in val) || typeof val.label === 'string')
-          );
+          return typeof val === 'function' && (!('label' in val) || typeof val.label === 'string');
         }),
         z.custom<ApiProvider>((val): val is ApiProvider => isApiProvider(val)),
       ])
-      .refine((val) => {
-        if (val === undefined || val === null) {
-          return false;
-        }
-        if (typeof val === 'number') {
-          return false;
-        }
-        return true;
-      }, {
-        message: 'Provider must be a string, function, or valid ApiProvider object',
-      })
+      .refine(
+        (val) => {
+          if (val === undefined || val === null) {
+            return false;
+          }
+          if (typeof val === 'number') {
+            return false;
+          }
+          return true;
+        },
+        {
+          message: 'Provider must be a string, function, or valid ApiProvider object',
+        },
+      )
       .describe('The provider to use for sequence generation'),
     inputs: z.array(z.string()).optional(),
     strategy: z.enum(['crescendo']).optional(),
@@ -197,36 +197,41 @@ export const SequenceProviderConfigSchema = z
     path: ['provider'],
   });
 
-export const ProvidersSchema = z.array(
-  z.union([
-    z.string(),
-    z.object({
-      id: z.literal('sequence'),
-      config: SequenceProviderConfigSchema,
-    }).strict(),
-    z.record(z.string(), z.union([ProviderOptionsSchema, SequenceProviderConfigSchema])),
-    ProviderOptionsSchema,
-    CallApiFunctionSchema,
-  ]),
-).min(1).superRefine((val, ctx) => {
-  for (const provider of val) {
-    if (typeof provider === 'object' && 'id' in provider && provider.id === 'sequence') {
-      if (!provider.config?.provider) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Provider is required for sequence provider',
-          path: ['config', 'provider'],
-        });
-      } else if (typeof provider.config.provider === 'number') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Provider must be a string, function, or valid ApiProvider object',
-          path: ['config', 'provider'],
-        });
+export const ProvidersSchema = z
+  .array(
+    z.union([
+      z.string(),
+      z
+        .object({
+          id: z.literal('sequence'),
+          config: SequenceProviderConfigSchema,
+        })
+        .strict(),
+      z.record(z.string(), z.union([ProviderOptionsSchema, SequenceProviderConfigSchema])),
+      ProviderOptionsSchema,
+      CallApiFunctionSchema,
+    ]),
+  )
+  .min(1)
+  .superRefine((val, ctx) => {
+    for (const provider of val) {
+      if (typeof provider === 'object' && 'id' in provider && provider.id === 'sequence') {
+        if (!provider.config?.provider) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Provider is required for sequence provider',
+            path: ['config', 'provider'],
+          });
+        } else if (typeof provider.config.provider === 'number') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Provider must be a string, function, or valid ApiProvider object',
+            path: ['config', 'provider'],
+          });
+        }
       }
     }
-  }
-});
+  });
 
 export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
 
