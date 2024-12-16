@@ -170,6 +170,7 @@ export async function doGenerateRedteam(
     language: redteamConfig?.language || options.language,
     maxConcurrency: options.maxConcurrency,
     numTests: redteamConfig?.numTests ?? options.numTests,
+    entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,

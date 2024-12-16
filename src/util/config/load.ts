@@ -301,11 +301,11 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       for (const redteamKey of Object.keys(config.redteam) as Array<keyof typeof redteam>) {
         if (['entities', 'plugins', 'strategies'].includes(redteamKey)) {
           if (Array.isArray(config.redteam[redteamKey])) {
-            const currentValue = redteam[redteamKey];
+            const currentValue = redteam[redteamKey] || [];
             const newValue = config.redteam[redteamKey];
-            if (Array.isArray(currentValue) && Array.isArray(newValue)) {
+            if (Array.isArray(newValue)) {
               (redteam[redteamKey] as unknown[]) = [
-                ...new Set([...currentValue, ...newValue]),
+                ...new Set([...(currentValue as unknown[]), ...(newValue as unknown[])]),
               ].sort();
             }
           }
@@ -441,7 +441,6 @@ export async function resolveConfigs(
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
-
   // Standalone assertion mode
   if (cmdObj.assertions) {
     telemetry.recordAndSendOnce('feature_used', {

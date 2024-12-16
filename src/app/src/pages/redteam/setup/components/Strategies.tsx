@@ -167,7 +167,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             <strong>Single-turn strategies</strong> test individual prompts in isolation. These are
             ideal for:
           </Typography>
-          <Box component="ul" sx={{ mt: 1, mb: 2 }}>
+          <Box component="ul" sx={{ mt: 1, mb: 2, typography: 'body2', color: 'text.secondary' }}>
             <li>Systems where each prompt is independent</li>
             <li>API endpoints (e.g., text classification, content generation)</li>
             <li>Completion tasks (e.g., code generation, text summarization)</li>
@@ -177,7 +177,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             <strong>Multi-turn strategies</strong> simulate realistic back-and-forth conversations.
             These are ideal for:
           </Typography>
-          <Box component="ul" sx={{ mt: 1, mb: 2 }}>
+          <Box component="ul" sx={{ mt: 1, mb: 2, typography: 'body2', color: 'text.secondary' }}>
             <li>Chatbots and conversational agents</li>
             <li>Systems that maintain conversation history</li>
             <li>Applications where context builds over time</li>
