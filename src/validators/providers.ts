@@ -11,6 +11,7 @@ import type {
   ProviderSimilarityResponse,
   SequenceProviderConfig,
 } from '../types/providers';
+import { isApiProvider } from '../types/providers';
 import { PromptSchema } from './prompts';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from './shared';
 
@@ -158,12 +159,16 @@ export const ProviderClassificationResponseSchema = z.object({
 
 export const SequenceProviderConfigSchema = z
   .object({
+    provider: z.union([
+      z.string(),
+      z.custom<CallApiFunction>((val) => typeof val === 'function'),
+      z.custom<ApiProvider>((val) => isApiProvider(val))
+    ]),
     inputs: z.array(z.string()).optional(),
-    separator: z.string().optional(),
-    provider: z.string(), // Required provider field
-    strategy: z.string().optional(),
-    maxTurns: z.number().optional(),
+    strategy: z.enum(['crescendo']).optional(),
+    maxTurns: z.number().int().positive().optional(),
     systemPrompt: z.string().optional(),
+    separator: z.string().optional()
   })
   .strict();
 

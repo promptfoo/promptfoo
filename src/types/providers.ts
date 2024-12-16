@@ -115,9 +115,9 @@ export interface ProviderClassificationResponse {
 export interface SequenceProviderConfig {
   inputs?: string[];
   separator?: string;
-  provider: string; // Changed from targetProvider and made required
-  strategy?: string;
-  maxTurns?: number;
+  provider: string | CallApiFunction | ApiProvider;
+  strategy?: 'crescendo';
+  maxTurns?: number;  // Must be positive integer at runtime
   systemPrompt?: string;
 }
 
