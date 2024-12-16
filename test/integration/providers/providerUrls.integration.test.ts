@@ -1,15 +1,10 @@
 import { jest, expect, describe, beforeEach, afterEach, it } from '@jest/globals';
 import nock from 'nock';
-import type { GoogleAuth } from 'google-auth-library';
-import { CloudConfig } from '../../../src/globalConfig/cloud';
 import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
 import { PromptfooHarmfulCompletionProvider } from '../../../src/providers/promptfoo';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic';
-import { VertexChatProvider } from '../../../src/providers/vertex';
-import type { GeminiApiResponse } from '../../../src/providers/vertexUtil';
 import { VERSION } from '../../../src/constants';
-import * as accounts from '../../../src/globalConfig/accounts';
 
 const TEST_TIMEOUT = 60000;
 const TEST_EMAIL = 'test@example.com';
@@ -77,26 +72,39 @@ describe('Provider URL Configuration', () => {
 
   describe('Unaligned Provider', () => {
     const mockUnalignedOptions = {
+      provider: 'promptfoo-harmful',
       harmCategory: 'test-category',
       n: 1,
       purpose: 'testing',
+      config: {
+        model: 'gpt-4',
+        temperature: 1,
+      },
     };
 
     const expectedRequestBody = {
-      ...mockUnalignedOptions,
+      prompt: TEST_PROMPT,
       email: TEST_EMAIL,
       version: VERSION,
+      harmCategory: 'test-category',
+      n: 1,
+      purpose: 'testing',
+      model: 'gpt-4',
+      temperature: 1,
     };
 
     it('should use URL from environment variable', async () => {
-      const envUrl = 'https://env.api.test/unaligned';
+      const envUrl = 'https://env.api.test';
       process.env.PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT = envUrl;
 
       const scope = nock(envUrl)
-        .post('/', body => {
+        .post('/task/harmful', body => {
           expect(body).toMatchObject(expectedRequestBody);
+          expect(body).toHaveProperty('email', TEST_EMAIL);
+          expect(body).toHaveProperty('version', VERSION);
           return true;
         })
+        .matchHeader('Content-Type', 'application/json')
         .reply(200, {
           output: ['test response'],
         });
@@ -105,32 +113,32 @@ describe('Provider URL Configuration', () => {
       const provider = new PromptfooHarmfulCompletionProvider(mockUnalignedOptions);
 
       const result = await provider.callApi(TEST_PROMPT);
-      expect(result.error).toBeUndefined();
+      expect(Array.isArray(result.output)).toBe(true);
       expect(result.output).toEqual(['test response']);
       expect(scope.isDone()).toBe(true);
     }, TEST_TIMEOUT);
 
     it('should handle API errors gracefully', async () => {
-      const envUrl = 'https://env.api.test/unaligned';
+      const envUrl = 'https://env.api.test';
       process.env.PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT = envUrl;
 
       const scope = nock(envUrl)
-        .post('/', body => {
+        .post('/task/harmful', body => {
           expect(body).toMatchObject(expectedRequestBody);
+          expect(body).toHaveProperty('email', TEST_EMAIL);
+          expect(body).toHaveProperty('version', VERSION);
           return true;
         })
+        .matchHeader('Content-Type', 'application/json')
         .reply(400, {
-          error: {
-            name: 'ValidationError',
-            message: 'Invalid request',
-          },
+          error: 'Invalid request: Bad input parameters',
         });
       pendingMocks.push(scope);
 
       const provider = new PromptfooHarmfulCompletionProvider(mockUnalignedOptions);
-
       const result = await provider.callApi(TEST_PROMPT);
       expect(result.error).toBeDefined();
+      expect(result.error).toContain('[HarmfulCompletionProvider]API call error: Error: [HarmfulCompletionProvider] API call failed with status 400');
       expect(scope.isDone()).toBe(true);
     }, TEST_TIMEOUT);
 
@@ -142,8 +150,11 @@ describe('Provider URL Configuration', () => {
       const scope = nock(cloudUrl)
         .post('/task/harmful', body => {
           expect(body).toMatchObject(expectedRequestBody);
+          expect(body).toHaveProperty('email', TEST_EMAIL);
+          expect(body).toHaveProperty('version', VERSION);
           return true;
         })
+        .matchHeader('Content-Type', 'application/json')
         .reply(200, {
           output: ['test response'],
         });
@@ -164,8 +175,11 @@ describe('Provider URL Configuration', () => {
       const scope = nock('https://api.promptfoo.app')
         .post('/task/harmful', body => {
           expect(body).toMatchObject(expectedRequestBody);
+          expect(body).toHaveProperty('email', TEST_EMAIL);
+          expect(body).toHaveProperty('version', VERSION);
           return true;
         })
+        .matchHeader('Content-Type', 'application/json')
         .reply(200, {
           output: ['test response'],
         });
@@ -217,11 +231,11 @@ describe('Provider URL Configuration', () => {
         });
     });
     it('should use URL from environment variable', async () => {
-      const envUrl = 'https://env.api.test/redteam';
+      const envUrl = 'https://env.api.test';
       process.env.PROMPTFOO_REDTEAM_INFERENCE_ENDPOINT = envUrl;
 
       const scope = nock(envUrl)
-        .post('/', body => {
+        .post('/task', body => {
           // Verify the request body contains the expected fields
           expect(body).toHaveProperty('email', TEST_EMAIL);
           expect(body).toHaveProperty('version', VERSION);
@@ -229,22 +243,28 @@ describe('Provider URL Configuration', () => {
           expect(body).toHaveProperty('goal', 'test goal');
           return true;
         })
+        .matchHeader('Content-Type', 'application/json')
         .reply(200, {
-          output: JSON.stringify({
-            improvement: 'test improvement',
-            prompt: TEST_PROMPT,
-          }),
+          result: 'test response',
+          tokenUsage: {
+            total: 100,
+            prompt: 50,
+            completion: 50,
+          },
         });
       pendingMocks.push(scope);
 
       const provider = new RedteamIterativeProvider(mockRedteamOptions);
 
-      await provider.callApi(TEST_PROMPT, {
+      const result = await provider.callApi(TEST_PROMPT, {
         originalProvider: mockOriginalProvider,
         vars: { 'test-inject': 'test goal' },
         prompt: { raw: TEST_PROMPT, label: 'test' },
       });
 
+      expect(result.output).toBe('test response');
+      expect(result.metadata).toBeDefined();
+      expect(result.tokenUsage).toBeDefined();
       expect(scope.isDone()).toBe(true);
     }, TEST_TIMEOUT);
 
@@ -254,7 +274,7 @@ describe('Provider URL Configuration', () => {
       mockCloudConfigInstance.getApiHost.mockReturnValue(cloudUrl);
 
       const scope = nock(cloudUrl)
-        .post('/api/v1/redteam/generate', body => {
+        .post('/task', body => {
           // Verify the request body contains the expected fields
           expect(body).toHaveProperty('email', TEST_EMAIL);
           expect(body).toHaveProperty('version', VERSION);
@@ -262,40 +282,44 @@ describe('Provider URL Configuration', () => {
           expect(body).toHaveProperty('goal', 'test goal');
           return true;
         })
+        .matchHeader('Content-Type', 'application/json')
         .reply(200, {
-          output: JSON.stringify({
-            improvement: 'test improvement',
-            prompt: TEST_PROMPT,
-          }),
+          result: 'test response',
+          tokenUsage: {
+            total: 100,
+            prompt: 50,
+            completion: 50,
+          },
         });
       pendingMocks.push(scope);
 
       const provider = new RedteamIterativeProvider(mockRedteamOptions);
 
-      await provider.callApi(TEST_PROMPT, {
+      const result = await provider.callApi(TEST_PROMPT, {
         originalProvider: mockOriginalProvider,
         vars: { 'test-inject': 'test goal' },
         prompt: { raw: TEST_PROMPT, label: 'test' },
       });
 
+      expect(result.output).toBe('test response');
+      expect(result.metadata).toBeDefined();
+      expect(result.tokenUsage).toBeDefined();
       expect(scope.isDone()).toBe(true);
     }, TEST_TIMEOUT);
 
     it('should handle API errors gracefully', async () => {
-      const envUrl = 'https://env.api.test/redteam';
+      const envUrl = 'https://env.api.test';
       process.env.PROMPTFOO_REDTEAM_INFERENCE_ENDPOINT = envUrl;
 
       const scope = nock(envUrl)
-        .post('/', body => {
+        .post('/task', body => {
           expect(body).toHaveProperty('email', TEST_EMAIL);
           expect(body).toHaveProperty('version', VERSION);
           return true;
         })
+        .matchHeader('Content-Type', 'application/json')
         .reply(400, {
-          error: {
-            name: 'ValidationError',
-            message: 'Invalid request',
-          },
+          error: 'Invalid request parameters',
         });
       pendingMocks.push(scope);
 
@@ -307,9 +331,35 @@ describe('Provider URL Configuration', () => {
           vars: { 'test-inject': 'test goal' },
           prompt: { raw: TEST_PROMPT, label: 'test' },
         })
-      ).rejects.toThrow('Invalid request');
+      ).rejects.toThrow('Error from redteam provider');
 
       expect(scope.isDone()).toBe(true);
+    }, TEST_TIMEOUT);
+
+    it('should handle authentication errors', async () => {
+      const envUrl = 'https://env.api.test';
+      process.env.PROMPTFOO_REDTEAM_INFERENCE_ENDPOINT = envUrl;
+
+      const scope = nock(envUrl)
+        .post('/task', body => {
+          expect(body).toHaveProperty('email', TEST_EMAIL);
+          expect(body).toHaveProperty('version', VERSION);
+          return true;
+        })
+        .matchHeader('Content-Type', 'application/json')
+        .reply(401, {
+          error: 'Unauthorized: Invalid or missing authentication',
+        });
+      pendingMocks.push(scope);
+
+      const provider = new RedteamIterativeProvider(mockRedteamOptions);
+      await expect(
+        provider.callApi(TEST_PROMPT, {
+          originalProvider: mockOriginalProvider,
+          vars: { 'test-inject': 'test goal' },
+          prompt: { raw: TEST_PROMPT, label: 'test' },
+        })
+      ).rejects.toThrow('Error from redteam provider');
     }, TEST_TIMEOUT);
   });
 
