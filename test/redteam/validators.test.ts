@@ -714,14 +714,43 @@ describe('redteamConfigSchema', () => {
         'harmful:intellectual-property',
         'harmful:misinformation-disinformation',
         'harmful:specialized-advice',
-        'overreliance',
+        'ascii-smuggling',
+        'indirect-prompt-injection',
+        'prompt-extraction',
+        'pii:api-db',
+        'pii:direct',
+        'pii:session',
+        'pii:social',
+        'cross-session-leak',
       ];
-      expect(result.data?.plugins).toHaveLength(expectedPlugins.length);
-      expect(result.data?.plugins).toEqual(
-        expect.arrayContaining(
-          expectedPlugins.map((id) => expect.objectContaining({ id, numTests: 3 })),
-        ),
-      );
+      const actualPlugins = result.data?.plugins || [];
+      const expectedPluginObjects = expectedPlugins.map((id) => ({
+        id,
+        numTests: 3,
+      }));
+
+      // Check that all expected plugins exist
+      for (const expected of expectedPluginObjects) {
+        const found = actualPlugins.find(
+          (p) => p.id === expected.id && p.numTests === expected.numTests,
+        );
+        if (!found) {
+          throw new Error(
+            `Expected to find plugin ${expected.id} with numTests=${expected.numTests}, but it was missing`,
+          );
+        }
+      }
+
+      // Check for any unexpected plugins
+      for (const actual of actualPlugins) {
+        const expected = expectedPluginObjects.find((p) => p.id === actual.id);
+        if (!expected) {
+          throw new Error(`Found unexpected plugin ${actual.id}`);
+        }
+      }
+
+      // Verify counts match
+      expect(actualPlugins).toHaveLength(expectedPlugins.length);
     });
 
     it('should expand strategies for "owasp:llm" alias', () => {
