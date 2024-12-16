@@ -272,7 +272,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 elevation={0}
                 sx={{
                   p: 2,
-                  bgcolor: 'grey.100',
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
                   maxHeight: '200px',
                   overflow: 'auto',
                 }}
@@ -294,7 +294,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 elevation={0}
                 sx={{
                   p: 2,
-                  bgcolor: 'grey.100',
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
                   maxHeight: '200px',
                   overflow: 'auto',
                 }}
