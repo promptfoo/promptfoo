@@ -13,9 +13,53 @@ interface IntentConfig {
   column?: string;
 }
 
-// Add interface for CSV records
 interface CSVRecord {
   [key: string]: string;
+}
+
+interface CSVParseResult {
+  intents: string[];
+  warnings: string[];
+}
+
+function validateIntent(intent: string): string {
+  // Basic sanitization - remove control characters and trim
+  return intent.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+}
+
+function parseCSVContent(fileContent: string, config: IntentConfig): CSVParseResult {
+  const warnings: string[] = [];
+
+  // Always parse with headers
+  const records = parse(fileContent, {
+    columns: true,
+    skip_empty_lines: true,
+    relax_quotes: true,
+  }) as CSVRecord[];
+
+  if (!records.length) {
+    throw new Error('CSV file is empty');
+  }
+
+  const columns = Object.keys(records[0]);
+  const columnToUse = config.column || columns[0];
+
+  if (!columns.includes(columnToUse)) {
+    throw new Error(
+      `Column "${columnToUse}" not found in CSV file. Available columns: ${columns.join(', ')}`,
+    );
+  }
+
+  if (!config.column && columns.length > 1) {
+    warnings.push(
+      `Multiple columns found in CSV: ${columns.join(', ')}. Using first column: ${columnToUse}`,
+    );
+  }
+
+  return {
+    intents: records.map((record) => validateIntent(record[columnToUse])),
+    warnings,
+  };
 }
 
 export function loadIntentsFromConfig(config: IntentConfig): {
@@ -26,50 +70,40 @@ export function loadIntentsFromConfig(config: IntentConfig): {
   invariant(config.intent, 'An "intent" property is required for the intent plugin.');
 
   // Handle both string and array configs
-  let loadedIntents = maybeLoadFromExternalFile(config.intent);
+  const initialIntents = maybeLoadFromExternalFile(config.intent);
 
-  // Handle CSV parsing if the file ends with .csv
-  if (
-    typeof loadedIntents === 'string' &&
-    loadedIntents.startsWith('file://') &&
-    loadedIntents.endsWith('.csv')
-  ) {
-    const filePath = loadedIntents.replace('file://', '');
+  // Type and empty value checks
+  if (Array.isArray(initialIntents)) {
+    invariant(initialIntents.length > 0, 'Intent array cannot be empty');
+    return {
+      intents: initialIntents.map(validateIntent),
+      warnings,
+    };
+  }
+
+  if (typeof initialIntents !== 'string') {
+    throw new Error('Intent must be a string or array of strings');
+  }
+
+  invariant(initialIntents.trim().length > 0, 'Intent string cannot be empty');
+
+  // Handle CSV file
+  if (initialIntents.startsWith('file://') && initialIntents.endsWith('.csv')) {
+    const filePath = initialIntents.replace('file://', '');
     const fileContent = readFileSync(filePath, 'utf-8');
-    const records = parse(fileContent, {
-      columns: true,
-      skip_empty_lines: true,
-    }) as CSVRecord[];
 
-    if (records.length === 0) {
+    if (!fileContent.trim()) {
       throw new Error('CSV file is empty');
     }
 
-    const columns = Object.keys(records[0]);
-    if (columns.length > 1 && !config.column) {
-      warnings.push(
-        `Multiple columns found in CSV: ${columns.join(', ')}. Using first column: ${columns[0]}`,
-      );
-    }
-
-    if (config.column) {
-      invariant(
-        config.column in records[0],
-        `Column "${config.column}" not found in CSV file. Available columns: ${columns.join(', ')}`,
-      );
-      loadedIntents = records.map((record: CSVRecord) => record[config.column!]);
-    } else {
-      const firstColumnName = columns[0];
-      loadedIntents = records.map((record: CSVRecord) => record[firstColumnName]);
-    }
+    return parseCSVContent(fileContent, config);
   }
 
-  const intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
-  intents.forEach((intent, i) => {
-    invariant(typeof intent === 'string', `Intent: "${intent}" at index ${i} must be a string`);
-  });
-
-  return { intents, warnings };
+  // Single string intent
+  return {
+    intents: [validateIntent(initialIntents)],
+    warnings,
+  };
 }
 
 export class IntentPlugin extends RedteamPluginBase {

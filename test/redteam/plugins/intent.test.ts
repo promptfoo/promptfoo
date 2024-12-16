@@ -53,8 +53,7 @@ describe('loadIntentsFromConfig', () => {
       intent
       intent1
       intent2
-      intent3
-    `;
+      intent3`.trim();
 
     const mockReadFileSync = jest.requireMock('fs').readFileSync;
     mockReadFileSync.mockReturnValue(csvContent);
@@ -112,7 +111,7 @@ describe('loadIntentsFromConfig', () => {
 
   it('should throw error for empty CSV', () => {
     const mockReadFileSync = jest.requireMock('fs').readFileSync;
-    mockReadFileSync.mockReturnValue('');
+    mockReadFileSync.mockReturnValue('   ');
 
     const config = {
       intent: 'file://test.csv',
@@ -123,10 +122,9 @@ describe('loadIntentsFromConfig', () => {
 
   it('should throw error for invalid column name', () => {
     const csvContent = dedent`
-      intent,category
-      intent1,cat1
-      intent2,cat2
-    `;
+      intent,category,severity
+      intent1,cat1,high
+      intent2,cat2,medium`.trim();
 
     const mockReadFileSync = jest.requireMock('fs').readFileSync;
     mockReadFileSync.mockReturnValue(csvContent);
@@ -139,6 +137,74 @@ describe('loadIntentsFromConfig', () => {
     expect(() => loadIntentsFromConfig(config)).toThrow(
       'Column "nonexistent" not found in CSV file',
     );
+  });
+
+  it('should throw error for empty array input', () => {
+    const config = {
+      intent: [],
+    };
+
+    expect(() => loadIntentsFromConfig(config)).toThrow('Intent array cannot be empty');
+  });
+
+  it('should throw error for empty string input', () => {
+    const config = {
+      intent: '   ', // Empty or whitespace string
+    };
+
+    expect(() => loadIntentsFromConfig(config)).toThrow('Intent string cannot be empty');
+  });
+
+  it('should throw error for invalid input type', () => {
+    const config = {
+      intent: 123,
+    } as any;
+
+    expect(() => loadIntentsFromConfig(config)).toThrow(
+      'Intent must be a string or array of strings',
+    );
+  });
+
+  it('should handle CSV file with empty rows', () => {
+    const csvContent = dedent`
+      intent,category
+      intent1,cat1
+
+      intent2,cat2
+
+      intent3,cat3
+
+    `;
+
+    const mockReadFileSync = jest.requireMock('fs').readFileSync;
+    mockReadFileSync.mockReturnValue(csvContent);
+
+    const config = {
+      intent: 'file://test.csv',
+    };
+
+    const { intents, warnings } = loadIntentsFromConfig(config);
+    expect(intents).toEqual(['intent1', 'intent2', 'intent3']);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('Multiple columns found in CSV');
+  });
+
+  it('should handle CSV with Unicode characters', () => {
+    const csvContent = dedent`
+      intent
+      测试意图1
+      テスト意図2
+      인텐트3`.trim();
+
+    const mockReadFileSync = jest.requireMock('fs').readFileSync;
+    mockReadFileSync.mockReturnValue(csvContent);
+
+    const config = {
+      intent: 'file://test.csv',
+    };
+
+    const { intents } = loadIntentsFromConfig(config);
+    expect(intents).toEqual(['测试意图1', 'テスト意図2', '인텐트3']);
   });
 });
 
@@ -174,6 +240,35 @@ describe('IntentPlugin', () => {
 
     const tests = await plugin.generateTests(1, 0);
     expect(tests).toHaveLength(3); // Should use number of intents, not numTests
+  });
+
+  it('should handle single string intent', async () => {
+    const plugin = new IntentPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      intent: 'single intent',
+    });
+
+    const tests = await plugin.generateTests(5, 0);
+    expect(tests).toHaveLength(1);
+    expect(tests[0]).toEqual({
+      vars: { prompt: 'single intent' },
+      assert: [{ type: 'promptfoo:redteam:intent', metric: 'Intent' }],
+      metadata: {
+        intent: 'single intent',
+        pluginId: 'promptfoo:redteam:intent',
+      },
+    });
+  });
+
+  it('should preserve metadata in generated tests', async () => {
+    const plugin = new IntentPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      intent: ['intent1'],
+    });
+
+    const tests = await plugin.generateTests(1, 0);
+    expect(tests[0].metadata).toEqual({
+      intent: 'intent1',
+      pluginId: 'promptfoo:redteam:intent',
+    });
   });
 });
 
