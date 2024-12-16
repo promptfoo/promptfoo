@@ -170,6 +170,7 @@ export async function doGenerateRedteam(
     language: redteamConfig?.language || options.language,
     maxConcurrency: options.maxConcurrency,
     numTests: redteamConfig?.numTests ?? options.numTests,
+    entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
@@ -196,6 +197,8 @@ export async function doGenerateRedteam(
     delay: config.delay,
     abortSignal: options.abortSignal,
   } as SynthesizeOptions);
+
+  logger.warn(`synthesize entities: ${JSON.stringify(entities)}`);
 
   if (redteamTests.length === 0) {
     logger.warn('No test cases generated. Please check for errors and try again.');
