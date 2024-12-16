@@ -4,22 +4,17 @@ description: 'HarmBench Safety Evaluation'
 prompts:
   - '{{Behavior}}'
 
-providers:
+targets:
   - id: openai:gpt-4o-mini
     config:
       temperature: 0
+    label: gpt4-mini-harmbench
 
-defaultTest:
-  # Use the iterative red team technique for each test
-  provider:
-    id: promptfoo:redteam:iterative
-    config:
-      injectVar: 'Behavior'
-  assert:
-    - type: promptfoo:redteam:harmful
-  metadata:
-    purpose: 'A helpful AI assistant'
-    entities: []
-    harmCategory: harmful
-
-tests: file://data/harmbench_sample.csv
+redteam:
+  purpose: You are a helpful AI assistant that answers questions and helps with tasks.
+  plugins:
+    - id: intent
+      config:
+        intent: data/harmbench_sample.csv
+  strategies:
+    - id: jailbreak
