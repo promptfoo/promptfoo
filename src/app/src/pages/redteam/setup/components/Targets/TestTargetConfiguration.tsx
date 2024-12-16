@@ -15,9 +15,9 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 import dedent from 'dedent';
 import 'prismjs/components/prism-clike';
 // @ts-expect-error: No types available
@@ -47,6 +47,32 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
+  const editorContainerStyles = {
+    border: 1,
+    borderColor: theme.palette.divider,
+    borderRadius: 1,
+    mt: 1,
+    position: 'relative',
+    backgroundColor: theme.palette.background.paper,
+  };
+
+  const editorStyles = {
+    fontFamily: '"Fira code", "Fira Mono", monospace',
+    fontSize: 14,
+    backgroundColor: darkMode ? alpha(theme.palette.background.paper, 0.5) : theme.palette.grey[50],
+    minHeight: '100px',
+  };
+
+  const responseBlockStyles = {
+    p: 2,
+    bgcolor: darkMode ? alpha(theme.palette.background.paper, 0.5) : theme.palette.grey[50],
+    maxHeight: '200px',
+    overflow: 'auto',
+    borderRadius: 1,
+    border: 1,
+    borderColor: theme.palette.divider,
+  };
+
   return (
     <Box mt={4}>
       {requiresTransformResponse(selectedTarget) && (
@@ -54,17 +80,16 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
           <Typography variant="h6" gutterBottom>
             Configure Request Parser
           </Typography>
-          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-            <Box
-              sx={{
-                border: 1,
-                borderColor: 'grey.300',
-                borderRadius: 1,
-                mt: 1,
-                position: 'relative',
-                backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-              }}
-            >
+          <Box
+            mt={2}
+            p={2}
+            border={1}
+            borderColor={theme.palette.divider}
+            borderRadius={1}
+            bgcolor={theme.palette.background.paper}
+            boxShadow={theme.shadows[1]}
+          >
+            <Box sx={editorContainerStyles}>
               <Editor
                 value={selectedTarget.config.transformRequest || ''}
                 onValueChange={(code) => updateCustomTarget('transformRequest', code)}
@@ -73,32 +98,27 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 placeholder={dedent`Optional: A JavaScript expression to transform the prompt before sending.
 
                   e.g. \`{ messages: [{ role: 'user', content: prompt }] }\``}
-                style={{
-                  fontFamily: '"Fira code", "Fira Mono", monospace',
-                  fontSize: 14,
-                  minHeight: '100px',
-                }}
+                style={editorStyles}
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a request parser to transform the prompt before sending. This
-              can be used to format the prompt into a specific structure required by your API.
+              Optionally, configure a request parser to transform the prompt before sending.
             </Typography>
           </Box>
+
           <Typography variant="h6" gutterBottom mt={4}>
             Configure Response Parser
           </Typography>
-          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-            <Box
-              sx={{
-                border: 1,
-                borderColor: 'grey.300',
-                borderRadius: 1,
-                mt: 1,
-                position: 'relative',
-                backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-              }}
-            >
+          <Box
+            mt={2}
+            p={2}
+            border={1}
+            borderColor={theme.palette.divider}
+            borderRadius={1}
+            bgcolor={theme.palette.background.paper}
+            boxShadow={theme.shadows[1]}
+          >
+            <Box sx={editorContainerStyles}>
               <Editor
                 value={selectedTarget.config.transformResponse || ''}
                 onValueChange={(code) => updateCustomTarget('transformResponse', code)}
@@ -107,56 +127,17 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 placeholder={dedent`Optional: A JavaScript expression to parse the response.
 
                   e.g. \`json.choices[0].message.content\``}
-                style={{
-                  fontFamily: '"Fira code", "Fira Mono", monospace',
-                  fontSize: 14,
-                  minHeight: '100px',
-                }}
+                style={editorStyles}
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
               Optionally, configure a response parser to extract a specific part of the HTTP
-              response. See{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
-                target="_blank"
-              >
-                docs
-              </a>{' '}
-              for more information.
+              response.
             </Typography>
-          </Box>
-          <Box mt={4} mb={2}>
-            <Typography variant="h6" gutterBottom>
-              Configure Session Header
-            </Typography>
-            <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-              <TextField
-                fullWidth
-                label="Session Header"
-                value={selectedTarget.config.sessionParser}
-                placeholder="Optional: Enter the name of the header that contains the session ID"
-                onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
-                margin="normal"
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Optionally, configure a session parser to extract the session ID from the HTTP
-                response headers. This is only needed for stateful systems. See{' '}
-                <a
-                  href="https://www.promptfoo.dev/docs/providers/http/#session-management"
-                  target="_blank"
-                >
-                  docs
-                </a>{' '}
-                for more information.
-              </Typography>
-            </Box>
           </Box>
         </Box>
       )}
+
       <Stack direction="row" alignItems="center" spacing={2} mb={2}>
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           Test Target Configuration
@@ -185,7 +166,17 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 
       {testResult && (
         <Box mt={2}>
-          <Alert severity={testResult.success ? 'success' : 'error'}>{testResult.message}</Alert>
+          <Alert
+            severity={testResult.success ? 'success' : 'error'}
+            sx={{
+              backgroundColor: darkMode
+                ? alpha(theme.palette.success.main, 0.1)
+                : alpha(theme.palette.success.light, 0.1),
+            }}
+          >
+            {testResult.message}
+          </Alert>
+
           {testResult.suggestions && (
             <Box mt={2}>
               <Typography variant="subtitle1" gutterBottom>
@@ -195,7 +186,10 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 elevation={1}
                 sx={{
                   p: 2,
-                  bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                  bgcolor: darkMode
+                    ? alpha(theme.palette.background.paper, 0.5)
+                    : theme.palette.grey[50],
+                  borderRadius: 1,
                 }}
               >
                 <List>
@@ -211,11 +205,21 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               </Paper>
             </Box>
           )}
-          <Accordion sx={{ mt: 2 }} expanded>
+
+          <Accordion
+            sx={{
+              mt: 2,
+              bgcolor: theme.palette.background.paper,
+              '&:before': { display: 'none' },
+              boxShadow: theme.shadows[1],
+            }}
+          >
             <AccordionSummary
               expandIcon={<ExpandMoreIcon />}
-              aria-controls="provider-response-content"
-              id="provider-response-header"
+              sx={{
+                borderBottom: 1,
+                borderColor: theme.palette.divider,
+              }}
             >
               <Typography>Provider Response Details</Typography>
             </AccordionSummary>
@@ -223,87 +227,61 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               <Typography variant="subtitle2" gutterBottom>
                 Headers:
               </Typography>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                }}
-              >
+              <Paper elevation={0} sx={responseBlockStyles}>
                 <pre
                   style={{
                     margin: 0,
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
+                    color: theme.palette.text.primary,
                   }}
                 >
                   {JSON.stringify(testResult.providerResponse?.metadata?.headers, null, 2)}
                 </pre>
               </Paper>
-              <Typography variant="subtitle2" gutterBottom>
+
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
                 Raw Result:
               </Typography>
-
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                }}
-              >
+              <Paper elevation={0} sx={responseBlockStyles}>
                 <pre
                   style={{
                     margin: 0,
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
+                    color: theme.palette.text.primary,
                   }}
                 >
                   {JSON.stringify(testResult.providerResponse?.raw, null, 2)}
                 </pre>
               </Paper>
+
               <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
                 Parsed Result:
               </Typography>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: 'grey.100',
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                }}
-              >
+              <Paper elevation={0} sx={responseBlockStyles}>
                 <pre
                   style={{
                     margin: 0,
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
+                    color: theme.palette.text.primary,
                   }}
                 >
                   {JSON.stringify(testResult.providerResponse?.output, null, 2)}
                 </pre>
               </Paper>
+
               <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
                 Session ID:
               </Typography>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: 'grey.100',
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                }}
-              >
+              <Paper elevation={0} sx={responseBlockStyles}>
                 <pre
                   style={{
                     margin: 0,
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
+                    color: theme.palette.text.primary,
                   }}
                 >
                   {testResult.providerResponse?.sessionId}

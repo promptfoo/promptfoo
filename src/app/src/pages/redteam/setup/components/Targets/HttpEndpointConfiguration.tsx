@@ -22,6 +22,7 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
@@ -135,6 +136,23 @@ Content-Type: application/json
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Add these common styles
+  const editorStyles = {
+    fontFamily: '"Fira code", "Fira Mono", monospace',
+    fontSize: 14,
+    backgroundColor: darkMode ? alpha(theme.palette.background.paper, 0.5) : theme.palette.grey[50],
+    minHeight: '10rem',
+  };
+
+  const containerStyles = {
+    border: 1,
+    borderColor: theme.palette.divider,
+    borderRadius: 1,
+    backgroundColor: theme.palette.background.paper,
+    p: 2,
+    boxShadow: theme.shadows[1],
+  };
 
   const resetState = useCallback(
     (isRawMode: boolean) => {
@@ -454,19 +472,13 @@ Authorization: Bearer {{api_key}}
         sx={{ mb: 2, display: 'block' }}
       />
       {useRawRequest ? (
-        <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+        <Box sx={containerStyles}>
           <Editor
             value={rawRequestValue}
             onValueChange={handleRawRequestChange}
             highlight={(code) => highlight(code, languages.http)}
             padding={10}
-            style={{
-              fontFamily: '"Fira code", "Fira Mono", monospace',
-              fontSize: 14,
-              backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
-              borderRadius: 4,
-              minHeight: '10rem',
-            }}
+            style={editorStyles}
             placeholder={placeholderText}
           />
           {bodyError && (
@@ -476,7 +488,7 @@ Authorization: Bearer {{api_key}}
           )}
         </Box>
       ) : (
-        <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+        <Box sx={containerStyles}>
           <TextField
             fullWidth
             label="URL"
@@ -536,30 +548,20 @@ Authorization: Bearer {{api_key}}
           </Typography>
           <Box
             sx={{
-              border: 1,
-              borderColor: bodyError ? 'error.main' : 'grey.300',
-              borderRadius: 1,
-              mt: 1,
-              position: 'relative',
-              backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+              ...containerStyles,
+              backgroundColor: darkMode
+                ? alpha(theme.palette.background.paper, 0.5)
+                : theme.palette.grey[50],
             }}
           >
             <Editor
-              value={
-                typeof requestBody === 'object'
-                  ? JSON.stringify(requestBody, null, 2)
-                  : requestBody || ''
-              }
+              value={requestBody}
               onValueChange={handleRequestBodyChange}
               highlight={(code) =>
                 highlight(code, isJsonContentType ? languages.json : languages.text)
               }
               padding={10}
-              style={{
-                fontFamily: '"Fira code", "Fira Mono", monospace',
-                fontSize: 14,
-                minHeight: '100px',
-              }}
+              style={editorStyles}
             />
           </Box>
           {bodyError && (
@@ -574,6 +576,11 @@ Authorization: Bearer {{api_key}}
         onClose={() => setConfigDialogOpen(false)}
         maxWidth="lg"
         fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: theme.palette.background.paper,
+          },
+        }}
       >
         <DialogTitle>Generate HTTP Configuration</DialogTitle>
         <DialogContent>
@@ -582,18 +589,22 @@ Authorization: Bearer {{api_key}}
               <Typography variant="h6" gutterBottom>
                 Example Request
               </Typography>
-              <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
+              <Paper
+                elevation={3}
+                sx={{
+                  height: '300px',
+                  overflow: 'auto',
+                  backgroundColor: darkMode
+                    ? alpha(theme.palette.background.paper, 0.5)
+                    : theme.palette.grey[50],
+                }}
+              >
                 <Editor
                   value={request}
                   onValueChange={(val) => setRequest(val)}
                   highlight={(code) => highlight(code, languages.http)}
                   padding={10}
-                  style={{
-                    fontFamily: '"Fira code", "Fira Mono", monospace',
-                    fontSize: 14,
-                    backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
-                    minHeight: '100%',
-                  }}
+                  style={editorStyles}
                 />
               </Paper>
             </Grid>
@@ -601,18 +612,22 @@ Authorization: Bearer {{api_key}}
               <Typography variant="h6" gutterBottom>
                 Example Response
               </Typography>
-              <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
+              <Paper
+                elevation={3}
+                sx={{
+                  height: '300px',
+                  overflow: 'auto',
+                  backgroundColor: darkMode
+                    ? alpha(theme.palette.background.paper, 0.5)
+                    : theme.palette.grey[50],
+                }}
+              >
                 <Editor
                   value={response}
                   onValueChange={(val) => setResponse(val)}
                   highlight={(code) => highlight(code, languages.json)}
                   padding={10}
-                  style={{
-                    fontFamily: '"Fira code", "Fira Mono", monospace',
-                    fontSize: 14,
-                    backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
-                    minHeight: '100%',
-                  }}
+                  style={editorStyles}
                 />
               </Paper>
             </Grid>
