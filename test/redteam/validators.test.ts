@@ -886,7 +886,7 @@ describe('RedteamConfigSchema transform', () => {
         if (typeof s === 'string' || !s) {
           throw new Error('Strategy should be an object');
         }
-        return s.id === 'prompt-injection';
+        return s.id === 'jailbreak:composite';
       }),
     ).toBe(true);
   });
