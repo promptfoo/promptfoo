@@ -224,25 +224,35 @@
                         {
                           "type": "object",
                           "properties": {
+                            "provider": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {},
+                                {}
+                              ]
+                            },
                             "inputs": {
                               "type": "array",
                               "items": {
                                 "type": "string"
                               }
                             },
-                            "separator": {
-                              "type": "string"
-                            },
-                            "provider": {
-                              "type": "string"
-                            },
                             "strategy": {
-                              "type": "string"
+                              "type": "string",
+                              "enum": [
+                                "crescendo"
+                              ]
                             },
                             "maxTurns": {
-                              "type": "number"
+                              "type": "integer",
+                              "exclusiveMinimum": 0
                             },
                             "systemPrompt": {
+                              "type": "string"
+                            },
+                            "separator": {
                               "type": "string"
                             }
                           },
