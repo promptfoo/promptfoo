@@ -169,25 +169,6 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
     }),
     {
       name: 'redTeamConfig',
-      version: 1,
-      migrate: (persistedState: any, version: number) => {
-        if (version === 0) {
-          return {
-            ...persistedState,
-            config: {
-              ...defaultConfig,
-              ...persistedState.config,
-              plugins: persistedState.config.plugins.filter((p: any) => {
-                if (typeof p === 'object') {
-                  return !COLLECTIONS.includes(p.id);
-                }
-                return !COLLECTIONS.includes(p);
-              }),
-            },
-          };
-        }
-        return persistedState;
-      },
     },
   ),
 );
