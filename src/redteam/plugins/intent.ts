@@ -1,4 +1,6 @@
+import { parse } from 'csv-parse/sync';
 import dedent from 'dedent';
+import { readFileSync } from 'fs';
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util';
 import invariant from '../../util/invariant';
@@ -6,24 +8,78 @@ import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:intent';
 
+interface IntentConfig {
+  intent: string | string[];
+  column?: string;
+}
+
+// Add interface for CSV records
+interface CSVRecord {
+  [key: string]: string;
+}
+
+export function loadIntentsFromConfig(config: IntentConfig): {
+  intents: string[];
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+  invariant(config.intent, 'An "intent" property is required for the intent plugin.');
+
+  // Handle both string and array configs
+  let loadedIntents = maybeLoadFromExternalFile(config.intent);
+
+  // Handle CSV parsing if the file ends with .csv
+  if (
+    typeof loadedIntents === 'string' &&
+    loadedIntents.startsWith('file://') &&
+    loadedIntents.endsWith('.csv')
+  ) {
+    const filePath = loadedIntents.replace('file://', '');
+    const fileContent = readFileSync(filePath, 'utf-8');
+    const records = parse(fileContent, {
+      columns: true,
+      skip_empty_lines: true,
+    }) as CSVRecord[];
+
+    if (records.length === 0) {
+      throw new Error('CSV file is empty');
+    }
+
+    const columns = Object.keys(records[0]);
+    if (columns.length > 1 && !config.column) {
+      warnings.push(
+        `Multiple columns found in CSV: ${columns.join(', ')}. Using first column: ${columns[0]}`,
+      );
+    }
+
+    if (config.column) {
+      invariant(
+        config.column in records[0],
+        `Column "${config.column}" not found in CSV file. Available columns: ${columns.join(', ')}`,
+      );
+      loadedIntents = records.map((record: CSVRecord) => record[config.column!]);
+    } else {
+      const firstColumnName = columns[0];
+      loadedIntents = records.map((record: CSVRecord) => record[firstColumnName]);
+    }
+  }
+
+  const intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
+  intents.forEach((intent, i) => {
+    invariant(typeof intent === 'string', `Intent: "${intent}" at index ${i} must be a string`);
+  });
+
+  return { intents, warnings };
+}
+
 export class IntentPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   private intents: string[];
 
-  constructor(
-    provider: ApiProvider,
-    purpose: string,
-    injectVar: string,
-    config: { intent: string | string[] },
-  ) {
+  constructor(provider: ApiProvider, purpose: string, injectVar: string, config: IntentConfig) {
     super(provider, purpose, injectVar);
-    invariant(config.intent, 'An "intent" property is required for the intent plugin.');
-    // Handle both string and array configs
-    const loadedIntents = maybeLoadFromExternalFile(config.intent);
-    this.intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
-    this.intents.forEach((intent, i) => {
-      invariant(typeof intent === 'string', `Intent: "${intent}" at index ${i} must be a string`);
-    });
+    const { intents } = loadIntentsFromConfig(config);
+    this.intents = intents;
   }
 
   protected async getTemplate(): Promise<string> {
