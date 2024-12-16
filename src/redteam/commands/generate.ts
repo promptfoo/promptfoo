@@ -198,8 +198,6 @@ export async function doGenerateRedteam(
     abortSignal: options.abortSignal,
   } as SynthesizeOptions);
 
-  logger.warn(`synthesize entities: ${JSON.stringify(entities)}`);
-
   if (redteamTests.length === 0) {
     logger.warn('No test cases generated. Please check for errors and try again.');
     return null;
