@@ -24,22 +24,18 @@ export async function extractEntities(provider: ApiProvider, prompts: string[]):
     Each line in your response must begin with the string "Entity:".
   `;
   try {
-    const entities = await callExtraction(
-      provider,
-      JSON.stringify([{ role: 'user', content: prompt }]),
-      (output: string) => {
-        const entities = output
-          .split('\n')
-          .filter((line) => line.trim().startsWith('Entity:'))
-          .map((line) => line.substring(line.indexOf('Entity:') + 'Entity:'.length).trim());
+    const entities = await callExtraction(provider, prompt, (output: string) => {
+      const entities = output
+        .split('\n')
+        .filter((line) => line.trim().startsWith('Entity:'))
+        .map((line) => line.substring(line.indexOf('Entity:') + 'Entity:'.length).trim());
 
-        if (entities.length === 0) {
-          logger.debug('No entities were extracted from the prompts.');
-        }
+      if (entities.length === 0) {
+        logger.debug('No entities were extracted from the prompts.');
+      }
 
-        return entities;
-      },
-    );
+      return entities;
+    });
 
     return entities;
   } catch (error) {
