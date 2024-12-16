@@ -38,21 +38,17 @@ Here's a complete example showing how to use the Sequence Provider to create a m
 
 ```yaml
 providers:
-  - openai:chat:gpt-4
   - id: sequence
     config:
+      provider: openai:chat:gpt-4o-mini
       inputs:
-        - 'What is {{prompt}}?'
-        - 'What are the potential drawbacks of {{prompt}}?'
-        - 'Can you summarize the pros and cons of {{prompt}}?'
-      separator: "\n\n=== Next Response ===\n\n"
-
-prompts:
-  - 'artificial intelligence'
+        - 'What is {{topic}}?'
+        - 'What are the potential drawbacks of {{topic}}?'
+        - 'Can you summarize the pros and cons of {{topic}}?'
 
 tests:
   - vars:
-      prompt: artificial intelligence
+      topic: artificial intelligence
     assert:
       - type: contains
         value: drawbacks
@@ -74,6 +70,7 @@ For example:
 providers:
   - id: sequence
     config:
+      provider: openai:chat:gpt-4o-mini
       inputs:
         - 'Question about {{topic}}: {{prompt}}'
         - 'Follow up: How does {{topic}} relate to {{industry}}?'
@@ -86,7 +83,8 @@ tests:
 
 ## Configuration Options
 
-| Option    | Type     | Required | Default   | Description                                    |
-| --------- | -------- | -------- | --------- | ---------------------------------------------- |
-| inputs    | string[] | Yes      | -         | Array of prompt templates to send sequentially |
-| separator | string   | No       | "\n---\n" | String used to join the responses              |
+| Option    | Type                      | Required | Default   | Description                                    |
+| --------- | ------------------------- | -------- | --------- | ---------------------------------------------- |
+| provider  | string \| ProviderOptions | Yes      | -         | The provider to use for the sequence           |
+| inputs    | string[]                  | Yes      | -         | Array of prompt templates to send sequentially |
+| separator | string                    | No       | "\n---\n" | String used to join the responses              |

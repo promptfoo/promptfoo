@@ -1,8 +1,10 @@
 import logger from '../logger';
+import { loadApiProvider } from '../providers';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderDefinition,
   ProviderOptions,
   ProviderResponse,
 } from '../types';
@@ -10,25 +12,26 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 
 interface SequenceProviderConfig {
-  inputs: string[];
+  inputs?: string[];
   separator?: string;
+  provider: ProviderDefinition;
 }
 
 export class SequenceProvider implements ApiProvider {
   private readonly inputs: string[];
   private readonly separator: string;
   private readonly identifier: string;
+  private readonly provider?: ProviderDefinition;
 
   constructor({ id, config }: ProviderOptions) {
-    invariant(
-      config && Array.isArray(config.inputs),
-      'Expected sequence provider config to contain an array of inputs',
-    );
+    invariant(config, 'Expected sequence provider config');
+    invariant(config.provider, 'Expected sequence provider config to have a provider');
 
     const typedConfig = config as SequenceProviderConfig;
-    this.inputs = typedConfig.inputs;
+    this.inputs = typedConfig.inputs || [];
     this.separator = typedConfig.separator || '\n---\n';
     this.identifier = id || 'sequence-provider';
+    this.provider = typedConfig.provider;
   }
 
   id() {
@@ -40,7 +43,34 @@ export class SequenceProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    invariant(context?.originalProvider, 'Expected originalProvider to be set');
+    // Use originalProvider from context if available, otherwise use configured provider
+    const providerToUse = context?.originalProvider || this.provider;
+    invariant(providerToUse, 'No provider available for sequence provider');
+
+    // Handle different provider types
+    let provider: ApiProvider;
+    if (typeof providerToUse === 'function') {
+      provider = { id: () => 'function-provider', callApi: providerToUse };
+    } else if (
+      typeof providerToUse === 'object' &&
+      'callApi' in providerToUse &&
+      typeof providerToUse.callApi === 'function'
+    ) {
+      provider = providerToUse as ApiProvider;
+    } else if (typeof providerToUse === 'string') {
+      provider = await loadApiProvider(providerToUse, {
+        options: {
+          id: this.identifier,
+          config: {
+            provider: providerToUse,
+          },
+        },
+      });
+    } else {
+      throw new Error(`Invalid provider configuration for sequence provider: ${providerToUse}`);
+    }
+
+    invariant(provider, 'No provider available for sequence provider');
 
     const nunjucks = getNunjucksEngine();
     const responses: string[] = [];
@@ -52,7 +82,6 @@ export class SequenceProvider implements ApiProvider {
       cached: 0,
     };
 
-    // Send each input to the original provider
     for (const input of this.inputs) {
       const renderedInput = nunjucks.renderString(input, {
         ...context?.vars,
@@ -61,7 +90,7 @@ export class SequenceProvider implements ApiProvider {
 
       logger.debug(`Sequence provider sending input: ${renderedInput}`);
 
-      const response = await context.originalProvider.callApi(renderedInput, context, options);
+      const response = await provider.callApi(renderedInput, context, options);
 
       if (response.error) {
         return response;
@@ -69,7 +98,6 @@ export class SequenceProvider implements ApiProvider {
 
       responses.push(response.output);
 
-      // Accumulate token usage if available
       if (response.tokenUsage) {
         totalTokenUsage.total += response.tokenUsage.total || 0;
         totalTokenUsage.prompt += response.tokenUsage.prompt || 0;
