@@ -1,5 +1,4 @@
-import { DEFAULT_STRATEGIES } from '@promptfoo/redteam/constants';
-import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
+import { COLLECTIONS, DEFAULT_PLUGINS, DEFAULT_STRATEGIES } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Config, ProviderOptions } from '../types';
@@ -177,9 +176,12 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
             config: {
               ...defaultConfig,
               ...persistedState.config,
-              plugins: persistedState.config.plugins.filter((p: any) =>
-                typeof p === 'object' ? p.id !== 'default' : p !== 'default',
-              ),
+              plugins: persistedState.config.plugins.filter((p: any) => {
+                if (typeof p === 'object') {
+                  return !COLLECTIONS.includes(p.id);
+                }
+                return !COLLECTIONS.includes(p);
+              }),
             },
           };
         }

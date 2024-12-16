@@ -32,6 +32,7 @@ import {
   categoryAliases,
   type Plugin,
   riskCategories,
+  COLLECTIONS,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -65,7 +66,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       typeof plugin === 'string' ? plugin : plugin.id,
     ) as Plugin[];
 
-    return new Set(configPlugins.filter((plugin) => plugin !== 'default'));
+    return new Set(configPlugins.filter((plugin) => !COLLECTIONS.includes(plugin)));
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>(() => {
@@ -86,7 +87,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       () =>
         Array.from(selectedPlugins)
           .map((plugin): string | { id: string; config: any } | null => {
-            if (plugin === 'policy') {
+            if (COLLECTIONS.includes(plugin) || plugin === 'policy') {
               return null;
             }
 
@@ -163,7 +164,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     const validPlugins = new Set(
-      Array.from(preset.plugins).filter((plugin) => plugin !== 'default'),
+      Array.from(preset.plugins).filter((plugin) => !COLLECTIONS.includes(plugin)),
     );
     setSelectedPlugins(validPlugins);
     setIsCustomMode(false);
