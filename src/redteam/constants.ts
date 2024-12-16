@@ -379,7 +379,6 @@ export const ADDITIONAL_STRATEGIES = [
   'citation',
   'crescendo',
   'goat',
-  'jailbreak:composite',
   'jailbreak:tree',
   'leetspeak',
   'math-prompt',
