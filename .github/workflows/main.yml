@@ -9,11 +9,7 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 env:
-  OPENAI_API_KEY: xxx
-  ANTHROPIC_API_KEY: xxx
-  AZURE_OPENAI_API_HOST: xxx
   VITE_TELEMETRY_DISABLED: 1
 jobs:
   build:
@@ -267,3 +263,40 @@ jobs:
             node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
             node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
           fi
+
+  redteam:
+    name: Redteam
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Redteam
+        run: |
+          npm run test:redteam:integration
+
+  redteam-custom-enterprise-server:
+    name: Redteam Custom Enterprise Server
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # Need to build first so we can login
+      - name: Build
+        run: |
+          npm run build
+
+      - name: Login
+        run: |
+          npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
+
+      - name: Run Redteam
+        run: |
+          npm run test:redteam:integration
