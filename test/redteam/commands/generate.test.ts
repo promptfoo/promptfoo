@@ -14,6 +14,14 @@ jest.mock('../../../src/util/config/load', () => ({
   combineConfigs: jest.fn(),
   resolveConfigs: jest.fn(),
 }));
+
+jest.mock('../../../src/globalConfig/cloud', () => ({
+  CloudConfig: jest.fn().mockImplementation(() => ({
+    isEnabled: jest.fn().mockReturnValue(false),
+    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+  })),
+}));
+
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
