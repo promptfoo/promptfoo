@@ -15,6 +15,11 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { alpha } from '@mui/material/styles';
@@ -228,16 +233,24 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 Headers:
               </Typography>
               <Paper elevation={0} sx={responseBlockStyles}>
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    color: theme.palette.text.primary,
-                  }}
-                >
-                  {JSON.stringify(testResult.providerResponse?.metadata?.headers, null, 2)}
-                </pre>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Header</TableCell>
+                      <TableCell>Value</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {Object.entries(testResult.providerResponse?.metadata?.headers || {}).map(
+                      ([key, value]) => (
+                        <TableRow key={key}>
+                          <TableCell>{key}</TableCell>
+                          <TableCell>{value as string}</TableCell>
+                        </TableRow>
+                      ),
+                    )}
+                  </TableBody>
+                </Table>
               </Paper>
 
               <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
@@ -252,7 +265,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     color: theme.palette.text.primary,
                   }}
                 >
-                  {JSON.stringify(testResult.providerResponse?.raw, null, 2)}
+                  {typeof testResult.providerResponse?.raw === 'string'
+                    ? testResult.providerResponse?.raw
+                    : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
                 </pre>
               </Paper>
 
@@ -268,7 +283,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     color: theme.palette.text.primary,
                   }}
                 >
-                  {JSON.stringify(testResult.providerResponse?.output, null, 2)}
+                  {typeof testResult.providerResponse?.output === 'string'
+                    ? testResult.providerResponse?.output
+                    : JSON.stringify(testResult.providerResponse?.output, null, 2)}
                 </pre>
               </Paper>
 

@@ -77,7 +77,6 @@ export type PIIPlugin = (typeof PII_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
-  'cross-session-leak',
   'excessive-agency',
   'hallucination',
   'hijacking',
@@ -90,6 +89,7 @@ export const ADDITIONAL_PLUGINS = [
   'bfla',
   'bola',
   'competitors',
+  'cross-session-leak',
   'debug-access',
   'imitation',
   'indirect-prompt-injection',
@@ -682,7 +682,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'indirect-prompt-injection',
     'ascii-smuggling',
     'hijacking',
-    'intent',
 
     // Data protection
     'pii',
