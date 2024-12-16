@@ -6,10 +6,10 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   EnvOverrides,
-  LLMFile,
   ProviderResponse,
 } from '../types';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import type { LLMFile } from '../types/motion';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
@@ -24,6 +24,25 @@ interface PalmCompletionOptions {
   topK?: number;
   generationConfig?: Record<string, any>;
 }
+
+type Part = {
+  text?: string;
+  fileData?: {
+    fileUri: string;
+    mimeType: string;
+  }
+};
+
+type Role = {
+  role: string;
+  parts: Part[];
+};
+
+type SystemInstruction = {
+  parts: Part[];
+};
+
+type GeminiContents = Role[];
 
 class PalmGenericProvider implements ApiProvider {
   modelName: string;
@@ -186,23 +205,38 @@ export class PalmChatProvider extends PalmGenericProvider {
       }
     }] : [];
 
-    const whatWeNeed = [
-      {
-        role: 'user',
-        parts: [
-          { text: process.env.USER_ROLE_MESSAGE_CONTENTS },
-          ...geminiFiles,
-          // { text: prompt }
-        ]
-      },
-    ];
-    // const contents = parseChatPrompt(prompt, [{ parts: [{ text: prompt }] }]);
-    const contents = parseChatPrompt(prompt, whatWeNeed);
+    let systemInstruction: SystemInstruction | undefined;
+
+    const promptInSystemInstruction = process.env.PROMPT_IN_SYSTEM_INSTRUCTION && process.env.PROMPT_IN_SYSTEM_INSTRUCTION.toLowerCase() === 'true';
+    if (promptInSystemInstruction) {
+      systemInstruction = { parts: [{ text: prompt }] };
+    }
+
+    const contentsDefaultValue: GeminiContents = [];
+    const userRole: Role = {
+      role: 'user',
+      parts: [],
+    };
+    if (!promptInSystemInstruction) {
+      userRole.parts.push({ text: prompt });
+    }
+    if (process.env.USER_ROLE_MESSAGE_CONTENTS?.length) {
+      userRole.parts.push({ text: process.env.USER_ROLE_MESSAGE_CONTENTS });
+    }
+
+    if (geminiFiles.length > 0) {
+      userRole.parts.push(...geminiFiles);
+    }
+
+    if (userRole.parts.length === 0) {
+      throw new Error('USER_ROLE_MESSAGE_CONTENTS must be set or PROMPT_IN_SYSTEM_INSTRUCTION must be false or files must be included otherwise there is no user input');
+    }
+    contentsDefaultValue.push(userRole);
+
+    const contents = parseChatPrompt(prompt, contentsDefaultValue);
     const body = {
       contents,
-      systemInstruction: {
-        parts:  { text: prompt }
-      },
+      systemInstruction,
       generationConfig: {
         temperature: this.config.temperature,
         topP: this.config.topP,

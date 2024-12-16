@@ -167,7 +167,7 @@ class GeminiApiService {
 
   async _uploadFile(assetUrl, mimeType) {
     if (!mimeType) {
-      let basename = path.basename(assetUrl);
+      let basename = path.basename(new URL(assetUrl).pathname);
       const splitted = basename.split('.');
       const fileExtension = splitted[1];
       if (fileExtension === 'bin') {
@@ -177,7 +177,7 @@ class GeminiApiService {
       basename = splitted.join('.');
       const foundMimeType = mime.lookup(basename);
       if (!foundMimeType) {
-        throw new Error(`Unable to determine mime type for ${assetUrl}`);
+        throw new Error(`Unable to determine mime type for ${assetUrl}. basename: ${basename}. fileExtension: ${fileExtension}`);
       }
       mimeType = foundMimeType;
     }
