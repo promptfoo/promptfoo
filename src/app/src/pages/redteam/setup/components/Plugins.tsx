@@ -61,9 +61,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { recordEvent } = useTelemetry();
   const [isCustomMode, setIsCustomMode] = useState(true);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
-    return new Set(
-      config.plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)) as Plugin[],
-    );
+    const configPlugins = config.plugins.map((plugin) =>
+      typeof plugin === 'string' ? plugin : plugin.id,
+    ) as Plugin[];
+
+    return new Set(configPlugins.filter((plugin) => plugin !== 'default'));
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>(() => {
@@ -154,12 +156,17 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       feature: 'redteam_config_plugins_preset_selected',
       preset: preset.name,
     });
+
     if (preset.name === 'Custom') {
       setIsCustomMode(true);
-    } else {
-      setSelectedPlugins(new Set(preset.plugins));
-      setIsCustomMode(false);
+      return;
     }
+
+    const validPlugins = new Set(
+      Array.from(preset.plugins).filter((plugin) => plugin !== 'default'),
+    );
+    setSelectedPlugins(validPlugins);
+    setIsCustomMode(false);
   };
 
   const filteredPlugins = useMemo(() => {

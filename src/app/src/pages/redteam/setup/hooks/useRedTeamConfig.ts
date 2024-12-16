@@ -1,3 +1,4 @@
+import { DEFAULT_STRATEGIES } from '@promptfoo/redteam/constants';
 import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -35,7 +36,7 @@ const defaultConfig: Config = {
   prompts: ['{{prompt}}'],
   target: DEFAULT_HTTP_TARGET,
   plugins: [...DEFAULT_PLUGINS],
-  strategies: ['jailbreak', 'jailbreak:composite'],
+  strategies: [...DEFAULT_STRATEGIES],
   purpose: '',
   entities: [],
   applicationDefinition: {
@@ -100,14 +101,18 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         })),
       updatePlugins: (plugins) =>
         set((state) => {
+          const validatedPlugins = plugins.filter((plugin) =>
+            typeof plugin === 'object' ? plugin.id !== 'default' : plugin !== 'default',
+          );
+
           const stringifiedCurrentPlugins = JSON.stringify(state.config.plugins);
-          const stringifiedNewPlugins = JSON.stringify(plugins);
+          const stringifiedNewPlugins = JSON.stringify(validatedPlugins);
 
           if (stringifiedCurrentPlugins === stringifiedNewPlugins) {
             return state;
           }
 
-          const newPlugins = plugins.map((plugin) => {
+          const newPlugins = validatedPlugins.map((plugin) => {
             if (typeof plugin === 'string' || !plugin.config) {
               return plugin;
             }
@@ -164,6 +169,22 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
     }),
     {
       name: 'redTeamConfig',
+      version: 1,
+      migrate: (persistedState: any, version: number) => {
+        if (version === 0) {
+          return {
+            ...persistedState,
+            config: {
+              ...defaultConfig,
+              ...persistedState.config,
+              plugins: persistedState.config.plugins.filter((p: any) =>
+                typeof p === 'object' ? p.id !== 'default' : p !== 'default',
+              ),
+            },
+          };
+        }
+        return persistedState;
+      },
     },
   ),
 );
