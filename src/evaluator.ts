@@ -412,7 +412,8 @@ class Evaluator {
 
       if (numAdded < 1) {
         logger.info(chalk.red('No prompts selected. Aborting.'));
-        process.exit(1);
+        process.exitCode = 1;
+        return this.evalRecord;
       }
     }
 
