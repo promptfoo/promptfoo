@@ -66,7 +66,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       typeof plugin === 'string' ? plugin : plugin.id,
     ) as Plugin[];
 
-    return new Set(configPlugins.filter((plugin) => !COLLECTIONS.includes(plugin)));
+    return new Set(
+      configPlugins.filter(
+        (plugin) => !COLLECTIONS.includes(plugin as (typeof COLLECTIONS)[number]),
+      ),
+    );
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>(() => {
@@ -87,7 +91,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       () =>
         Array.from(selectedPlugins)
           .map((plugin): string | { id: string; config: any } | null => {
-            if (COLLECTIONS.includes(plugin) || plugin === 'policy') {
+            if (
+              COLLECTIONS.includes(plugin as (typeof COLLECTIONS)[number]) ||
+              plugin === 'policy'
+            ) {
               return null;
             }
 
@@ -164,7 +171,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     const validPlugins = new Set(
-      Array.from(preset.plugins).filter((plugin) => !COLLECTIONS.includes(plugin)),
+      Array.from(preset.plugins).filter(
+        (plugin) => !COLLECTIONS.includes(plugin as (typeof COLLECTIONS)[number]),
+      ),
     );
     setSelectedPlugins(validPlugins);
     setIsCustomMode(false);
