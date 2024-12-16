@@ -682,7 +682,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'indirect-prompt-injection',
     'ascii-smuggling',
     'hijacking',
-    'intent',
 
     // Data protection
     'pii',
