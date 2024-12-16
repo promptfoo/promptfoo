@@ -1,7 +1,11 @@
 import { describe, expect } from '@jest/globals';
 import { SequenceProvider } from '../../../src/providers/sequence';
-import type { ApiProvider, ProviderResponse, CallApiContextParams } from '../../../src/types/providers';
 import type { Prompt } from '../../../src/types/prompts';
+import type {
+  ApiProvider,
+  ProviderResponse,
+  CallApiContextParams,
+} from '../../../src/types/providers';
 
 class MockProvider implements ApiProvider {
   public calls: string[] = [];
@@ -102,14 +106,14 @@ describe('SequenceProvider', () => {
       id: 'sequence',
       config: {
         inputs: ['Test prompt'],
-        provider: mockConfigProvider
-      }
+        provider: mockConfigProvider,
+      },
     });
 
     const result = await sequenceProvider.callApi('test input', {
       originalProvider: mockOriginalProvider,
       prompt: { raw: 'test input', label: 'test' } as Prompt,
-      vars: {}
+      vars: {},
     } as CallApiContextParams);
 
     expect(result.error).toBeUndefined();

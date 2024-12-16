@@ -162,13 +162,13 @@ export const SequenceProviderConfigSchema = z
     provider: z.union([
       z.string(),
       z.custom<CallApiFunction>((val) => typeof val === 'function'),
-      z.custom<ApiProvider>((val) => isApiProvider(val))
+      z.custom<ApiProvider>((val) => isApiProvider(val)),
     ]),
     inputs: z.array(z.string()).optional(),
     strategy: z.enum(['crescendo']).optional(),
     maxTurns: z.number().int().positive().optional(),
     systemPrompt: z.string().optional(),
-    separator: z.string().optional()
+    separator: z.string().optional(),
   })
   .strict();
 

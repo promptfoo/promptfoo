@@ -117,7 +117,7 @@ export interface SequenceProviderConfig {
   separator?: string;
   provider: string | CallApiFunction | ApiProvider;
   strategy?: 'crescendo';
-  maxTurns?: number;  // Must be positive integer at runtime
+  maxTurns?: number; // Must be positive integer at runtime
   systemPrompt?: string;
 }
 
