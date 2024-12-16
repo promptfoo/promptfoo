@@ -57,7 +57,7 @@ export function redteamRunCommand(program: Command) {
         } else {
           logger.error('An unexpected error occurred:', error);
         }
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 
