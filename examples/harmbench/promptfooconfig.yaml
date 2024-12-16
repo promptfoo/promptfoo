@@ -2,7 +2,7 @@
 description: 'HarmBench Safety Evaluation'
 
 prompts:
-  - '{{Behavior}}'
+  - '{{prompt}}'
 
 targets:
   - id: openai:gpt-4o-mini
@@ -15,6 +15,7 @@ redteam:
   plugins:
     - id: intent
       config:
-        intent: data/harmbench_sample.csv
-  strategies:
-    - id: jailbreak
+        intent: file://harmbench_10.csv
+        column: Behavior
+  # strategies:
+  #   - id: jailbreak
