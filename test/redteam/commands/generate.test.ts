@@ -131,7 +131,13 @@ describe('doGenerateRedteam', () => {
 
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
     jest.mocked(synthesize).mockResolvedValue({
-      testCases: [],
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
       purpose: 'Test purpose',
       entities: [],
     });
@@ -140,11 +146,23 @@ describe('doGenerateRedteam', () => {
 
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({
-        tests: [],
+        defaultTest: {
+          metadata: {
+            purpose: 'Test purpose',
+            entities: [],
+          },
+        },
         redteam: expect.objectContaining({
           purpose: 'Test purpose',
           entities: [],
         }),
+        tests: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'redteam' },
+          },
+        ],
       }),
       'config.yaml',
     );

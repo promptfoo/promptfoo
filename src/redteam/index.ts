@@ -4,6 +4,7 @@ import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import cliState from '../cliState';
 import logger, { getLogLevel } from '../logger';
 import type { TestCase, TestCaseWithPlugin } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
@@ -232,11 +233,22 @@ export async function synthesize({
   purpose: purposeOverride,
   strategies,
   delay,
+  abortSignal,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
   testCases: TestCaseWithPlugin[];
 }> {
+  // Add abort check helper
+  const checkAbort = () => {
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled');
+    }
+  };
+
+  // Add abort checks at key points
+  checkAbort();
+
   if (prompts.length === 0) {
     throw new Error('Prompts array cannot be empty');
   }
@@ -399,7 +411,11 @@ export async function synthesize({
 
   // Start the progress bar
   let progressBar: cliProgress.SingleBar | null = null;
-  if (process.env.LOG_LEVEL !== 'debug' && getLogLevel() !== 'debug') {
+  const isWebUI = Boolean(cliState.webUI);
+
+  const showProgressBar =
+    !isWebUI && process.env.LOG_LEVEL !== 'debug' && getLogLevel() !== 'debug';
+  if (showProgressBar) {
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
@@ -409,10 +425,19 @@ export async function synthesize({
     progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
   }
 
-  progressBar?.increment(1, { task: 'Extracting system purpose' });
+  // Replace progress bar updates with logger calls when in web UI
+  if (showProgressBar) {
+    progressBar?.increment(1, { task: 'Extracting system purpose' });
+  } else {
+    logger.info('Extracting system purpose...');
+  }
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
 
-  progressBar?.increment(1, { task: 'Extracting entities' });
+  if (showProgressBar) {
+    progressBar?.increment(1, { task: 'Extracting entities' });
+  } else {
+    logger.info('Extracting entities...');
+  }
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
     : await extractEntities(redteamProvider, prompts);
@@ -422,7 +447,13 @@ export async function synthesize({
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
-    progressBar?.update({ task: plugin.id });
+    checkAbort();
+
+    if (showProgressBar) {
+      progressBar?.update({ task: plugin.id });
+    } else {
+      logger.info(`Generating tests for ${plugin.id}...`);
+    }
     const { action } = Plugins.find((p) => p.key === plugin.id) || {};
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
@@ -454,7 +485,11 @@ export async function synthesize({
       }
 
       pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
-      progressBar?.increment(plugin.numTests);
+      if (showProgressBar) {
+        progressBar?.increment(plugin.numTests);
+      } else {
+        logger.info(`Generated ${pluginTests.length} tests for ${plugin.id}`);
+      }
       logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
       pluginResults[plugin.id] = {
         requested: plugin.id === 'intent' ? pluginTests.length : plugin.numTests,

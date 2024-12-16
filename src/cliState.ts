@@ -6,6 +6,9 @@ interface CliState {
 
   // Forces remote inference wherever possible
   remote?: boolean;
+
+  // Indicates we're running in web UI mode
+  webUI?: boolean;
 }
 
 const state: CliState = {};

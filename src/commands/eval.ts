@@ -63,7 +63,7 @@ export async function doEval(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
-) {
+): Promise<Eval> {
   setupEnv(cmdObj.envPath);
   if (cmdObj.verbose) {
     setLogLevel('debug');
@@ -203,9 +203,10 @@ export async function doEval(
       : new Eval(config);
 
     // Run the evaluation!!!!!!
-    await evaluate(testSuite, evalRecord, {
+    const ret = await evaluate(testSuite, evalRecord, {
       ...options,
       eventSource: 'cli',
+      abortSignal: evaluateOptions.abortSignal,
     });
 
     const shareableUrl =
@@ -408,9 +409,10 @@ export async function doEval(
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
+    return ret;
   };
 
-  await runEvaluation(true /* initialization */);
+  return await runEvaluation(true /* initialization */);
 }
 
 export function evalCommand(
