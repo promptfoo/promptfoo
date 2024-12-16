@@ -1,14 +1,12 @@
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
-import {
-  isApiProvider,
-  isProviderOptions,
-  type ApiProvider,
-  type CallApiContextParams,
-  type CallApiOptionsParams,
-  type ProviderDefinition,
-  type ProviderOptions,
-  type ProviderResponse,
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderDefinition,
+  ProviderOptions,
+  ProviderResponse,
 } from '../types';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
