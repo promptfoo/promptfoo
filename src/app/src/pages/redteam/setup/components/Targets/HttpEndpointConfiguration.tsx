@@ -137,7 +137,6 @@ Content-Type: application/json
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Add these common styles
   const editorStyles = {
     fontFamily: '"Fira code", "Fira Mono", monospace',
     fontSize: 14,
