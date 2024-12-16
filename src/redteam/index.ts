@@ -19,6 +19,8 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
+import cliState from '../cliState';
+import path from 'path';
 
 /**
  * Determines the status of test generation based on requested and generated counts.
@@ -84,20 +86,15 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
   if (!config) {
     return {};
   }
-
-  for (const key in config) {
-    const value = config[key];
+  const basePath = cliState.basePath || '';
+  for (const [key, value] of Object.entries(config)) {
     if (typeof value === 'string' && value.startsWith('file://')) {
-      const filePath = value.slice('file://'.length);
-
+      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
       if (!fs.existsSync(filePath)) {
         throw new Error(`File not found: ${filePath}`);
       }
-
-      if (filePath.endsWith('.yaml')) {
+      if (filePath.endsWith('.yaml') || filePath.endsWith('.yml') || filePath.endsWith('.json')) {
         config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
-      } else if (filePath.endsWith('.json')) {
-        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       } else {
         config[key] = fs.readFileSync(filePath, 'utf8');
       }
