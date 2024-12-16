@@ -1,4 +1,4 @@
-import { fetchWithProxy } from '../fetch';
+import { fetchWithTimeout } from '../fetch';
 import { CloudConfig } from '../globalConfig/cloud';
 
 export interface HealthResponse {
@@ -14,13 +14,15 @@ export interface HealthResponse {
 export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
   try {
     const cloudConfig = new CloudConfig();
-    const response = await fetchWithProxy(url, {
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
       },
-      // Increased timeout to 5 seconds for first request
-      signal: AbortSignal.timeout(5000),
-    });
+      5000,
+    );
 
     if (!response.ok) {
       return {
