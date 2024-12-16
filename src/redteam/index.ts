@@ -4,6 +4,7 @@ import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import cliState from '../cliState';
 import logger, { getLogLevel } from '../logger';
 import type { TestCase, TestCaseWithPlugin } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';

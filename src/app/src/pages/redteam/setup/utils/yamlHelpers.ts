@@ -98,4 +98,4 @@ export function generateOrderedYaml(config: Config): string {
   });
 
   return `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n${updatedLines.join('\n')}`;
-};
+}
