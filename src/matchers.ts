@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import cliState from './cliState';
 import { getEnvString } from './envars';
 import logger from './logger';
@@ -569,6 +570,97 @@ export async function matchesClosedQa(
   } catch (err) {
     return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
+}
+
+export async function matchesGEval(
+  criteria: string,
+  input: string,
+  output: string,
+  threshold: number,
+  grading?: GradingConfig,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  if (!input) {
+    throw Error('No source text to estimate reply');
+  }
+
+  const maxScore = 10;
+  const textProvider = await getAndCheckProvider(
+    'text',
+    grading?.provider,
+    (await getDefaultProviders()).gradingProvider,
+    'reply geval check',
+  );
+
+  const promptSteps = dedent`
+    Given an evaluation criteria which outlines how you should judge some text, generate 3-4 concise evaluation steps for any text based on the criteria below.
+
+    Evaluation Criteria:
+    ${criteria}
+
+    **
+    IMPORTANT: Please make sure to only return in minified JSON format, with the "steps" key as a list of strings. No additional words, explanation or formatting is needed.
+    Example JSON:
+    {"steps": <list_of_strings>}
+    **
+
+    JSON:
+    `;
+
+  const respSteps = await textProvider.callApi(promptSteps);
+  let steps;
+
+  try {
+    // NOTE: use regexp for reliable, because sometimes LLM wraps response to markdown format ```json...```
+    steps = JSON.parse(respSteps.output.match(/\{"steps".+\}/g)[0]).steps;
+
+    if (!steps.length) {
+      return fail('LLM does not propose any evaluation step');
+    }
+  } catch {
+    return fail(`LLM-proposed evaluation steps are not in JSON format: ${respSteps.output}`);
+  }
+
+  const promptText = dedent`
+    You will be given one Reply for a Source Text below. Your task is to rate the Reply on one metric.
+    Please make sure you read and understand these instructions carefully. Please keep this document open while reviewing, and refer to it as needed.
+
+    Evaluation Criteria:
+    ${criteria}
+
+    Evaluation Steps:
+    - ${steps.join('\n- ')}
+    - Given the evaluation steps, return a JSON with two keys: 1) a "score" key ranging from 0 - ${maxScore}, with ${maxScore} being that it follows the Evaluation Criteria outlined in the Evaluation Steps and 0 being that it does not; 2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Source Text and Reply in your reason, but be very concise with it!
+
+    Source Text:
+    ${input}
+
+    Reply:
+    ${output}
+
+    **
+    IMPORTANT: Please make sure to only return in minified JSON format, with the "score" and "reason" key. No additional words, explanation or formatting is needed.
+
+    Example JSON:
+    {"score":0,"reason":"The text does not follow the evaluation steps provided."}
+    **
+
+    JSON:
+    `;
+
+  const resp = await textProvider.callApi(promptText);
+  let result;
+
+  try {
+    result = JSON.parse(resp.output.match(/\{.+\}/g)[0]);
+  } catch {
+    return fail(`LLM-proposed evaluation result is not in JSON format: ${resp.output}`);
+  }
+
+  return {
+    pass: result.score / maxScore >= threshold,
+    score: result.score / maxScore,
+    reason: result.reason,
+  };
 }
 
 export async function matchesAnswerRelevance(
