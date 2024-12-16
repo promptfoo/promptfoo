@@ -1,3 +1,7 @@
+prompts:
+  # Dummy prompt - the sequence provider will ignore this.
+  - '{{prompt}}'
+
 providers:
   - id: sequence
     config:

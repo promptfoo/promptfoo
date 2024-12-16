@@ -1,12 +1,14 @@
 import logger from '../logger';
-import { loadApiProviders } from '../providers';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderDefinition,
-  ProviderOptions,
-  ProviderResponse,
+import { loadApiProvider } from '../providers';
+import {
+  isApiProvider,
+  isProviderOptions,
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  type ProviderDefinition,
+  type ProviderOptions,
+  type ProviderResponse,
 } from '../types';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -57,8 +59,17 @@ export class SequenceProvider implements ApiProvider {
       typeof providerToUse.callApi === 'function'
     ) {
       provider = providerToUse as ApiProvider;
+    } else if (typeof providerToUse === 'string') {
+      provider = await loadApiProvider(providerToUse, {
+        options: {
+          id: this.identifier,
+          config: {
+            provider: providerToUse,
+          },
+        },
+      });
     } else {
-      [provider] = await loadApiProviders([providerToUse as any]);
+      throw new Error(`Invalid provider configuration for sequence provider: ${providerToUse}`);
     }
 
     invariant(provider, 'No provider available for sequence provider');

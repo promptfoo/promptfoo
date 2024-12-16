@@ -1,11 +1,6 @@
 import { describe, expect } from '@jest/globals';
 import { SequenceProvider } from '../../../src/providers/sequence';
-import type { Prompt } from '../../../src/types/prompts';
-import type {
-  ApiProvider,
-  ProviderResponse,
-  CallApiContextParams,
-} from '../../../src/types/providers';
+import type { ApiProvider, ProviderResponse } from '../../../src/types/providers';
 
 class MockProvider implements ApiProvider {
   public calls: string[] = [];
@@ -34,7 +29,7 @@ describe('SequenceProvider', () => {
           'Initial prompt: {{prompt}}',
           'Based on the previous response, do this: {{prompt}}',
         ],
-        provider: async (prompt: string) => mockProvider.callApi(prompt),
+        provider: mockProvider,
       },
     });
 
@@ -48,7 +43,7 @@ describe('SequenceProvider', () => {
     expect(result.output).toBe('Initial response\n---\nFollow-up response');
   });
 
-  it('handles provider errors in redteam context', async () => {
+  it('handles provider errors', async () => {
     const mockProvider = new MockProvider();
     mockProvider.callApi = async () => ({
       error: 'Rate limit exceeded',
@@ -59,9 +54,7 @@ describe('SequenceProvider', () => {
       id: 'sequence',
       config: {
         inputs: ['test1', 'test2'],
-        strategy: 'jailbreak',
-        maxTurns: 2,
-        provider: async (prompt: string) => mockProvider.callApi(prompt),
+        provider: mockProvider,
       },
     });
 
@@ -69,7 +62,7 @@ describe('SequenceProvider', () => {
     expect(result.error).toBe('Rate limit exceeded');
   });
 
-  it('accumulates token usage in redteam sequence', async () => {
+  it('accumulates token usage', async () => {
     const mockProvider = new MockProvider();
     mockProvider.callApi = async () => ({
       output: 'test response',
@@ -86,9 +79,7 @@ describe('SequenceProvider', () => {
       id: 'sequence',
       config: {
         inputs: ['test1', 'test2'],
-        strategy: 'crescendo',
-        maxTurns: 2,
-        provider: async (prompt: string) => mockProvider.callApi(prompt),
+        provider: mockProvider,
       },
     });
 
@@ -110,9 +101,7 @@ describe('SequenceProvider', () => {
       id: 'sequence',
       config: {
         inputs: ['Test prompt: {{prompt}}'],
-        strategy: 'crescendo',
-        maxTurns: 1,
-        provider: async (prompt: string) => mockConstructorProvider.callApi(prompt),
+        provider: mockConstructorProvider,
       },
     });
 
