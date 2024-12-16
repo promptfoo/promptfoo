@@ -258,7 +258,7 @@ class CrescendoProvider implements ApiProvider {
       );
 
       if (isRefusal) {
-        logger.debug('\n[Crescendo]Response Rejected, performing back tracking...\n');
+        logger.debug('\n[Crescendo] Response Rejected, performing back tracking...\n');
         backtrackCount++;
         this.targetConversationId = await this.backtrackMemory(this.targetConversationId);
         lastFeedback = dedent`
