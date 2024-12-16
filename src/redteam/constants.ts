@@ -373,6 +373,7 @@ export const AGENTIC_STRATEGIES = ['jailbreak', 'jailbreak:tree', 'crescendo', '
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'prompt-injection',
   'ascii-smuggling',
   'base64',
   'citation',
