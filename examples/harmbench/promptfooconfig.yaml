@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'HarmBench Safety Evaluation'
+
+prompts:
+  - '{{Behavior}}'
+
+providers:
+  - id: openai:gpt-4o-mini
+    config:
+      temperature: 0
+
+defaultTest:
+  # Use the iterative red team technique for each test
+  provider:
+    id: promptfoo:redteam:iterative
+    config:
+      injectVar: 'Behavior'
+  assert:
+    - type: promptfoo:redteam:harmful
+  metadata:
+    purpose: 'A helpful AI assistant'
+    entities: []
+    harmCategory: harmful
+
+tests: file://data/harmbench_sample.csv

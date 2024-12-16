@@ -16,7 +16,6 @@ import {
   type Strategy,
   type Plugin,
 } from '../redteam/constants';
-import { loadIntentsFromConfig } from '../redteam/plugins/intent';
 import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
 import { isJavascriptFile } from '../util/file';
 import { ProviderSchema } from '../validators/providers';
@@ -206,37 +205,13 @@ export const RedteamConfigSchema = z
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
     const strategySet = new Set<Strategy>();
-    const warnings: string[] = [];
 
     const addPlugin = (id: string, config: any, numTests: number | undefined) => {
       const key = `${id}:${JSON.stringify(config)}`;
       const pluginObject: RedteamPluginObject = { id };
-
-      // Special handling for intent plugin
-      if (id === 'intent') {
-        if (numTests !== undefined) {
-          warnings.push(
-            'Warning: numTests for intent plugin is determined by the number of intents specified in the configuration.',
-          );
-        }
-
-        try {
-          const { intents, warnings: intentWarnings } = loadIntentsFromConfig(config);
-          warnings.push(...intentWarnings);
-          pluginObject.numTests = intents.length;
-          pluginObject.config = { ...config, intent: intents };
-        } catch (error: unknown) {
-          // Type guard for Error objects
-          if (error instanceof Error) {
-            throw new Error(`Failed to load intents: ${error.message}`);
-          }
-          // Handle non-Error objects
-          throw new Error(`Failed to load intents: ${String(error)}`);
-        }
-      } else if (numTests !== undefined || data.numTests !== undefined) {
+      if (numTests !== undefined || data.numTests !== undefined) {
         pluginObject.numTests = numTests ?? data.numTests;
       }
-
       if (config !== undefined) {
         pluginObject.config = config;
       }
@@ -335,9 +310,6 @@ export const RedteamConfigSchema = z
         }),
       ),
     ).sort((a, b) => a.id.localeCompare(b.id));
-
-    // Log any warnings
-    warnings.forEach((warning) => console.warn(warning));
 
     return {
       numTests: data.numTests,

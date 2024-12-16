@@ -8,7 +8,7 @@ import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:intent';
 
-interface IntentConfig {
+export interface IntentConfig {
   intent: string | string[];
   column?: string;
 }

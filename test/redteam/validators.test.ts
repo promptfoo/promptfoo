@@ -760,6 +760,152 @@ describe('redteamConfigSchema', () => {
       );
     });
   });
+
+  describe('intent plugin', () => {
+    it('should handle intent plugin with direct string input', () => {
+      const input = {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: 'reveal confidential information',
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (!result.success) {
+        return;
+      }
+      expect(result.data.plugins?.[0]).toEqual({
+        id: 'intent',
+        config: { intent: 'reveal confidential information' },
+      });
+    });
+
+    it('should handle intent plugin with array input', () => {
+      const input = {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: ['reveal user data', 'generate malicious code'],
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (!result.success) {
+        return;
+      }
+      expect(result.data.plugins?.[0]).toEqual({
+        id: 'intent',
+        config: { intent: ['reveal user data', 'generate malicious code'] },
+      });
+    });
+
+    it('should handle intent plugin with CSV file path', () => {
+      const input = {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: 'file://intents.csv',
+              column: 'harmful_intents',
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (!result.success) {
+        return;
+      }
+      expect(result.data.plugins?.[0]).toEqual({
+        id: 'intent',
+        config: {
+          intent: 'file://intents.csv',
+          column: 'harmful_intents',
+        },
+      });
+    });
+
+    it('should ignore numTests for intent plugin', () => {
+      const input = {
+        numTests: 5,
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: ['intent1', 'intent2'],
+            },
+            numTests: 10, // This should be ignored
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (!result.success) {
+        return;
+      }
+      expect(result.data.plugins?.[0]?.numTests).toBeUndefined();
+    });
+
+    it('should reject empty intent array', () => {
+      const input = {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: [],
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.safeParse(input);
+      expect(result.success).toBe(false);
+      expect(result.error?.errors[0]?.message).toContain('Intent array cannot be empty');
+    });
+
+    it('should reject empty intent string', () => {
+      const input = {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: '   ',
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.safeParse(input);
+      expect(result.success).toBe(false);
+      expect(result.error?.errors[0]?.message).toContain('Intent string cannot be empty');
+    });
+
+    it('should require intent config', () => {
+      const input = {
+        plugins: [
+          {
+            id: 'intent',
+            config: {},
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.safeParse(input);
+      expect(result.success).toBe(false);
+      expect(result.error?.errors[0]?.message).toContain('An "intent" property is required');
+    });
+  });
 });
 
 describe('RedteamConfigSchema transform', () => {
