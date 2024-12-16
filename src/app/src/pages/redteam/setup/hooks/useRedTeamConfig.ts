@@ -100,9 +100,10 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         })),
       updatePlugins: (plugins) =>
         set((state) => {
-          const validatedPlugins = plugins.filter((plugin) =>
-            typeof plugin === 'object' ? plugin.id !== 'default' : plugin !== 'default',
-          );
+          const validatedPlugins = plugins.filter((plugin) => {
+            const pluginId = typeof plugin === 'string' ? plugin : plugin.id;
+            return !COLLECTIONS.includes(pluginId as (typeof COLLECTIONS)[number]);
+          });
 
           const stringifiedCurrentPlugins = JSON.stringify(state.config.plugins);
           const stringifiedNewPlugins = JSON.stringify(validatedPlugins);
