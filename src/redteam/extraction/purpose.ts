@@ -35,10 +35,14 @@ export async function extractSystemPurpose(
   `;
 
   try {
-    return callExtraction(provider, prompt, (output: string) => {
-      const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
-      return match ? match[1].trim() : output.trim();
-    });
+    return callExtraction(
+      provider,
+      JSON.stringify([{ role: 'user', content: prompt }]),
+      (output: string) => {
+        const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
+        return match ? match[1].trim() : output.trim();
+      },
+    );
   } catch (error) {
     logger.warn(`[purpose] Error using remote generation, returning empty string: ${error}`);
     return '';
