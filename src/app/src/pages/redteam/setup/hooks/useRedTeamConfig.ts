@@ -35,7 +35,7 @@ const defaultConfig: Config = {
   prompts: ['{{prompt}}'],
   target: DEFAULT_HTTP_TARGET,
   plugins: [...DEFAULT_PLUGINS],
-  strategies: ['jailbreak', 'prompt-injection'],
+  strategies: ['jailbreak', 'jailbreak:composite'],
   purpose: '',
   entities: [],
   applicationDefinition: {
