@@ -16,6 +16,7 @@ import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
+import { updateCommand } from './commands/update';
 import { viewCommand } from './commands/view';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
@@ -82,6 +83,9 @@ async function main() {
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
+
+  // Add update command
+  updateCommand(program);
 
   program.parse();
 }

@@ -53,6 +53,26 @@ promptfoo --version
 
 This should display the version number of promptfoo.
 
+## Updating
+
+To update promptfoo to the latest version, run:
+
+```sh
+promptfoo update
+```
+
+This will automatically detect how promptfoo was installed and update it accordingly.
+
+You can also update manually using one of:
+
+```sh
+# If installed via npm
+npm install -g promptfoo@latest
+
+# If installed via Homebrew
+brew upgrade promptfoo
+```
+
 ## Next Steps
 
 After installation, you can start using promptfoo by running:
