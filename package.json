@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.102.1",
+  "version": "0.97.1000",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -104,6 +104,7 @@
     "@types/cache-manager": "^4.0.6",
     "@types/cache-manager-fs-hash": "^0.0.4",
     "@types/cli-progress": "^3.11.6",
+    "@types/compression": "^1.7.5",
     "@types/cors": "^2.8.17",
     "@types/debounce": "^1.2.4",
     "@types/eslint__js": "^8.42.3",

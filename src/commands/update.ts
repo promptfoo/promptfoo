@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { execSync } from 'child_process';
 import type { Command } from 'commander';
+import dedent from 'dedent';
 import fs from 'fs';
 import ora from 'ora';
 import os from 'os';
@@ -45,13 +46,6 @@ async function restoreFromBackup(backupDir: string): Promise<void> {
   } catch (err) {
     logger.error('Failed to restore from backup:', err);
     throw new Error('Failed to restore from backup');
-  } finally {
-    // Clean up backup
-    try {
-      fs.rmSync(backupDir, { recursive: true, force: true });
-    } catch (err) {
-      logger.debug('Failed to clean up backup:', err);
-    }
   }
 }
 
@@ -99,6 +93,14 @@ export async function updateCommand(program: Command) {
 
       try {
         const latestVersion = await getLatestVersion();
+
+        // Add friendly message about the duplicate notification
+        spinner.info(
+          chalk.dim(
+            "Note: You can ignore the update notification above - we're handling the update now.",
+          ),
+        );
+        spinner.start();
 
         spinner.info(`Current version: ${VERSION}`);
         spinner.info(`Latest version: ${latestVersion}`);
@@ -160,10 +162,21 @@ export async function updateCommand(program: Command) {
 
           default:
             spinner.warn('Could not determine installation method');
-            logger.info('Please update manually using one of:');
-            logger.info('  npm install -g promptfoo@latest');
-            logger.info('  brew upgrade promptfoo');
+            logger.info(dedent`
+              Please update manually using one of:
+                npm install -g promptfoo@latest
+                brew upgrade promptfoo
+            `);
             break;
+        }
+
+        // Clean up backup after successful update
+        if (backupDir) {
+          try {
+            fs.rmSync(backupDir, { recursive: true, force: true });
+          } catch (err) {
+            logger.debug('Failed to clean up backup:', err);
+          }
         }
       } catch (err) {
         spinner.fail('Update failed');
