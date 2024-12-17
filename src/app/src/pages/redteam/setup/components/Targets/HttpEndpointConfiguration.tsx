@@ -55,27 +55,6 @@ interface GeneratedConfig {
   };
 }
 
-const EXAMPLE_TARGET = {
-  id: 'http',
-  label: 'Acme Chatbot',
-  config: {
-    url: 'https://acme-cx-chatbot.promptfoo.dev/chat',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: {
-      messages: [
-        {
-          role: 'user',
-          content: '{{prompt}}',
-        },
-      ],
-    },
-    transformResponse: 'json.response',
-  },
-};
-
 const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   selectedTarget,
   updateCustomTarget,
@@ -415,25 +394,11 @@ Authorization: Bearer {{api_key}}
     }
   };
 
-  const handleTryExample = () => {
-    setForceStructured(true);
-    updateFullTarget({
-      ...EXAMPLE_TARGET,
-      config: {
-        ...EXAMPLE_TARGET.config,
-        request: undefined, // Ensure raw request is cleared
-      },
-    });
-  };
-
   return (
     <Box mt={2}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6">HTTP Endpoint Configuration</Typography>
         <Box>
-          <Button variant="outlined" onClick={handleTryExample} sx={{ mr: 2 }}>
-            Try Example
-          </Button>
           <Button variant="outlined" onClick={() => setConfigDialogOpen(true)}>
             Generate Config
           </Button>
