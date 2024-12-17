@@ -116,7 +116,6 @@ export type Plugin =
   | ConfigRequiredPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
-  ...COLLECTIONS,
   ...BASE_PLUGINS,
   ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]),
   ...PII_PLUGINS,
