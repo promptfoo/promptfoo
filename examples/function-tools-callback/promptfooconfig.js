@@ -2,6 +2,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   prompts: [
     'Please add the following numbers together: {{a}} and {{b}}',
     'What is the sum of {{a}} and {{b}}?',
+    'Perform a mathematical operation on these numbers: {{numbers}}',
   ],
   providers: [
     {
@@ -35,6 +36,17 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
         },
       },
     },
+    {
+      id: 'openai:gpt-4',
+      config: {
+        functions: [
+          {
+            name: 'calculate',
+            parameters: '{{ mathSchema | dump | safe }}',
+          },
+        ],
+      },
+    },
   ],
   tests: [
     {
@@ -52,6 +64,23 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
         {
           type: 'javascript',
           value: "output.includes('30')",
+        },
+      ],
+    },
+    {
+      vars: {
+        mathSchema: {
+          type: 'object',
+          properties: {
+            operation: { type: 'string', enum: ['add', 'subtract'] },
+            numbers: { type: 'array', items: { type: 'number' } },
+          },
+        },
+        numbers: [1, 2, 3],
+      },
+      assert: [
+        {
+          type: 'is-valid-openai-function-call',
         },
       ],
     },
