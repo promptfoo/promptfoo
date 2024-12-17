@@ -11,20 +11,21 @@ import logger from '../logger';
 import { getLatestVersion } from '../updates';
 import { isRunningUnderNpx } from '../util';
 
-// Add backup functionality
+/**
+ * Creates a backup of the current promptfoo installation.
+ * The backup is stored in a temporary directory with the current version number.
+ * @returns Path to the backup directory
+ * @throws Error if backup creation fails
+ */
 async function backupCurrentInstallation(): Promise<string> {
   const backupDir = path.join(os.tmpdir(), `promptfoo-backup-${VERSION}`);
   const binPath = process.argv[1];
   const backupPath = path.join(backupDir, 'promptfoo');
 
   try {
-    // Create backup directory
     fs.mkdirSync(backupDir, { recursive: true });
-
-    // Copy current installation
     fs.copyFileSync(binPath, backupPath);
-    fs.chmodSync(backupPath, 0o755); // Make executable
-
+    fs.chmodSync(backupPath, 0o755); // Make backup executable
     return backupDir;
   } catch (err) {
     logger.debug('Failed to create backup:', err);
@@ -32,7 +33,11 @@ async function backupCurrentInstallation(): Promise<string> {
   }
 }
 
-// Add restore functionality
+/**
+ * Restores promptfoo from a backup directory.
+ * @param backupDir - Path to the backup directory containing the promptfoo executable
+ * @throws Error if restore fails
+ */
 async function restoreFromBackup(backupDir: string): Promise<void> {
   const binPath = process.argv[1];
   const backupPath = path.join(backupDir, 'promptfoo');
@@ -40,7 +45,7 @@ async function restoreFromBackup(backupDir: string): Promise<void> {
   try {
     if (fs.existsSync(backupPath)) {
       fs.copyFileSync(backupPath, binPath);
-      fs.chmodSync(binPath, 0o755); // Make executable
+      fs.chmodSync(binPath, 0o755); // Make restored file executable
       logger.info(chalk.green('Successfully rolled back to previous version'));
     }
   } catch (err) {
@@ -49,6 +54,11 @@ async function restoreFromBackup(backupDir: string): Promise<void> {
   }
 }
 
+/**
+ * Detects how promptfoo was installed on the system.
+ * Checks for installation via npx, npm global, or homebrew.
+ * @returns The detected installation method
+ */
 export async function detectInstallMethod(): Promise<'npm' | 'homebrew' | 'npx' | 'unknown'> {
   if (isRunningUnderNpx()) {
     return 'npx';
@@ -56,7 +66,6 @@ export async function detectInstallMethod(): Promise<'npm' | 'homebrew' | 'npx' 
 
   if (process.platform === 'win32') {
     try {
-      // On Windows, check if installed via npm by looking at the installation path
       const npmList = execSync('npm list -g promptfoo', { encoding: 'utf8' });
       if (npmList.includes('promptfoo')) {
         return 'npm';
@@ -64,7 +73,6 @@ export async function detectInstallMethod(): Promise<'npm' | 'homebrew' | 'npx' 
     } catch {}
   } else {
     try {
-      // Check if installed via homebrew (macOS/Linux only)
       const brewList = execSync('brew list promptfoo 2>/dev/null', { encoding: 'utf8' });
       if (brewList.includes('promptfoo')) {
         return 'homebrew';
@@ -72,7 +80,6 @@ export async function detectInstallMethod(): Promise<'npm' | 'homebrew' | 'npx' 
     } catch {}
 
     try {
-      // Check if installed via npm global
       const npmList = execSync('npm list -g promptfoo', { encoding: 'utf8' });
       if (npmList.includes('promptfoo')) {
         return 'npm';
@@ -83,6 +90,11 @@ export async function detectInstallMethod(): Promise<'npm' | 'homebrew' | 'npx' 
   return 'unknown';
 }
 
+/**
+ * Registers the update command with the CLI program.
+ * Handles checking for updates, creating backups, performing the update,
+ * and rolling back on failure.
+ */
 export async function updateCommand(program: Command) {
   program
     .command('update')
@@ -94,7 +106,6 @@ export async function updateCommand(program: Command) {
       try {
         const latestVersion = await getLatestVersion();
 
-        // Add friendly message about the duplicate notification
         spinner.info(
           chalk.dim(
             "Note: You can ignore the update notification above - we're handling the update now.",
@@ -112,7 +123,7 @@ export async function updateCommand(program: Command) {
 
         const installMethod = await detectInstallMethod();
 
-        // Create backup before updating
+        // Create backup before attempting update
         try {
           spinner.start('Creating backup...');
           backupDir = await backupCurrentInstallation();
@@ -182,7 +193,7 @@ export async function updateCommand(program: Command) {
         spinner.fail('Update failed');
         logger.error('Error details:', err);
 
-        // Attempt rollback if we have a backup
+        // Attempt rollback if backup exists
         if (backupDir) {
           spinner.start('Rolling back to previous version...');
           try {
