@@ -90,8 +90,8 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.713.0",
-    "@aws-sdk/credential-provider-sso": "^3.713.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.714.0",
+    "@aws-sdk/credential-provider-sso": "^3.714.0",
     "@azure/identity": "^4.5.0",
     "@eslint/js": "^9.17.0",
     "@libsql/client": "^0.14.0",
@@ -119,7 +119,7 @@
     "@types/semver": "^7.5.8",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",
-    "check-dependency-version-consistency": "^4.1.0",
+    "check-dependency-version-consistency": "^5.0.0",
     "cloudflare": "3.4.0",
     "concurrently": "^9.1.0",
     "drizzle-kit": "^0.26.2",
@@ -156,7 +156,7 @@
     "@adaline/together-ai": "0.8.0",
     "@adaline/types": "0.15.0",
     "@adaline/vertex": "0.8.1",
-    "@anthropic-ai/sdk": "^0.33.0",
+    "@anthropic-ai/sdk": "^0.33.1",
     "@apidevtools/json-schema-ref-parser": "^11.7.3",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
