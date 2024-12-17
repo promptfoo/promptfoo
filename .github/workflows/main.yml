@@ -224,6 +224,7 @@ jobs:
 
   share-test:
     name: Share Test
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -258,11 +259,10 @@ jobs:
           fi
 
       - name: Share to cloud
+        if: ${{ secrets.PROMPTFOO_STAGING_API_KEY != '' }}
         run: |
-          if [ -n "${{ secrets.PROMPTFOO_STAGING_API_KEY }}" ]; then
-            node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
-            node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
-          fi
+          node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
+          node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
 
   redteam:
     name: Redteam
@@ -280,6 +280,7 @@ jobs:
 
   redteam-custom-enterprise-server:
     name: Redteam Custom Enterprise Server
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -294,6 +295,7 @@ jobs:
           npm run build
 
       - name: Login
+        if: ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY != '' }}
         run: |
           npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
 
