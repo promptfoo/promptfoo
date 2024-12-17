@@ -2,6 +2,7 @@
 sidebar_position: 0
 sidebar_label: Testing LLM chains
 slug: /configuration/testing-llm-chains
+image: /img/meta/docs/guides-testing-llm-chains-md.png
 ---
 
 # Testing LLM chains

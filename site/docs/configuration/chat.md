@@ -1,6 +1,7 @@
 ---
 sidebar_label: Chat threads
 sidebar_position: 10
+image: /img/meta/docs/configuration-chat-md.png
 ---
 
 # Chat conversations / threads

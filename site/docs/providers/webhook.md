@@ -1,5 +1,6 @@
 ---
 sidebar_position: 49
+image: /img/meta/docs/providers-webhook-md.png
 ---
 
 # Generic webhook

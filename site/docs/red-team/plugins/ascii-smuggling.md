@@ -1,5 +1,6 @@
 ---
 sidebar_label: ASCII Smuggling
+image: /img/meta/docs/red-team-plugins-ascii-smuggling-md.png
 ---
 
 # ASCII Smuggling for LLMs

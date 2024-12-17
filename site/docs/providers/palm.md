@@ -1,5 +1,6 @@
 ---
 sidebar_position: 43
+image: /img/meta/docs/providers-palm-md.png
 ---
 
 # Google AI Studio

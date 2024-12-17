@@ -1,5 +1,6 @@
 ---
 sidebar_label: Base64 Encoding
+image: /img/meta/docs/red-team-strategies-base64-md.png
 ---
 
 # Base64 Encoding Strategy

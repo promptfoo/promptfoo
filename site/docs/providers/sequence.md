@@ -1,6 +1,7 @@
 ---
 sidebar_position: 21
 sidebar_label: Sequence
+image: /img/meta/docs/providers-sequence-md.png
 ---
 
 # Sequence Provider

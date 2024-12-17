@@ -1,5 +1,6 @@
 ---
 sidebar_label: Portkey AI
+image: /img/meta/docs/integrations-portkey-md.png
 ---
 
 # Portkey AI integration

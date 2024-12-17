@@ -1,5 +1,6 @@
 ---
 sidebar_label: Connecting to Targets
+image: /img/meta/docs/red-team-troubleshooting-connecting-to-targets-md.png
 ---
 
 # Connecting to Targets

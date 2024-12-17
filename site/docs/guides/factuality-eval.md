@@ -1,5 +1,6 @@
 ---
 sidebar_position: 1
+image: /img/meta/docs/guides-factuality-eval-md.png
 ---
 
 # Evaluating factuality

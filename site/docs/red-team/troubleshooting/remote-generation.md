@@ -1,5 +1,6 @@
 ---
 sidebar_label: Remote Generation Errors
+image: /img/meta/docs/red-team-troubleshooting-remote-generation-md.png
 ---
 
 # Remote Generation Errors

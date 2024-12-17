@@ -1,5 +1,6 @@
 ---
 sidebar_position: 40
+image: /img/meta/docs/configuration-caching-md.png
 ---
 
 # Caching

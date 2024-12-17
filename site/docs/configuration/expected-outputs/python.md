@@ -1,6 +1,7 @@
 ---
 sidebar_position: 51
 sidebar_label: Python
+image: /img/meta/docs/configuration-expected-outputs-python-md.png
 ---
 
 # Python assertions

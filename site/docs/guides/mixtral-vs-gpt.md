@@ -1,5 +1,6 @@
 ---
 sidebar_label: Mixtral vs GPT
+image: /img/meta/docs/guides-mixtral-vs-gpt-md.png
 ---
 
 # Mixtral vs GPT: Run a benchmark with your own data

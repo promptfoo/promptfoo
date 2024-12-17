@@ -1,5 +1,6 @@
 ---
 sidebar_label: Harmful Content
+image: /img/meta/docs/red-team-plugins-harmful-md.png
 ---
 
 import Tabs from '@theme/Tabs';

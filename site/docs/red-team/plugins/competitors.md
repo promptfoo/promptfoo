@@ -1,5 +1,6 @@
 ---
 sidebar_label: Competitors
+image: /img/meta/docs/red-team-plugins-competitors-md.png
 ---
 
 # Competitors Plugin

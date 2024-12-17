@@ -1,5 +1,6 @@
 ---
 sidebar_label: GitHub Actions
+image: /img/meta/docs/integrations-github-action-md.png
 ---
 
 # Testing Prompts with GitHub Actions
