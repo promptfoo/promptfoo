@@ -118,6 +118,33 @@ jobs:
             echo "No changes detected."
           fi
 
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash
+
+      - name: Run actionlint
+        run: ./actionlint
+
+  shell-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shfmt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shfmt
+
+      - name: Run shfmt
+        run: |
+          git ls-files '*.sh' | xargs shfmt -i 2 -ci -sr -d
+
   python:
     name: Check Python
     timeout-minutes: 5
