@@ -27,18 +27,16 @@ const pluginOptions: string[] = [...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIA
 const RedteamPluginObjectSchema = z.object({
   id: z
     .union([
-      z
-        .enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]])
-        .superRefine((val, ctx) => {
-          if (![...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].includes(val)) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.invalid_enum_value,
-              options: [...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS],
-              received: val,
-              message: `Invalid plugin name. Must be one of: ${[...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].join(', ')} (or a path starting with file://)`,
-            });
-          }
-        }),
+      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
+        if (!pluginOptions.includes(val)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.invalid_enum_value,
+            options: pluginOptions,
+            received: val,
+            message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+          });
+        }
+      }),
       z.string().startsWith('file://', {
         message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
       }),
@@ -59,18 +57,16 @@ const RedteamPluginObjectSchema = z.object({
 export const RedteamPluginSchema = z.union([
   z
     .union([
-      z
-        .enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]])
-        .superRefine((val, ctx) => {
-          if (![...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].includes(val)) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.invalid_enum_value,
-              options: [...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS],
-              received: val,
-              message: `Invalid plugin name. Must be one of: ${[...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].join(', ')} (or a path starting with file://)`,
-            });
-          }
-        }),
+      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
+        if (!pluginOptions.includes(val)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.invalid_enum_value,
+            options: pluginOptions,
+            received: val,
+            message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+          });
+        }
+      }),
       z.string().startsWith('file://', {
         message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
       }),
