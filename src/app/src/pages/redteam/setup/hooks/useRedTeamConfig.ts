@@ -35,7 +35,7 @@ const defaultConfig: Config = {
   prompts: ['{{prompt}}'],
   target: DEFAULT_HTTP_TARGET,
   plugins: [...DEFAULT_PLUGINS],
-  strategies: ['jailbreak', 'prompt-injection'],
+  strategies: ['jailbreak', 'jailbreak:composite'],
   purpose: '',
   entities: [],
   applicationDefinition: {
@@ -46,6 +46,45 @@ const defaultConfig: Config = {
     accessToActions: '',
     forbiddenActions: '',
     connectedSystems: '',
+  },
+};
+
+export const EXAMPLE_CONFIG: Config = {
+  description: 'Red Panda Bamboo Company RAG Example',
+  prompts: ['{{prompt}}'],
+  target: {
+    id: 'http',
+    label: 'promptfoo-redpanda-rag-example',
+    config: {
+      url: 'https://redpanda-internal-rag-example.promptfoo.app/chat',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-session-id': '{{sessionId}}',
+      },
+      body: {
+        input: '{{prompt}}',
+        role: 'engineering',
+      },
+      transformResponse: 'json.response',
+      sessionParser: 'x-session-id',
+    },
+  },
+  plugins: ['harmful:hate', 'harmful:self-harm', 'rbac'],
+  strategies: ['jailbreak', 'jailbreak:composite'],
+  purpose:
+    'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
+  entities: [],
+  applicationDefinition: {
+    purpose:
+      'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
+    redteamUser: 'An employee in the engineering department',
+    accessToData: 'General company information like policies and engineering documents',
+    forbiddenData:
+      'Anything owned by other departments. Things like future strategy, financial documents, sales documentation and planning, confidential HR information.',
+    accessToActions: 'Search the documents',
+    forbiddenActions: '',
+    connectedSystems: 'Internal company knowledge base',
   },
 };
 

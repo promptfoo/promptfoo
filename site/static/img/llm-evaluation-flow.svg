@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 450">
+  <!-- Background -->
+  <rect width="1000" height="450" fill="#f8f9fa"/>
+  
+  <!-- Definitions for reusable elements -->
+  <defs>
+    <!-- Arrow markers -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+    </marker>
+    <!-- Box shadow -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dx="2" dy="2"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Section backgrounds with enhanced styling -->
+  <rect x="20" y="40" width="260" height="340" fill="white" rx="8" stroke="#2b6cb0" stroke-width="1" opacity="0.3"/>
+  <rect x="370" y="40" width="260" height="340" fill="white" rx="8" stroke="#2b6cb0" stroke-width="1" opacity="0.3"/>
+  <rect x="720" y="40" width="260" height="340" fill="white" rx="8" stroke="#2b6cb0" stroke-width="1" opacity="0.3"/>
+
+  <!-- Phase labels with more professional styling -->
+  <rect x="20" y="40" width="260" height="40" fill="#1a365d" rx="8"/>
+  <rect x="370" y="40" width="260" height="40" fill="#1a365d" rx="8"/>
+  <rect x="720" y="40" width="260" height="40" fill="#1a365d" rx="8"/>
+
+  <!-- Phase titles -->
+  <text x="150" y="65" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="white">DEVELOPMENT PHASE</text>
+  <text x="500" y="65" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="white">EVALUATION PHASE</text>
+  <text x="850" y="65" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="white">PRODUCTION PHASE</text>
+
+  <!-- Content Boxes -->
+  <!-- Development box -->
+  <rect x="50" y="180" width="200" height="100" rx="10" fill="white" stroke="#2b6cb0" stroke-width="2" filter="shadow"/>
+  <text x="150" y="220" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="#2b6cb0">Development</text>
+  <text x="150" y="245" text-anchor="middle" font-family="Arial" font-size="14" fill="#4a5568">Prompts + Control Logic</text>
+
+  <!-- Validation box -->
+  <rect x="400" y="180" width="200" height="100" rx="10" fill="white" stroke="#2b6cb0" stroke-width="2" filter="shadow"/>
+  <text x="500" y="220" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="#2b6cb0">Validation</text>
+  <text x="500" y="245" text-anchor="middle" font-family="Arial" font-size="14" fill="#4a5568">Automated Test Cases</text>
+
+  <!-- Production box -->
+  <rect x="750" y="180" width="200" height="100" rx="10" fill="white" stroke="#2b6cb0" stroke-width="2" filter="shadow"/>
+  <text x="850" y="220" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="#2b6cb0">Production</text>
+  <text x="850" y="245" text-anchor="middle" font-family="Arial" font-size="14" fill="#4a5568">User Interaction</text>
+
+  <!-- Arrows with adjusted positions -->
+  <!-- Improvements arrow -->
+  <path d="M250 210 C300 210 350 210 400 210" fill="none" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="325" y="200" text-anchor="middle" font-family="Arial" font-size="12" fill="#4a5568">Improvements</text>
+
+  <!-- Deploy arrow -->
+  <path d="M600 210 C650 210 700 210 750 210" fill="none" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="675" y="200" text-anchor="middle" font-family="Arial" font-size="12" fill="#4a5568">Deploy</text>
+
+  <!-- Feedback arrow -->
+  <path d="M750 250 C700 250 650 250 600 250" fill="none" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="675" y="270" text-anchor="middle" font-family="Arial" font-size="12" fill="#4a5568">Feedback</text>
+
+  <!-- Regressions arrow -->
+  <path d="M400 250 C350 250 300 250 250 250" fill="none" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="325" y="270" text-anchor="middle" font-family="Arial" font-size="12" fill="#4a5568">Regressions</text>
+</svg>

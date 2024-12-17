@@ -21,6 +21,7 @@
     "@mui/system": "^6.1.10",
     "@mui/x-charts": "^7.23.1",
     "@tanstack/react-table": "^8.20.5",
+    "ansi-to-html": "^0.7.2",
     "chart.js": "^4.4.7",
     "csv-parse": "^5.6.0",
     "csv-stringify": "^6.5.2",

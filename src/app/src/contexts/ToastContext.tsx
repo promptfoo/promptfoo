@@ -32,9 +32,10 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         <Alert
           severity={severity}
           sx={{
-            width: '100%',
-            maxWidth: '600px',
             boxShadow: (theme) => theme.shadows[3],
+            maxWidth: '600px',
+            whiteSpace: 'pre-line', // Preserves line breaks in the message
+            width: '100%',
           }}
         >
           {message}

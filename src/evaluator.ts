@@ -31,6 +31,7 @@ import {
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import invariant from './util/invariant';
+import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
@@ -358,6 +359,15 @@ class Evaluator {
 
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
+    const checkAbort = () => {
+      if (options.abortSignal?.aborted) {
+        throw new Error('Operation cancelled');
+      }
+    };
+
+    // Add abort checks at key points
+    checkAbort();
+
     const prompts: CompletedPrompt[] = [];
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
@@ -403,7 +413,8 @@ class Evaluator {
 
       if (numAdded < 1) {
         logger.info(chalk.red('No prompts selected. Aborting.'));
-        process.exit(1);
+        process.exitCode = 1;
+        return this.evalRecord;
       }
     }
 
@@ -656,7 +667,7 @@ class Evaluator {
       try {
         await this.evalRecord.addResult(row, evalStep.test);
       } catch (error) {
-        logger.error(`Error saving result: ${error} ${JSON.stringify(row)}`);
+        logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
       }
 
       for (const writer of this.fileWriters) {
@@ -727,12 +738,22 @@ class Evaluator {
     let multibar: MultiBar | undefined;
     let multiProgressBars: SingleBar[] = [];
     const originalProgressCallback = this.options.progressCallback;
+    const isWebUI = Boolean(cliState.webUI);
+
     this.options.progressCallback = (completed, total, index, evalStep) => {
       if (originalProgressCallback) {
         originalProgressCallback(completed, total, index, evalStep);
       }
 
-      if (multibar && evalStep) {
+      if (isWebUI) {
+        const provider = evalStep.provider.label || evalStep.provider.id();
+        const vars = Object.entries(evalStep.test.vars || {})
+          .map(([k, v]) => `${k}=${v}`)
+          .join(' ')
+          .slice(0, 50)
+          .replace(/\n/g, ' ');
+        logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
+      } else if (multibar && evalStep) {
         const threadIndex = index % concurrency;
         const progressbar = multiProgressBars[threadIndex];
         progressbar.increment({
@@ -750,6 +771,11 @@ class Evaluator {
     };
 
     const createMultiBars = async (evalOptions: RunEvalOptions[]) => {
+      // Only create progress bars if not in web UI mode
+      if (isWebUI) {
+        return;
+      }
+
       const cliProgress = await import('cli-progress');
       multibar = new cliProgress.MultiBar(
         {
@@ -796,6 +822,17 @@ class Evaluator {
       // Run serial evaluations first
       logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
       for (const evalStep of serialRunEvalOptions) {
+        if (isWebUI) {
+          const provider = evalStep.provider.label || evalStep.provider.id();
+          const vars = Object.entries(evalStep.test.vars || {})
+            .map(([k, v]) => `${k}=${v}`)
+            .join(' ')
+            .slice(0, 50)
+            .replace(/\n/g, ' ');
+          logger.info(
+            `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+          );
+        }
         await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
       }
     }
@@ -804,13 +841,16 @@ class Evaluator {
     logger.info(
       `Running ${concurrentRunEvalOptions.length} concurrent evaluations with ${concurrency} threads...`,
     );
-    await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, processEvalStep);
+    await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep, index) => {
+      checkAbort();
+      await processEvalStep(evalStep, index);
+    });
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size;
 
     let progressBar;
-    if (compareRowsCount > 0 && multibar) {
+    if (compareRowsCount > 0 && multibar && !isWebUI) {
       progressBar = multibar.create(compareRowsCount, 0, {
         provider: 'Running model-graded comparisons',
         prompt: '',
@@ -820,6 +860,10 @@ class Evaluator {
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
       compareCount++;
+
+      if (isWebUI) {
+        logger.info(`Running model-graded comparison ${compareCount} of ${compareRowsCount}...`);
+      }
 
       const resultsToCompare = this.evalRecord.persisted
         ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
@@ -883,7 +927,7 @@ class Evaluator {
           progressBar.increment({
             prompt: resultsToCompare[0].prompt.raw.slice(0, 10).replace(/\n/g, ''),
           });
-        } else {
+        } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
       }
@@ -938,7 +982,11 @@ class Evaluator {
   }
 }
 
-export function evaluate(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
+export function evaluate(
+  testSuite: TestSuite,
+  evalRecord: Eval,
+  options: EvaluateOptions,
+): Promise<Eval> {
   const ev = new Evaluator(testSuite, evalRecord, options);
   return ev.evaluate();
 }
