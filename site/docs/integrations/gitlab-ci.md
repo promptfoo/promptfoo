@@ -18,7 +18,7 @@ This guide shows how to integrate Promptfoo's LLM evaluation into your GitLab CI
 
 Create a `.gitlab-ci.yml` file in your repository root. Here's a basic configuration that installs Promptfoo and runs evaluations:
 
-```yaml:.gitlab-ci.yml
+```yaml
 image: node:18
 
 evaluate_prompts:
