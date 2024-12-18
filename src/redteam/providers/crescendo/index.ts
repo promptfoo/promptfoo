@@ -323,14 +323,14 @@ class CrescendoProvider implements ApiProvider {
     this.logChatHistory(this.targetConversationId);
     this.logChatHistory(this.redTeamingChatConversationId);
     delete vars['sessionId'];
+
+    const messages = this.memory.getConversation(this.targetConversationId);
     return {
       output: lastResponse.output,
       metadata: {
         // Displayed in UI
-        redteamFinalPrompt: this.memory
-          .getConversation(this.targetConversationId)
-          .map((m) => `[${m.role}] ${m.content}`)
-          .join('\n\n'),
+        redteamFinalPrompt: messages[messages.length - 2]?.content,
+        messages: JSON.stringify(messages, null, 2),
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
