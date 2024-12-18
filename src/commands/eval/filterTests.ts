@@ -1,64 +1,93 @@
+import logger from '../../logger';
 import type { TestSuite } from '../../types';
 import { filterFailingTests } from './filterFailingTests';
 
-interface Args {
-  firstN?: string | number;
-  sample?: string | number;
+interface FilterOptions {
+  firstN?: number | string;
   pattern?: string;
   failing?: string;
+  sample?: number | string;
+  metadata?: string;
 }
 
 type Tests = TestSuite['tests'];
 
-export async function filterTests(testSuite: TestSuite, args: Args): Promise<Tests> {
-  const tests = testSuite.tests;
+export async function filterTests(testSuite: TestSuite, options: FilterOptions): Promise<Tests> {
+  let tests = testSuite.tests || [];
 
-  if (!tests) {
+  logger.debug(`Starting filterTests with options: ${JSON.stringify(options)}`);
+  logger.debug(`Initial test count: ${tests.length}`);
+
+  if (Object.keys(options).length === 0) {
+    logger.debug('No filter options provided, returning all tests');
     return tests;
   }
 
-  if (Object.keys(args).length === 0) {
-    return tests;
+  if (options.metadata) {
+    const [key, value] = options.metadata.split('=');
+    if (!key || value === undefined) {
+      throw new Error('--filter-metadata must be specified in key=value format');
+    }
+    logger.debug(`Filtering for metadata ${key}=${value}`);
+    logger.debug(`Before metadata filter: ${tests.length} tests`);
+    logger.debug('First few tests metadata:');
+    tests.slice(0, 3).forEach((test, i) => {
+      logger.debug(`Test ${i} metadata: ${JSON.stringify(test.metadata)}`);
+    });
+
+    tests = tests.filter((test) => {
+      if (!test.metadata) {
+        logger.debug(`Test has no metadata: ${JSON.stringify(test)}`);
+        return false;
+      }
+      const matches = test.metadata[key] === value;
+      if (!matches) {
+        logger.debug(
+          `Test metadata doesn't match. Expected ${key}=${value}, got ${JSON.stringify(test.metadata)}`,
+        );
+      }
+      return matches;
+    });
+
+    logger.debug(`After metadata filter: ${tests.length} tests`);
   }
 
-  const { firstN, pattern, failing, sample } = args;
-  let newTests: NonNullable<Tests>;
-
-  if (failing) {
-    newTests = await filterFailingTests(testSuite, failing);
-  } else {
-    newTests = [...tests];
+  if (options.failing) {
+    tests = await filterFailingTests(testSuite, options.failing);
   }
 
-  if (pattern) {
-    newTests = newTests.filter((test) => test.description && test.description.match(pattern));
+  if (options.pattern) {
+    const pattern = new RegExp(options.pattern);
+    tests = tests.filter((test) => test.description && pattern.test(test.description));
   }
 
-  if (firstN) {
-    const count = typeof firstN === 'number' ? firstN : Number.parseInt(firstN);
+  if (options.firstN !== undefined) {
+    const count =
+      typeof options.firstN === 'number' ? options.firstN : Number.parseInt(options.firstN);
 
     if (Number.isNaN(count)) {
-      throw new Error(`firstN must be a number, got: ${firstN}`);
+      throw new Error(`firstN must be a number, got: ${options.firstN}`);
     }
 
-    newTests = newTests.slice(0, count);
+    tests = tests.slice(0, count);
   }
 
-  if (sample) {
-    const count = typeof sample === 'number' ? sample : Number.parseInt(sample, 10);
+  if (options.sample !== undefined) {
+    const count =
+      typeof options.sample === 'number' ? options.sample : Number.parseInt(options.sample);
 
     if (Number.isNaN(count)) {
-      throw new Error(`sample must be a number, got: ${sample}`);
+      throw new Error(`sample must be a number, got: ${options.sample}`);
     }
 
     // Fisher-Yates shuffle and take first n elements
-    const shuffled = [...newTests];
+    const shuffled = [...tests];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    newTests = shuffled.slice(0, count);
+    tests = shuffled.slice(0, count);
   }
 
-  return newTests;
+  return tests;
 }

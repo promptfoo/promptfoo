@@ -39,6 +39,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
+  filterMetadata: z.string().optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -138,7 +139,17 @@ export async function doEval(
       pattern: cmdObj.filterPattern,
       failing: cmdObj.filterFailing,
       sample: cmdObj.filterSample,
+      metadata: cmdObj.filterMetadata,
     });
+    logger.debug(
+      `Filter options: ${JSON.stringify({
+        firstN: cmdObj.filterFirstN,
+        pattern: cmdObj.filterPattern,
+        failing: cmdObj.filterFailing,
+        sample: cmdObj.filterSample,
+        metadata: cmdObj.filterMetadata,
+      })}`,
+    );
 
     if (
       config.redteam &&
@@ -516,6 +527,10 @@ export function evalCommand(
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option('--filter-failing <path>', 'Path to json output file')
+    .option(
+      '--filter-metadata <key=value>',
+      'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',
+    )
 
     // Output configuration
     .option(
