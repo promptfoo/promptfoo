@@ -8,7 +8,6 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -17,63 +16,14 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
+import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
-
-interface Message {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
 
 function ellipsize(value: string, maxLength: number) {
   if (value.length <= maxLength) {
     return value;
   }
   return value.slice(0, maxLength) + '...';
-}
-
-function ChatMessage({ message }: { message: Message }) {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-  const isUser = message.role === 'user';
-
-  const backgroundColor = isUser
-    ? 'linear-gradient(to bottom right, #FF8B96, #FF4B40)'
-    : isDark
-      ? 'linear-gradient(to bottom right, #3A3A3C, #2C2C2E)'
-      : 'linear-gradient(to bottom right, #E9E9EB, #D1D1D6)';
-
-  const textColor = isUser || isDark ? '#FFFFFF' : '#000000';
-  const alignSelf = isUser ? 'flex-end' : 'flex-start';
-  const borderRadius = isUser ? '20px 20px 5px 20px' : '20px 20px 20px 5px';
-
-  return (
-    <Box sx={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', mb: 1 }}>
-      <Paper
-        elevation={1}
-        sx={{
-          p: 1.5,
-          maxWidth: '70%',
-          background: backgroundColor,
-          borderRadius,
-          alignSelf,
-          boxShadow: isDark ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
-        }}
-      >
-        <Typography
-          variant="body1"
-          sx={{
-            whiteSpace: 'pre-wrap',
-            color: textColor,
-            textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
-            fontWeight: isUser ? 500 : 400,
-          }}
-        >
-          {message.content}
-        </Typography>
-      </Paper>
-    </Box>
-  );
 }
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
@@ -228,26 +178,7 @@ export default function EvalOutputPromptDialog({
           </Box>
         )}
         <AssertionResults gradingResults={gradingResults} />
-        {parsedMessages && parsedMessages.length > 0 && (
-          <>
-            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
-              Messages
-            </Typography>
-            <Box
-              mb={2}
-              sx={{
-                backgroundColor: (theme) =>
-                  theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : '#F8F9FA',
-                p: 2,
-                borderRadius: 2,
-              }}
-            >
-              {parsedMessages.map((message: Message, index: number) => (
-                <ChatMessage key={index} message={message} />
-              ))}
-            </Box>
-          </>
-        )}
+        {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
         {metadata && Object.keys(metadata).length > 0 && (
           <Box my={2}>
             <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
