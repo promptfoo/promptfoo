@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -14,6 +15,7 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
+import type { TargetResponse } from './shared';
 import { getTargetResponse, redteamProviderManager } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -133,7 +135,12 @@ async function runRedteamConversation({
     logger.debug(`[Iterative] Parsed onTopic value: ${JSON.stringify(isOnTopic)}`);
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
-    const targetResponse = await getTargetResponse(targetProvider, targetPrompt, context, options);
+    const targetResponse: TargetResponse = await getTargetResponse(
+      targetProvider,
+      targetPrompt,
+      context,
+      options,
+    );
     if (targetResponse.error) {
       throw new Error(`[Iterative] Target returned an error: ${targetResponse.error}`);
     }
@@ -183,9 +190,13 @@ async function runRedteamConversation({
 
     redteamHistory.push({
       role: 'user',
-      content: `LANGUAGE MODEL OUTPUT: ${targetResponse.output}\n\nOBJECTIVE: ${goal}\n\nSCORE: ${score} ${
-        isOnTopic ? '' : '(your prompt was off-topic)'
-      }${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}`,
+      content: dedent`
+        LANGUAGE MODEL OUTPUT: ${targetResponse.output}
+
+        OBJECTIVE: ${goal}
+
+        SCORE: ${score} ${isOnTopic ? '' : '(your prompt was off-topic)'}${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}
+      `,
     });
 
     if (redteamResp.tokenUsage) {
