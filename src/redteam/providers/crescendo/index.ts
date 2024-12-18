@@ -214,7 +214,7 @@ class CrescendoProvider implements ApiProvider {
       }
 
       if (!attackPrompt) {
-        logger.error('[Crescendo] failed to generate a question. Will skip turn and try again');
+        logger.debug('[Crescendo] failed to generate a question. Will skip turn and try again');
         continue;
       }
 
