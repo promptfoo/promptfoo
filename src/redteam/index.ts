@@ -525,19 +525,32 @@ export async function synthesize({
     }
   });
 
-  // We generate strategies that are not multilingual first
+  // Find if basic strategy is disabled
+  const basicStrategy = strategies.find((s) => s.id === 'basic');
+  const includeBasicTests = basicStrategy?.config?.enabled ?? true;
+
+  // After generating plugin test cases but before applying strategies:
+  const pluginTestCases = testCases; // Save original plugin test cases
+  const finalTestCases: TestCaseWithPlugin[] = [];
+
+  // Include basic tests if enabled
+  if (includeBasicTests) {
+    finalTestCases.push(...pluginTestCases);
+  }
+
+  // Apply other strategies
   const { testCases: strategyTestCases, strategyResults } = await applyStrategies(
-    testCases,
-    strategies.filter((s) => s.id !== 'multilingual'),
+    pluginTestCases,
+    strategies.filter((s) => s.id !== 'basic'), // Filter out basic strategy
     injectVar,
   );
-  testCases.push(...strategyTestCases);
+  finalTestCases.push(...strategyTestCases);
 
   // Then we generate multilingual attacks for all of our test cases
   if (multilingualStrategy) {
     const { testCases: multiLingualTestCases, strategyResults: multiLingualResults } =
       await applyStrategies([...testCases], [multilingualStrategy], injectVar);
-    testCases.push(...multiLingualTestCases);
+    finalTestCases.push(...multiLingualTestCases);
     Object.assign(strategyResults, multiLingualResults);
   }
 
@@ -550,5 +563,5 @@ export async function synthesize({
 
   logger.info(generateReport(pluginResults, strategyResults));
 
-  return { purpose, entities, testCases };
+  return { purpose, entities, testCases: finalTestCases };
 }
