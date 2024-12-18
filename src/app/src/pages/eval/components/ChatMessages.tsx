@@ -69,7 +69,7 @@ export default function ChatMessages({ messages }: ChatMessagesProps) {
 
   const minHeight = 200;
   const maxHeight = isExpanded ? 'none' : minHeight;
-  const hasMoreMessages = messages.length > 4;
+  const hasMoreMessages = messages.length > 1;
 
   return (
     <>
