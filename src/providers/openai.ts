@@ -494,7 +494,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     // NOTE: Special handling for o1 models which do not support max_tokens and temperature
-    const isO1Model = this.modelName.startsWith('o1-');
+    const isO1Model = this.modelName.startsWith('o1');
     const maxCompletionTokens = isO1Model
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
