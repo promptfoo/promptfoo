@@ -329,8 +329,8 @@ class CrescendoProvider implements ApiProvider {
       output: lastResponse.output,
       metadata: {
         // Displayed in UI
-        redteamFinalPrompt: messages[messages.length - 1].content,
-        messages,
+        redteamFinalPrompt: messages[messages.length - 2]?.content,
+        messages: JSON.stringify(messages, null, 2),
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
