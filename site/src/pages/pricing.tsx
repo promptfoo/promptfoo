@@ -23,36 +23,55 @@ function PricingTable() {
       features: [
         'All LLM evaluation features',
         'All model providers and integrations',
-        'No usage limits',
+        'No usage limits on evals',
         'Custom integration with your own app',
         //'Data visualizations',
         //'Dataset generation',
         //'Run locally on your machine',
         'Run locally or self-host on your own infrastructure',
-        'Vulnerability scanning',
-        'Community support',
+        'Limited red team runs',
+        'Community support (GitHub & Discord)',
       ],
       cta: 'Get Started',
       ctaLink: '/docs/intro/',
     },
     {
+      name: 'Cloud Evals',
+      price: '$50/seat, billed monthly',
+      description: 'For larger teams that need private sharing for evals',
+      features: [
+        'All Community features',
+        'Team sharing & collaboration on Promptfoo Cloud',
+        'Private Slack or Discord channel',
+        'US data hosting',
+        'Support SLA',
+      ],
+      cta: 'Email Sales',
+      ctaLink: 'https://www.promptfoo.dev/contact/',
+      highlighted: true,
+    },
+    {
       name: 'Enterprise',
       price: 'Custom',
-      description: 'For teams that need advanced features and cloud-based support',
+      description: 'For teams that need advanced red teaming features and enterprise-level support',
       features: [
         'All Community features',
         'Team sharing & collaboration',
+        'Unlimited red teaming',
+        'Customized red teaming plugins',
         'Continuous monitoring',
         'Centralized security/compliance dashboard',
-        'Customized red teaming plugins',
-        'SSO and Access Control',
-        'Cloud deployment',
+        'Vulnerabilities dashboard and remediation recommendations',
+        'SSO and access control',
+        'On-Premise (self-hosted) or cloud deployment options',
+        'US or EU data hosting',
         'Priority support & SLA guarantees',
       ],
       cta: 'Schedule Demo',
       ctaLink: 'https://cal.com/team/promptfoo/intro2',
       highlighted: true,
     },
+/*
     {
       name: 'On-Premise',
       price: 'Custom',
@@ -67,6 +86,7 @@ function PricingTable() {
       ctaLink: '/contact/',
       highlighted: false,
     },
+*/
   ];
 
   return (
@@ -150,6 +170,14 @@ function FAQSection() {
     {
       question: `What's included in the Community version?`,
       answer: `The Community version includes all core features for local testing, evaluation, and vulnerability scanning.`,
+    },
+    {
+      question: `Are there seat requirements for Cloud Evals?`,
+      answer: `There is a three seat minimum.`,
+    },
+    {
+      question: `What are payment options for Cloud Evals?`,
+      answer: `You can pay monthly by credit card or annually through ACH. Companies who pay annually receive two months free.`,
     },
     {
       question: 'Who needs the Enterprise version?',
