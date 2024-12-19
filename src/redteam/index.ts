@@ -530,26 +530,22 @@ export async function synthesize({
   const includeBasicTests = basicStrategy?.config?.enabled ?? true;
 
   // After generating plugin test cases but before applying strategies:
-  const pluginTestCases = testCases; // Save original plugin test cases
-  const finalTestCases: TestCaseWithPlugin[] = [];
+  const pluginTestCases = testCases;
 
-  // Include basic tests if enabled
-  if (includeBasicTests) {
-    finalTestCases.push(...pluginTestCases);
-  }
-
-  // Apply other strategies
+  // Apply non-basic, non-multilingual strategies
   const { testCases: strategyTestCases, strategyResults } = await applyStrategies(
     pluginTestCases,
-    strategies.filter((s) => s.id !== 'multilingual'),
+    strategies.filter((s) => s.id !== 'basic' && s.id !== 'multilingual'),
     injectVar,
   );
-  finalTestCases.push(...strategyTestCases);
 
-  // Then we generate multilingual attacks for all of our test cases
+  // Combine test cases based on basic strategy setting
+  const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
+
+  // Then apply multilingual strategy to all test cases
   if (multilingualStrategy) {
     const { testCases: multiLingualTestCases, strategyResults: multiLingualResults } =
-      await applyStrategies([...testCases], [multilingualStrategy], injectVar);
+      await applyStrategies(finalTestCases, [multilingualStrategy], injectVar);
     finalTestCases.push(...multiLingualTestCases);
     Object.assign(strategyResults, multiLingualResults);
   }
