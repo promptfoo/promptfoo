@@ -169,9 +169,9 @@ export default class GoatProvider implements ApiProvider {
     delete context?.vars?.sessionId;
 
     return {
-      output: messages.filter((m) => m?.role === 'user').slice(-1)[0]?.content,
+      output: messages.filter((m) => m?.role === 'assistant').slice(-1)[0]?.content,
       metadata: {
-        redteamFinalPrompt: messages.filter((m) => m?.role === 'assistant').slice(-1)[0]?.content,
+        redteamFinalPrompt: messages.filter((m) => m?.role === 'user').slice(-1)[0]?.content,
         messages: JSON.stringify(
           messages.filter((m) => m?.role),
           null,
