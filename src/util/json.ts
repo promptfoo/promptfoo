@@ -9,7 +9,7 @@ export function isValidJson(str: string): boolean {
   }
 }
 
-export function safeJsonStringify(value: any, prettyPrint: boolean = false): string {
+export function safeJsonStringify(value: any, prettyPrint: boolean = false): string | undefined{
   // Prevent circular references
   const cache = new Set();
   const space = prettyPrint ? 2 : undefined;
@@ -25,7 +25,7 @@ export function safeJsonStringify(value: any, prettyPrint: boolean = false): str
       return val;
     },
     space,
-  );
+  ) || undefined;
 }
 
 export function extractJsonObjects(str: string): object[] {

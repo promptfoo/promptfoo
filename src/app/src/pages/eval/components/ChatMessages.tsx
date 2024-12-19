@@ -10,10 +10,14 @@ interface Message {
   content: string;
 }
 
-function ChatMessage({ message }: { message: Message }) {
+function ChatMessage({ message }: { message: Message | null }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const isUser = message.role === 'user';
+  const isUser = message?.role === 'user';
+
+  if (!message) {
+    return null;
+  }
 
   const backgroundColor = isUser
     ? 'linear-gradient(to bottom right, #FF8B96, #FF4B40)'
