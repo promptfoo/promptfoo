@@ -346,7 +346,7 @@ class CrescendoProvider implements ApiProvider {
     lastResponse: TargetResponse,
     lastFeedback: string,
     objectiveScore?: { value: number; rationale: string },
-  ): Promise<{ generatedQuestion: string; tokenUsage?: TokenUsage }> {
+  ): Promise<{ generatedQuestion: string | undefined; tokenUsage?: TokenUsage }> {
     logger.debug(
       `[Crescendo] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
         objectiveScore,
@@ -390,6 +390,13 @@ class CrescendoProvider implements ApiProvider {
     });
     if (response.error) {
       throw new Error(`Error from redteam provider: ${response.error}`);
+    }
+    if (!response.output) {
+      logger.warning(`[Crescendo] No output from redteam provider: ${safeJsonStringify(response)}`);
+      return {
+        generatedQuestion: undefined,
+        tokenUsage: undefined,
+      };
     }
 
     const parsedOutput =

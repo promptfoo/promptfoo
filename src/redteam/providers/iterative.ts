@@ -88,7 +88,7 @@ async function runRedteamConversation({
     logger.debug(`[Iterative] Redteam response: ${JSON.stringify(redteamResp)}`);
     invariant(
       typeof redteamResp.output === 'string',
-      `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
+      `Expected output to be a string, but got response: ${safeJsonStringify(redteamResp)}`,
     );
     let improvement, newInjectVar;
     try {
@@ -100,7 +100,7 @@ async function runRedteamConversation({
       newInjectVar = parsed.prompt;
     } catch (err) {
       logger.debug(
-        `[Iterative] Failed to parse redteam response, likely refusal: ${err} ${JSON.stringify(
+        `[Iterative] Failed to parse redteam response, likely refusal: ${err} ${safeJsonStringify(
           redteamResp,
         )}`,
       );
@@ -137,7 +137,7 @@ async function runRedteamConversation({
       },
       vars: {},
     });
-    logger.debug(`[Iterative] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
+    logger.debug(`[Iterative] On-topic response: ${safeJsonStringify(isOnTopicResp)}`);
     if (isOnTopicResp.error) {
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
     }
@@ -147,13 +147,13 @@ async function runRedteamConversation({
       isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
     } catch (err) {
       logger.debug(
-        `[Iterative] Failed to parse onTopic response, likely refusal: ${err} ${JSON.stringify(
+        `[Iterative] Failed to parse onTopic response, likely refusal: ${err} ${safeJsonStringify(
           isOnTopicResp,
         )}`,
       );
       continue;
     }
-    logger.debug(`[Iterative] Parsed onTopic value: ${JSON.stringify(isOnTopic)}`);
+    logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
     const targetResponse: TargetResponse = await getTargetResponse(
@@ -199,7 +199,7 @@ async function runRedteamConversation({
       score = parsed.rating;
     } catch (err) {
       logger.debug(
-        `[Iterative] Failed to parse judge response, likely refusal: ${err} ${JSON.stringify(
+        `[Iterative] Failed to parse judge response, likely refusal: ${err} ${safeJsonStringify(
           judgeResp,
         )}`,
       );
