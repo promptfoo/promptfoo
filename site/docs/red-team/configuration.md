@@ -159,6 +159,8 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
 
 #### Available Plugins
 
+<PluginTable />
+
 To see the list of available plugins on the command line, run `promptfoo redteam plugins`.
 
 #### Harmful Plugins
