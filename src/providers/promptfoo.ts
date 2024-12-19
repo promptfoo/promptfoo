@@ -147,7 +147,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
 
       if (!result) {
         return {
-          error: 'No choices returned from API, likely refusal',
+          error: 'LLM did not return a result, likely refusal',
         };
       }
 
