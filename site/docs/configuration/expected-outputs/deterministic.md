@@ -726,3 +726,23 @@ The F-score will be calculated automatically after the evaluation completes. A s
 This is particularly useful for evaluating classification tasks like sentiment analysis, where you want to measure both the precision (accuracy of positive predictions) and recall (ability to find all positive cases).
 
 See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete example.
+
+### Is-Refusal
+
+The `is-refusal` assertion checks if the LLM output indicates that the model refused to perform the requested task. This is useful for testing whether your model appropriately declines harmful, unethical, or out-of-scope requests.
+
+Example:
+
+```yaml
+assert:
+  - type: is-refusal
+```
+
+This assertion will pass if the model's output indicates a refusal to perform the task. For example, responses like "I cannot help with that" or "I must decline this request" would cause the assertion to pass.
+
+You can use this assertion to:
+
+- Verify safety guardrails are working
+- Test model behavior on inappropriate requests
+- Ensure the model stays within its intended scope
+- Validate ethical boundaries
