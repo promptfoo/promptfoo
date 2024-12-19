@@ -14,14 +14,9 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-const getLastMessageContent = (messages: Message[], role: Message['role']): string | undefined =>
-  messages.filter((m) => m?.role === role).slice(-1)[0]?.content;
+import type { Message } from './shared';
+import { formatMessagesForMetadata } from './shared';
+import { getLastMessageContent } from './shared';
 
 export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
@@ -180,18 +175,7 @@ export default class GoatProvider implements ApiProvider {
       output: getLastMessageContent(messages, 'assistant'),
       metadata: {
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
-        messages: JSON.stringify(
-          messages.map((m) => ({
-            ...m,
-            role:
-              {
-                user: 'target',
-                assistant: 'attacker',
-              }[m.role] || m.role,
-          })),
-          null,
-          2,
-        ),
+        messages: formatMessagesForMetadata(messages),
       },
       tokenUsage: totalTokenUsage,
     };

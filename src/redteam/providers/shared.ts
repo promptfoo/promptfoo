@@ -144,3 +144,28 @@ export async function getTargetResponse(
 
   throw new Error('Expected target output or error to be set');
 }
+
+export interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+export const getLastMessageContent = (
+  messages: Message[],
+  role: Message['role'],
+): string | undefined => messages.filter((m) => m?.role === role).slice(-1)[0]?.content;
+
+export const formatMessagesForMetadata = (messages: Message[]): string =>
+  JSON.stringify(
+    messages.map((m) => ({
+      ...m,
+      role:
+        {
+          assistant: 'attacker',
+          system: 'system',
+          user: 'target',
+        }[m.role] || m.role,
+    })),
+    null,
+    2,
+  );
