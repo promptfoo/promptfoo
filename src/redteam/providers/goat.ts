@@ -86,7 +86,7 @@ export default class GoatProvider implements ApiProvider {
           method: 'POST',
         });
         const data = await response.json();
-        if (typeof data?.message !== 'object' && data.message.content && data.message.role) {
+        if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
           logger.debug(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
           continue;
         }
@@ -105,14 +105,14 @@ export default class GoatProvider implements ApiProvider {
         `,
         );
 
+        const targetVars = {
+          ...context.vars,
+          [this.injectVar]: messages[messages.length - 1].content,
+        };
+
         const targetPrompt = this.stateless
           ? JSON.stringify(messages)
-          : await renderPrompt(
-              context.prompt,
-              { ...context.vars, [this.injectVar]: messages[messages.length - 1].content },
-              context.filters,
-              targetProvider,
-            );
+          : await renderPrompt(context.prompt, targetVars, context.filters, targetProvider);
 
         logger.debug(`GOAT turn ${turn} target prompt: ${targetPrompt}`);
         const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
@@ -169,10 +169,14 @@ export default class GoatProvider implements ApiProvider {
     delete context?.vars?.sessionId;
 
     return {
-      output: messages[messages.length - 1]?.content,
+      output: messages.filter((m) => m?.role === 'user').slice(-1)[0]?.content,
       metadata: {
-        redteamFinalPrompt: messages[messages.length - 2]?.content,
-        messages: JSON.stringify(messages, null, 2),
+        redteamFinalPrompt: messages.filter((m) => m?.role === 'assistant').slice(-1)[0]?.content,
+        messages: JSON.stringify(
+          messages.filter((m) => m?.role),
+          null,
+          2,
+        ),
       },
       tokenUsage: totalTokenUsage,
     };

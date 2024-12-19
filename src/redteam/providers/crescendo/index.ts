@@ -417,6 +417,12 @@ class CrescendoProvider implements ApiProvider {
       }
     }
 
+    if (Object.keys(parsedOutput).length !== expectedKeys.length) {
+      logger.debug(
+        `[Crescendo] Unexpected keys in response: ${Object.keys(parsedOutput).join(', ')}`,
+      );
+    }
+
     logger.debug(dedent`
       [Crescendo] Received from red teaming chat:
 
@@ -424,12 +430,6 @@ class CrescendoProvider implements ApiProvider {
       rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
       lastResponseSummary: ${parsedOutput.lastResponseSummary}
     `);
-
-    if (Object.keys(parsedOutput).length !== expectedKeys.length) {
-      logger.debug(
-        `[Crescendo] Unexpected keys in response: ${Object.keys(parsedOutput).join(', ')}`,
-      );
-    }
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
       role: 'assistant',
