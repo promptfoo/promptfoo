@@ -1,0 +1,41 @@
+prompts:
+  - 'Hello! How are you?'
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  - assert: # Calculate score for one criteria only
+      - type: g-eval
+        value: >-
+          Coherence - the collective quality of all sentences. We align this
+          dimension with the DUC quality question of structure and coherence
+          whereby "the reply should be well-structured and well-organized. The
+          reply should not just be a heap of related information, but should
+          build from sentence to a coherent body of information about a topic."
+  - assert:
+      - type: g-eval
+        value: >-
+          Consistency - the factual alignment between the reply and the source.
+          A factually consistent reply contains only statements that are
+          entailed by the source document. Annotators were also asked to
+          penalize replies that contained hallucinated facts.
+  - assert:
+      - type: g-eval
+        value: >-
+          Fluency - the quality of the reply in terms of grammar, spelling,
+          punctuation, word choice, and sentence structure.
+  - assert:
+      - type: g-eval
+        value: >-
+          Relevance - selection of important content for the source. The reply
+          should include only important information for the source document.
+          Annotators were instructed to penalize replies which contained
+          redundancies and excess information.
+  - assert: # Calculate average score among all criterias
+      - type: g-eval
+        value:
+          - Coherence - the collective quality of all sentences. We align this dimension with the DUC quality question of structure and coherence whereby "the reply should be well-structured and well-organized. The reply should not just be a heap of related information, but should build from sentence to a coherent body of information about a topic."
+          - Consistency - the factual alignment between the reply and the source. A factually consistent reply contains only statements that are entailed by the source document. Annotators were also asked to penalize replies that contained hallucinated facts.
+          - Fluency - the quality of the reply in terms of grammar, spelling, punctuation, word choice, and sentence structure.
+          - Relevance - selection of important content for the source. The reply should include only important information for the source document. Annotators were instructed to penalize replies which contained redundancies and excess information.

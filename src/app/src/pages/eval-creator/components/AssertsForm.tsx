@@ -37,6 +37,7 @@ const assertTypes: AssertionType[] = [
   'webhook',
   'bleu',
   'rouge-n',
+  'g-eval',
   'not-equals',
   'not-contains',
   'not-icontains',
