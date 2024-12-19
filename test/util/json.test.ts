@@ -22,18 +22,21 @@ describe('json utilities', () => {
 
   describe('safeJsonStringify', () => {
     it('stringifies simple objects', () => {
-      const obj = { key: 'value', number: 123 };
+      const obj: { key: string; number: number } = { key: 'value', number: 123 };
       expect(safeJsonStringify(obj)).toBe('{"key":"value","number":123}');
     });
 
     it('handles circular references', () => {
-      const obj: any = { key: 'value' };
+      const obj: { key: string; circular?: any } = { key: 'value' };
       obj.circular = obj;
       expect(safeJsonStringify(obj)).toBe('{"key":"value"}');
     });
 
     it('pretty prints when specified', () => {
-      const obj = { key: 'value', nested: { inner: 'content' } };
+      const obj: { key: string; nested: { inner: string } } = {
+        key: 'value',
+        nested: { inner: 'content' },
+      };
       const expected = dedent`
       {
         "key": "value",
@@ -44,12 +47,6 @@ describe('json utilities', () => {
       expect(safeJsonStringify(obj, true)).toBe(expected);
     });
 
-    it('handles arrays with circular references', () => {
-      const arr: any[] = [1, 2, 3];
-      arr.push(arr);
-      expect(safeJsonStringify(arr)).toBe('[1,2,3,null]');
-    });
-
     it('handles null values', () => {
       expect(safeJsonStringify(null)).toBe('null');
     });
@@ -58,8 +55,27 @@ describe('json utilities', () => {
       expect(safeJsonStringify(undefined)).toBeUndefined();
     });
 
+    it('returns undefined or strips non-serializable values', () => {
+      expect(safeJsonStringify(() => {})).toBeUndefined(); // Function
+      expect(safeJsonStringify(Symbol('sym'))).toBeUndefined(); // Symbol
+      expect(safeJsonStringify({ key: 'value' })).toBe('{"key":"value"}');
+    });
+
+    it('returns undefined for circular references in arrays', () => {
+      const arr: (number | any[])[] = [1, 2, 3];
+      arr.push(arr);
+      expect(safeJsonStringify(arr)).toBe('[1,2,3,null]');
+    });
+
     it('handles complex nested structures', () => {
-      const complex = {
+      const complex: {
+        string: string;
+        number: number;
+        boolean: boolean;
+        null: null;
+        array: (number | string | { three: number })[];
+        nested: { a: number; b: number[] };
+      } = {
         string: 'value',
         number: 123,
         boolean: true,
@@ -71,7 +87,14 @@ describe('json utilities', () => {
         },
       };
       const result = safeJsonStringify(complex);
-      expect(JSON.parse(result as string)).toEqual(complex);
+      expect(result).toBeDefined(); // Ensure it returns a string
+      expect(JSON.parse(result as string)).toEqual(complex); // Ensure it matches the original structure
+    });
+
+    it('handles arrays with circular references', () => {
+      const arr: any[] = [1, 2, 3];
+      arr.push(arr);
+      expect(safeJsonStringify(arr)).toBe('[1,2,3,null]');
     });
 
     it('handles nested circular references', () => {
