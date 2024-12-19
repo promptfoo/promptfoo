@@ -70,7 +70,6 @@ export const CommandLineOptionsSchema = z.object({
   promptSuffix: z.string().optional(),
 
   envPath: z.string().optional(),
-  filterMetadata: z.string().optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;

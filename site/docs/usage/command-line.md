@@ -332,3 +332,9 @@ For the `eval` command, you may also want to disable the progress bar and table 
 ```sh
 FORCE_COLOR=0 promptfoo eval --no-progress-bar --no-table
 ```
+
+Filters can be combined. For example:
+
+```bash
+promptfoo eval --filter-metadata strat
+```

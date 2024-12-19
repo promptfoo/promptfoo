@@ -7,7 +7,7 @@ interface FilterOptions {
   pattern?: string;
   failing?: string;
   sample?: number | string;
-  metadata?: string;
+  metadata?: string | string[];
 }
 
 type Tests = TestSuite['tests'];
@@ -28,13 +28,24 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     if (!key || value === undefined) {
       throw new Error('--filter-metadata must be specified in key=value format');
     }
+    logger.debug(`Filtering for metadata ${key}=${value}`);
+    logger.debug(`Before metadata filter: ${tests.length} tests`);
+
     tests = tests.filter((test) => {
       if (!test.metadata) {
+        logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
         return false;
       }
       const matches = test.metadata[key] === value;
+      if (!matches) {
+        logger.debug(
+          `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key}=${value}, got ${JSON.stringify(test.metadata)}`,
+        );
+      }
       return matches;
     });
+
+    logger.debug(`After metadata filter: ${tests.length} tests remain`);
   }
 
   if (options.failing) {
