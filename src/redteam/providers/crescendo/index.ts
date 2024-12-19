@@ -17,7 +17,13 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
-import { getTargetResponse, redteamProviderManager, type TargetResponse } from '../shared';
+import type { Message } from '../shared';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_ROUNDS = 10;
@@ -31,22 +37,17 @@ interface CrescendoConfig {
   stateless?: boolean;
 }
 
-interface ConversationMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
-
 export class MemorySystem {
-  private conversations: Map<string, ConversationMessage[]> = new Map();
+  private conversations: Map<string, Message[]> = new Map();
 
-  addMessage(conversationId: string, message: ConversationMessage) {
+  addMessage(conversationId: string, message: Message) {
     if (!this.conversations.has(conversationId)) {
       this.conversations.set(conversationId, []);
     }
     this.conversations.get(conversationId)!.push(message);
   }
 
-  getConversation(conversationId: string): ConversationMessage[] {
+  getConversation(conversationId: string): Message[] {
     return this.conversations.get(conversationId) || [];
   }
 
@@ -329,7 +330,7 @@ class CrescendoProvider implements ApiProvider {
       output: lastResponse.output,
       metadata: {
         // Displayed in UI
-        redteamFinalPrompt: messages[messages.length - 2]?.content,
+        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
         messages: JSON.stringify(messages, null, 2),
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
@@ -460,7 +461,7 @@ class CrescendoProvider implements ApiProvider {
     );
 
     try {
-      const parsed = extractFirstJsonObject<ConversationMessage[]>(renderedPrompt);
+      const parsed = extractFirstJsonObject<Message[]>(renderedPrompt);
       // If successful, then load it directly into the chat history
       for (const message of parsed) {
         if (
