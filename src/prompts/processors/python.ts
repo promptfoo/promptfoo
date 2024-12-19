@@ -64,7 +64,7 @@ export const pythonPromptFunctionLegacy = async (
   const options: PythonShellOptions = {
     mode: 'text',
     pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-    args: [safeJsonStringify(transformedContext)],
+    args: [safeJsonStringify(transformedContext) as string],
   };
   logger.debug(`Executing python prompt script ${filePath}`);
   const results = (await PythonShell.run(filePath, options)).join('\n');

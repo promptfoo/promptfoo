@@ -71,7 +71,7 @@ describe('json utilities', () => {
         },
       };
       const result = safeJsonStringify(complex);
-      expect(JSON.parse(result)).toEqual(complex);
+      expect(JSON.parse(result as string)).toEqual(complex);
     });
 
     it('handles nested circular references', () => {
@@ -82,7 +82,7 @@ describe('json utilities', () => {
 
     it('preserves non-circular nested structures', () => {
       const nested = { a: { b: { c: 1 } }, d: [1, 2, { e: 3 }] };
-      expect(JSON.parse(safeJsonStringify(nested))).toEqual(nested);
+      expect(JSON.parse(safeJsonStringify(nested) as string)).toEqual(nested);
     });
   });
 
