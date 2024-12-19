@@ -137,7 +137,7 @@ async function runRedteamConversation({
       },
       vars: {},
     });
-    logger.debug(`[Iterative] On-topic response: ${safeJsonStringify(isOnTopicResp)}`);
+    logger.debug(`[Iterative] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
     if (isOnTopicResp.error) {
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
     }
