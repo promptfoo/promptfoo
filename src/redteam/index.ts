@@ -129,6 +129,11 @@ function pluginMatchesStrategyTargets(
   pluginId: RedteamPluginObject['id'],
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
+  if (pluginId === 'pliny') {
+    // Pliny jailbreaks stand alone.
+    return false;
+  }
+
   if (!targetPlugins || targetPlugins.length === 0) {
     return true; // If no targets specified, strategy applies to all plugins
   }
