@@ -86,6 +86,10 @@ export default class GoatProvider implements ApiProvider {
           method: 'POST',
         });
         const data = await response.json();
+        if (typeof data?.message !== 'string') {
+          logger.debug(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
+          continue;
+        }
         messages.push(data.message);
         if (data.tokenUsage) {
           totalTokenUsage.total += data.tokenUsage.total || 0;
