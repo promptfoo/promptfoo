@@ -26,7 +26,7 @@ describe('filterTests', () => {
   it('handles no tests', async () => {
     const result = await filterTests({} as TestSuite, {});
 
-    expect(result).toBeUndefined();
+    expect(result).toEqual([]);
   });
 
   describe('firstN', () => {
@@ -101,6 +101,68 @@ describe('filterTests', () => {
       expect(result).toBeDefined();
       expect(result).toHaveLength(1);
       expect(result?.[0].description).toMatch(/ey$/);
+    });
+  });
+
+  describe('metadata', () => {
+    const testWithMetadata1 = {
+      description: 'Test with metadata 1',
+      metadata: {
+        strategyId: 'goat',
+        pluginId: 'test-plugin',
+      },
+    };
+    const testWithMetadata2 = {
+      description: 'Test with metadata 2',
+      metadata: {
+        strategyId: 'sheep',
+        pluginId: 'test-plugin',
+      },
+    };
+    const testWithoutMetadata = {
+      description: 'Test without metadata',
+    };
+
+    const testSuiteWithMetadata = {
+      tests: [testWithMetadata1, testWithMetadata2, testWithoutMetadata],
+    } as TestSuite;
+
+    it('should filter tests by metadata key=value', async () => {
+      const result = await filterTests(testSuiteWithMetadata, { metadata: 'strategyId=goat' });
+
+      expect(result).toHaveLength(1);
+      expect(result).toStrictEqual([testWithMetadata1]);
+    });
+
+    it('should return empty array when no tests match metadata', async () => {
+      const result = await filterTests(testSuiteWithMetadata, { metadata: 'strategyId=invalid' });
+
+      expect(result).toHaveLength(0);
+      expect(result).toStrictEqual([]);
+    });
+
+    it('should return empty array when filtering for non-existent metadata key', async () => {
+      const result = await filterTests(testSuiteWithMetadata, { metadata: 'nonexistent=value' });
+
+      expect(result).toHaveLength(0);
+      expect(result).toStrictEqual([]);
+    });
+
+    it('can combine metadata filter with other filters', async () => {
+      const result = await filterTests(testSuiteWithMetadata, {
+        metadata: 'pluginId=test-plugin',
+        firstN: 1,
+      });
+
+      expect(result).toBeDefined();
+      expect(result).toHaveLength(1);
+      expect(result?.[0]).toBe(testWithMetadata1);
+    });
+
+    it('throws error for invalid metadata format', async () => {
+      await expect(() =>
+        filterTests(testSuiteWithMetadata, { metadata: 'invalid-format' }),
+      ).rejects.toThrow('--filter-metadata must be specified in key=value format');
     });
   });
 });

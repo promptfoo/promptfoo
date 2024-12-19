@@ -122,7 +122,7 @@ export default class GoatProvider implements ApiProvider {
           await sleep(targetProvider.delay);
         }
 
-        logger.debug(`GOAT turn ${turn} target response: ${JSON.stringify(targetResponse)}`);
+        logger.debug(`GOAT turn ${turn} target response: ${safeJsonStringify(targetResponse)}`);
 
         if (targetResponse.sessionId) {
           context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
@@ -133,13 +133,23 @@ export default class GoatProvider implements ApiProvider {
         }
         invariant(
           targetResponse.output,
-          `[GOAT] Expected target response output to be set, but got: ${JSON.stringify(targetResponse)}`,
+          `[GOAT] Expected target response output to be set, but got: ${safeJsonStringify(targetResponse)}`,
         );
+
+        const stringifiedOutput =
+          typeof targetResponse.output === 'string'
+            ? targetResponse.output
+            : safeJsonStringify(targetResponse.output);
+
+        if (!stringifiedOutput) {
+          logger.debug(
+            `[GOAT] Target response output is not a string or JSON: ${safeJsonStringify(targetResponse)}`,
+          );
+          continue;
+        }
+
         messages.push({
-          content:
-            typeof targetResponse.output === 'string'
-              ? targetResponse.output
-              : JSON.stringify(targetResponse.output),
+          content: stringifiedOutput,
           role: 'assistant',
         });
 
