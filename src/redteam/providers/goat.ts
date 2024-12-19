@@ -180,7 +180,18 @@ export default class GoatProvider implements ApiProvider {
       output: getLastMessageContent(messages, 'assistant'),
       metadata: {
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
-        messages: JSON.stringify(messages, null, 2),
+        messages: JSON.stringify(
+          messages.map((m) => ({
+            ...m,
+            role:
+              {
+                user: 'target',
+                assistant: 'attacker',
+              }[m.role] || m.role,
+          })),
+          null,
+          2,
+        ),
       },
       tokenUsage: totalTokenUsage,
     };

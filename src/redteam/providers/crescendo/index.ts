@@ -330,7 +330,19 @@ class CrescendoProvider implements ApiProvider {
       metadata: {
         // Displayed in UI
         redteamFinalPrompt: messages[messages.length - 2]?.content,
-        messages: JSON.stringify(messages, null, 2),
+        messages: JSON.stringify(
+          messages.map((m) => ({
+            ...m,
+            role:
+              {
+                user: 'target',
+                assistant: 'attacker',
+                system: 'system',
+              }[m.role] || m.role,
+          })),
+          null,
+          2,
+        ),
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
