@@ -10,11 +10,12 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 import { useToast } from '@app/hooks/useToast';
-import type {
-  EvaluateTableRow,
-  EvaluateTableOutput,
-  FilterMode,
-  EvaluateTable,
+import {
+  type EvaluateTableRow,
+  type EvaluateTableOutput,
+  type FilterMode,
+  type EvaluateTable,
+  ResultFailureReason,
 } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
@@ -118,6 +119,7 @@ interface ResultsTableProps {
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
+  setFilterMode: (mode: FilterMode) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -165,6 +167,7 @@ function ResultsTable({
   showStats,
   onFailureFilterToggle,
   onSearchTextChange,
+  setFilterMode,
 }: ResultsTableProps) {
   const { evalId, table, setTable, config, inComparisonMode, version } = useMainStore();
   const { showToast } = useToast();
@@ -301,6 +304,10 @@ function ResultsTable({
                 (!columnVisibilityIsSet || columnVisibility[columnId])
               );
             });
+          } else if (filterMode === 'errors') {
+            outputsPassFilter = row.outputs.some(
+              (output) => output.failureReason === ResultFailureReason.ERROR,
+            );
           } else if (filterMode === 'different') {
             outputsPassFilter = !row.outputs.every((output) => output.text === row.outputs[0].text);
           } else if (filterMode === 'highlights') {
@@ -570,7 +577,7 @@ function ResultsTable({
                       </div>
                     </div>
                     {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
-                      <div className="summary">
+                      <div className="summary error-pill" onClick={() => setFilterMode('errors')}>
                         <div className="highlight fail">
                           <strong>Errors:</strong> {prompt.metrics?.testErrorCount || 0}
                         </div>
@@ -595,7 +602,7 @@ function ResultsTable({
                     resourceId={prompt.id}
                   />
                   {details}
-                  {filterMode === 'failures' && (
+                  {filterMode === 'failures' && head.prompts.length > 1 && (
                     <FormControlLabel
                       sx={{
                         '& .MuiFormControlLabel-label': {

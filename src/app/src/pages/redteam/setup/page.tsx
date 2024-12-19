@@ -49,11 +49,13 @@ const StyledTabs = styled(Tabs)(({ theme }) => ({
     left: 0,
     right: 'auto',
   },
-  width: '280px',
-  minWidth: '280px',
+  width: '100%',
   backgroundColor: theme.palette.background.paper,
   '& .MuiTab-root': {
     minHeight: '48px',
+  },
+  '& .MuiTabs-scrollButtons': {
+    display: 'none',
   },
 }));
 
@@ -222,6 +224,7 @@ const readFileAsText = (file: File): Promise<string> => {
 const StatusSection = styled(Box)(({ theme }) => ({
   padding: theme.spacing(2),
   borderBottom: `1px solid ${theme.palette.divider}`,
+  borderRight: `1px solid ${theme.palette.divider}`,
   backgroundColor: theme.palette.background.paper,
   width: '280px',
   minWidth: '280px',
@@ -558,7 +561,6 @@ export default function RedTeamSetupPage() {
                 variant="scrollable"
                 value={value}
                 onChange={handleChange}
-                sx={{ width: 200 }}
               >
                 <StyledTab
                   icon={<AppIcon />}

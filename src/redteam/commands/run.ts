@@ -1,85 +1,12 @@
-import chalk from 'chalk';
 import type { Command } from 'commander';
-import * as fs from 'fs';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { doEval } from '../../commands/eval';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
-import type { CommandLineOptions, RedteamCliGenerateOptions } from '../../types';
-import { setupEnv, isRunningUnderNpx } from '../../util';
-import { loadDefaultConfig } from '../../util/config/default';
-import { doGenerateRedteam } from './generate';
-import { redteamInit } from './init';
+import { setupEnv } from '../../util';
+import { doRedteamRun } from '../shared';
+import type { RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
-
-interface RedteamRunOptions {
-  config?: string;
-  output?: string;
-  cache?: boolean;
-  envPath?: string;
-  maxConcurrency?: number;
-  delay?: number;
-  remote?: boolean;
-  force?: boolean;
-  filterProviders?: string;
-  filterTargets?: string;
-  verbose?: boolean;
-}
-
-async function doRedteamRun(options: RedteamRunOptions) {
-  const configPath = options.config || 'promptfooconfig.yaml';
-  const redteamPath = options.output || 'redteam.yaml';
-
-  // Check if promptfooconfig.yaml exists, if not, run init
-  if (!fs.existsSync(configPath)) {
-    logger.info('No configuration file found. Running initialization...');
-    await redteamInit(undefined);
-    // User probably needs to edit init and stuff, so it is premature to generate and eval.
-    return;
-  }
-
-  // Generate new test cases
-  logger.info('Generating test cases...');
-  await doGenerateRedteam({
-    ...options,
-    config: configPath,
-    output: redteamPath,
-    force: options.force,
-    inRedteamRun: true,
-  } as Partial<RedteamCliGenerateOptions>);
-
-  // Check if redteam.yaml exists before running evaluation
-  if (!fs.existsSync(redteamPath)) {
-    logger.info('No test cases generated. Skipping scan.');
-    return;
-  }
-
-  // Run evaluation
-  logger.info('Running scan...');
-  const { defaultConfig } = await loadDefaultConfig();
-  await doEval(
-    {
-      ...options,
-      config: [redteamPath],
-      cache: true, // Enable caching
-      write: true, // Write results to database
-      filterProviders: options.filterProviders,
-      filterTargets: options.filterTargets,
-    } as Partial<CommandLineOptions & Command>,
-    defaultConfig,
-    redteamPath,
-    {
-      showProgressBar: true,
-    },
-  );
-
-  logger.info(chalk.green('\nRed team scan complete!'));
-  logger.info(
-    chalk.blue('To view the results, run: ') +
-      chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam report`),
-  );
-}
 
 export function redteamRunCommand(program: Command) {
   program
@@ -130,7 +57,7 @@ export function redteamRunCommand(program: Command) {
         } else {
           logger.error('An unexpected error occurred:', error);
         }
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 

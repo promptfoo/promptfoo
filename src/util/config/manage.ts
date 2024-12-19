@@ -20,7 +20,10 @@ export function setConfigDirectoryPath(newPath: string): void {
   configDirectoryPath = newPath;
 }
 
-export function writePromptfooConfig(config: Partial<UnifiedConfig>, outputPath: string) {
+export function writePromptfooConfig(
+  config: Partial<UnifiedConfig>,
+  outputPath: string,
+): Partial<UnifiedConfig> {
   const orderedConfig = orderKeys(config, [
     'description',
     'targets',
@@ -34,10 +37,11 @@ export function writePromptfooConfig(config: Partial<UnifiedConfig>, outputPath:
   const yamlContent = yaml.dump(orderedConfig, { skipInvalid: true });
   if (!yamlContent) {
     logger.warn('Warning: config is empty, skipping write');
-    return;
+    return orderedConfig;
   }
   fs.writeFileSync(
     outputPath,
     `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n${yamlContent}`,
   );
+  return orderedConfig;
 }

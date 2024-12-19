@@ -70,6 +70,7 @@ describe('ResultsTable Metrics Display', () => {
     searchText: '',
     showStats: true,
     wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
   };
 
   const renderWithProviders = (ui: React.ReactElement) => {

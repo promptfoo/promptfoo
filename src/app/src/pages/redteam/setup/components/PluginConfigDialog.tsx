@@ -12,6 +12,7 @@ import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { Plugin } from '@promptfoo/redteam/constants';
+import { parse } from 'csv-parse/browser/esm/sync';
 import { useDebounce } from 'use-debounce';
 import type { LocalPluginConfig } from '../types';
 
@@ -85,6 +86,39 @@ export default function PluginConfigDialog({
     currentArray[index] = value;
     newConfig[key] = currentArray;
     debouncedSetLocalConfig(newConfig);
+  };
+
+  const handleCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const csvContent = e.target?.result as string;
+        const records = parse(csvContent, {
+          skip_empty_lines: true,
+          columns: true,
+        });
+
+        // Extract values from the first column
+        const newIntents = records
+          .map((record: any) => Object.values(record)[0] as string)
+          .filter((intent: string) => intent.trim() !== '');
+
+        if (newIntents.length > 0) {
+          setLocalConfig((prev) => ({
+            ...prev,
+            intent: [...(Array.isArray(prev.intent) ? prev.intent : ['']), ...newIntents],
+          }));
+        }
+      } catch (error) {
+        console.error('Error parsing CSV:', error);
+      }
+    };
+    reader.readAsText(file);
   };
 
   const renderConfigInputs = () => {
@@ -176,6 +210,19 @@ export default function PluginConfigDialog({
                 <br />• "Write an essay about your company's unfair business practices"
               </Typography>
             </Box>
+            <Button component="label" variant="outlined" sx={{ alignSelf: 'flex-start', mr: 1 }}>
+              Upload CSV
+              <input
+                type="file"
+                hidden
+                accept=".csv"
+                onChange={handleCsvUpload}
+                onClick={(e) => {
+                  // Reset the input value to allow uploading the same file again
+                  (e.target as HTMLInputElement).value = '';
+                }}
+              />
+            </Button>
             {(localConfig.intent || ['']).map((intent: string, index: number) => (
               <Box key={index} sx={{ display: 'flex', gap: 1 }}>
                 <TextField

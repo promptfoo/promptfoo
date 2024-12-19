@@ -73,6 +73,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   write: boolean;
   inRedteamRun?: boolean;
   verbose?: boolean;
+  abortSignal?: AbortSignal;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
@@ -88,6 +89,26 @@ export interface SynthesizeOptions extends CommonOptions {
   plugins: (RedteamPluginObject & { id: string; numTests: number })[];
   prompts: [string, ...string[]];
   strategies: RedteamStrategyObject[];
+  abortSignal?: AbortSignal;
 }
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
+
+export interface RedteamRunOptions {
+  config?: string;
+  output?: string;
+  cache?: boolean;
+  envPath?: string;
+  maxConcurrency?: number;
+  delay?: number;
+  remote?: boolean;
+  force?: boolean;
+  filterProviders?: string;
+  filterTargets?: string;
+  verbose?: boolean;
+
+  // Used by webui
+  liveRedteamConfig?: any;
+  logCallback?: (message: string) => void;
+  abortSignal?: AbortSignal;
+}

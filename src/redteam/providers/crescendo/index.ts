@@ -13,7 +13,7 @@ import type {
   TokenUsage,
 } from '../../../types';
 import invariant from '../../../util/invariant';
-import { extractFirstJsonObject } from '../../../util/json';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
@@ -132,7 +132,7 @@ class CrescendoProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
-    logger.debug(`[Crescendo] callApi context: ${JSON.stringify(context)}`);
+    logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -258,7 +258,7 @@ class CrescendoProvider implements ApiProvider {
       );
 
       if (isRefusal) {
-        logger.debug('\n[Crescendo]Response Rejected, performing back tracking...\n');
+        logger.debug('\n[Crescendo] Response Rejected, performing back tracking...\n');
         backtrackCount++;
         this.targetConversationId = await this.backtrackMemory(this.targetConversationId);
         lastFeedback = dedent`

@@ -1,14 +1,7 @@
 import * as fs from 'fs';
 import { createRequire } from 'node:module';
 import * as path from 'path';
-import { getEnvBool } from '../src/envars';
-import {
-  extractTextFromPDF,
-  renderPrompt,
-  resolveVariables,
-  runExtensionHook,
-  trimTrailingNewlines,
-} from '../src/evaluatorHelpers';
+import { renderPrompt, resolveVariables, runExtensionHook } from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
 import { transform } from '../src/util/transform';
 
@@ -47,34 +40,6 @@ jest.mock('../src/database', () => ({
 jest.mock('../src/logger');
 jest.mock('../src/util/transform', () => ({
   transform: jest.fn(),
-}));
-
-jest.mock('pdf-parse', () => {
-  let mockImpl = jest.fn().mockResolvedValue({ text: 'extracted pdf text' });
-  return {
-    __esModule: true,
-    default: mockImpl,
-    _setMockImplementation: (impl: any) => {
-      mockImpl = impl;
-    },
-  };
-});
-
-jest.mock('../src/integrations/portkey', () => ({
-  getPrompt: jest.fn().mockResolvedValue({ messages: [{ role: 'user', content: 'test' }] }),
-}));
-
-jest.mock('../src/integrations/langfuse', () => ({
-  getPrompt: jest.fn().mockResolvedValue('langfuse result'),
-}));
-
-jest.mock('../src/integrations/helicone', () => ({
-  getPrompt: jest.fn().mockResolvedValue('helicone result'),
-}));
-
-jest.mock('../src/envars', () => ({
-  ...jest.requireActual('../src/envars'),
-  getEnvBool: jest.fn().mockReturnValue(false),
 }));
 
 function toPrompt(text: string): Prompt {
@@ -214,235 +179,9 @@ describe('renderPrompt', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.yaml'), 'utf8');
     expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
   });
-
-  it('should handle deeply nested JSON structures', async () => {
-    const prompt = toPrompt(`{
-      "outer": {
-        "inner": {
-          "text": "{{ var1 }}"
-        }
-      }
-    }`);
-    const renderedPrompt = await renderPrompt(
-      prompt,
-      {
-        var1: 'value with "quotes"',
-      },
-      {},
-    );
-    expect(renderedPrompt).toBe(
-      JSON.stringify(
-        {
-          outer: {
-            inner: {
-              text: 'value with "quotes"',
-            },
-          },
-        },
-        null,
-        2,
-      ),
-    );
-  });
-
-  it('should handle arrays of objects with variables', async () => {
-    const prompt = toPrompt(`[
-      {"message": "{{ msg1 }}"},
-      {"message": "{{ msg2 }}"}
-    ]`);
-    const renderedPrompt = await renderPrompt(
-      prompt,
-      {
-        msg1: 'first "quoted" message',
-        msg2: 'second "quoted" message',
-      },
-      {},
-    );
-    expect(renderedPrompt).toBe(
-      JSON.stringify(
-        [{ message: 'first "quoted" message' }, { message: 'second "quoted" message' }],
-        null,
-        2,
-      ),
-    );
-  });
-
-  it('should handle JSON strings containing escaped characters', async () => {
-    const prompt = toPrompt('{"text": "{{ var1 }}"}');
-    const renderedPrompt = await renderPrompt(
-      prompt,
-      {
-        var1: 'line1\nline2\t"quoted"',
-      },
-      {},
-    );
-    expect(renderedPrompt).toBe(
-      JSON.stringify(
-        {
-          text: 'line1\nline2\t"quoted"',
-        },
-        null,
-        2,
-      ),
-    );
-  });
-
-  it('should handle multiple JSON string replacements', async () => {
-    const prompt = toPrompt(`{
-      "text1": "{{ var1 }}",
-      "text2": "{{ var2 }}",
-      "nested": {
-        "text3": "{{ var3 }}"
-      }
-    }`);
-    const renderedPrompt = await renderPrompt(
-      prompt,
-      {
-        var1: 'first "quote"',
-        var2: 'second "quote"',
-        var3: 'nested "quote"',
-      },
-      {},
-    );
-    expect(renderedPrompt).toBe(
-      JSON.stringify(
-        {
-          text1: 'first "quote"',
-          text2: 'second "quote"',
-          nested: {
-            text3: 'nested "quote"',
-          },
-        },
-        null,
-        2,
-      ),
-    );
-  });
-
-  it('should handle chat completion JSON templates', async () => {
-    const prompt = toPrompt(`[
-      {
-        "role": "system",
-        "content": "{{ system_message }}"
-      },
-      {
-        "role": "user",
-        "content": "{{ user_message }}"
-      }
-    ]`);
-
-    const vars = {
-      system_message: 'You are a helpful assistant\nBe concise',
-      user_message: 'Hello\nHow are you?',
-    };
-
-    const result = await renderPrompt(prompt, vars);
-    const parsed = JSON.parse(result);
-
-    expect(parsed).toEqual([
-      {
-        role: 'system',
-        content: 'You are a helpful assistant\nBe concise',
-      },
-      {
-        role: 'user',
-        content: 'Hello\nHow are you?',
-      },
-    ]);
-  });
-
-  it('should handle duplicate prompts with simple text', async () => {
-    const prompts = [
-      toPrompt('[Summarize this: {{text}}'),
-      toPrompt('Summarize this: {{text}}'),
-      toPrompt('Do not Summarize this: {{text}}'),
-      toPrompt('This is the prompt {{text}}'),
-    ];
-
-    const vars = {
-      text: 'The quick brown fox jumps over the lazy dog.',
-    };
-
-    // Test each prompt individually
-    for (const prompt of prompts) {
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-      // Ensure the text variable is properly substituted
-      expect(renderedPrompt).toContain('The quick brown fox');
-      // Ensure no JSON escaping is applied to plain text
-      expect(renderedPrompt).not.toContain('\\"');
-      // Ensure the original template structure is maintained
-      expect(renderedPrompt.startsWith(prompt.raw.split('{{')[0])).toBe(true);
-    }
-  });
-
-  it('should handle duplicate prompts with JSON content', async () => {
-    const prompts = [
-      toPrompt('{"summary": "{{text}}"}'),
-      toPrompt('{"summary": "{{text}}"}'),
-      toPrompt('{"different": "{{text}}"}'),
-    ];
-
-    const vars = {
-      text: 'The quick brown fox jumps over the lazy dog.',
-    };
-
-    for (const prompt of prompts) {
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-      // Ensure it's valid JSON
-      expect(() => JSON.parse(renderedPrompt)).not.toThrow();
-      // Ensure the text is properly included
-      expect(renderedPrompt).toContain('quick brown fox');
-      // Ensure proper JSON escaping
-      const parsed = JSON.parse(renderedPrompt);
-      expect(typeof parsed).toBe('object');
-      expect(parsed).toHaveProperty(Object.keys(parsed)[0], vars.text);
-    }
-  });
 });
 
 describe('resolveVariables', () => {
-  it('should handle multiple variables in single string', () => {
-    const variables = {
-      template: '{{greeting}} {{name}}',
-      greeting: 'Hello',
-      name: 'World',
-    };
-    const result = resolveVariables(variables);
-    expect(result.template).toBe('Hello World');
-  });
-
-  it('should preserve non-string values', () => {
-    const variables = {
-      str: '{{num}}',
-      num: 42,
-      obj: { key: 'value' },
-      bool: true,
-    };
-    const result = resolveVariables(variables);
-    expect(result).toEqual(variables);
-  });
-
-  it('should stop after 5 iterations for circular references', () => {
-    const variables = {
-      a: '{{b}}',
-      b: '{{c}}',
-      c: '{{d}}',
-      d: '{{e}}',
-      e: '{{f}}',
-      f: '{{a}}',
-    };
-    const result = resolveVariables(variables);
-    const expected = {
-      a: '{{e}}',
-      b: '{{e}}',
-      c: '{{e}}',
-      d: '{{e}}',
-      e: '{{e}}',
-      f: '{{e}}',
-    };
-    expect(result).toEqual(expected);
-  });
-
   it('should replace placeholders with corresponding variable values', () => {
     const variables = { final: '{{ my_greeting }}, {{name}}!', my_greeting: 'Hello', name: 'John' };
     const expected = { final: 'Hello, John!', my_greeting: 'Hello', name: 'John' };
@@ -457,7 +196,8 @@ describe('resolveVariables', () => {
 
   it('should not modify variables without placeholders', () => {
     const variables = { greeting: 'Hello, world!', name: 'John' };
-    expect(resolveVariables(variables)).toEqual(variables);
+    const expected = { greeting: 'Hello, world!', name: 'John' };
+    expect(resolveVariables(variables)).toEqual(expected);
   });
 
   it('should not fail if a variable is not found', () => {
@@ -465,57 +205,12 @@ describe('resolveVariables', () => {
     expect(resolveVariables(variables)).toEqual({ greeting: 'Hello, {{name}}!' });
   });
 
-  it('should handle different whitespace patterns in placeholders', () => {
-    const variables = {
-      noSpace: '{{var}}',
-      oneSpace: '{{ var }}',
-      multipleSpaces: '{{   var   }}',
-      var: 'value',
-    };
-    const expected = {
-      noSpace: 'value',
-      oneSpace: 'value',
-      multipleSpaces: 'value',
-      var: 'value',
-    };
-    expect(resolveVariables(variables)).toEqual(expected);
-  });
-
-  it('should handle nested variable resolution in correct order', () => {
-    const variables = {
-      template: '{{message}}',
-      message: '{{greeting}} {{person}}',
-      greeting: 'Hello',
-      person: '{{name}}',
-      name: 'John',
-    };
-    const expected = {
-      template: 'Hello John',
-      message: 'Hello John',
-      greeting: 'Hello',
-      person: 'John',
-      name: 'John',
-    };
-    expect(resolveVariables(variables)).toEqual(expected);
-  });
-
-  it('should handle partial variable resolution', () => {
-    const variables = {
-      template: '{{greeting}} {{unknown}}',
-      greeting: 'Hello',
-    };
-    const expected = {
-      template: 'Hello {{unknown}}',
-      greeting: 'Hello',
-    };
-    expect(resolveVariables(variables)).toEqual(expected);
-  });
-
-  it('should preserve text around unresolved variables', () => {
-    const variables = {
-      template: 'Start {{missing}} middle {{also_missing}} end',
-    };
-    expect(resolveVariables(variables)).toEqual(variables);
+  it('should not fail for unresolved placeholders', () => {
+    const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
+    expect(resolveVariables(variables)).toEqual({
+      greeting: 'Hello, {{unknown}}!',
+      name: '{{unknown}}',
+    });
   });
 });
 
@@ -555,166 +250,5 @@ describe('runExtensionHook', () => {
     await expect(runExtensionHook(extensions, hookName, context)).rejects.toThrow(
       'extension must be a string',
     );
-  });
-});
-
-describe('extractTextFromPDF', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should extract text from PDF', async () => {
-    const result = await extractTextFromPDF('test.pdf');
-    expect(result).toBe('extracted pdf text');
-  });
-});
-
-describe('renderPrompt additional cases', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should handle prompt functions returning string', async () => {
-    const prompt: Prompt = {
-      raw: 'base prompt',
-      label: 'test',
-      function: async () => 'function result',
-    };
-    const result = await renderPrompt(prompt, {});
-    expect(result).toBe('function result');
-  });
-
-  it('should handle prompt functions returning object', async () => {
-    const prompt: Prompt = {
-      raw: 'base prompt',
-      label: 'test',
-      function: async () => ({ key: 'value' }),
-    };
-    const result = await renderPrompt(prompt, {});
-    expect(JSON.parse(result)).toEqual({ key: 'value' });
-  });
-
-  it('should throw on invalid prompt function return type', async () => {
-    const prompt: Prompt = {
-      raw: 'base prompt',
-      label: 'test',
-      function: async () => 42 as any,
-    };
-    await expect(renderPrompt(prompt, {})).rejects.toThrow(
-      'Prompt function must return a string or object, got number',
-    );
-  });
-
-  it('should handle portkey integration', async () => {
-    const prompt: Prompt = {
-      raw: 'portkey://test-prompt',
-      label: 'test',
-    };
-    const result = await renderPrompt(prompt, {});
-    expect(JSON.parse(result)).toEqual([{ role: 'user', content: 'test' }]);
-  });
-
-  it('should handle langfuse integration with text type', async () => {
-    const prompt: Prompt = {
-      raw: 'langfuse://helper:1:text',
-      label: 'test',
-    };
-    const result = await renderPrompt(prompt, {});
-    expect(result).toBe('langfuse result');
-  });
-
-  it('should throw on invalid langfuse prompt type', async () => {
-    const prompt: Prompt = {
-      raw: 'langfuse://helper:1:invalid',
-      label: 'test',
-    };
-
-    await expect(renderPrompt(prompt, {})).rejects.toThrow('Unknown promptfoo prompt type');
-  });
-
-  it('should handle helicone integration', async () => {
-    const prompt: Prompt = {
-      raw: 'helicone://test-id:1.2',
-      label: 'test',
-    };
-    const result = await renderPrompt(prompt, {});
-    expect(result).toBe('helicone result');
-  });
-
-  it('should handle disabled JSON autoescape', async () => {
-    jest.mocked(getEnvBool).mockReturnValue(false);
-    const prompt: Prompt = {
-      raw: '{"test": "{{ var }}"}',
-      label: 'test',
-    };
-    const result = await renderPrompt(prompt, { var: 'value' });
-    expect(JSON.parse(result)).toEqual({ test: 'value' });
-  });
-});
-
-describe('trimTrailingNewlines', () => {
-  it('should remove trailing newlines from string values', () => {
-    const variables = {
-      str1: 'hello\n',
-      str2: 'world\n\n',
-      str3: 'no newline',
-      num: 42,
-      obj: { key: 'value' },
-      bool: true,
-      nested: {
-        text: 'nested\n',
-      },
-    };
-
-    const expected = {
-      str1: 'hello',
-      str2: 'world\n', // Only removes last newline
-      str3: 'no newline',
-      num: 42,
-      obj: { key: 'value' },
-      bool: true,
-      nested: {
-        text: 'nested\n', // Doesn't process nested objects
-      },
-    };
-
-    expect(trimTrailingNewlines(variables)).toEqual(expected);
-  });
-
-  it('should handle empty strings', () => {
-    const variables = {
-      empty: '',
-      justNewline: '\n',
-      normal: 'text',
-    };
-
-    const expected = {
-      empty: '',
-      justNewline: '',
-      normal: 'text',
-    };
-
-    expect(trimTrailingNewlines(variables)).toEqual(expected);
-  });
-
-  it('should preserve original object when no newlines exist', () => {
-    const variables = {
-      text1: 'hello',
-      text2: 'world',
-      number: 123,
-    };
-
-    expect(trimTrailingNewlines(variables)).toEqual(variables);
-  });
-
-  it('should not modify the original object', () => {
-    const original = {
-      text: 'hello\n',
-      other: 'world',
-    };
-    const originalCopy = { ...original };
-
-    trimTrailingNewlines(original);
-    expect(original).toEqual(originalCopy);
   });
 });

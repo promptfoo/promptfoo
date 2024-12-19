@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.100.6",
+  "version": "0.102.1",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -59,12 +59,16 @@
     "test:app": "npm run test --prefix src/app",
     "test:integration": "jest --config jest.integration.config.ts integration",
     "test:watch": "jest --watch",
+    "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
     "tsc": "tsc"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
-    "whatwg-url": "14.1.0"
+    "whatwg-url": "14.1.0",
+    "*": {
+      "whatwg-url": "14.1.0"
+    }
   },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",

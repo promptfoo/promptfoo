@@ -74,6 +74,10 @@ jobs:
           load: true
           tags: local-test-image:latest
           platforms: linux/amd64
+          build-args: |
+            BUILD_VERSION=${{ github.ref_name }}
+            BUILD_DATE=${{ fromJSON('["' + github.event.head_commit.timestamp + '", "' + github.event.pull_request.updated_at + '"]')[github.event.pull_request && 1 || 0] || format('2006-01-02T15:04:05Z', github.event.repository.updated_at) }}
+            GIT_SHA=${{ github.sha }}
 
       - name: Run Docker container for testing
         run: docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
@@ -121,7 +125,7 @@ jobs:
           PROMPTFOO_SHARING_APP_BASE_URL: http://localhost:3000
         run: |
           npm install
-          npm run local -- eval -c .github/workflows/files/promptfooconfig.yaml --share
+          npm run local -- eval -c .github/assets/promptfooconfig.yaml --share
 
       - name: Test that the eval results are uploaded
         run: |
@@ -182,5 +186,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_VERSION=${{ github.ref_name }}
+            BUILD_DATE=${{ fromJSON('["' + github.event.head_commit.timestamp + '", "' + github.event.pull_request.updated_at + '"]')[github.event.pull_request && 1 || 0] || format('2006-01-02T15:04:05Z', github.event.repository.updated_at) }}
+            GIT_SHA=${{ github.sha }}
           outputs: |
             type=image,name=target,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.

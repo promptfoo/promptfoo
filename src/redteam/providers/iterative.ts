@@ -10,7 +10,7 @@ import {
   type RedteamFileConfig,
 } from '../../types';
 import invariant from '../../util/invariant';
-import { extractFirstJsonObject } from '../../util/json';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
@@ -276,7 +276,7 @@ class RedteamIterativeProvider implements ApiProvider {
    * @returns
    */
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
-    logger.debug(`[Iterative] callApi context: ${JSON.stringify(context)}`);
+    logger.debug(`[Iterative] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context.vars, 'Expected vars to be set');
 
