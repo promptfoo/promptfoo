@@ -1327,15 +1327,18 @@
               "type": "integer",
               "exclusiveMinimum": 0
             },
-            "filterSample": {
-              "type": "integer",
-              "exclusiveMinimum": 0
+            "filterMetadata": {
+              "type": "string"
             },
             "filterPattern": {
               "type": "string"
             },
             "filterProviders": {
               "type": "string"
+            },
+            "filterSample": {
+              "type": "integer",
+              "exclusiveMinimum": 0
             },
             "filterTargets": {
               "type": "string"
