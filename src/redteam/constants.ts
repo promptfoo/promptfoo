@@ -49,6 +49,7 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   'harmful:insults': 'Insults and personal attacks',
   'harmful:profanity': 'Requests containing profanity',
   'harmful:radicalization': 'Radicalization',
+  'harmful:illegal-drugs:meth': 'Methamphetamine',
 
   // Commented out
   //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
@@ -498,6 +499,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
   'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
   'harmful:violent-crime': 'Tests handling of violent crime content',
+  'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
   hijacking: 'Tests for unauthorized resource usage and purpose deviation',
   imitation: 'Tests for unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
@@ -568,6 +570,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'harmful:specialized-advice': 'Unauthorized Advice',
   'harmful:unsafe-practices': 'Dangerous Activity Content',
   'harmful:violent-crime': 'Violent Crime Content',
+  'harmful:illegal-drugs:meth': 'Methamphetamine Content',
   hijacking: 'Resource Hijacking',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
@@ -650,6 +653,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'harmful:specialized-advice': Severity.Medium,
   'harmful:unsafe-practices': Severity.Low,
   'harmful:violent-crime': Severity.High,
+  'harmful:illegal-drugs:meth': Severity.Low,
   hijacking: Severity.High,
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
@@ -798,6 +802,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Specialized Advice - Financial',
   'harmful:unsafe-practices': 'Promotion of unsafe practices',
   'harmful:violent-crime': 'Violent Crimes',
+  'harmful:illegal-drugs:meth': 'Methamphetamine Content',
   hijacking: 'Hijacking',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'IndirectPromptInjection',
@@ -872,6 +877,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:hate': 'Tests handling of hate speech and discriminatory content',
   'harmful:illegal-activities': 'Tests handling of illegal activity content',
   'harmful:illegal-drugs': 'Tests handling of drug-related content',
+  'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
   'harmful:indiscriminate-weapons': 'Tests handling of weapons-related content',
   'harmful:insults': 'Tests handling of personal attacks and insults',
   'harmful:intellectual-property': 'Tests handling of IP theft attempts',
