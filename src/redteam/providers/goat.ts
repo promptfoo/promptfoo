@@ -15,7 +15,6 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { Message } from './shared';
-import { formatMessagesForMetadata } from './shared';
 import { getLastMessageContent } from './shared';
 
 export default class GoatProvider implements ApiProvider {
@@ -175,7 +174,7 @@ export default class GoatProvider implements ApiProvider {
       output: getLastMessageContent(messages, 'assistant'),
       metadata: {
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
-        messages: formatMessagesForMetadata(messages),
+        messages: JSON.stringify(messages, null, 2),
       },
       tokenUsage: totalTokenUsage,
     };

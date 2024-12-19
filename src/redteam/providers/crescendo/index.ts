@@ -19,7 +19,6 @@ import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
 import {
-  formatMessagesForMetadata,
   getLastMessageContent,
   getTargetResponse,
   redteamProviderManager,
@@ -332,7 +331,7 @@ class CrescendoProvider implements ApiProvider {
       metadata: {
         // Displayed in UI
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
-        messages: formatMessagesForMetadata(messages),
+        messages: JSON.stringify(messages, null, 2),
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
