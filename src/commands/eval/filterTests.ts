@@ -28,28 +28,13 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     if (!key || value === undefined) {
       throw new Error('--filter-metadata must be specified in key=value format');
     }
-    logger.debug(`Filtering for metadata ${key}=${value}`);
-    logger.debug(`Before metadata filter: ${tests.length} tests`);
-    logger.debug('First few tests metadata:');
-    tests.slice(0, 3).forEach((test, i) => {
-      logger.debug(`Test ${i} metadata: ${JSON.stringify(test.metadata)}`);
-    });
-
     tests = tests.filter((test) => {
       if (!test.metadata) {
-        logger.debug(`Test has no metadata: ${JSON.stringify(test)}`);
         return false;
       }
       const matches = test.metadata[key] === value;
-      if (!matches) {
-        logger.debug(
-          `Test metadata doesn't match. Expected ${key}=${value}, got ${JSON.stringify(test.metadata)}`,
-        );
-      }
       return matches;
     });
-
-    logger.debug(`After metadata filter: ${tests.length} tests`);
   }
 
   if (options.failing) {

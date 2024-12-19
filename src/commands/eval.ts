@@ -39,7 +39,6 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
-  filterMetadata: z.string().optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -141,15 +140,6 @@ export async function doEval(
       sample: cmdObj.filterSample,
       metadata: cmdObj.filterMetadata,
     });
-    logger.debug(
-      `Filter options: ${JSON.stringify({
-        firstN: cmdObj.filterFirstN,
-        pattern: cmdObj.filterPattern,
-        failing: cmdObj.filterFailing,
-        sample: cmdObj.filterSample,
-        metadata: cmdObj.filterMetadata,
-      })}`,
-    );
 
     if (
       config.redteam &&

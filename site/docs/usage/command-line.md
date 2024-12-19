@@ -37,6 +37,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern              |
 | `--filter-providers <providers>`    | Only run tests with these providers                                     |
 | `--filter-sample <number>`          | Only run a random sample of N tests                                     |
+| `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair                |
 | `--filter-targets <targets>`        | Only run tests with these targets                                       |
 | `--grader <provider>`               | Model that will grade outputs                                           |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                  |
