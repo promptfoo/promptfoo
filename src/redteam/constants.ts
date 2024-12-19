@@ -711,6 +711,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:cybercrime',
     'harmful:illegal-activities',
     'harmful:illegal-drugs',
+    'harmful:illegal-drugs:meth',
     'harmful:chemical-biological-weapons',
     'harmful:indiscriminate-weapons',
     'harmful:unsafe-practices',
