@@ -9,6 +9,8 @@ import {
   type TokenUsage,
   type CallApiContextParams,
 } from '../../types';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
@@ -120,11 +122,13 @@ export async function getTargetResponse(
     await sleep(targetProvider.delay);
   }
   if (targetRespRaw?.output) {
+    const output =
+      typeof targetRespRaw.output === 'string'
+        ? targetRespRaw.output
+        : safeJsonStringify(targetRespRaw.output);
+    invariant(output, `Expected output to be a string, got ${safeJsonStringify(targetRespRaw)}`);
     return {
-      output:
-        typeof targetRespRaw.output === 'string'
-          ? targetRespRaw.output
-          : JSON.stringify(targetRespRaw.output),
+      output,
       sessionId: targetRespRaw.sessionId,
       tokenUsage: targetRespRaw.tokenUsage || { numRequests: 1 },
     };

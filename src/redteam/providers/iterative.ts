@@ -153,7 +153,7 @@ async function runRedteamConversation({
       );
       continue;
     }
-    logger.debug(`[Iterative] Parsed onTopic value: ${JSON.stringify(isOnTopic)}`);
+    logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
     const targetResponse: TargetResponse = await getTargetResponse(
