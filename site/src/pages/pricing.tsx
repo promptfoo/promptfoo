@@ -71,7 +71,7 @@ function PricingTable() {
       ctaLink: 'https://cal.com/team/promptfoo/intro2',
       highlighted: true,
     },
-/*
+    /*
     {
       name: 'On-Premise',
       price: 'Custom',
