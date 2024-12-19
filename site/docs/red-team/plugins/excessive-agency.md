@@ -1,5 +1,6 @@
 ---
 sidebar_label: Excessive Agency
+image: /img/meta/docs/red-team-plugins-excessive-agency-md.png
 ---
 
 # Excessive Agency Plugin

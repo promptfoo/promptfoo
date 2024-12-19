@@ -1,5 +1,6 @@
 ---
 sidebar_label: FAQ
+image: /img/meta/docs/faq-md.png
 ---
 
 # Frequently asked questions

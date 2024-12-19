@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Go (Golang)
+image: /img/meta/docs/providers-go-md.png
 ---
 
 # Custom Go Provider

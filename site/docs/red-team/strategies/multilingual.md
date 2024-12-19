@@ -1,5 +1,6 @@
 ---
 sidebar_label: Multilingual
+image: /img/meta/docs/red-team-strategies-multilingual-md.png
 ---
 
 # Multilingual jailbreaking

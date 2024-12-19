@@ -1,5 +1,6 @@
 ---
 sidebar_label: Object-Level Authorization
+image: /img/meta/docs/red-team-plugins-bola-md.png
 ---
 
 # BOLA (Broken Object Level Authorization) Plugin

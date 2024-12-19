@@ -1,5 +1,6 @@
 ---
 sidebar_label: RAG Poisoning
+image: /img/meta/docs/red-team-plugins-rag-poisoning-md.png
 ---
 
 # RAG Poisoning

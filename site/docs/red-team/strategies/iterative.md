@@ -1,5 +1,6 @@
 ---
 sidebar_label: Iterative Jailbreaks
+image: /img/meta/docs/red-team-strategies-iterative-md.png
 ---
 
 # Iterative Jailbreaks Strategy

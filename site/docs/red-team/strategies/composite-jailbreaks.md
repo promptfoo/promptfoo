@@ -1,5 +1,6 @@
 ---
 sidebar_label: Single Turn Composite
+image: /img/meta/docs/red-team-strategies-composite-jailbreaks-md.png
 ---
 
 # Jailbreak composition

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Gemma vs Llama
+image: /img/meta/docs/guides-gemma-vs-llama-md.png
 ---
 
 # Gemma vs Llama: benchmark on your own data
