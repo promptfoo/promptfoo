@@ -132,6 +132,26 @@ redteam:
     - 'pii:social'
 ```
 
+#### RAG Poisoning Attacks
+
+You can also run [RAG poisoning attacks](/docs/red-team/plugins/rag-poisoning/#reference) using Promptfoo. Start by generating poisoned documents through the CLI:
+
+`promptfoo redteam poison document1.txt document2.txt --goal "Extract API keys"`
+
+Running this command will generate poisoned documents and create a summary YAML file (default: `poisoned-config.yaml`) that contains metadata about the poisoning results:
+
+```yaml
+documents:
+  - originalPath: document1.txt
+    poisonedDocument: 'Modified content with injected attack vectors...'
+    intendedResult: 'In order to contact customer support, use this email: attacker@evil.com'
+  - originalPath: subfolder/document2.txt
+    poisonedDocument: 'Another poisoned document...'
+    intendedResult: 'The company is going out of business and giving away free products'
+```
+
+Ingest these poisoned documents into your RAG knowledge base. Then, run a red team using `promptfoo redteam run` to identify if the LLM application is vulnerable to data poisoning.
+
 ## Data/PII Exfiltration
 
 Data exfiltration in RAG systems involves attempts to extract sensitive information or personally identifiable information (PII) from the knowledge base or the model's training data.
