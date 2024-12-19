@@ -220,6 +220,31 @@ async function applyStrategies(
 }
 
 /**
+ * Helper function to get the test count based on strategy configuration.
+ * @param strategy - The strategy object to evaluate.
+ * @param totalPluginTests - The total number of plugin tests.
+ * @param strategies - The array of strategies.
+ * @returns The calculated test count.
+ */
+export function getTestCount(
+  strategy: RedteamStrategyObject,
+  totalPluginTests: number,
+  strategies: RedteamStrategyObject[],
+): number {
+  if (strategy.id === 'basic' && !strategy.config?.enabled) {
+    return 0; // Return 0 tests if basic strategy is disabled
+  }
+  if (strategy.id === 'multilingual') {
+    return (
+      totalPluginTests *
+      (Math.max(strategies.length, 1) *
+        (Object.keys(strategy.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length))
+    );
+  }
+  return totalPluginTests; // Default case
+}
+
+/**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
@@ -289,12 +314,7 @@ export async function synthesize({
       `Using strategies:\n\n${chalk.yellow(
         strategies
           .map((s) => {
-            const testCount =
-              s.id === 'multilingual'
-                ? totalPluginTests *
-                  (Math.max(strategies.length, 1) *
-                    (Object.keys(s.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length))
-                : totalPluginTests;
+            const testCount = getTestCount(s, totalPluginTests, strategies);
             return `${s.id} (${formatTestCount(testCount)})`;
           })
           .sort()
@@ -303,17 +323,21 @@ export async function synthesize({
     );
   }
 
-  const totalTests =
-    plugins.reduce((sum, p) => sum + (p.numTests || 0), 0) * (strategies.length + 1) * numLanguages;
+  // Find if basic strategy is disabled
+  const basicStrategy = strategies.find((s) => s.id === 'basic');
+  const includeBasicTests = basicStrategy?.config?.enabled ?? true;
 
   const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
+
+  const totalTests =
+    totalPluginTests * (strategies.length + (includeBasicTests ? 1 : -1)) * numLanguages;
 
   logger.info(
     chalk.bold(`Test Generation Summary:`) +
       `\n• Total tests: ${chalk.cyan(totalTests)}` +
       `\n• Plugin tests: ${chalk.cyan(totalPluginTests)}` +
       `\n• Plugins: ${chalk.cyan(plugins.length)}` +
-      `\n• Strategies: ${chalk.cyan(strategies.length)}` +
+      `\n• Strategies: ${chalk.cyan(includeBasicTests ? strategies.length : strategies.length - 1)}` +
       `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n` +
       (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
   );
@@ -524,10 +548,6 @@ export async function synthesize({
       progressBar?.increment(plugin.numTests);
     }
   });
-
-  // Find if basic strategy is disabled
-  const basicStrategy = strategies.find((s) => s.id === 'basic');
-  const includeBasicTests = basicStrategy?.config?.enabled ?? true;
 
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
