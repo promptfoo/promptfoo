@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -14,6 +15,7 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
+import type { TargetResponse } from './shared';
 import { getTargetResponse, redteamProviderManager } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -88,10 +90,22 @@ async function runRedteamConversation({
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
     );
-    const { improvement, prompt: newInjectVar } = extractFirstJsonObject<{
-      improvement: string;
-      prompt: string;
-    }>(redteamResp.output);
+    let improvement, newInjectVar;
+    try {
+      const parsed = extractFirstJsonObject<{
+        improvement: string;
+        prompt: string;
+      }>(redteamResp.output);
+      improvement = parsed.improvement;
+      newInjectVar = parsed.prompt;
+    } catch (err) {
+      logger.debug(
+        `[Iterative] Failed to parse redteam response, likely refusal: ${err} ${JSON.stringify(
+          redteamResp,
+        )}`,
+      );
+      continue;
+    }
 
     // Update the application prompt with the new injection.
     logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
@@ -128,12 +142,26 @@ async function runRedteamConversation({
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
     }
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-    const isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean })
-      .onTopic;
+    let isOnTopic = false;
+    try {
+      isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
+    } catch (err) {
+      logger.debug(
+        `[Iterative] Failed to parse onTopic response, likely refusal: ${err} ${JSON.stringify(
+          isOnTopicResp,
+        )}`,
+      );
+      continue;
+    }
     logger.debug(`[Iterative] Parsed onTopic value: ${JSON.stringify(isOnTopic)}`);
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
-    const targetResponse = await getTargetResponse(targetProvider, targetPrompt, context, options);
+    const targetResponse: TargetResponse = await getTargetResponse(
+      targetProvider,
+      targetPrompt,
+      context,
+      options,
+    );
     if (targetResponse.error) {
       throw new Error(`[Iterative] Target returned an error: ${targetResponse.error}`);
     }
@@ -165,7 +193,18 @@ async function runRedteamConversation({
       throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
     }
     invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
-    let { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
+    let score = 1; // Default low score if parsing fails
+    try {
+      const parsed = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
+      score = parsed.rating;
+    } catch (err) {
+      logger.debug(
+        `[Iterative] Failed to parse judge response, likely refusal: ${err} ${JSON.stringify(
+          judgeResp,
+        )}`,
+      );
+      continue;
+    }
 
     // Apply penalty if the phrase is present
     if (containsPenalizedPhrase) {
@@ -183,9 +222,13 @@ async function runRedteamConversation({
 
     redteamHistory.push({
       role: 'user',
-      content: `LANGUAGE MODEL OUTPUT: ${targetResponse}\n\nOBJECTIVE: ${goal}\n\nSCORE: ${score} ${
-        isOnTopic ? '' : '(your prompt was off-topic)'
-      }${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}`,
+      content: dedent`
+        LANGUAGE MODEL OUTPUT: ${targetResponse.output}
+
+        OBJECTIVE: ${goal}
+
+        SCORE: ${score} ${isOnTopic ? '' : '(your prompt was off-topic)'}${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}
+      `,
     });
 
     if (redteamResp.tokenUsage) {

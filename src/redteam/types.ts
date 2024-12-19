@@ -32,8 +32,10 @@ export type RedteamPluginObject = ConfigurableObject &
 export type RedteamPlugin = string | RedteamPluginObject;
 
 export type RedteamStrategyObject = ConfigurableObject & {
-  config?: StrategyConfig & {
-    plugins?: RedteamPluginObject['id'][];
+  id: string;
+  config?: {
+    enabled?: boolean;
+    plugins?: string[];
     [key: string]: unknown;
   };
 };

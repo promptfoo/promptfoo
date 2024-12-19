@@ -29,6 +29,14 @@ export interface Strategy {
 
 export const Strategies: Strategy[] = [
   {
+    id: 'basic',
+    action: async (testCases: TestCase[], injectVar: string, config?: Record<string, any>) => {
+      // Basic strategy doesn't modify test cases, it just controls whether they're included
+      // The actual filtering happens in synthesize()
+      return [];
+    },
+  },
+  {
     id: 'base64',
     action: async (testCases, injectVar) => {
       logger.debug('Adding Base64 encoding to all test cases');
@@ -149,6 +157,13 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
 
     if (!Strategies.map((s) => s.id).includes(strategy.id)) {
       invalidStrategies.push(strategy);
+    }
+
+    if (strategy.id === 'basic') {
+      if (strategy.config?.enabled !== undefined && typeof strategy.config.enabled !== 'boolean') {
+        throw new Error('Basic strategy enabled config must be a boolean');
+      }
+      continue;
     }
   }
 
