@@ -68,6 +68,7 @@ import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from '.
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
+import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
@@ -242,6 +243,7 @@ export async function runAssertion({
     'icontains-all': handleIContainsAll,
     'icontains-any': handleIContainsAny,
     'is-json': handleIsJson,
+    'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
     'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
     'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
