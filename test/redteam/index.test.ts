@@ -346,6 +346,50 @@ describe('synthesize', () => {
       expect(logger.debug).toHaveBeenCalledWith('API health check passed');
     });
   });
+
+  it('should handle basic strategy configuration', async () => {
+    jest.mocked(loadApiProvider).mockResolvedValue({
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    });
+
+    // Mock plugin to generate a test case
+    const mockPlugin = {
+      id: 'test-plugin',
+      numTests: 1,
+    };
+
+    const mockProvider = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    };
+
+    // Test with basic strategy enabled
+    const resultEnabled = await synthesize({
+      plugins: [mockPlugin],
+      strategies: [{ id: 'basic', config: { enabled: true } }],
+      prompts: ['test prompt'],
+      injectVar: 'input',
+      provider: mockProvider,
+      language: 'en',
+      numTests: 1,
+    });
+
+    expect(resultEnabled.testCases.length).toBeGreaterThan(0);
+
+    // Test with basic strategy disabled
+    const resultDisabled = await synthesize({
+      plugins: [mockPlugin],
+      strategies: [{ id: 'basic', config: { enabled: false } }],
+      prompts: ['test prompt'],
+      injectVar: 'input',
+      provider: mockProvider,
+      language: 'en',
+      numTests: 1,
+    });
+
+    expect(resultDisabled.testCases).toHaveLength(0);
+  });
 });
 
 jest.mock('fs');
