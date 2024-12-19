@@ -90,10 +90,22 @@ async function runRedteamConversation({
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
     );
-    const { improvement, prompt: newInjectVar } = extractFirstJsonObject<{
-      improvement: string;
-      prompt: string;
-    }>(redteamResp.output);
+    let improvement, newInjectVar;
+    try {
+      const parsed = extractFirstJsonObject<{
+        improvement: string;
+        prompt: string;
+      }>(redteamResp.output);
+      improvement = parsed.improvement;
+      newInjectVar = parsed.prompt;
+    } catch (err) {
+      logger.debug(
+        `[Iterative] Failed to parse redteam response, likely refusal: ${err} ${JSON.stringify(
+          redteamResp,
+        )}`,
+      );
+      continue;
+    }
 
     // Update the application prompt with the new injection.
     logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
@@ -130,8 +142,17 @@ async function runRedteamConversation({
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
     }
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-    const isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean })
-      .onTopic;
+    let isOnTopic = false;
+    try {
+      isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
+    } catch (err) {
+      logger.debug(
+        `[Iterative] Failed to parse onTopic response, likely refusal: ${err} ${JSON.stringify(
+          isOnTopicResp,
+        )}`,
+      );
+      continue;
+    }
     logger.debug(`[Iterative] Parsed onTopic value: ${JSON.stringify(isOnTopic)}`);
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
@@ -172,7 +193,18 @@ async function runRedteamConversation({
       throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
     }
     invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
-    let { rating: score } = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
+    let score = 1; // Default low score if parsing fails
+    try {
+      const parsed = extractFirstJsonObject<{ rating: number }>(judgeResp.output);
+      score = parsed.rating;
+    } catch (err) {
+      logger.debug(
+        `[Iterative] Failed to parse judge response, likely refusal: ${err} ${JSON.stringify(
+          judgeResp,
+        )}`,
+      );
+      continue;
+    }
 
     // Apply penalty if the phrase is present
     if (containsPenalizedPhrase) {
