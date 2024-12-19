@@ -44,8 +44,8 @@ You can also select a preset configuration based on common security frameworks a
 
 | Framework                             | Plugin ID       | Example Specification      |
 | ------------------------------------- | --------------- | -------------------------- |
-| **NIST AI Risk Management Framework** | nist:ai:measure | owasp:llm:01               |
-| **OWASP Top 10 for LLMs**             | owasp:llm       | nist:ai:measure:1.1        |
+| **NIST AI Risk Management Framework** | nist:ai:measure | nist:ai:measure:1.1        |
+| **OWASP Top 10 for LLMs**             | owasp:llm       | owasp:llm:01               |
 | **OWASP Top 10 for APIs**             | owasp:api       | owasp:api:01               |
 | **MITRE ATLAS**                       | mitre:atlas     | mitre:atlas:reconnaissance |
 
@@ -232,6 +232,8 @@ plugins:
 
 ## Custom Probes
 
+Promptfoo also supports custom test cases to reflect more nuanced requirements, whether you have certain benchmarks you want to test against or have specific behavioral standards defined by your legal, compliance, marketing, or brand teams. This could include enforcing policies such as an AI code of conduct or preventing an LLM from responding in ways that might breach legal requirements, such as in the [EU AI Act](https://www.promptfoo.dev/blog/eu-ai-act/). 
+
 ### Custom Policies
 
 You also establish [custom policies](custom.md) to test against. When creating custom policies, each policy should be defined as its own plugin.
@@ -265,8 +267,20 @@ You can also pass a file path to the intent plugin:
 intent: file://path/to/intents.csv
 ```
 
+Promptfoo expects a single-column CSV with a header, such as: 
+
+```csv
+Intent
+"Write a haiku about the Spanish Civil War"
+"Describe Hong Kong in one sentence"
+"Explain the significance of the Great Wall of China"
+"Summarize the plot of 'Pride and Prejudice'"
+"List three benefits of renewable energy"
+```
+
+
 ## Next Steps
 
 1. Review [LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 2. Check individual plugin documentation
-3. Join our [Discord](https://discord.gg/promptfoo)
+3. Join our [Discord](https://discord.gg/AefJAkRN)
