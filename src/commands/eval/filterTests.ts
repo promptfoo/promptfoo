@@ -3,11 +3,11 @@ import type { TestSuite } from '../../types';
 import { filterFailingTests } from './filterFailingTests';
 
 interface FilterOptions {
-  firstN?: number | string;
-  pattern?: string;
   failing?: string;
+  firstN?: number | string;
+  metadata?: string;
+  pattern?: string;
   sample?: number | string;
-  metadata?: string | string[];
 }
 
 type Tests = TestSuite['tests'];

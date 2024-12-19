@@ -134,11 +134,11 @@ export async function doEval(
     }
 
     testSuite.tests = await filterTests(testSuite, {
-      firstN: cmdObj.filterFirstN,
-      pattern: cmdObj.filterPattern,
       failing: cmdObj.filterFailing,
-      sample: cmdObj.filterSample,
+      firstN: cmdObj.filterFirstN,
       metadata: cmdObj.filterMetadata,
+      pattern: cmdObj.filterPattern,
+      sample: cmdObj.filterSample,
     });
 
     if (
