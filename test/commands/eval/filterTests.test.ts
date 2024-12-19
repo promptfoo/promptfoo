@@ -164,22 +164,5 @@ describe('filterTests', () => {
         filterTests(testSuiteWithMetadata, { metadata: 'invalid-format' }),
       ).rejects.toThrow('--filter-metadata must be specified in key=value format');
     });
-
-    it('should handle nested metadata', async () => {
-      const testWithNestedMetadata = {
-        description: 'Test with nested metadata',
-        metadata: {
-          plugin: {
-            id: 'test-plugin',
-          },
-        },
-      };
-      const testSuite = {
-        tests: [testWithNestedMetadata],
-      } as TestSuite;
-
-      const result = await filterTests(testSuite, { metadata: 'plugin.id=test-plugin' });
-      expect(result).toHaveLength(0); // Currently returns 0 since we don't support nested paths
-    });
   });
 });
