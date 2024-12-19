@@ -392,7 +392,7 @@ class CrescendoProvider implements ApiProvider {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
     if (!response.output) {
-      logger.debug(`[Crescendo] No output from redteam provider: ${safeJsonStringify(response)}`);
+      logger.debug(`[Crescendo] No output from redteam provider: ${JSON.stringify(response)}`);
       return {
         generatedQuestion: undefined,
         tokenUsage: undefined,
@@ -417,12 +417,6 @@ class CrescendoProvider implements ApiProvider {
       }
     }
 
-    if (Object.keys(parsedOutput).length !== expectedKeys.length) {
-      logger.debug(
-        `[Crescendo] Unexpected keys in response: ${Object.keys(parsedOutput).join(', ')}`,
-      );
-    }
-
     logger.debug(dedent`
       [Crescendo] Received from red teaming chat:
 
@@ -430,6 +424,12 @@ class CrescendoProvider implements ApiProvider {
       rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
       lastResponseSummary: ${parsedOutput.lastResponseSummary}
     `);
+
+    if (Object.keys(parsedOutput).length !== expectedKeys.length) {
+      logger.debug(
+        `[Crescendo] Unexpected keys in response: ${Object.keys(parsedOutput).join(', ')}`,
+      );
+    }
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
       role: 'assistant',
