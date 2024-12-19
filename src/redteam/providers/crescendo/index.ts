@@ -392,7 +392,7 @@ class CrescendoProvider implements ApiProvider {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
     if (!response.output) {
-      logger.warning(`[Crescendo] No output from redteam provider: ${safeJsonStringify(response)}`);
+      logger.debug(`[Crescendo] No output from redteam provider: ${safeJsonStringify(response)}`);
       return {
         generatedQuestion: undefined,
         tokenUsage: undefined,
