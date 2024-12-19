@@ -15,6 +15,14 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+const getLastMessageContent = (messages: Message[], role: Message['role']): string | undefined =>
+  messages.filter((m) => m?.role === role).slice(-1)[0]?.content;
+
 export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
   private readonly injectVar: string;
@@ -60,7 +68,7 @@ export default class GoatProvider implements ApiProvider {
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
 
-    const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] = [];
+    const messages: Message[] = [];
     const totalTokenUsage = {
       total: 0,
       prompt: 0,
@@ -86,7 +94,7 @@ export default class GoatProvider implements ApiProvider {
           method: 'POST',
         });
         const data = await response.json();
-        if (typeof data?.message !== 'object' && data.message.content && data.message.role) {
+        if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
           logger.debug(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
           continue;
         }
@@ -105,14 +113,14 @@ export default class GoatProvider implements ApiProvider {
         `,
         );
 
+        const targetVars = {
+          ...context.vars,
+          [this.injectVar]: messages[messages.length - 1].content,
+        };
+
         const targetPrompt = this.stateless
           ? JSON.stringify(messages)
-          : await renderPrompt(
-              context.prompt,
-              { ...context.vars, [this.injectVar]: messages[messages.length - 1].content },
-              context.filters,
-              targetProvider,
-            );
+          : await renderPrompt(context.prompt, targetVars, context.filters, targetProvider);
 
         logger.debug(`GOAT turn ${turn} target prompt: ${targetPrompt}`);
         const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
@@ -149,8 +157,8 @@ export default class GoatProvider implements ApiProvider {
         }
 
         messages.push({
-          content: stringifiedOutput,
           role: 'assistant',
+          content: stringifiedOutput,
         });
 
         if (targetResponse.tokenUsage) {
@@ -169,9 +177,9 @@ export default class GoatProvider implements ApiProvider {
     delete context?.vars?.sessionId;
 
     return {
-      output: messages[messages.length - 1]?.content,
+      output: getLastMessageContent(messages, 'assistant'),
       metadata: {
-        redteamFinalPrompt: messages[messages.length - 2]?.content,
+        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
         messages: JSON.stringify(messages, null, 2),
       },
       tokenUsage: totalTokenUsage,
