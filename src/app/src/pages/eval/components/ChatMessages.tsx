@@ -12,6 +12,7 @@ interface Message {
 
 const ChatMessage = memo(({ message }: { message: Message | null }) => {
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const isUser = message?.role === 'user';
   const isAssistant = message?.role === 'assistant';
 
@@ -20,14 +21,14 @@ const ChatMessage = memo(({ message }: { message: Message | null }) => {
   }
 
   const backgroundColor = isUser
-    ? theme.palette.grey[200]
-    : isAssistant
-      ? theme.palette.grey[300]
-      : theme.palette.grey[100];
+    ? 'linear-gradient(to bottom right, #FF8B96, #FF4B40)'
+    : isDark
+      ? 'linear-gradient(to bottom right, #3A3A3C, #2C2C2E)'
+      : 'linear-gradient(to bottom right, #E9E9EB, #D1D1D6)';
 
-  const textColor = theme.palette.common.black;
+  const textColor = isUser || isDark ? '#FFFFFF' : '#000000';
   const alignSelf = isUser ? 'flex-end' : 'flex-start';
-  const borderRadius = '5px';
+  const borderRadius = isUser ? '20px 20px 5px 20px' : '20px 20px 20px 5px';
 
   return (
     <Box sx={{ display: 'flex', justifyContent: alignSelf, mb: 1 }}>
@@ -39,7 +40,7 @@ const ChatMessage = memo(({ message }: { message: Message | null }) => {
           background: backgroundColor,
           borderRadius,
           alignSelf,
-          boxShadow: 'none',
+          boxShadow: isDark ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
         }}
         role="alert"
       >
@@ -60,6 +61,7 @@ const ChatMessage = memo(({ message }: { message: Message | null }) => {
           sx={{
             whiteSpace: 'pre-wrap',
             color: textColor,
+            textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
             fontWeight: isUser ? 500 : 400,
             fontStyle: isAssistant ? 'italic' : 'normal',
           }}

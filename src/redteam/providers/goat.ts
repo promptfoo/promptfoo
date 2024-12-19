@@ -92,7 +92,25 @@ export default class GoatProvider implements ApiProvider {
           logger.debug(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
           continue;
         }
-        messages.push(data.message);
+        const attackerMessage = data.message;
+
+        const targetVars = {
+          ...context.vars,
+          [this.injectVar]: attackerMessage.content,
+        };
+
+        const renderedAttackerPrompt = await renderPrompt(
+          context.prompt,
+          targetVars,
+          context.filters,
+          targetProvider,
+        );
+
+        messages.push({
+          role: attackerMessage.role,
+          content: renderedAttackerPrompt,
+        });
+
         if (data.tokenUsage) {
           totalTokenUsage.total += data.tokenUsage.total || 0;
           totalTokenUsage.prompt += data.tokenUsage.prompt || 0;
@@ -107,16 +125,11 @@ export default class GoatProvider implements ApiProvider {
         `,
         );
 
-        const targetVars = {
-          ...context.vars,
-          [this.injectVar]: messages[messages.length - 1].content,
-        };
-
         const targetPrompt = this.stateless
           ? JSON.stringify(messages)
-          : await renderPrompt(context.prompt, targetVars, context.filters, targetProvider);
+          : messages[messages.length - 1].content;
 
-        logger.debug(`GOAT turn ${turn} target prompt: ${targetPrompt}`);
+        logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
         const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
