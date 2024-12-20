@@ -195,7 +195,7 @@ export const RedteamConfigSchema = z
     delay: z
       .number()
       .int()
-      .positive()
+      .nonnegative()
       .optional()
       .describe('Delay in milliseconds between plugin API calls'),
   })
