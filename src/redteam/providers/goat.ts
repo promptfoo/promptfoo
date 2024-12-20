@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import telemetry from '../../telemetry';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -43,6 +44,11 @@ export default class GoatProvider implements ApiProvider {
         stateless: options.stateless,
       })}`,
     );
+    if (typeof options.stateless === 'boolean' && !options.stateless) {
+      telemetry.recordOnce('feature_used', {
+        feature: 'stateless',
+      });
+    }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
     this.maxTurns = options.maxTurns || 5;
