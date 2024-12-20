@@ -427,6 +427,7 @@ export default function RedTeamSetupPage() {
 
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
+      window.location.reload();
     } catch (error) {
       console.error('Failed to load configuration', error);
       toast.showToast(
