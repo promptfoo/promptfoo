@@ -703,6 +703,7 @@ describe('redteamConfigSchema', () => {
         'harmful:chemical-biological-weapons',
         'harmful:illegal-drugs',
         'harmful:illegal-drugs:meth',
+        'harmful:weapons:ied',
         'harmful:copyright-violations',
         'harmful:harassment-bullying',
         'harmful:illegal-activities',
