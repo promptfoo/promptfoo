@@ -3,6 +3,8 @@ sidebar_position: 3
 sidebar_label: 'Configuration'
 ---
 
+import PluginTable from '../_shared/plugin-table.md';
+
 # Redteam Configuration
 
 The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
@@ -158,6 +160,8 @@ Plugins are specified as an array of either strings (plugin IDs) or objects with
 If `numTests` is not specified for a plugin, it will use the global `numTests` value.
 
 #### Available Plugins
+
+<PluginTable />
 
 To see the list of available plugins on the command line, run `promptfoo redteam plugins`.
 

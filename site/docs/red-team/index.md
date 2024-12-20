@@ -314,3 +314,9 @@ See [LLM vulnerability types](/docs/red-team/llm-vulnerability-types/) for more 
 ## What's next?
 
 To get started and run your first red team, see the [quickstart guide](/docs/red-team/quickstart/).
+
+## Available Plugins
+
+The following plugins are available for red team testing:
+
+<PluginTable />
