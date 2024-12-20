@@ -700,6 +700,7 @@ describe('redteamConfigSchema', () => {
         'harmful:self-harm',
         'harmful:sexual-content',
         'harmful:cybercrime',
+        'harmful:cybercrime:malicious-code',
         'harmful:chemical-biological-weapons',
         'harmful:illegal-drugs',
         'harmful:illegal-drugs:meth',
