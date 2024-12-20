@@ -38,6 +38,7 @@ const defaultConfig: Config = {
   strategies: ['jailbreak', 'jailbreak:composite'],
   purpose: '',
   entities: [],
+  numTests: 5,
   applicationDefinition: {
     purpose: '',
     redteamUser: '',
@@ -75,6 +76,7 @@ export const EXAMPLE_CONFIG: Config = {
   purpose:
     'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
   entities: [],
+  numTests: 5,
   applicationDefinition: {
     purpose:
       'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
