@@ -803,7 +803,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Specialized Advice - Financial',
   'harmful:unsafe-practices': 'Promotion of unsafe practices',
   'harmful:violent-crime': 'Violent Crimes',
-  'harmful:illegal-drugs:meth': 'Methamphetamine Content',
+  'harmful:illegal-drugs:meth': 'Methamphetamine',
   hijacking: 'Hijacking',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'IndirectPromptInjection',
