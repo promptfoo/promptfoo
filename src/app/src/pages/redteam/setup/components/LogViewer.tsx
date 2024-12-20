@@ -24,6 +24,10 @@ export function LogViewer({ logs }: LogViewerProps) {
   const [shouldAutoScroll, setShouldAutoScroll] = React.useState(true);
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const fullscreenLogsContainerRef = useRef<HTMLDivElement>(null);
+  const previousScrollPositionRef = useRef<{ main: number; fullscreen: number }>({
+    main: 0,
+    fullscreen: 0,
+  });
 
   const ansiConverter = useMemo(
     () =>
@@ -60,6 +64,14 @@ export function LogViewer({ logs }: LogViewerProps) {
         const container = fullscreenLogsContainerRef.current;
         container.scrollTop = container.scrollHeight;
       }
+    } else {
+      // Restore previous scroll positions
+      if (logsContainerRef.current) {
+        logsContainerRef.current.scrollTop = previousScrollPositionRef.current.main;
+      }
+      if (fullscreenLogsContainerRef.current) {
+        fullscreenLogsContainerRef.current.scrollTop = previousScrollPositionRef.current.fullscreen;
+      }
     }
   }, [logs, shouldAutoScroll]);
 
@@ -69,6 +81,7 @@ export function LogViewer({ logs }: LogViewerProps) {
       const isAtBottom =
         Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 50;
       setShouldAutoScroll(isAtBottom);
+      previousScrollPositionRef.current.main = container.scrollTop;
     }
   }, []);
 
@@ -78,6 +91,7 @@ export function LogViewer({ logs }: LogViewerProps) {
       const isAtBottom =
         Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 50;
       setShouldAutoScroll(isAtBottom);
+      previousScrollPositionRef.current.fullscreen = container.scrollTop;
     }
   }, []);
 
@@ -162,7 +176,7 @@ export function LogViewer({ logs }: LogViewerProps) {
       <LogContent
         containerRef={logsContainerRef}
         onScroll={handleScroll}
-        sx={{ maxHeight: '300px' }}
+        sx={{ maxHeight: '600px' }}
       />
 
       <Dialog
