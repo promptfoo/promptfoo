@@ -816,3 +816,126 @@ describe('llama', () => {
     });
   });
 });
+
+describe('BEDROCK_MODEL AMAZON_NOVA', () => {
+  const modelHandler = BEDROCK_MODEL.AMAZON_NOVA;
+
+  it('should format system message correctly when using JSON array input', () => {
+    const config = {};
+    const prompt = JSON.stringify([
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Hello!' },
+    ]);
+
+    const params = modelHandler.params(config, prompt);
+
+    expect(params).toEqual({
+      messages: [
+        {
+          role: 'user',
+          content: [{ text: 'Hello!' }],
+        },
+      ],
+      system: [{ text: 'You are a helpful assistant.' }],
+      inferenceConfig: {
+        max_new_tokens: 1024,
+        temperature: 0,
+      },
+    });
+  });
+
+  it('should handle messages without system prompt', () => {
+    const config = {};
+    const prompt = JSON.stringify([
+      { role: 'user', content: 'Hello!' },
+      { role: 'assistant', content: 'Hi there!' },
+    ]);
+
+    const params = modelHandler.params(config, prompt);
+
+    expect(params).toEqual({
+      messages: [
+        {
+          role: 'user',
+          content: [{ text: 'Hello!' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ text: 'Hi there!' }],
+        },
+      ],
+      inferenceConfig: {
+        max_new_tokens: 1024,
+        temperature: 0,
+      },
+    });
+    expect(params.system).toBeUndefined();
+  });
+
+  it('should handle complex message content arrays', () => {
+    const config = {};
+    const prompt = JSON.stringify([
+      { role: 'system', content: 'You are a helpful assistant.' },
+      {
+        role: 'user',
+        content: [
+          { text: 'What is this image?' },
+          {
+            image: {
+              format: 'jpeg',
+              source: {
+                bytes: 'base64_encoded_image',
+              },
+            },
+          },
+        ],
+      },
+    ]);
+
+    const params = modelHandler.params(config, prompt);
+
+    expect(params).toEqual({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { text: 'What is this image?' },
+            {
+              image: {
+                format: 'jpeg',
+                source: {
+                  bytes: 'base64_encoded_image',
+                },
+              },
+            },
+          ],
+        },
+      ],
+      system: [{ text: 'You are a helpful assistant.' }],
+      inferenceConfig: {
+        max_new_tokens: 1024,
+        temperature: 0,
+      },
+    });
+  });
+
+  it('should handle invalid JSON gracefully', () => {
+    const config = {};
+    const prompt = 'Invalid JSON';
+
+    const params = modelHandler.params(config, prompt);
+
+    expect(params).toEqual({
+      messages: [
+        {
+          role: 'user',
+          content: [{ text: 'Invalid JSON' }],
+        },
+      ],
+      inferenceConfig: {
+        max_new_tokens: 1024,
+        temperature: 0,
+      },
+    });
+  });
+});
