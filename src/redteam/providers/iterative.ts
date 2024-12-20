@@ -222,7 +222,6 @@ async function runRedteamConversation({
       finalTargetPrompt = targetPrompt;
     }
 
-    // Store the current output and score
     previousOutputs.push({
       prompt: targetPrompt,
       output: targetResponse.output,
