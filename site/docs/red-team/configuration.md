@@ -491,16 +491,16 @@ Strategies modify or generate additional test cases based on the output of other
 
 #### Available Strategies
 
+- `jailbreak`: Applies a linear probe jailbreak technique to deliver the payload (Default)
+- `jailbreak:composite`: Combines multiple jailbreak techniques from research papers (Default)
 - `base64`: Encodes the injected variable using Base64 encoding
 - `basic` - Raw payloads only (Default)
 - `citation`: Uses academic citations and references to potentially bypass safety measures
 - `crescendo`: Applies a multi-turn jailbreak technique
-- `jailbreak:composite`: Combines multiple jailbreak techniques from research papers
 - `jailbreak:tree`: Applies a tree-based jailbreak technique
-- `jailbreak`: Applies a linear probe jailbreak technique to deliver the payload (Default)
 - `leetspeak`: Converts the injected variable to leetspeak, replacing certain letters with numbers or symbols
 - `multilingual`: Translates the request to multiple low-resource languages
-- `prompt-injection`: Wraps the payload in a prompt injection (Default)
+- `prompt-injection`: Wraps the payload in a prompt injection
 - `rot13`: Applies ROT13 encoding to the injected variable, shifting each letter 13 positions in the alphabet
 
 See [Strategies](/docs/category/strategies/) for comprehensive descriptions of each strategy.

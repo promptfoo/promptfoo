@@ -81,8 +81,8 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
     } catch (err) {
       if (
         getEnvBool('PROMPTFOO_REQUIRE_JSON_PROMPTS') ||
-        trimmedPrompt.startsWith('{') ||
-        trimmedPrompt.startsWith('[')
+        (trimmedPrompt.startsWith('{') && trimmedPrompt.endsWith('}')) ||
+        (trimmedPrompt.startsWith('[') && trimmedPrompt.endsWith(']'))
       ) {
         throw new Error(`Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`);
       }

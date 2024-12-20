@@ -269,7 +269,7 @@ class Evaluator {
       };
       if (response.error) {
         ret.error = response.error;
-      } else if (response.output == null) {
+      } else if (response.output === null || response.output === undefined) {
         ret.success = false;
         ret.score = 0;
         ret.error = 'No output';

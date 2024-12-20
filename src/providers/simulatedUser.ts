@@ -103,6 +103,9 @@ export class SimulatedUser implements ApiProvider {
       tokenUsage: {
         numRequests,
       },
+      metadata: {
+        messages,
+      },
     };
   }
 

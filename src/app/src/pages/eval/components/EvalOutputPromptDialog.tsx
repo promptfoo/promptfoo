@@ -16,6 +16,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
+import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
 
 function ellipsize(value: string, maxLength: number) {
@@ -124,6 +125,11 @@ export default function EvalOutputPromptDialog({
     setExpandedMetadata((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  let parsedMessages: Message[] = [];
+  try {
+    parsedMessages = JSON.parse(metadata?.messages || '[]');
+  } catch {}
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>Details{provider && `: ${provider}`}</DialogTitle>
@@ -172,6 +178,7 @@ export default function EvalOutputPromptDialog({
           </Box>
         )}
         <AssertionResults gradingResults={gradingResults} />
+        {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
         {metadata && Object.keys(metadata).length > 0 && (
           <Box my={2}>
             <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
