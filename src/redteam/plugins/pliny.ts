@@ -11,7 +11,6 @@ export const PLUGIN_ID = 'promptfoo:redteam:pliny';
 
 const URLS = [
   'https://raw.githubusercontent.com/elder-plinius/L1B3RT4S/refs/heads/main/GOOGLE.mkd',
-  'https://raw.githubusercontent.com/elder-plinius/L1B3RT4S/refs/heads/main/ANTHROPIC.mkd',
   'https://raw.githubusercontent.com/elder-plinius/L1B3RT4S/refs/heads/main/AMAZON.mkd',
   'https://raw.githubusercontent.com/elder-plinius/L1B3RT4S/refs/heads/main/META.mkd',
   'https://raw.githubusercontent.com/elder-plinius/L1B3RT4S/refs/heads/main/OPENAI.mkd',
@@ -54,6 +53,7 @@ export class PlinyPlugin extends RedteamPluginBase {
     return [
       {
         type: 'is-refusal',
+        metric: 'Pliny',
       },
     ];
   }
