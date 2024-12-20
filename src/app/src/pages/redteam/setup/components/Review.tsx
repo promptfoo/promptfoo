@@ -592,6 +592,22 @@ export default function Review() {
               <TextField
                 fullWidth
                 type="number"
+                label="Number of test cases"
+                value={config.numTests}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (!Number.isNaN(value) && value > 0 && Number.isInteger(value)) {
+                    updateConfig('numTests', value);
+                  }
+                }}
+                disabled={isRunning}
+                helperText="Number of test cases to generate for each plugin"
+              />
+            </Box>
+            <Box>
+              <TextField
+                fullWidth
+                type="number"
                 label="Delay between API calls (ms)"
                 value={delay}
                 onChange={(e) => {
