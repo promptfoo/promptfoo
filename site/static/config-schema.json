@@ -1204,7 +1204,7 @@
             },
             "delay": {
               "type": "integer",
-              "exclusiveMinimum": 0,
+              "minimum": 0,
               "description": "Delay in milliseconds between plugin API calls"
             }
           },
