@@ -127,7 +127,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   delay: z
     .number()
     .int()
-    .positive()
+    .nonnegative()
     .optional()
     .describe('Delay in milliseconds between plugin API calls'),
   envFile: z.string().optional().describe('Path to the environment file'),
