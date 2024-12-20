@@ -58,6 +58,7 @@ export default function Review() {
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [debugMode, setDebugMode] = React.useState(false);
+  const [delay, setDelay] = React.useState('0');
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
   const [isRunSettingsDialogOpen, setIsRunSettingsDialogOpen] = useState(false);
@@ -185,6 +186,7 @@ export default function Review() {
           config: getUnifiedConfig(config),
           force: forceRegeneration,
           verbose: debugMode,
+          delay,
         }),
       });
 
@@ -549,7 +551,7 @@ export default function Review() {
       <Dialog open={isRunSettingsDialogOpen} onClose={() => setIsRunSettingsDialogOpen(false)}>
         <DialogTitle>Run Settings</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1, minWidth: 300 }}>
+          <Stack spacing={4} sx={{ mt: 1, minWidth: 300 }}>
             {/*
             <FormControlLabel
               control={
@@ -586,6 +588,26 @@ export default function Review() {
                 </Box>
               }
             />
+            <Box>
+              <TextField
+                fullWidth
+                type="number"
+                label="Delay between API calls (ms)"
+                value={delay}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Ensure non-negative numbers only
+                  if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
+                    setDelay(value);
+                  }
+                }}
+                disabled={isRunning}
+                InputProps={{
+                  endAdornment: <Typography variant="caption">ms</Typography>,
+                }}
+                helperText="Add a delay between API calls to avoid rate limits"
+              />
+            </Box>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
               <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
             </Box>
