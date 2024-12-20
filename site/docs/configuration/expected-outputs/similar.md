@@ -1,5 +1,6 @@
 ---
 sidebar_position: 55
+image: /img/meta/docs/configuration-expected-outputs-similar-md.png
 ---
 
 # Similarity (embeddings)

@@ -1,5 +1,6 @@
 ---
 sidebar_label: GOAT
+image: /img/meta/docs/red-team-strategies-goat-md.png
 ---
 
 # GOAT Technique for Jailbreaking LLMs

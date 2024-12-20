@@ -1,6 +1,7 @@
 ---
 sidebar_position: 100
 sidebar_label: Moderation
+image: /img/meta/docs/configuration-expected-outputs-moderation-md.png
 ---
 
 # Moderation

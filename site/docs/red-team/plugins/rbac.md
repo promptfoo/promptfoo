@@ -1,5 +1,6 @@
 ---
 sidebar_label: RBAC
+image: /img/meta/docs/red-team-plugins-rbac-md.png
 ---
 
 # Role-Based Access Control (RBAC) Plugin

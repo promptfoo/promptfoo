@@ -1,5 +1,6 @@
 ---
 sidebar_label: Overreliance
+image: /img/meta/docs/red-team-plugins-overreliance-md.png
 ---
 
 # Overreliance Plugin

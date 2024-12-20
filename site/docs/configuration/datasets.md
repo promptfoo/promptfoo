@@ -1,5 +1,6 @@
 ---
 sidebar_position: 25
+image: /img/meta/docs/configuration-datasets-md.png
 ---
 
 # Dataset generation

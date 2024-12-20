@@ -1,5 +1,6 @@
 ---
 sidebar_label: Handling Multiple Response Types like Guardrails
+image: /img/meta/docs/red-team-troubleshooting-multiple-response-types-md.png
 ---
 
 # Handling Multiple Response Types

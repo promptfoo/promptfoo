@@ -1,5 +1,6 @@
 ---
 sidebar_label: Qwen vs GPT-4 vs Llama
+image: /img/meta/docs/guides-qwen-benchmark-md.png
 ---
 
 # Qwen vs GPT-4 vs Llama: Run a Custom Benchmark

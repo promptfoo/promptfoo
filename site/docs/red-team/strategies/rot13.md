@@ -1,5 +1,6 @@
 ---
 sidebar_label: ROT13 Encoding
+image: /img/meta/docs/red-team-strategies-rot13-md.png
 ---
 
 # ROT13 Encoding Strategy

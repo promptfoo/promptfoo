@@ -1,5 +1,6 @@
 ---
 sidebar_label: Promptfoo Cloud
+image: /img/meta/docs/cloud-index-md.png
 ---
 
 # Promptfoo Cloud

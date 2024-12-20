@@ -1,5 +1,6 @@
 ---
 sidebar_label: Multi-turn Jailbreaks
+image: /img/meta/docs/red-team-strategies-multi-turn-md.png
 ---
 
 # Multi-turn Jailbreaks

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 30
 sidebar_label: Web viewer
+image: /img/meta/docs/usage-web-ui-md.png
 ---
 
 # Using the web viewer

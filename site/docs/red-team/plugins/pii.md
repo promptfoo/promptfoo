@@ -1,5 +1,6 @@
 ---
 sidebar_label: PII
+image: /img/meta/docs/red-team-plugins-pii-md.png
 ---
 
 # PII Plugin

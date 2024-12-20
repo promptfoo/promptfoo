@@ -1,5 +1,6 @@
 ---
 sidebar_position: 20
+image: /img/meta/docs/providers-azure-md.png
 ---
 
 # Azure

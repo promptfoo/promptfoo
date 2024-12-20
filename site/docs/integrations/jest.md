@@ -1,5 +1,6 @@
 ---
 sidebar_label: Jest & Vitest
+image: /img/meta/docs/integrations-jest-md.png
 ---
 
 import Tabs from '@theme/Tabs';

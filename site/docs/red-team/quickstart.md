@@ -1,6 +1,7 @@
 ---
 sidebar_position: 2
 sidebar_label: Quickstart
+image: /img/meta/docs/red-team-quickstart-md.png
 ---
 
 import CodeBlock from '@theme/CodeBlock';

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 60
+image: /img/meta/docs/usage-troubleshooting-md.png
 ---
 
 # Troubleshooting

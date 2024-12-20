@@ -1,6 +1,7 @@
 ---
 sidebar_position: 50
 sidebar_label: Custom Javascript
+image: /img/meta/docs/providers-custom-api-md.png
 ---
 
 # Javascript Provider

@@ -1,6 +1,7 @@
 ---
 sidebar_label: Custom scripts
 sidebar_position: 52
+image: /img/meta/docs/providers-custom-script-md.png
 ---
 
 # Custom scripts

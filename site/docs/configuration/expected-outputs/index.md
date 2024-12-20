@@ -1,6 +1,7 @@
 ---
 sidebar_position: 5
 sidebar_label: Overview
+image: /img/meta/docs/configuration-expected-outputs-index-md.png
 ---
 
 # Assertions & metrics

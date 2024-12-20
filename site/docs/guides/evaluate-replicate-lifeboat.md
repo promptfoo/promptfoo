@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating Replicate Lifeboat
+image: /img/meta/docs/guides-evaluate-replicate-lifeboat-md.png
 ---
 
 # How to evaluate GPT 3.5 vs Llama2-70b with Replicate Lifeboat

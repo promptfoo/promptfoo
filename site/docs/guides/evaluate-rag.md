@@ -1,5 +1,6 @@
 ---
 sidebar_position: 2
+image: /img/meta/docs/guides-evaluate-rag-md.png
 ---
 
 # Evaluating RAG pipelines

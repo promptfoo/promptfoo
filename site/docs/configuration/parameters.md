@@ -1,5 +1,6 @@
 ---
 sidebar_position: 4
+image: /img/meta/docs/configuration-parameters-md.png
 ---
 
 # Prompts, tests, and outputs

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating OpenAI Assistants
+image: /img/meta/docs/guides-evaluate-openai-assistants-md.png
 ---
 
 # How to evaluate OpenAI Assistants
