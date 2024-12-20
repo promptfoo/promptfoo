@@ -74,6 +74,7 @@ async function runRedteamConversation({
   const previousOutputs: { prompt: string; output: string; score: number; isOnTopic: boolean }[] =
     [];
   let finalIteration = 0;
+  let finalTargetPrompt: string | undefined = undefined;
 
   for (let i = 0; i < NUM_ITERATIONS; i++) {
     const redteamBody = JSON.stringify(redteamHistory);
@@ -218,6 +219,7 @@ async function runRedteamConversation({
     if (score > highestScore) {
       highestScore = score;
       bestResponse = targetResponse.output;
+      finalTargetPrompt = targetPrompt;
     }
 
     // Store the current output and score
@@ -295,7 +297,7 @@ async function runRedteamConversation({
       finalIteration,
       highestScore,
       previousOutputs: JSON.stringify(previousOutputs, null, 2),
-      redteamFinalPrompt: targetPrompt || undefined,
+      redteamFinalPrompt: finalTargetPrompt,
     },
     tokenUsage: totalTokenUsage,
   };
