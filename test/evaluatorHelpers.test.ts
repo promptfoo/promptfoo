@@ -85,6 +85,29 @@ describe('renderPrompt', () => {
     );
   });
 
+  it('should parse JSON only for schema variables', async () => {
+    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ schema }}"}, {"text": "{{ var1 }}"}]');
+    const renderedPrompt = await renderPrompt(
+      prompt,
+      {
+        schema: '{"nested": "value1"}',
+        var1: '{"other": "value2"}'
+      },
+      {}
+    );
+    expect(renderedPrompt).toBe(
+      JSON.stringify(
+        [
+          {"text": "Test prompt "},
+          {"text": {"nested": "value1"}},
+          {"text": "{\"other\": \"value2\"}"}
+        ],
+        null,
+        2,
+      ),
+    );
+  });
+
   it('should load external yaml files in renderPrompt', async () => {
     const prompt = toPrompt('Test prompt with {{ var1 }}');
     const vars = { var1: 'file://test.txt' };
