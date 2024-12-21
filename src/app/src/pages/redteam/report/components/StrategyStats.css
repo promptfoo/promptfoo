@@ -15,7 +15,28 @@
 .strategy-item {
   padding: 16px;
   border-radius: 8px;
-  transition: all 0.2s ease;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
+  backdrop-filter: blur(8px);
+}
+
+.strategy-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%);
+}
+
+[data-theme='dark'] .strategy-item {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+[data-theme='dark'] .strategy-item:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
 }
 
 .strategy-name {
