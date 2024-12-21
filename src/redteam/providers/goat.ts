@@ -44,9 +44,10 @@ export default class GoatProvider implements ApiProvider {
         stateless: options.stateless,
       })}`,
     );
-    if (typeof options.stateless === 'boolean' && !options.stateless) {
+    if (config.stateless !== undefined) {
       telemetry.recordOnce('feature_used', {
         feature: 'stateless',
+        state: String(config.stateless)
       });
     }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
