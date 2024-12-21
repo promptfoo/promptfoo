@@ -314,6 +314,7 @@ export default function RedTeamSetupPage() {
     setValue((prevValue) => {
       const newValue = prevValue + 1;
       updateHash(newValue);
+      window.scrollTo({ top: 0 });
       return newValue;
     });
   };
@@ -322,6 +323,7 @@ export default function RedTeamSetupPage() {
     setValue((prevValue) => {
       const newValue = prevValue - 1;
       updateHash(newValue);
+      window.scrollTo({ top: 0 });
       return newValue;
     });
   };
@@ -329,6 +331,7 @@ export default function RedTeamSetupPage() {
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     updateHash(newValue);
     setValue(newValue);
+    window.scrollTo({ top: 0 });
   };
 
   const toggleYamlPreview = () => {
