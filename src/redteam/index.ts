@@ -19,7 +19,7 @@ import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
-import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
+import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 
 /**
  * Determines the status of test generation based on requested and generated counts.
