@@ -537,6 +537,49 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           sx={{ mb: 3 }}
         />
 
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 2,
+            mb: 2,
+            '& > *': {
+              color: 'primary.main',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              textDecoration: 'none',
+              '&:hover': {
+                textDecoration: 'underline',
+              },
+            },
+          }}
+        >
+          <Box
+            component="span"
+            onClick={() => {
+              filteredPlugins.forEach((plugin) => {
+                if (!selectedPlugins.has(plugin)) {
+                  handlePluginToggle(plugin);
+                }
+              });
+            }}
+          >
+            Select all
+          </Box>
+          <Box
+            component="span"
+            onClick={() => {
+              filteredPlugins.forEach((plugin) => {
+                if (selectedPlugins.has(plugin)) {
+                  handlePluginToggle(plugin);
+                }
+              });
+            }}
+          >
+            Select none
+          </Box>
+        </Box>
+
         <Box sx={{ mb: 3 }}>
           {recentlyUsedSnapshot.length > 0 &&
             renderPluginCategory('Recently Used', recentlyUsedSnapshot)}
