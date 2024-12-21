@@ -71,6 +71,11 @@ async function runRedteamConversation({
     cached: 0,
   };
 
+  const previousOutputs: { prompt: string; output: string; score: number; isOnTopic: boolean }[] =
+    [];
+  let finalIteration = 0;
+  let finalTargetPrompt: string | undefined = undefined;
+
   for (let i = 0; i < NUM_ITERATIONS; i++) {
     const redteamBody = JSON.stringify(redteamHistory);
 
@@ -214,9 +219,18 @@ async function runRedteamConversation({
     if (score > highestScore) {
       highestScore = score;
       bestResponse = targetResponse.output;
+      finalTargetPrompt = targetPrompt;
     }
 
+    previousOutputs.push({
+      prompt: targetPrompt,
+      output: targetResponse.output,
+      score,
+      isOnTopic,
+    });
+
     if (score >= 10) {
+      finalIteration = i + 1;
       break;
     }
 
@@ -279,7 +293,10 @@ async function runRedteamConversation({
   return {
     output: bestResponse,
     metadata: {
-      redteamFinalPrompt: targetPrompt || undefined,
+      finalIteration,
+      highestScore,
+      previousOutputs: JSON.stringify(previousOutputs, null, 2),
+      redteamFinalPrompt: finalTargetPrompt,
     },
     tokenUsage: totalTokenUsage,
   };
