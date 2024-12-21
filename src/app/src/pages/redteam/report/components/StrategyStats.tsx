@@ -14,6 +14,8 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 import { styled } from '@mui/system';
 import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';
@@ -33,14 +35,18 @@ interface StrategyStatsProps {
 }
 
 const DangerLinearProgress = styled(LinearProgress)(({ theme }) => ({
-  height: 8,
-  borderRadius: 8,
+  height: 10,
+  borderRadius: 5,
   [`&.${linearProgressClasses.colorPrimary}`]: {
-    backgroundColor: theme.palette.mode === 'light' ? '#e0e0e0' : '#424242',
+    backgroundColor:
+      theme.palette.mode === 'light'
+        ? alpha(theme.palette.error.main, 0.1)
+        : alpha(theme.palette.error.dark, 0.2),
   },
   [`& .${linearProgressClasses.bar}`]: {
-    borderRadius: 8,
-    backgroundColor: theme.palette.mode === 'light' ? '#ff1744' : '#ff8a80',
+    borderRadius: 5,
+    backgroundColor:
+      theme.palette.mode === 'light' ? theme.palette.error.main : theme.palette.error.light,
   },
 })) as React.FC<React.ComponentProps<typeof LinearProgress>>;
 
@@ -171,10 +177,20 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
   };
 
   const [tabValue, setTabValue] = React.useState(0);
+  const theme = useTheme();
 
   return (
     <>
-      <Card className="strategy-stats-card">
+      <Card
+        className="strategy-stats-card"
+        sx={{
+          backgroundColor:
+            theme.palette.mode === 'dark'
+              ? alpha(theme.palette.background.paper, 0.8)
+              : theme.palette.background.paper,
+          boxShadow: theme.shadows[theme.palette.mode === 'dark' ? 2 : 1],
+        }}
+      >
         <CardContent className="strategy-stats-content">
           <Typography variant="h5" mb={2}>
             Attack Methods
@@ -221,8 +237,27 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
         </CardContent>
       </Card>
 
-      <Drawer anchor="right" open={Boolean(selectedStrategy)} onClose={handleDrawerClose}>
-        <Box sx={{ width: 750, p: 3 }}>
+      <Drawer
+        anchor="right"
+        open={Boolean(selectedStrategy)}
+        onClose={handleDrawerClose}
+        PaperProps={{
+          sx: {
+            backgroundColor:
+              theme.palette.mode === 'dark'
+                ? alpha(theme.palette.background.paper, 0.9)
+                : theme.palette.background.paper,
+            borderLeft: `1px solid ${theme.palette.divider}`,
+          },
+        }}
+      >
+        <Box
+          sx={{
+            width: 750,
+            p: 3,
+            color: theme.palette.text.primary,
+          }}
+        >
           <Typography variant="h5" gutterBottom>
             {selectedStrategy &&
               (displayNameOverrides[selectedStrategy as keyof typeof displayNameOverrides] ||
@@ -234,7 +269,19 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                 '')}
           </Typography>
 
-          <Box sx={{ mt: 3, mb: 4, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
+          <Box
+            sx={{
+              mt: 3,
+              mb: 4,
+              p: 2,
+              bgcolor:
+                theme.palette.mode === 'dark'
+                  ? alpha(theme.palette.background.paper, 0.6)
+                  : theme.palette.grey[50],
+              borderRadius: 1,
+              border: `1px solid ${theme.palette.divider}`,
+            }}
+          >
             <Grid container spacing={3}>
               <Grid item xs={4}>
                 <Typography variant="h6" align="center">
@@ -275,7 +322,19 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
           </Typography>
 
           {selectedStrategy && (
-            <TableContainer>
+            <TableContainer
+              sx={{
+                '& .MuiTableCell-root': {
+                  borderColor: theme.palette.divider,
+                },
+                '& .MuiTableRow-root:hover': {
+                  backgroundColor:
+                    theme.palette.mode === 'dark'
+                      ? alpha(theme.palette.action.hover, 0.1)
+                      : theme.palette.action.hover,
+                },
+              }}
+            >
               <Table>
                 <TableHead>
                   <TableRow>
@@ -320,7 +379,18 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
               {getExamplesByStrategy(selectedStrategy)
                 .failures.slice(0, 5)
                 .map((failure, index) => (
-                  <Paper key={index} elevation={1} sx={{ mb: 2, p: 2 }}>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      mb: 2,
+                      p: 2,
+                      backgroundColor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.background.paper, 0.4)
+                          : theme.palette.background.paper,
+                      border: `1px solid ${theme.palette.divider}`,
+                    }}
+                  >
                     <ListItem
                       sx={{
                         flexDirection: 'column',
@@ -342,11 +412,15 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                           sx={{
                             mb: 2,
                             p: 1.5,
-                            bgcolor: 'grey.50',
+                            bgcolor:
+                              theme.palette.mode === 'dark'
+                                ? alpha(theme.palette.common.black, 0.2)
+                                : alpha(theme.palette.grey[100], 0.5),
                             borderRadius: 1,
                             fontFamily: 'monospace',
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word',
+                            border: `1px solid ${theme.palette.divider}`,
                           }}
                         >
                           {getPromptDisplayString(failure.prompt)}
@@ -358,11 +432,15 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                           variant="body2"
                           sx={{
                             p: 1.5,
-                            bgcolor: 'grey.50',
+                            bgcolor:
+                              theme.palette.mode === 'dark'
+                                ? alpha(theme.palette.common.black, 0.2)
+                                : alpha(theme.palette.grey[100], 0.5),
                             borderRadius: 1,
                             fontFamily: 'monospace',
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word',
+                            border: `1px solid ${theme.palette.divider}`,
                           }}
                         >
                           {getOutputDisplay(failure.output)}
@@ -379,7 +457,18 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
               {getExamplesByStrategy(selectedStrategy)
                 .passes.slice(0, 5)
                 .map((pass, index) => (
-                  <Paper key={index} elevation={1} sx={{ mb: 2 }}>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      mb: 2,
+                      p: 2,
+                      backgroundColor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.background.paper, 0.4)
+                          : theme.palette.background.paper,
+                      border: `1px solid ${theme.palette.divider}`,
+                    }}
+                  >
                     <ListItem
                       sx={{
                         flexDirection: 'column',
@@ -396,11 +485,15 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                           sx={{
                             mb: 2,
                             p: 1.5,
-                            bgcolor: 'grey.50',
+                            bgcolor:
+                              theme.palette.mode === 'dark'
+                                ? alpha(theme.palette.common.black, 0.2)
+                                : alpha(theme.palette.grey[100], 0.5),
                             borderRadius: 1,
                             fontFamily: 'monospace',
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word',
+                            border: `1px solid ${theme.palette.divider}`,
                           }}
                         >
                           {getPromptDisplayString(pass.prompt)}
@@ -417,11 +510,15 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                           variant="body2"
                           sx={{
                             p: 1.5,
-                            bgcolor: 'grey.50',
+                            bgcolor:
+                              theme.palette.mode === 'dark'
+                                ? alpha(theme.palette.common.black, 0.2)
+                                : alpha(theme.palette.grey[100], 0.5),
                             borderRadius: 1,
                             fontFamily: 'monospace',
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word',
+                            border: `1px solid ${theme.palette.divider}`,
                           }}
                         >
                           {getOutputDisplay(pass.output)}
