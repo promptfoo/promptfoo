@@ -175,8 +175,8 @@ function CustomIntentSection() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography variant="body2" color="text.secondary">
-        These inputs are passed directly to your target. They are also used by Promptfoo's automated
-        jailbreak strategies.
+        These prompts are passed directly to your target. They are also used as an initial prompt by
+        Promptfoo's automated jailbreak strategies.
       </Typography>
       {(localConfig.intent || ['']).map((intent: string, index: number) => (
         <Box key={index} sx={{ display: 'flex', gap: 1 }}>
@@ -715,14 +715,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           )}
 
           <Accordion
-            expanded={expandedCategories.has('Custom Inputs')}
+            expanded={expandedCategories.has('Custom Prompts')}
             onChange={(event, expanded) => {
               setExpandedCategories((prev) => {
                 const newSet = new Set(prev);
                 if (expanded) {
-                  newSet.add('Custom Inputs');
+                  newSet.add('Custom Prompts');
                 } else {
-                  newSet.delete('Custom Inputs');
+                  newSet.delete('Custom Prompts');
                 }
                 return newSet;
               });
@@ -730,7 +730,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           >
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-                Custom Inputs (
+                Custom Prompts (
                 {config.plugins.filter(
                   (p): p is { id: string; config: any } =>
                     typeof p === 'object' && 'id' in p && p.id === 'intent' && 'config' in p,
