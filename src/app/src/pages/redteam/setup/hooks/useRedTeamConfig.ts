@@ -1,7 +1,32 @@
 import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
+import type { Plugin } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Config, ProviderOptions } from '../types';
+
+interface RecentlyUsedPlugins {
+  plugins: Plugin[];
+  addPlugin: (plugin: Plugin) => void;
+}
+
+const NUM_RECENT_PLUGINS = 6;
+export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
+  persist(
+    (set) => ({
+      plugins: [],
+      addPlugin: (plugin) =>
+        set((state) => ({
+          plugins: [plugin, ...state.plugins.filter((p) => p !== plugin)].slice(
+            0,
+            NUM_RECENT_PLUGINS,
+          ),
+        })),
+    }),
+    {
+      name: 'recentlyUsedPlugins',
+    },
+  ),
+);
 
 interface RedTeamConfigState {
   config: Config;

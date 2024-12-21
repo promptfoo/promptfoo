@@ -34,7 +34,7 @@ import {
   riskCategories,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
@@ -58,8 +58,10 @@ const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
+  const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
   const [isCustomMode, setIsCustomMode] = useState(true);
+  const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
       config.plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)) as Plugin[],
@@ -110,41 +112,45 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
   }, [debouncedPlugins, updatePlugins]);
 
-  const handlePluginToggle = useCallback((plugin: Plugin) => {
-    setSelectedPlugins((prev) => {
-      const newSet = new Set(prev);
+  const handlePluginToggle = useCallback(
+    (plugin: Plugin) => {
+      setSelectedPlugins((prev) => {
+        const newSet = new Set(prev);
 
-      if (plugin === 'policy') {
+        if (plugin === 'policy') {
+          if (newSet.has(plugin)) {
+            newSet.delete(plugin);
+            setPluginConfig((prevConfig) => {
+              const newConfig = { ...prevConfig };
+              delete newConfig[plugin];
+              return newConfig;
+            });
+          } else {
+            newSet.add(plugin);
+          }
+          return newSet;
+        }
+
         if (newSet.has(plugin)) {
           newSet.delete(plugin);
           setPluginConfig((prevConfig) => {
             const newConfig = { ...prevConfig };
-            delete newConfig[plugin];
+            delete newConfig[plugin as keyof LocalPluginConfig];
             return newConfig;
           });
         } else {
           newSet.add(plugin);
+          addPlugin(plugin);
+          if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+            setSelectedConfigPlugin(plugin);
+            setConfigDialogOpen(true);
+          }
         }
         return newSet;
-      }
-
-      if (newSet.has(plugin)) {
-        newSet.delete(plugin);
-        setPluginConfig((prevConfig) => {
-          const newConfig = { ...prevConfig };
-          delete newConfig[plugin as keyof LocalPluginConfig];
-          return newConfig;
-        });
-      } else {
-        newSet.add(plugin);
-        if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-          setSelectedConfigPlugin(plugin);
-          setConfigDialogOpen(true);
-        }
-      }
-      return newSet;
-    });
-  }, []);
+      });
+    },
+    [addPlugin],
+  );
 
   const handlePresetSelect = (preset: {
     name: string;
@@ -364,9 +370,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                           PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
                           !isPluginConfigured(plugin)
                         ) {
-                          return `1px solid ${theme.palette.error.main}`; // Error state border
+                          return `1px solid ${theme.palette.error.main}`;
                         }
-                        return `1px solid ${theme.palette.primary.main}`; // Selected state border
+                        return `1px solid ${theme.palette.primary.main}`;
                       }
                       return '1px solid transparent';
                     },
@@ -530,49 +536,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           }}
           sx={{ mb: 3 }}
         />
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 2,
-            mb: 2,
-            '& > *': {
-              color: 'primary.main',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              textDecoration: 'none',
-              '&:hover': {
-                textDecoration: 'underline',
-              },
-            },
-          }}
-        >
-          <Box
-            component="span"
-            onClick={() => {
-              filteredPlugins.forEach((plugin) => {
-                if (!selectedPlugins.has(plugin)) {
-                  handlePluginToggle(plugin);
-                }
-              });
-            }}
-          >
-            Select all
-          </Box>
-          <Box
-            component="span"
-            onClick={() => {
-              filteredPlugins.forEach((plugin) => {
-                if (selectedPlugins.has(plugin)) {
-                  handlePluginToggle(plugin);
-                }
-              });
-            }}
-          >
-            Select none
-          </Box>
-        </Box>
+
         <Box sx={{ mb: 3 }}>
+          {recentlyUsedSnapshot.length > 0 &&
+            renderPluginCategory('Recently Used', recentlyUsedSnapshot)}
           {Object.entries(riskCategories).map(([category, plugins]) =>
             renderPluginCategory(category, plugins),
           )}
