@@ -3,7 +3,7 @@ import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
 import type { ApiProvider } from '../../../src/types';
 
 const mockGetProvider = jest.fn();
-const mockGetTargetResponse = jest.fn(); 
+const mockGetTargetResponse = jest.fn();
 const mockCheckPenalizedPhrases = jest.fn();
 
 jest.mock('../../../src/redteam/providers/shared', () => ({
