@@ -6,24 +6,27 @@ import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:intent';
 
+type Intent = string | string[];
+
+interface IntentPluginConfig {
+  intent: Intent | Intent[];
+}
+
 export class IntentPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
-  private intents: string[];
+  private intents: Intent[];
 
   constructor(
     provider: ApiProvider,
     purpose: string,
     injectVar: string,
-    config: { intent: string | string[] },
+    config: IntentPluginConfig,
   ) {
     super(provider, purpose, injectVar);
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
     // Handle both string and array configs
-    const loadedIntents = maybeLoadFromExternalFile(config.intent);
+    const loadedIntents = maybeLoadFromExternalFile(config.intent) as Intent | Intent[];
     this.intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
-    this.intents.forEach((intent, i) => {
-      invariant(typeof intent === 'string', `Intent: "${intent}" at index ${i} must be a string`);
-    });
   }
 
   protected async getTemplate(): Promise<string> {
@@ -43,16 +46,38 @@ export class IntentPlugin extends RedteamPluginBase {
 
   async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
     // Instead of generating new prompts, we create one test case per intent
-    return this.intents.map((intent) => ({
-      vars: {
-        [this.injectVar]: intent,
-      },
-      assert: this.getAssertions(intent),
-      metadata: {
-        intent,
-        pluginId: this.id,
-      },
-    }));
+    return this.intents.map((intent) => {
+      if (typeof intent === 'string') {
+        // Just a single prompt
+        return {
+          vars: {
+            [this.injectVar]: intent,
+          },
+          assert: this.getAssertions(intent),
+          metadata: {
+            intent,
+            pluginId: this.id,
+          },
+        };
+      }
+      // Otherwise, it's a list of prompts
+      return {
+        vars: {
+          [this.injectVar]: intent,
+        },
+        provider: {
+          id: 'sequence',
+          config: {
+            inputs: intent,
+          },
+        },
+        assert: this.getAssertions(intent[0]), // arg is not actually used for grading
+        metadata: {
+          intent,
+          pluginId: this.id,
+        },
+      };
+    });
   }
 }
 
