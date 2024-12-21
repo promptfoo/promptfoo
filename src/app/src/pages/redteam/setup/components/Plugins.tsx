@@ -36,6 +36,7 @@ import {
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
+import CustomIntentSection from './CustomIntentPluginSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
@@ -52,7 +53,7 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'intent', 'prompt-extraction'];
+const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
 const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 
@@ -279,7 +280,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   };
 
   const renderPluginCategory = (category: string, plugins: readonly Plugin[]) => {
-    const pluginsToShow = plugins.filter((plugin) => filteredPlugins.includes(plugin));
+    const pluginsToShow = plugins
+      .filter((plugin) => plugin !== 'intent') // Skip intent because we have a dedicated section for it
+      .filter((plugin) => filteredPlugins.includes(plugin));
     if (pluginsToShow.length === 0) {
       return null;
     }
@@ -586,6 +589,35 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           {Object.entries(riskCategories).map(([category, plugins]) =>
             renderPluginCategory(category, plugins),
           )}
+
+          <Accordion
+            expanded={expandedCategories.has('Custom Prompts')}
+            onChange={(event, expanded) => {
+              setExpandedCategories((prev) => {
+                const newSet = new Set(prev);
+                if (expanded) {
+                  newSet.add('Custom Prompts');
+                } else {
+                  newSet.delete('Custom Prompts');
+                }
+                return newSet;
+              });
+            }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+                Custom Prompts (
+                {config.plugins.filter(
+                  (p): p is { id: string; config: any } =>
+                    typeof p === 'object' && 'id' in p && p.id === 'intent' && 'config' in p,
+                )[0]?.config?.intent?.length || 0}
+                )
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <CustomIntentSection />
+            </AccordionDetails>
+          </Accordion>
         </Box>
 
         {selectedPlugins.has('policy') && (
