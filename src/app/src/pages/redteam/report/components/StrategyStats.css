@@ -1,53 +1,43 @@
 .strategy-stats-card {
-  border-radius: 0.75rem;
+  transition: all 0.3s ease;
 }
 
-div.strategy-stats-content {
-  padding: 2rem;
+.strategy-stats-content {
+  padding: 24px;
 }
 
 .strategy-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
 }
 
 .strategy-item {
-  border: 1px solid #eee;
-  border-radius: 0.5rem;
-  padding: 1rem;
-  height: 100%;
-  transition: background-color 0.2s ease;
-  border-radius: 4px;
   padding: 16px;
-}
-
-.strategy-item:hover {
-  background-color: rgba(0, 0, 0, 0.04);
-}
-
-[data-theme='dark'] .strategy-item {
-  border: 1px solid #424242;
+  border-radius: 8px;
+  transition: all 0.2s ease;
 }
 
 .strategy-name {
-  font-weight: 500;
-  margin-bottom: 0.25rem;
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
 .strategy-description {
-  margin-bottom: 0.75rem;
+  min-height: 40px;
+  margin-bottom: 16px;
 }
 
 .progress-container {
-  margin-bottom: 0.5rem;
+  margin-bottom: 8px;
 }
 
 .fail-rate {
+  min-width: 45px;
   text-align: right;
 }
 
 .attack-stats {
   display: block;
-  text-align: right;
+  margin-top: 4px;
 }
