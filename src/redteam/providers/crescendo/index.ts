@@ -83,9 +83,10 @@ class CrescendoProvider implements ApiProvider {
     this.targetConversationId = uuidv4();
     this.redTeamingChatConversationId = uuidv4();
     this.stateless = config.stateless ?? true;
-    if (typeof config.stateless === 'boolean' && !config.stateless) {
+    if (config.stateless !== undefined) {
       telemetry.recordOnce('feature_used', {
         feature: 'stateless',
+        state: String(config.stateless)
       });
     }
 
