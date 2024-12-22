@@ -137,7 +137,7 @@ The evaluation classifies prompt injection attempts as either successful or unsu
 
 For each model, you'll see how many tests successfully defended against prompt injection and how many succumbed to the attack.
 
-![CyberSecEval results](/img/docs/cyberseceval-examples.png)
+![CyberSecEval results](/img/blog/cyberseceval/cyberseceval-examples.png)
 
 In the above image, both GPT 4o and GPT 4o-mini fell victim to [prompt injections](/blog/prompt-injection/).
 
