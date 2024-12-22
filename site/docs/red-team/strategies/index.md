@@ -2,6 +2,8 @@
 sidebar_label: Overview
 ---
 
+import StrategyTable from '@site/docs/\_shared/StrategyTable';
+
 # Red Team Strategies
 
 ## What are Strategies?
@@ -48,21 +50,7 @@ Strategies fall into three categories: static, dynamic, and multi-turn.
 - Dynamic strategies are single-turn and rely on an attacker LLM to make one or more calls to your target. This can be done either during generation (math prompt) or during evaluation (jailbreak).
 - Multi-turn strategies are multi-turn and rely on more complex prompting techniques to bypass content filters.
 
-| Category                  | Strategy                                | Description                      | Cost   | ASR Increase over No Strategy |
-| ------------------------- | --------------------------------------- | -------------------------------- | ------ | ----------------------------- |
-| **Static (Single-Turn)**  | [Base64](base64.md)                     | Base64 encoding bypass           | Low    | 20-30%                        |
-|                           | [Leetspeak](leetspeak.md)               | Character substitution           | Low    | 20-30%                        |
-|                           | [ROT13](rot13.md)                       | Letter rotation encoding         | Low    | 20-30%                        |
-|                           | [Prompt Injection](prompt-injection.md) | Direct system prompts            | Low    | 50-70%                        |
-|                           | [Multilingual](multilingual.md)         | Cross-language testing           | Low    | 30-40%                        |
-| **Dynamic (Single-Turn)** | [Math Prompt](math-prompt.md)           | Mathematical encoding            | Medium | 70-80%                        |
-|                           | [Citation](citation.md)                 | Academic framing                 | Medium | 40-60%                        |
-|                           | [Composite](composite-jailbreaks.md)    | Combined techniques              | Medium | 60-80%                        |
-|                           | [Jailbreak](iterative.md)               | Lightweight iterative refinement | High   | 60-80%                        |
-|                           | [Tree-based](tree.md)                   | Branching attack paths           | High   | 60-80%                        |
-| **Multi-turn**            | [GOAT](goat.md)                         | Gradual escalation               | High   | 70-90%                        |
-|                           | [Crescendo](multi-turn.md)              | Gradual escalation               | High   | 70-90%                        |
-| **Custom**                | [Custom](custom.md)                     | User-defined strategies          | Varies | Varies                        |
+<StrategyTable />
 
 ## Implementation
 

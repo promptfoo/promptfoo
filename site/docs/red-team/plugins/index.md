@@ -278,4 +278,4 @@ intent
 
 1. Review [LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types).
 2. Check individual plugin documentation.
-3. Read our [strategy documentation](/docs/category/strategies-1/).
+3. Read our [strategy documentation](/docs/red-team/strategies/).
