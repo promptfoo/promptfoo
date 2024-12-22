@@ -109,6 +109,17 @@ export const strategies: Strategy[] = [
     asrIncrease: '60-80%',
   },
   {
+    category: 'Dynamic (Single-Turn)',
+    categoryLink: '#dynamic-single-turn',
+    strategy: 'Best-of-N',
+    description: 'Parallel sampling attack',
+    longDescription:
+      'Tests multiple variations of prompts in parallel until finding a successful jailbreak',
+    cost: 'High',
+    asrIncrease: '40-60%',
+    link: '/docs/red-team/strategies/best-of-n/',
+  },
+  {
     category: 'Multi-turn',
     categoryLink: '#multi-turn',
     strategy: 'GOAT',
@@ -142,7 +153,7 @@ export const strategies: Strategy[] = [
     description: 'Plugin-generated test cases without applied strategies',
     longDescription:
       'Controls whether the original plugin-generated test cases (without any strategies applied) are included in the final output',
-    cost: 'Varies',
-    asrIncrease: 'Varies',
+    cost: 'Low',
+    asrIncrease: 'None',
   },
 ];

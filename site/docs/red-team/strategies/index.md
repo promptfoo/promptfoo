@@ -24,7 +24,7 @@ Multi-turn LLM applications incorporate mechanisms for continuity. They track th
 
 ### Promptfoo Strategies
 
-By default, promptfoo recommends [`jailbreak`](./iterative.md) and [`composite-jailbreaks`](./composite-jailbreaks.md). These are single-turn strategies that rely on an attacker model to iteratively probe the target where the conversation history is reset each time. Each testcase run with these strategies results in many calls to the target LLM but significantly increases the ASR. They stop after exhausting a configurable iteration/token budget or when they are able to coerce the target model into generating a harmful output based on the plugin intent. They are run in addition to the unmodified plugins.
+By default, promptfoo recommends [`jailbreak`](./iterative.md) and [`composite-jailbreaks`](./composite-jailbreaks.md). These are single-turn strategies that rely on an attacker model to modify the test cases to increase the ASR. Each testcase run with these strategies results in many calls to the target LLM but significantly increases the ASR. They stop after exhausting a configurable iteration/token budget or when they are able to coerce the target model into generating a harmful output based on the plugin intent. They are run in addition to the unmodified plugins.
 
 You can configure them as:
 
