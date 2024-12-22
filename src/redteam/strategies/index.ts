@@ -40,7 +40,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'base64',
     action: async (testCases, injectVar) => {
-      logger.debug('Adding Base64 encoding to all test cases');
+      logger.debug(`Adding Base64 encoding to ${testCases.length} test cases`);
       const newTestCases = addBase64Encoding(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
       return newTestCases;
@@ -49,7 +49,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'crescendo',
     action: async (testCases, injectVar, config) => {
-      logger.debug('Adding Crescendo to all test cases');
+      logger.debug(`Adding Crescendo to ${testCases.length} test cases`);
       const newTestCases = addCrescendo(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
       return newTestCases;
@@ -58,7 +58,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'goat',
     action: async (testCases, injectVar, config) => {
-      logger.debug('Adding GOAT to all test cases');
+      logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
       return newTestCases;
@@ -67,7 +67,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'best-of-n',
     action: async (testCases, injectVar, config) => {
-      logger.debug('Adding Best-of-N to all test cases');
+      logger.debug(`Adding Best-of-N to ${testCases.length} test cases`);
       const newTestCases = await addBestOfNTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} Best-of-N test cases`);
       return newTestCases;
@@ -76,7 +76,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'jailbreak',
     action: async (testCases, injectVar, config) => {
-      logger.debug('Adding experimental jailbreaks to all test cases');
+      logger.debug(`Adding experimental jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative', config);
       logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
       return newTestCases;
@@ -85,7 +85,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'jailbreak:tree',
     action: async (testCases, injectVar, config) => {
-      logger.debug('Adding experimental tree jailbreaks to all test cases');
+      logger.debug(`Adding experimental tree jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree', config);
       logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
       return newTestCases;
@@ -94,7 +94,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'leetspeak',
     action: async (testCases, injectVar) => {
-      logger.debug('Adding leetspeak encoding to all test cases');
+      logger.debug(`Adding leetspeak encoding to ${testCases.length} test cases`);
       const newTestCases = addLeetspeak(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} leetspeak encoded test cases`);
       return newTestCases;
@@ -103,7 +103,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'math-prompt',
     action: async (testCases, injectVar, config) => {
-      logger.debug('Adding MathPrompt encoding to all test cases');
+      logger.debug(`Adding MathPrompt encoding to ${testCases.length} test cases`);
       const newTestCases = await addMathPrompt(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} MathPrompt encoded test cases`);
       return newTestCases;
@@ -112,7 +112,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'multilingual',
     action: async (testCases, injectVar, config) => {
-      logger.debug('Adding multilingual test cases');
+      logger.debug(`Adding multilingual test cases to ${testCases.length} test cases`);
       const newTestCases = await addMultilingual(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} multilingual test cases`);
       return newTestCases;
@@ -121,7 +121,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'prompt-injection',
     action: async (testCases, injectVar, config) => {
-      logger.debug('Adding prompt injections to all test cases');
+      logger.debug(`Adding prompt injections to ${testCases.length} test cases`);
       const newTestCases = await addInjections(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
       return newTestCases;
@@ -130,7 +130,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'rot13',
     action: async (testCases, injectVar) => {
-      logger.debug('Adding ROT13 encoding to all test cases');
+      logger.debug(`Adding ROT13 encoding to ${testCases.length} test cases`);
       const newTestCases = addRot13(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
       return newTestCases;
@@ -139,7 +139,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'citation',
     action: async (testCases, injectVar, config) => {
-      logger.debug('Adding Citation to all test cases');
+      logger.debug(`Adding Citation to ${testCases.length} test cases`);
       const newTestCases = await addCitationTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} Citation test cases`);
       return newTestCases;
@@ -148,7 +148,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'jailbreak:composite',
     action: async (testCases, injectVar, config) => {
-      logger.debug('Adding composite jailbreak test cases');
+      logger.debug(`Adding composite jailbreak test cases to ${testCases.length} test cases`);
       const newTestCases = await addCompositeTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} composite jailbreak test cases`);
       return newTestCases;

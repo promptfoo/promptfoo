@@ -102,5 +102,6 @@ The attack success rate follows a power-law scaling with the number of samples, 
 - [GOAT Strategy](goat.md)
 - [Iterative Jailbreaks](iterative.md)
 - [Multi-turn Jailbreaks](multi-turn.md)
+- [Best of N configuration example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-bestOfN-strategy)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
