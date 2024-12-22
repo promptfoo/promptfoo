@@ -146,7 +146,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const { result, tokenUsage } = data;
 
       if (!result) {
-        throw new Error('No choices returned from API');
+        return {
+          error: 'LLM did not return a result, likely refusal',
+        };
       }
 
       return {

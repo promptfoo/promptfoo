@@ -143,6 +143,7 @@ Deterministic eval metrics
 | `contains-sql`                  | output contains valid sql                                         |
 | `is-xml`                        | output is valid xml                                               |
 | `contains-xml`                  | output contains valid xml                                         |
+| `is-refusal`                    | output indicates the model refused to perform the task            |
 | `javascript`                    | provided Javascript function validates the output                 |
 | `python`                        | provided Python function validates the output                     |
 | `webhook`                       | provided webhook returns `{pass: true}`                           |

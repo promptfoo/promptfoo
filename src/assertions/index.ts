@@ -57,6 +57,7 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import { handleGEval } from './geval';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
@@ -68,6 +69,7 @@ import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from '.
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
+import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
@@ -238,10 +240,12 @@ export async function runAssertion({
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
+    'g-eval': handleGEval,
     icontains: handleIContains,
     'icontains-all': handleIContainsAll,
     'icontains-any': handleIContainsAny,
     'is-json': handleIsJson,
+    'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
     'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
     'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,

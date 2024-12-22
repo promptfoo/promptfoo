@@ -426,10 +426,12 @@
                                               "cost",
                                               "equals",
                                               "factuality",
+                                              "g-eval",
                                               "icontains-all",
                                               "icontains-any",
                                               "icontains",
                                               "is-json",
+                                              "is-refusal",
                                               "is-sql",
                                               "is-valid-openai-function-call",
                                               "is-valid-openai-tools-call",
@@ -892,11 +894,13 @@
                           "harmful:child-exploitation",
                           "harmful:copyright-violations",
                           "harmful:cybercrime",
+                          "harmful:cybercrime:malicious-code",
                           "harmful:graphic-content",
                           "harmful:harassment-bullying",
                           "harmful:hate",
                           "harmful:illegal-activities",
                           "harmful:illegal-drugs",
+                          "harmful:illegal-drugs:meth",
                           "harmful:indiscriminate-weapons",
                           "harmful:insults",
                           "harmful:intellectual-property",
@@ -911,6 +915,7 @@
                           "harmful:specialized-advice",
                           "harmful:unsafe-practices",
                           "harmful:violent-crime",
+                          "harmful:weapons:ied",
                           "hijacking",
                           "imitation",
                           "indirect-prompt-injection",
@@ -973,6 +978,7 @@
                           "pii:direct",
                           "pii:session",
                           "pii:social",
+                          "pliny",
                           "policy",
                           "politics",
                           "prompt-extraction",
@@ -1013,11 +1019,13 @@
                               "harmful:child-exploitation",
                               "harmful:copyright-violations",
                               "harmful:cybercrime",
+                              "harmful:cybercrime:malicious-code",
                               "harmful:graphic-content",
                               "harmful:harassment-bullying",
                               "harmful:hate",
                               "harmful:illegal-activities",
                               "harmful:illegal-drugs",
+                              "harmful:illegal-drugs:meth",
                               "harmful:indiscriminate-weapons",
                               "harmful:insults",
                               "harmful:intellectual-property",
@@ -1032,6 +1040,7 @@
                               "harmful:specialized-advice",
                               "harmful:unsafe-practices",
                               "harmful:violent-crime",
+                              "harmful:weapons:ied",
                               "hijacking",
                               "imitation",
                               "indirect-prompt-injection",
@@ -1094,6 +1103,7 @@
                               "pii:direct",
                               "pii:session",
                               "pii:social",
+                              "pliny",
                               "policy",
                               "politics",
                               "prompt-extraction",
@@ -1198,7 +1208,7 @@
             },
             "delay": {
               "type": "integer",
-              "exclusiveMinimum": 0,
+              "minimum": 0,
               "description": "Delay in milliseconds between plugin API calls"
             }
           },
@@ -1327,15 +1337,18 @@
               "type": "integer",
               "exclusiveMinimum": 0
             },
-            "filterSample": {
-              "type": "integer",
-              "exclusiveMinimum": 0
+            "filterMetadata": {
+              "type": "string"
             },
             "filterPattern": {
               "type": "string"
             },
             "filterProviders": {
               "type": "string"
+            },
+            "filterSample": {
+              "type": "integer",
+              "exclusiveMinimum": 0
             },
             "filterTargets": {
               "type": "string"
