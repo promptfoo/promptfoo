@@ -442,16 +442,23 @@ export const BEDROCK_MODEL = {
               content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
             }))
             .filter((msg) => msg.role !== 'system');
-          systemPrompt = parsed.find((msg) => msg.role === 'system')?.content;
+          const systemMessage = parsed.find((msg) => msg.role === 'system');
+          if (systemMessage) {
+            systemPrompt = [{ text: systemMessage.content }];
+          }
         } else {
           const { system, extractedMessages } = novaParseMessages(prompt);
           messages = extractedMessages;
-          systemPrompt = system;
+          if (system) {
+            systemPrompt = [{ text: system }];
+          }
         }
       } catch {
         const { system, extractedMessages } = novaParseMessages(prompt);
         messages = extractedMessages;
-        systemPrompt = system;
+        if (system) {
+          systemPrompt = [{ text: system }];
+        }
       }
 
       const params: any = { messages };

@@ -12,6 +12,7 @@ import type {
   ResultFailureReason,
 } from '../types';
 import { type EvaluateResult } from '../types';
+import { safeJsonStringify } from '../util/json';
 import { getCurrentTimestamp } from '../util/time';
 
 export default class EvalResult {
@@ -38,7 +39,13 @@ export default class EvalResult {
     const args = {
       id: randomUUID(),
       evalId,
-      testCase,
+      // Maybe stringify provider to avoid circular references
+      testCase: {
+        ...testCase,
+        ...(testCase.provider && {
+          provider: JSON.parse(safeJsonStringify(testCase.provider) as string),
+        }),
+      },
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt,

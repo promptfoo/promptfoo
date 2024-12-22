@@ -3,11 +3,13 @@ import { useToast } from '@app/hooks/useToast';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Fab from '@mui/material/Fab';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -22,8 +24,13 @@ export function LogViewer({ logs }: LogViewerProps) {
   const toast = useToast();
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = React.useState(true);
+  const [showScrollButton, setShowScrollButton] = React.useState(false);
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const fullscreenLogsContainerRef = useRef<HTMLDivElement>(null);
+  const previousScrollPositionRef = useRef<{ main: number; fullscreen: number }>({
+    main: 0,
+    fullscreen: 0,
+  });
 
   const ansiConverter = useMemo(
     () =>
@@ -60,8 +67,23 @@ export function LogViewer({ logs }: LogViewerProps) {
         const container = fullscreenLogsContainerRef.current;
         container.scrollTop = container.scrollHeight;
       }
+    } else {
+      // Restore previous scroll positions
+      if (logsContainerRef.current) {
+        logsContainerRef.current.scrollTop = previousScrollPositionRef.current.main;
+      }
+      if (fullscreenLogsContainerRef.current) {
+        fullscreenLogsContainerRef.current.scrollTop = previousScrollPositionRef.current.fullscreen;
+      }
     }
   }, [logs, shouldAutoScroll]);
+
+  const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement>) => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      setShouldAutoScroll(true);
+    }
+  }, []);
 
   const handleScroll = useCallback(() => {
     if (logsContainerRef.current) {
@@ -69,6 +91,8 @@ export function LogViewer({ logs }: LogViewerProps) {
       const isAtBottom =
         Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 50;
       setShouldAutoScroll(isAtBottom);
+      setShowScrollButton(!isAtBottom);
+      previousScrollPositionRef.current.main = container.scrollTop;
     }
   }, []);
 
@@ -78,6 +102,8 @@ export function LogViewer({ logs }: LogViewerProps) {
       const isAtBottom =
         Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 50;
       setShouldAutoScroll(isAtBottom);
+      setShowScrollButton(!isAtBottom);
+      previousScrollPositionRef.current.fullscreen = container.scrollTop;
     }
   }, []);
 
@@ -159,11 +185,28 @@ export function LogViewer({ logs }: LogViewerProps) {
         </Box>
       </Box>
 
-      <LogContent
-        containerRef={logsContainerRef}
-        onScroll={handleScroll}
-        sx={{ maxHeight: '300px' }}
-      />
+      <Box sx={{ position: 'relative' }}>
+        <LogContent
+          containerRef={logsContainerRef}
+          onScroll={handleScroll}
+          sx={{ maxHeight: '600px' }}
+        />
+        {showScrollButton && !isFullscreen && (
+          <Fab
+            size="small"
+            color="primary"
+            sx={{
+              position: 'absolute',
+              right: 16,
+              bottom: 16,
+              zIndex: 1,
+            }}
+            onClick={() => scrollToBottom(logsContainerRef)}
+          >
+            <KeyboardDoubleArrowDownIcon />
+          </Fab>
+        )}
+      </Box>
 
       <Dialog
         open={isFullscreen}
@@ -188,12 +231,27 @@ export function LogViewer({ logs }: LogViewerProps) {
             </Box>
           </Box>
         </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
+        <DialogContent sx={{ p: 0, position: 'relative' }}>
           <LogContent
             containerRef={fullscreenLogsContainerRef}
             onScroll={handleFullscreenScroll}
             sx={{ height: '100%', p: 3 }}
           />
+          {showScrollButton && isFullscreen && (
+            <Fab
+              size="small"
+              color="primary"
+              sx={{
+                position: 'fixed',
+                right: 16,
+                bottom: 16,
+                zIndex: 1,
+              }}
+              onClick={() => scrollToBottom(fullscreenLogsContainerRef)}
+            >
+              <KeyboardDoubleArrowDownIcon />
+            </Fab>
+          )}
         </DialogContent>
       </Dialog>
     </>

@@ -314,6 +314,7 @@ export default function RedTeamSetupPage() {
     setValue((prevValue) => {
       const newValue = prevValue + 1;
       updateHash(newValue);
+      window.scrollTo({ top: 0 });
       return newValue;
     });
   };
@@ -322,6 +323,7 @@ export default function RedTeamSetupPage() {
     setValue((prevValue) => {
       const newValue = prevValue - 1;
       updateHash(newValue);
+      window.scrollTo({ top: 0 });
       return newValue;
     });
   };
@@ -329,6 +331,7 @@ export default function RedTeamSetupPage() {
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     updateHash(newValue);
     setValue(newValue);
+    window.scrollTo({ top: 0 });
   };
 
   const toggleYamlPreview = () => {
@@ -427,6 +430,7 @@ export default function RedTeamSetupPage() {
 
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
+      window.location.reload();
     } catch (error) {
       console.error('Failed to load configuration', error);
       toast.showToast(
