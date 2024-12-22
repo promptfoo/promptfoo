@@ -450,6 +450,7 @@ export const ADDITIONAL_STRATEGIES = [
   'math-prompt',
   'multilingual',
   'rot13',
+  'best-of-n',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
@@ -466,6 +467,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Single-shot baseline security tests without optimization',
+  'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
   citation: 'Exploits academic authority bias to bypass content filters',
@@ -538,6 +540,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
+  'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
   competitors: 'Competitors',
@@ -913,6 +916,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'ascii-smuggling': 'Evaluates system resilience against Unicode tag-based instruction smuggling',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Establishes baseline security posture through fundamental test cases',
+  'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
@@ -931,6 +935,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Encoding',
   basic: 'Basic',
+  'best-of-n': 'Best-of-N',
   citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
