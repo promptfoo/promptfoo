@@ -45,6 +45,7 @@ providers:
 | [vLLM](./vllm.md)                                   | Local                                      | Compatible with OpenAI syntax                   |
 | [Ollama](./ollama.md)                               | Local                                      | `ollama:llama3.2:latest`                        |
 | [LocalAI](./localai.md)                             | Local                                      | `localai:gpt4all-j`                             |
+| [Llamafile](./llamafile.md)                         | OpenAI-compatible llamafile server         | Uses OpenAI provider with custom endpoint       |
 | [llama.cpp](./llama.cpp.md)                         | Local                                      | `llama:7b`                                      |
 | [WebSocket](./websocket.md)                         | WebSocket-based providers                  | `ws://example.com/ws`                           |
 | [Echo](./echo.md)                                   | Custom - For testing purposes              | `echo`                                          |
@@ -55,6 +56,9 @@ providers:
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                              | `watsonx:ibm/granite-13b-chat-v2`               |
 | [X.AI](./xai.md)                                    | X.AI's models                              | `xai:grok-2`                                    |
 | [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers   | Compatible with OpenAI syntax                   |
+| [Sequence](./sequence.md)                           | Send multiple prompts in sequence          | `sequence` with config.inputs array             |
+| [Simulated User](./simulated-user.md)               | Multi-turn conversation simulator          | `promptfoo:simulated-user`                      |
+| [Webhook](./webhook.md)                             | Generic webhook integration                | `webhook:http://example.com/webhook`            |
 
 ## Provider Syntax
 
