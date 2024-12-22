@@ -13,6 +13,7 @@ import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
+import { fetchHuggingFaceDataset } from './providers/huggingfaceDatasets';
 import telemetry from './telemetry';
 import type {
   CsvRow,
@@ -174,6 +175,13 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
+    if (loadTestsGlob.startsWith('hf://datasets/')) {
+      telemetry.recordAndSendOnce('feature_used', {
+        feature: 'huggingface dataset',
+      });
+      return await fetchHuggingFaceDataset(loadTestsGlob);
+    }
+
     if (loadTestsGlob.startsWith('file://')) {
       loadTestsGlob = loadTestsGlob.slice('file://'.length);
     }

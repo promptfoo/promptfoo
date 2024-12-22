@@ -844,3 +844,28 @@ Either way, this will allow you to evaluate your custom tests.
 ### Loading custom tests from CSV
 
 Promptfoo supports loading tests from CSV as well as Google Sheets. See [CSV loading](/docs/configuration/guide/#loading-tests-from-csv) and [Google Sheets](/docs/integrations/google-sheets/) for more info.
+
+### Loading tests from HuggingFace datasets
+
+Promptfoo can load test cases directly from [HuggingFace datasets](https://huggingface.co/docs/datasets). This is useful when you want to use existing datasets for testing or red teaming. For example:
+
+```yaml
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts
+```
+
+# Or with query parameters
+
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train&config=custom
+
+````
+
+Each row in the dataset becomes a test case, with dataset fields available as variables in your prompts:
+
+```yaml
+prompts:
+  - "Question: {{question}}\nExpected: {{answer}}"
+
+tests: huggingface://datasets/rajpurkar/squad
+````
+
+For detailed information about query parameters, dataset configuration, and more examples, see the [HuggingFace provider documentation](/docs/providers/huggingface/#datasets).
