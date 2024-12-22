@@ -3,7 +3,7 @@ date: 2024-12-21
 image: /img/blog/cyberseceval/cyberseceval-illustration.jpg
 ---
 
-# How to run CyberSecEval with Promptfoo
+# How to run a CyberSecEval benchmark
 
 Your LLM's security is only as strong as its weakest prompt. This guide shows you how to use [Promptfoo](https://github.com/promptfoo/promptfoo) to run standardized cybersecurity evaluations against any AI model, including OpenAI, Ollama, and HuggingFace models.
 
