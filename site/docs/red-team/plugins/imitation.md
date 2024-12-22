@@ -68,8 +68,8 @@ By incorporating the Imitation plugin in your LLM red teaming strategy, you can 
 
 ## Related Concepts
 
-- [Brand Protection](../llm-vulnerability-types.mdx#misinformation-and-misuse)
-- [Misinformation and Disinformation](../llm-vulnerability-types.mdx#misinformation-and-misuse)
+- [Brand Protection](../llm-vulnerability-types.md#misinformation-and-misuse)
+- [Misinformation and Disinformation](../llm-vulnerability-types.md#misinformation-and-misuse)
 - [Excessive Agency](excessive-agency.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

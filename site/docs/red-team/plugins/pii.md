@@ -50,6 +50,6 @@ redteam:
 
 - [RBAC Plugin](rbac.md)
 - [Cross-Session Leak Plugin](cross-session-leak.md)
-- [Information Disclosure](../llm-vulnerability-types.mdx#privacy-and-security)
+- [Information Disclosure](../llm-vulnerability-types.md#privacy-and-security)
 
 For more on LLM vulnerabilities and red teaming strategies, see [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types).

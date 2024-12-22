@@ -4,9 +4,6 @@ sidebar_label: Intro
 title: LLM red teaming guide (open source)
 ---
 
-import React from 'react';
-import PluginTable from '../_shared/PluginTable';
-
 # LLM red teaming
 
 LLM red teaming is a way to find vulnerabilities in AI systems _before_ they're deployed by using simulated adversarial inputs.
@@ -317,9 +314,3 @@ See [LLM vulnerability types](/docs/red-team/llm-vulnerability-types/) for more 
 ## What's next?
 
 To get started and run your first red team, see the [quickstart guide](/docs/red-team/quickstart/).
-
-## Available Plugins
-
-The following plugins are available for red team testing:
-
-<PluginTable />

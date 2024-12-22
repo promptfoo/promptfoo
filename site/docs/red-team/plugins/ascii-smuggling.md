@@ -60,6 +60,6 @@ To protect against ASCII smuggling attacks, consider implementing the following 
 ## Related Concepts
 
 - [Indirect Prompt Injection](indirect-prompt-injection.md)
-- [Types of LLM Vulnerabilities](../llm-vulnerability-types.mdx)
+- [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

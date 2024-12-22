@@ -5,12 +5,12 @@ sidebar_label: 'Configuration'
 
 import React from 'react';
 import {
-  HarmfulPluginsTable,
-  PIIPluginsTable,
-  BrandPluginsTable,
-  TechnicalPluginsTable,
-} from '../_shared/PluginTable';
-import StrategyTable from '../_shared/StrategyTable';
+HarmfulPluginsTable,
+PIIPluginsTable,
+BrandPluginsTable,
+TechnicalPluginsTable,
+} from '../\_shared/PluginTable';
+import StrategyTable from '../\_shared/StrategyTable';
 
 # Redteam Configuration
 

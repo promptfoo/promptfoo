@@ -3,13 +3,13 @@ sidebar_label: Overview
 ---
 
 import React from 'react';
-import PluginTable from '../../_shared/PluginTable';
+import PluginTable from '../../\_shared/PluginTable';
 import {
-  PLUGINS,
-  PLUGIN_CATEGORIES,
-  humanReadableCategoryList,
-  CATEGORY_DESCRIPTIONS,
-} from '../../_shared/data/plugins';
+PLUGINS,
+PLUGIN_CATEGORIES,
+humanReadableCategoryList,
+CATEGORY_DESCRIPTIONS,
+} from '../../\_shared/data/plugins';
 
 # Red Team Plugins
 
