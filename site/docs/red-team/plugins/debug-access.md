@@ -64,7 +64,7 @@ By incorporating the Debug Access plugin in your LLM red teaming strategy, you c
 ## Related Concepts
 
 - [RBAC (Role-Based Access Control)](rbac.md)
-- [Information Disclosure](../llm-vulnerability-types.md#privacy-and-security)
-- [Technical Vulnerabilities](../llm-vulnerability-types.md#technical-vulnerabilities)
+- [Information Disclosure](../llm-vulnerability-types.mdx#privacy-and-security)
+- [Technical Vulnerabilities](../llm-vulnerability-types.mdx#technical-vulnerabilities)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

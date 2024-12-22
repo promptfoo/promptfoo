@@ -1,8 +1,13 @@
 ---
+
 sidebar_position: 1
 sidebar_label: Intro
 title: LLM red teaming guide (open source)
+
 ---
+
+import React from 'react';
+import PluginTable from '../_shared/PluginTable';
 
 # LLM red teaming
 
@@ -20,8 +25,8 @@ By systematically probing the LLM application, we can produce a report that quan
 Ready to run a red team? Jump to **[Quickstart](/docs/red-team/quickstart/)**.
 :::
 
-<div style={{maxWidth: 760, margin: '0 auto'}}>
-![llm red team report](/img/riskreport-1@2x.png)
+<div style={{ maxWidth: 760, margin: '0 auto' }}>
+  ![llm red team report](/img/riskreport-1@2x.png)
 </div>
 
 ## Why is LLM red teaming important?
@@ -55,8 +60,8 @@ Once a process is set up, it can be applied in two primary ways:
 
 The magic moment for managing AI risk usually comes after an organization is able to set up some continuous measurement of AI risk: whether through CI/CD, internal requirements, or some other form of scheduled runs.
 
-<div style={{maxWidth: 760, margin: '0 auto'}}>
-![llm security continuous monitoring](/img/continuous-monitoring.png)
+<div style={{ maxWidth: 760, margin: '0 auto' }}>
+  ![llm security continuous monitoring](/img/continuous-monitoring.png)
 </div>
 
 ## Model vs application layer threats
@@ -98,8 +103,8 @@ Both methods have their merits in red teaming:
 
 For most developers and AppSec teams, black box testing is the more practical approach, because in most cases testers do not have access to model internals. A black-box approach more easily incorporates the real world infrastructure associated with RAGs and agents.
 
-<div style={{maxWidth: 760, margin: '0 auto'}}>
-![llm testing: white-box vs black-box](/img/docs/llm-testing-diagram.svg)
+<div style={{ maxWidth: 760, margin: '0 auto' }}>
+  ![llm testing: white-box vs black-box](/img/docs/llm-testing-diagram.svg)
 </div>
 
 ## Common threats
@@ -114,14 +119,14 @@ To state the obvious: Gen AI apps depend on massive data sources, by definition,
 
 Even if user privacy isn't directly violated, companies with AI apps likely don't want outsiders to know the training data they use. But, in a [2022 paper](https://arxiv.org/pdf/2202.03286), researchers found it was relatively easy to use an adversarial LLM to reveal another LLM's training data (while this applies only to base models and fine-tunes, it's relevant to RAGs with additional data in context).
 
-<div style={{maxWidth: 250, margin: '0 auto'}}>
-![Training data leakage](/img/docs/training-data-leakage.png)
+<div style={{ maxWidth: 250, margin: '0 auto' }}>
+  ![Training data leakage](/img/docs/training-data-leakage.png)
 </div>
 
 That same paper shows, however, that with similar methods, privacy violations can be much more direct – ranging from an LLM sharing phone numbers it shouldn't to sharing individual email addresses.
 
-<div style={{maxWidth: 600, margin: '0 auto'}}>
-![Training data leakage 2](/img/docs/training-data-leakage2.png)
+<div style={{ maxWidth: 600, margin: '0 auto' }}>
+  ![Training data leakage 2](/img/docs/training-data-leakage2.png)
 </div>
 
 A leak of personally identifiable information (PII) is bad in itself, but once adversaries have that PII, they could use the stolen identities to gain unauthorized access to internal companies' resources—to steal the resources, blackmail the company, or insert malware.
@@ -136,8 +141,8 @@ Prompt injections, for example, resemble SQL injections but present differently.
 
 In a 2023 [Black Hat presentation](https://i.blackhat.com/BH-US-23/Presentations/US-23-Greshake-Compromising-LLMS.pdf), security researchers ran through numerous examples of prompt injections working in the wild. With one prompt injection, researchers hijacked an LLM, convinced the user to disclose their names, and got the user to click on a link that redirected them to a malware website, for example.
 
-<div style={{maxWidth: 650, margin: '0 auto'}}>
-<img src="/img/docs/prompt-injection-example.png" />
+<div style={{ maxWidth: 650, margin: '0 auto' }}>
+  <img src="/img/docs/prompt-injection-example.png" />
 </div>
 
 Of course, though researchers analogize prompt injections to more traditional SQL and shell injections, AI-based SQL and shell injections are still possible, too.
@@ -156,9 +161,9 @@ Jailbreaking can be surprisingly simple—sometimes as easy as copying and pasti
 
 For example, Chris Bakke, founder of Interviewed, convinced a Chevrolet dealer's ChatGPT-powered customer service app to sell him a 2024 Chevy Tahoe for $1 with a simple prompt that [gave the bot a new objective](https://x.com/ChrisJBakke/status/1736533308849443121).
 
-<div style={{maxWidth: 400, margin: '0 auto'}}>
-![Chevy chatbot conversation 1](/img/docs/chevy1.png)
-![Chevy chatbot conversation 2](/img/docs/chevy2.png)
+<div style={{ maxWidth: 400, margin: '0 auto' }}>
+  ![Chevy chatbot conversation 1](/img/docs/chevy1.png) ![Chevy chatbot conversation
+  2](/img/docs/chevy2.png)
 </div>
 
 The example is funny, but this situation demonstrates a much deeper issue: the ability to override the model's core constraints.
@@ -171,8 +176,8 @@ In a [different paper](https://arxiv.org/abs/2307.15043), other researchers demo
 
 And it's not just about wording inputs differently. In a [2024 paper](https://arxiv.org/pdf/2402.11753), researchers showed that ASCII art could successfully get around AI guardrails, demonstrating yet another method to subvert foundational safety measures.
 
-<div style={{maxWidth: 650, margin: '0 auto'}}>
-![ASCII art prompt injection](/img/docs/artprompt.png)
+<div style={{ maxWidth: 650, margin: '0 auto' }}>
+  ![ASCII art prompt injection](/img/docs/artprompt.png)
 </div>
 
 ### Generation of Unwanted Content
@@ -185,8 +190,8 @@ Content promoting criminal activities, for example, can make the AI app that gen
 
 Similarly, misinformation can feel small on one level and cataclysmic on another. At a big enough scale, users relying on a hallucinating AI app could amount to mass delusion. But the steps in between are dangerous, too, ranging from merely incorrect information (that makes the company look foolish) to misleading, unsafe information (that could really hurt users).
 
-<div style={{maxWidth: 650, margin: '0 auto'}}>
-![Eating glue pizza](/img/docs/eating-glue.png)
+<div style={{ maxWidth: 650, margin: '0 auto' }}>
+  ![Eating glue pizza](/img/docs/eating-glue.png)
 </div>
 
 AI developers work to ensure these kinds of results don't emerge, but it's always a tight race between implementing safeguards and the model's vast knowledge base potentially producing undesired outputs.
@@ -302,7 +307,7 @@ This case highlights several practical aspects of AI red teaming:
 
 ### Other examples
 
-Promptfoo is an open-source software that breaks down LLM failure modes into adversarial testers known as "[plugins](/docs/category/plugins/)". Here are some examples of plugins:
+Promptfoo is an open-source software that breaks down LLM failure modes into adversarial testers known as "[plugins](/docs/red-team/plugins/)". Here are some examples of plugins:
 
 - [Harmful content](/docs/red-team/plugins/harmful/#examples): Examples of hate speech, offensive content, and other harmful outputs triggered in leading AI models.
 - [Broken object-level authorization (BOLA)](/docs/red-team/plugins/bola/#example-test-cases): Test cases for unauthorized access to resources belonging to other users.
