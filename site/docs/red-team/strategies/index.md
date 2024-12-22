@@ -12,6 +12,10 @@ Strategies are attack techniques that systematically probe LLM applications for 
 
 For example, a plugin might generate a harmful input, and a strategy like `jailbreak` would then attempt multiple variations of that input to bypass content filters.
 
+## Available Strategies
+
+<StrategyTable />
+
 ## Strategy Categories
 
 ### Static Strategies
@@ -25,6 +29,10 @@ Dynamic strategies use an attacker agent to mutate the original adversarial inpu
 ### Multi-turn Strategies
 
 Execute complex attack chains that build context over multiple interactions. These are particularly effective against stateful applications where they can convince the target model to act against it's purpose over time. You should run these strategies if you are testing a multi-turn application (such as a chatbot). Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
+
+:::note
+All single-turn strategies can be applied to multi-turn applications, but multi-turn strategies require a stateful application.
+:::
 
 ## Strategy Selection
 
@@ -83,6 +91,36 @@ redteam:
     - jailbreak # string syntax
     - id: jailbreak:composite # object syntax
 ```
+
+### Advanced Configuration
+
+Some strategies allow you to specify options in the configuration object. For example, the `multilingual` strategy allows you to specify the languages to use.
+
+```yaml
+redteam:
+  strategies:
+    - id: multilingual
+      config:
+        languages:
+          - french
+          - zh-CN # Chinese (IETF)
+          - de # German (ISO 639-1)
+```
+
+Strategies can be applied to specific plugins or the entire test suite. By default, strategies are applied to all plugins. You can override this by specifying the `plugins` option in the strategy which will only apply the strategy to the specified plugins.
+
+```yaml
+redteam:
+  strategies:
+    - id: jailbreak:tree
+      config:
+        plugins:
+          - harmful:hate
+```
+
+### Custom Strategies
+
+For advanced use cases, you can create custom strategies. See [Custom Strategy Development](/docs/red-team/strategies/custom) for details.
 
 ## Next Steps
 
