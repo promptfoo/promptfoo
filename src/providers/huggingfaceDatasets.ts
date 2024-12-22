@@ -56,9 +56,8 @@ export async function fetchHuggingFaceDataset(datasetPath: string): Promise<Test
   const tests: TestCase[] = [];
   let offset = 0;
   const pageSize = 100; // Number of rows per request
-  const userLimit = queryParams.get('limit')
-    ? Number.parseInt(queryParams.get('limit'), 10)
-    : undefined;
+  const queryParamLimit = queryParams.get('limit');
+  const userLimit = queryParamLimit ? Number.parseInt(queryParamLimit, 10) : undefined;
 
   while (true) {
     // Create a new URLSearchParams for this request
