@@ -7,6 +7,7 @@ import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/file';
 import { addBase64Encoding } from './base64';
+import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addGoatTestCases } from './goat';
@@ -60,6 +61,15 @@ export const Strategies: Strategy[] = [
       logger.debug('Adding GOAT to all test cases');
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'best-of-n',
+    action: async (testCases, injectVar, config) => {
+      logger.debug('Adding Best-of-N to all test cases');
+      const newTestCases = await addBestOfNTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Best-of-N test cases`);
       return newTestCases;
     },
   },
