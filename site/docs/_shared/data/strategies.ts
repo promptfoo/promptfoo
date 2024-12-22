@@ -1,8 +1,18 @@
-import React from 'react';
+export interface Strategy {
+  category: string;
+  categoryLink?: string;
+  strategy: string;
+  description: string;
+  longDescription: string;
+  cost: string;
+  asrIncrease: string;
+  link?: string;
+}
 
-const strategiesData = [
+export const strategies: Strategy[] = [
   {
     category: 'Static (Single-Turn)',
+    categoryLink: '#static-single-turn',
     strategy: 'Base64',
     description: 'Base64 encoding bypass',
     longDescription: 'Encodes the injected variable using Base64 encoding',
@@ -12,6 +22,7 @@ const strategiesData = [
   },
   {
     category: 'Static (Single-Turn)',
+    categoryLink: '#static-single-turn',
     strategy: 'Leetspeak',
     description: 'Character substitution',
     longDescription:
@@ -22,6 +33,7 @@ const strategiesData = [
   },
   {
     category: 'Static (Single-Turn)',
+    categoryLink: '#static-single-turn',
     strategy: 'ROT13',
     description: 'Letter rotation encoding',
     longDescription:
@@ -32,6 +44,7 @@ const strategiesData = [
   },
   {
     category: 'Static (Single-Turn)',
+    categoryLink: '#static-single-turn',
     strategy: 'Prompt Injection',
     description: 'Direct system prompts',
     longDescription: 'Wraps the payload in a prompt injection',
@@ -41,6 +54,7 @@ const strategiesData = [
   },
   {
     category: 'Static (Single-Turn)',
+    categoryLink: '#static-single-turn',
     strategy: 'Multilingual',
     description: 'Cross-language testing',
     longDescription: 'Translates the request to multiple low-resource languages',
@@ -49,6 +63,7 @@ const strategiesData = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    categoryLink: '#dynamic-single-turn',
     strategy: 'Math Prompt',
     description: 'Mathematical encoding',
     longDescription: 'Applies a linear probe jailbreak technique to deliver the payload (Default)',
@@ -58,6 +73,7 @@ const strategiesData = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    categoryLink: '#dynamic-single-turn',
     strategy: 'Citation',
     description: 'Academic framing',
     longDescription: 'Uses academic citations and references to potentially bypass safety measures',
@@ -67,6 +83,7 @@ const strategiesData = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    categoryLink: '#dynamic-single-turn',
     strategy: 'Composite',
     description: 'Combined techniques',
     longDescription: 'Combines multiple jailbreak techniques from research papers (Default)',
@@ -75,6 +92,7 @@ const strategiesData = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    categoryLink: '#dynamic-single-turn',
     strategy: 'Jailbreak',
     description: 'Lightweight iterative refinement',
     longDescription: 'Applies a multi-turn jailbreak technique',
@@ -83,6 +101,7 @@ const strategiesData = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    categoryLink: '#dynamic-single-turn',
     strategy: 'Tree-based',
     description: 'Branching attack paths',
     longDescription: 'Applies a tree-based jailbreak technique',
@@ -91,6 +110,7 @@ const strategiesData = [
   },
   {
     category: 'Multi-turn',
+    categoryLink: '#multi-turn',
     strategy: 'GOAT',
     description: 'Gradual escalation',
     longDescription: 'Applies a multi-turn jailbreak technique',
@@ -99,6 +119,7 @@ const strategiesData = [
   },
   {
     category: 'Multi-turn',
+    categoryLink: '#multi-turn',
     strategy: 'Crescendo',
     description: 'Gradual escalation',
     longDescription: 'Applies a multi-turn jailbreak technique',
@@ -107,6 +128,7 @@ const strategiesData = [
   },
   {
     category: 'Custom',
+    categoryLink: '#custom',
     strategy: 'Custom',
     description: 'User-defined strategies',
     longDescription: 'Raw payloads only (Default)',
@@ -115,6 +137,7 @@ const strategiesData = [
   },
   {
     category: 'Basic',
+    categoryLink: '#basic',
     strategy: 'Basic',
     description: 'Plugin-generated test cases without applied strategies',
     longDescription:
@@ -123,45 +146,3 @@ const strategiesData = [
     asrIncrease: 'Varies',
   },
 ];
-
-const StrategiesTable = ({
-  shouldRenderCategory = true,
-  shouldRenderStrategy = true,
-  shouldRenderDescription = true,
-  shouldRenderLongDescription = true,
-  shouldRenderCost = true,
-  shouldRenderAsrIncrease = true,
-}) => {
-  return (
-    <table>
-      <thead>
-        <tr>
-          {shouldRenderCategory && <th>Category</th>}
-          {shouldRenderStrategy && <th>Strategy</th>}
-          {shouldRenderDescription && <th>Description</th>}
-          {shouldRenderLongDescription && <th>Detailed Description</th>}
-          {shouldRenderCost && <th>Cost</th>}
-          {shouldRenderAsrIncrease && <th>ASR Increase over No Strategy</th>}
-        </tr>
-      </thead>
-      <tbody>
-        {strategiesData.map((strategy, index) => (
-          <tr key={index}>
-            {shouldRenderCategory && <td>{strategy.category}</td>}
-            {shouldRenderStrategy && (
-              <td>
-                <a href={strategy.link}>{strategy.strategy}</a>
-              </td>
-            )}
-            {shouldRenderDescription && <td>{strategy.description}</td>}
-            {shouldRenderLongDescription && <td>{strategy.longDescription}</td>}
-            {shouldRenderCost && <td>{strategy.cost}</td>}
-            {shouldRenderAsrIncrease && <td>{strategy.asrIncrease}</td>}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-};
-
-export default StrategiesTable;

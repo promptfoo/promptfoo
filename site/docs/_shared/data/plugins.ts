@@ -1,6 +1,59 @@
-import React from 'react';
+export const PLUGIN_CATEGORIES = [
+  'Brand',
+  'Compliance and Legal',
+  'Security and Access Control',
+  'Trust and Safety',
+  'Custom',
+] as const;
 
-const pluginsData = [
+export interface CategoryDescription {
+  category: PluginCategory;
+  description: string;
+}
+
+export const CATEGORY_DESCRIPTIONS: CategoryDescription[] = [
+  {
+    category: 'Brand',
+    description:
+      'Tests focused on brand protection, including competitor mentions, misinformation, hallucinations, and model behavior that could impact brand reputation.',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for LLM behavior that may encourage illegal activity, breach contractual commitments, or violate intellectual property rights.',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Technical security risk tests mapped to OWASP Top 10 for LLMs, APIs, and web applications, covering SQL injection, SSRF, broken access control, and cross-session leaks.',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests that attempt to produce illicit, graphic, or inappropriate responses from the LLM.',
+  },
+  {
+    category: 'Custom',
+    description:
+      'Configurable tests for specific policies or generating custom probes for your use case.',
+  },
+];
+
+export const humanReadableCategoryList =
+  PLUGIN_CATEGORIES.slice(0, -1).join(', ') + ', and ' + PLUGIN_CATEGORIES.slice(-1);
+
+export type PluginCategory = (typeof PLUGIN_CATEGORIES)[number];
+
+export interface Plugin {
+  category: PluginCategory;
+  name: string;
+  description: string;
+  pluginId: string;
+  link: string;
+  label: string | null;
+}
+
+export const PLUGINS: Plugin[] = [
   {
     category: 'Security and Access Control',
     name: 'Unauthorized Data Access',
@@ -419,183 +472,3 @@ const pluginsData = [
     label: null,
   },
 ];
-
-const PluginTable = ({
-  shouldRenderCategory = true,
-  shouldRenderStrategy = true,
-  shouldRenderDescription = true,
-  shouldRenderPluginId = true,
-}) => {
-  // Group plugins by category
-  const groupedPlugins = pluginsData.reduce((acc, plugin) => {
-    if (!acc[plugin.category]) {
-      acc[plugin.category] = [];
-    }
-    acc[plugin.category].push(plugin);
-    return acc;
-  }, {});
-
-  return (
-    <table>
-      <thead>
-        <tr>
-          {shouldRenderCategory && (
-            <th style={{ verticalAlign: 'top', textAlign: 'left' }}>Category</th>
-          )}
-          {shouldRenderStrategy && <th>Strategy</th>}
-          {shouldRenderDescription && <th>Description</th>}
-          {shouldRenderPluginId && <th>Plugin ID</th>}
-        </tr>
-      </thead>
-      <tbody>
-        {Object.entries(groupedPlugins).map(([category, plugins]) => (
-          <React.Fragment key={category}>
-            {plugins.map((plugin, index) => (
-              <tr key={plugin.pluginId}>
-                {index === 0 && shouldRenderCategory && (
-                  <td rowSpan={plugins.length} style={{ verticalAlign: 'top' }}>
-                    {category}
-                  </td>
-                )}
-                {shouldRenderStrategy && (
-                  <td>
-                    <a href={plugin.link}>{plugin.name}</a>
-                  </td>
-                )}
-                {shouldRenderDescription && <td>{plugin.description}</td>}
-                {shouldRenderPluginId && (
-                  <td>
-                    <code>{plugin.pluginId}</code>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </React.Fragment>
-        ))}
-      </tbody>
-    </table>
-  );
-};
-
-const HarmfulPluginsTable = () => {
-  // Filter plugins with 'harmful' label
-  const harmfulPlugins = pluginsData.filter((plugin) => plugin.label === 'harmful');
-
-  return (
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Description</th>
-          <th>Plugin ID</th>
-        </tr>
-      </thead>
-      <tbody>
-        {harmfulPlugins.map((plugin) => (
-          <tr key={plugin.pluginId}>
-            <td>
-              <a href={plugin.link}>{plugin.name}</a>
-            </td>
-            <td>{plugin.description}</td>
-            <td>
-              <code>{plugin.pluginId}</code>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-};
-
-const PIIPluginsTable = () => {
-  // Filter plugins with 'pii' label
-  const piiPlugins = pluginsData.filter((plugin) => plugin.label === 'pii');
-
-  return (
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Description</th>
-          <th>Plugin ID</th>
-        </tr>
-      </thead>
-      <tbody>
-        {piiPlugins.map((plugin) => (
-          <tr key={plugin.pluginId}>
-            <td>
-              <a href={plugin.link}>{plugin.name}</a>
-            </td>
-            <td>{plugin.description}</td>
-            <td>
-              <code>{plugin.pluginId}</code>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-};
-
-const BrandPluginsTable = () => {
-  // Filter plugins with 'brand' label
-  const brandPlugins = pluginsData.filter((plugin) => plugin.label === 'brand');
-
-  return (
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Description</th>
-          <th>Plugin ID</th>
-        </tr>
-      </thead>
-      <tbody>
-        {brandPlugins.map((plugin) => (
-          <tr key={plugin.pluginId}>
-            <td>
-              <a href={plugin.link}>{plugin.name}</a>
-            </td>
-            <td>{plugin.description}</td>
-            <td>
-              <code>{plugin.pluginId}</code>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-};
-
-const TechnicalPluginsTable = () => {
-  // Filter plugins with 'technical' label
-  const technicalPlugins = pluginsData.filter((plugin) => plugin.label === 'technical');
-
-  return (
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Description</th>
-          <th>Plugin ID</th>
-        </tr>
-      </thead>
-      <tbody>
-        {technicalPlugins.map((plugin) => (
-          <tr key={plugin.pluginId}>
-            <td>
-              <a href={plugin.link}>{plugin.name}</a>
-            </td>
-            <td>{plugin.description}</td>
-            <td>
-              <code>{plugin.pluginId}</code>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-};
-
-export { HarmfulPluginsTable, PIIPluginsTable, BrandPluginsTable, TechnicalPluginsTable };
-export default PluginTable;
