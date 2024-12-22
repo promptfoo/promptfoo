@@ -1,15 +1,15 @@
 ---
 date: 2024-12-21
-image: /img/blog/cyberseceval/cyberseceval-illustation.jpg
+image: /img/blog/cyberseceval/cyberseceval-illustration.jpg
 ---
 
-# How to run CyberSecEval on any model with Promptfoo
+# How to run CyberSecEval with Promptfoo
 
 Want to evaluate your LLM's cybersecurity defenses? This guide shows you how to use [Promptfoo](https://github.com/promptfoo/promptfoo) to run standardized cybersecurity evaluations against any AI model, including OpenAI, Ollama, and HuggingFace models.
 
 Importantly, Promptfoo also allows you to run these evaluations **on your application** rather than just the base model. This is important because behavior will vary based on how you've wrapped any given model.
 
-We'll use Meta's [CyberSecEval benchmark](https://ai.meta.com/research/publications/cyberseceval-3-advancing-the-evaluation-of-cybersecurity-risks-and-capabilities-in-large-language-models/) to test models against prompt injection vulnerabilities. According to Meta's research, even state-of-the-art models show between 25% and 50% successful prompt injection rates, making this evaluation critical for production deployments.
+We'll use Meta's [CyberSecEval benchmark](https://ai.meta.com/research/publications/cyberseceval-3-advancing-the-evaluation-of-cybersecurity-risks-and-capabilities-in-large-language-models/) to test models against prompt injection vulnerabilities. According to Meta, even state-of-the-art models show between 25% and 50% successful prompt injection rates, making this evaluation critical for production deployments.
 
 The end result is a report that shows you how well your model is able to defend against prompt injection attacks.
 
