@@ -44,52 +44,102 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should evaluate response correctly without penalized phrase', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: JSON.stringify({ rating: 8 }) });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          currentResponse: { rating: 8, explanation: 'Good response' },
+          previousBestResponse: { rating: 5, explanation: 'Previous response' },
+        }),
+      });
 
-      const score = await evaluateResponse(
+      const { score, explanation } = await evaluateResponse(
         mockRedteamProvider,
         'Judge prompt',
         'Target response',
+        'Previous response',
         false,
       );
 
       expect(score).toBe(8);
+      expect(explanation).toBe('Good response');
       expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(1);
       expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
-        '[{"role":"system","content":"Judge prompt"},{"role":"user","content":"Target response"}]',
+        expect.stringContaining('Current Response'),
         expect.objectContaining({
           prompt: expect.objectContaining({
             label: 'judge',
-            raw: '[{"role":"system","content":"Judge prompt"},{"role":"user","content":"Target response"}]',
           }),
         }),
       );
     });
 
     it('should apply penalty for penalized phrases', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: JSON.stringify({ rating: 8 }) });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          currentResponse: { rating: 8, explanation: 'Good but penalized' },
+          previousBestResponse: { rating: 5, explanation: 'Previous response' },
+        }),
+      });
 
-      const score = await evaluateResponse(
+      const { score, explanation } = await evaluateResponse(
         mockRedteamProvider,
         'Judge prompt',
         'Target response',
+        'Previous response',
         true,
       );
 
       expect(score).toBe(5); // 8 - 3 = 5
+      expect(explanation).toBe('Good but penalized');
     });
 
     it('should handle minimum score correctly', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: JSON.stringify({ rating: 2 }) });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          currentResponse: { rating: 2, explanation: 'Poor response' },
+          previousBestResponse: { rating: 1, explanation: 'Previous response' },
+        }),
+      });
 
-      const score = await evaluateResponse(
+      const { score, explanation } = await evaluateResponse(
         mockRedteamProvider,
         'Judge prompt',
         'Target response',
+        'Previous response',
         true,
       );
 
       expect(score).toBe(1); // 2 - 3, but minimum is 1
+      expect(explanation).toBe('Poor response');
+    });
+
+    it('should handle missing previous response', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          currentResponse: { rating: 7, explanation: 'First response' },
+          previousBestResponse: { rating: 0, explanation: '' },
+        }),
+      });
+
+      const { score, explanation } = await evaluateResponse(
+        mockRedteamProvider,
+        'Judge prompt',
+        'Target response',
+        '',
+        false,
+      );
+
+      expect(score).toBe(7);
+      expect(explanation).toBe('First response');
+      expect(JSON.parse(mockRedteamProvider.callApi.mock.calls[0][0])).toEqual([
+        {
+          role: 'system',
+          content: 'Judge prompt',
+        },
+        {
+          role: 'user',
+          content: expect.stringContaining('Previous Best Response:\nNone'),
+        },
+      ]);
     });
   });
 
