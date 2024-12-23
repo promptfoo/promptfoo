@@ -40,8 +40,8 @@ For private sheets, you'll need to set up Google's Default Application Credentia
 
    - Create a [service account](https://console.cloud.google.com/iam-admin/serviceaccounts) in Google Cloud
    - Download the JSON key file
-   - Enable the [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
-   - Share your sheet with the service account email (`your-service-account@project-name.iam.gserviceaccount.com`)
+   - Enable the [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com) (`sheets.googleapis.com`)
+   - Share your sheet with the service account email (`your-service-account@project-name.iam.gserviceaccount.com`) with at least viewer permissions
 
 3. **Configure Credentials**
 
@@ -53,6 +53,7 @@ For private sheets, you'll need to set up Google's Default Application Credentia
    ```yaml
    tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
    ```
+   The system will automatically use authenticated access when the sheet is not public.
 
 ## Writing Evaluation Results to Google Sheets
 
