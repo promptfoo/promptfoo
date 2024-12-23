@@ -175,7 +175,7 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
-    if (loadTestsGlob.startsWith('hf://datasets/')) {
+    if (loadTestsGlob.startsWith('huggingface://datasets/')) {
       telemetry.recordAndSendOnce('feature_used', {
         feature: 'huggingface dataset',
       });

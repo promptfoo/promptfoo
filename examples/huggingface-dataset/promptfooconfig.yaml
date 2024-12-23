@@ -13,4 +13,4 @@ providers:
 
 
 tests:
-  - hf://datasets/PKU-Alignment/BeaverTails-Evaluation
+  - huggingface://datasets/PKU-Alignment/BeaverTails-Evaluation
