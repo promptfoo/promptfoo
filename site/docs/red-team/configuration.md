@@ -476,7 +476,7 @@ Strategies modify or generate additional test cases based on the output of other
   shouldRenderAsrIncrease={false}
 />
 
-See [Strategies](/docs/category/strategies/) for comprehensive descriptions of each strategy.
+See [Strategies](/docs/red-team/strategies/) for descriptions of each strategy.
 
 #### Strategy Configuration
 

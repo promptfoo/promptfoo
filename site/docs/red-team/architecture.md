@@ -120,7 +120,7 @@ The test generation engine combines plugins and strategies to create attack prob
 
   Examples include [PII exposure](/docs/red-team/plugins/pii/), [BOLA](/docs/red-team/plugins/bola/), and [Hate Speech](/docs/red-team/plugins/harmful/).
 
-- **[Strategies](/docs/category/strategies-1/)** are patterns for delivering the generated adversarial inputs.
+- **[Strategies](/docs/red-team/strategies/)** are patterns for delivering the generated adversarial inputs.
 
   The most fundamental strategy is `basic`, which controls whether original test cases are included in the output. When disabled, only modified test cases from other strategies are included.
 
