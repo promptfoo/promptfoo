@@ -86,3 +86,15 @@ tests:
 outputPath: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 // highlight-end
 ```
+
+When writing to a Google Sheet, you can:
+
+1. **Specify a target sheet** by including the `gid` parameter in the URL (found in the sheet's URL when viewing it). For example:
+
+```yaml
+outputPath: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit#gid=123456789
+```
+
+2. **Create a new sheet automatically** by omitting the `gid` parameter. A new sheet will be created with a timestamp-based name (e.g., "Sheet1234567890") to avoid overwriting existing data.
+
+This behavior helps prevent accidental overwrites and makes it easier to manage multiple evaluation results within the same Google Sheets document.
