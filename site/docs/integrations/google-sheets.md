@@ -2,13 +2,15 @@
 sidebar_label: Google Sheets
 ---
 
-# Importing Test Cases from Google Sheets
+# Google Sheets Integration
 
 promptfoo allows you to import eval test cases directly from Google Sheets. This can be done either unauthenticated (if the sheet is public) or authenticated using Google's Default Application Credentials, typically with a service account for programmatic access.
 
-## Unauthenticated Access
+## Importing Test Cases from Google Sheets
 
-If the Google Sheet is set to be accessible by "anyone with the link," you can directly specify the share URL in your YAML configuration. For example:
+### Public Sheets (Unauthenticated)
+
+For sheets that are accessible via "anyone with the link", simply specify the share URL in your configuration:
 
 ```yaml
 prompts:
@@ -22,58 +24,41 @@ tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsK
 // highlight-end
 ```
 
-Here's an [example sheet](https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit#gid=0). For more information on how to set up the sheet itself, see [loading assertions from CSV](/docs/configuration/expected-outputs/#load-assertions-from-csv).
+> 💡 See our [example sheet](https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit#gid=0) for the expected format. For details on sheet structure, refer to [loading assertions from CSV](/docs/configuration/expected-outputs/#load-assertions-from-csv).
 
-## Authenticated Access with Default Application Credentials
+### Private Sheets (Authenticated)
 
-For sheets that are not publicly accessible, you can use authenticated access. This requires setting up Google [Default Application Credentials](https://cloud.google.com/docs/authentication/application-default-credentials). Here’s how you can configure it:
+For private sheets, you'll need to set up Google's Default Application Credentials:
 
-1. **Install peer dependencies**: `npm install googleapis`
+1. **Install Peer Dependencies**
 
-1. **Service Account Setup**: Create a [service account](https://console.cloud.google.com/iam-admin/serviceaccounts) in your Google Cloud Platform project. Create a JSON key file and download it.
+   ```bash
+   npm install googleapis
+   ```
 
-1. **Enable Google Sheets API**: Enable the [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com) (`sheets.googleapis.com`).
+2. **Set Up Authentication**
 
-1. **Share Sheet**: Share the Google Sheet with the email address of your service account (`your-service-account@project-name.iam.gserviceaccount.com`) with at least viewer permissions.
+   - Create a [service account](https://console.cloud.google.com/iam-admin/serviceaccounts) in Google Cloud
+   - Download the JSON key file
+   - Enable the [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
+   - Share your sheet with the service account email (`your-service-account@project-name.iam.gserviceaccount.com`)
 
-1. **Configure Environment**: Set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to the path of the JSON key file:
+3. **Configure Credentials**
 
-```sh
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account-file.json"
-```
+   ```bash
+   export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account-file.json"
+   ```
 
-1. **Update YAML Configuration**: Use the same URL format as in unauthenticated access, but the system will automatically use the authenticated method to access the sheet:
+4. **Use the Same URL Format**
+   ```yaml
+   tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
+   ```
 
-```yaml
-tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
-```
+## Writing Evaluation Results to Google Sheets
 
-## Using Custom Providers for Model-Graded Metrics
+The `outputPath` parameter (`--output` or `-o` on the command line) supports writing evaluation results directly to Google Sheets. This requires Default Application Credentials with write access configured.
 
-When using Google Sheets for test cases, you can still use custom providers for model-graded metrics like `llm-rubric` or `similar`. To do this, override the default LLM grader by adding a `defaultTest` property to your configuration:
-
-```yaml
-prompts:
-  - prompt1.txt
-  - prompt2.txt
-providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
-  - openai:chat:gpt-4o-mini
-tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
-defaultTest:
-  options:
-    provider:
-      text:
-        id: ollama:llama3.1:70b
-      embedding:
-        id: ollama:embeddings:mxbai-embed-large
-```
-
-For more information on overriding the LLM grader, see the [model-graded metrics documentation](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
-
-## Writing outputs to a Google Sheet
-
-The `outputPath` parameter (`--output` or `-o` on the command line) supports Google Sheets URLs. In order to write, Default Application Credentials must be configured with a service account that has write access.
+### Basic Usage
 
 ```yaml
 prompts:
@@ -87,14 +72,45 @@ outputPath: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSa
 // highlight-end
 ```
 
-When writing to a Google Sheet, you can:
+### Targeting Specific Sheets
 
-1. **Specify a target sheet** by including the `gid` parameter in the URL (found in the sheet's URL when viewing it). For example:
+You have two options when writing results to a Google Sheet:
+
+1. **Write to an existing sheet** by including the sheet's `gid` parameter in the URL:
+
+   ```yaml
+   outputPath: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit#gid=123456789
+   ```
+
+   > 💡 To find a sheet's `gid`, open the sheet in your browser and look at the URL - the `gid` appears after the `#gid=` portion.
+
+2. **Create a new sheet automatically** by omitting the `gid` parameter. The system will:
+   - Create a new sheet with a timestamp-based name (e.g., "Sheet1234567890")
+   - Write results to this new sheet
+   - Preserve existing sheets and their data
+
+This behavior helps prevent accidental data overwrites while keeping your evaluation results organized within the same Google Sheets document.
+
+## Using Custom Providers for Model-Graded Metrics
+
+When using Google Sheets for test cases, you can still use custom providers for model-graded metrics
+like `llm-rubric` or `similar`. To do this, override the default LLM grader by adding a `defaultTest` property to your configuration:
 
 ```yaml
-outputPath: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit#gid=123456789
+prompts:
+  - prompt1.txt
+  - prompt2.txt
+providers:
+  - anthropic:messages:claude-3-5-sonnet-20241022
+  - openai:chat:gpt-4-mini
+tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
+defaultTest:
+  options:
+    provider:
+      text:
+        id: ollama:llama3.1:70b
+      embedding:
+        id: ollama:embeddings:mxbai-embed-large
 ```
 
-2. **Create a new sheet automatically** by omitting the `gid` parameter. A new sheet will be created with a timestamp-based name (e.g., "Sheet1234567890") to avoid overwriting existing data.
-
-This behavior helps prevent accidental overwrites and makes it easier to manage multiple evaluation results within the same Google Sheets document.
+For more details on customizing the LLM grader, see the [model-graded metrics documentation](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
