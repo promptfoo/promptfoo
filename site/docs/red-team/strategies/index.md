@@ -37,7 +37,7 @@ By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 
 ### Multi-turn Strategies
 
-Multi-turn strategies also use an attacker agent to coerce the target model into generating harmful outputs. These strategies are particularly effective against stateful applications where they can convince the target model to act against it's purpose over time. You should run these strategies if you are testing a multi-turn application (such as a chatbot). Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
+Multi-turn strategies also use an attacker agent to coerce the target model into generating harmful outputs. These strategies are particularly effective against stateful applications where they can convince the target model to act against its purpose over time. You should run these strategies if you are testing a multi-turn application (such as a chatbot). Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
 
 :::note
 All single-turn strategies can be applied to multi-turn applications, but multi-turn strategies require a stateful application.
