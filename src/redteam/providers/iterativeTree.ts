@@ -29,6 +29,7 @@ import type {
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
@@ -117,6 +118,10 @@ export async function evaluateResponse(
     },
     vars: {},
   });
+  if (redteamProvider.delay) {
+    logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
+    await sleep(redteamProvider.delay);
+  }
   logger.debug(`[IterativeTree] Judge response: ${JSON.stringify(judgeResp)}`);
   if (judgeResp.error) {
     throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
@@ -159,6 +164,10 @@ export async function getNewPrompt(
     },
     vars: {},
   });
+  if (redteamProvider.delay) {
+    logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
+    await sleep(redteamProvider.delay);
+  }
   logger.debug(`[IterativeTree] Redteam response: ${JSON.stringify(redteamResp)}`);
   if (redteamResp.error) {
     throw new Error(`Error from redteam provider: ${redteamResp.error}`);
@@ -202,6 +211,10 @@ export async function checkIfOnTopic(
     },
     vars: {},
   });
+  if (redteamProvider.delay) {
+    logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
+    await sleep(redteamProvider.delay);
+  }
   logger.debug(`[IterativeTree] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
   if (isOnTopicResp.error) {
     throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);

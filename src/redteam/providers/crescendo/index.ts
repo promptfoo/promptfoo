@@ -16,6 +16,7 @@ import type {
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
@@ -396,6 +397,10 @@ class CrescendoProvider implements ApiProvider {
       },
       vars: {},
     });
+    if (redTeamingChat.delay) {
+      logger.debug(`[Crescendo] Sleeping for ${redTeamingChat.delay}ms`);
+      await sleep(redTeamingChat.delay);
+    }
     if (response.error) {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
@@ -548,6 +553,10 @@ class CrescendoProvider implements ApiProvider {
       },
       vars: {},
     });
+    if (scoringProvider.delay) {
+      logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
+      await sleep(scoringProvider.delay);
+    }
     if (refusalResponse.error) {
       throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
     }
@@ -596,6 +605,10 @@ class CrescendoProvider implements ApiProvider {
       },
       vars: {},
     });
+    if (scoringProvider.delay) {
+      logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
+      await sleep(scoringProvider.delay);
+    }
     if (evalResponse.error) {
       throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
     }
