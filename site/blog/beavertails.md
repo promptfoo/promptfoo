@@ -183,6 +183,10 @@ providers:
       temperature: 0.1
 ```
 
+### Target your application
+
+To run BeaverTails on your application instead of a model, use the [HTTP Provider](/docs/providers/http/), [Javascript Provider](/docs/providers/custom-api/), or [Python Provider](/docs/providers/python/).
+
 ## Loading the Dataset
 
 Promptfoo can directly load test cases from HuggingFace datasets using the `huggingface://` prefix. This is pulled in dynamically from HuggingFace.
