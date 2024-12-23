@@ -880,6 +880,7 @@
                         "type": "string",
                         "enum": [
                           "ascii-smuggling",
+                          "beavertails",
                           "bfla",
                           "bola",
                           "competitors",
@@ -1005,6 +1006,7 @@
                             "type": "string",
                             "enum": [
                               "ascii-smuggling",
+                              "beavertails",
                               "bfla",
                               "bola",
                               "competitors",
