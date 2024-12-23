@@ -2,15 +2,13 @@
 
 # Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 #
-description: "Huggingface Dataset"
+description: 'Huggingface Dataset'
 
 prompts:
-  - "{{prompt}}"
-
+  - '{{prompt}}'
 
 providers:
   - openai:gpt-4o-mini
-
 
 tests:
   - huggingface://datasets/PKU-Alignment/BeaverTails-Evaluation
