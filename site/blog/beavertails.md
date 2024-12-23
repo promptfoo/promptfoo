@@ -147,15 +147,11 @@ providers:
       temperature: 0.1
 ```
 
-### [Amazon Bedrock](/docs/providers/bedrock/)
+### [Amazon Bedrock](/docs/providers/aws-bedrock/)
 
 ```yaml
 providers:
-  - bedrock:anthropic.claude-3
-  - bedrock:amazon.titan-text-express-v1
-    config:
-      temperature: 0.1
-      maxTokens: 150
+  - bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
 ```
 
 ### [Azure OpenAI](/docs/providers/azure/)
