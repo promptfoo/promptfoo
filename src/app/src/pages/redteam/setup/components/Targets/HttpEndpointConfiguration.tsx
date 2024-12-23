@@ -1,4 +1,5 @@
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
+import type { FC } from 'react';
 import Editor from 'react-simple-code-editor';
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
@@ -55,7 +56,7 @@ interface GeneratedConfig {
   };
 }
 
-const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
+const HttpEndpointConfiguration: FC<HttpEndpointConfigurationProps> = ({
   selectedTarget,
   updateCustomTarget,
   bodyError,
@@ -63,7 +64,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   setUrlError,
   updateFullTarget,
-}): JSX.Element => {
+}) => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 

@@ -7,7 +7,7 @@ function textLength(node: React.ReactNode): number {
   if (Array.isArray(node)) {
     return node.reduce((acc, child) => acc + textLength(child), 0);
   }
-  if (React.isValidElement(node) && node.props.children) {
+  if (React.isValidElement<{ children?: React.ReactNode }>(node) && node.props.children) {
     return React.Children.toArray(node.props.children).reduce(
       (acc: number, child) => acc + textLength(child),
       0,
@@ -47,7 +47,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
       }
       return nodes;
     }
-    if (React.isValidElement(node) && node.props.children) {
+    if (React.isValidElement<{ children?: React.ReactNode }>(node) && node.props.children) {
       const childLength = textLength(node.props.children);
       if (childLength > maxLength - length) {
         return React.cloneElement(node, {

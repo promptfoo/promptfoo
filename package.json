@@ -90,8 +90,8 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.714.0",
-    "@aws-sdk/credential-provider-sso": "^3.714.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.716.0",
+    "@aws-sdk/credential-provider-sso": "^3.716.0",
     "@azure/identity": "^4.5.0",
     "@eslint/js": "^9.17.0",
     "@libsql/client": "^0.14.0",
@@ -123,9 +123,9 @@
     "cloudflare": "3.4.0",
     "concurrently": "^9.1.0",
     "drizzle-kit": "^0.26.2",
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.24.2",
     "eslint": "^9.17.0",
-    "eslint-plugin-jest": "^28.9.0",
+    "eslint-plugin-jest": "^28.10.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.16",
     "eslint-plugin-unicorn": "^56.0.1",
@@ -141,7 +141,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.1",
+    "typescript-eslint": "^8.18.2",
     "zod-to-json-schema": "^3.24.1"
   },
   "dependencies": {
@@ -158,10 +158,7 @@
     "@adaline/vertex": "0.8.1",
     "@anthropic-ai/sdk": "^0.33.1",
     "@apidevtools/json-schema-ref-parser": "^11.7.3",
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.0",
     "@googleapis/sheets": "^9.3.1",
-    "@mui/material": "^6.1.10",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",

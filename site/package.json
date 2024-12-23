@@ -16,7 +16,6 @@
     "format": "prettier --ignore-path .gitignore -w ."
   },
   "dependencies": {
-    "@calcom/embed-react": "^1.5.1",
     "@docusaurus/core": "^3.6.3",
     "@docusaurus/plugin-content-docs": "^3.6.3",
     "@docusaurus/plugin-google-gtag": "^3.6.3",
@@ -25,17 +24,17 @@
     "@docusaurus/theme-search-algolia": "^3.6.3",
     "@mdx-js/react": "^3.1.0",
     "@monaco-editor/react": "^4.6.0",
-    "@mui/icons-material": "^6.1.10",
+    "@mui/icons-material": "^6.3.0",
     "@segment/ajv-human-errors": "^2.14.1",
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
     "dedent": "^1.5.3",
     "docusaurus-plugin-image-zoom": "^2.0.0",
-    "framer-motion": "^11.13.3",
-    "lucide-react": "^0.468.0",
-    "prism-react-renderer": "^2.4.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "framer-motion": "^11.15.0",
+    "lucide-react": "^0.469.0",
+    "prism-react-renderer": "^2.4.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.6.3",
