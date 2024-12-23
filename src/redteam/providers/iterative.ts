@@ -13,6 +13,7 @@ import {
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import type { TargetResponse } from './shared';
@@ -87,6 +88,10 @@ async function runRedteamConversation({
       },
       vars: {},
     });
+    if (redteamProvider.delay) {
+      logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
+      await sleep(redteamProvider.delay);
+    }
     if (redteamResp.error) {
       throw new Error(`Error from redteam provider: ${redteamResp.error}`);
     }
@@ -142,6 +147,10 @@ async function runRedteamConversation({
       },
       vars: {},
     });
+    if (redteamProvider.delay) {
+      logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
+      await sleep(redteamProvider.delay);
+    }
     logger.debug(`[Iterative] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
     if (isOnTopicResp.error) {
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
@@ -196,6 +205,10 @@ async function runRedteamConversation({
       },
       vars: {},
     });
+    if (redteamProvider.delay) {
+      logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
+      await sleep(redteamProvider.delay);
+    }
     if (judgeResp.error) {
       throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
     }
