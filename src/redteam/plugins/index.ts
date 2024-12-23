@@ -14,6 +14,7 @@ import {
   getRemoteGenerationUrl,
 } from '../remoteGeneration';
 import { type RedteamPluginBase } from './base';
+import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { DebugAccessPlugin } from './debugAccess';
@@ -114,6 +115,7 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 >;
 
 const pluginFactories: PluginFactory[] = [
+  createPluginFactory(BeavertailsPlugin, 'beavertails'),
   createPluginFactory(PlinyPlugin, 'pliny'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),

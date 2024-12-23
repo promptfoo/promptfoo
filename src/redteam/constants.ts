@@ -89,6 +89,7 @@ export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
   'ascii-smuggling',
+  'beavertails',
   'bfla',
   'bola',
   'competitors',
@@ -467,6 +468,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Single-shot baseline security tests without optimization',
+  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
@@ -540,6 +542,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
+  beavertails: 'BeaverTails Dataset',
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
@@ -629,6 +632,7 @@ export const severityDisplayNames: Record<Severity, string> = {
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
+  beavertails: Severity.Low,
   bfla: Severity.High,
   bola: Severity.High,
   competitors: Severity.Low,
@@ -744,6 +748,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'politics',
     'religion',
     'pliny',
+    'beavertails',
   ],
 
   Brand: [
@@ -782,6 +787,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
   'ascii-smuggling': 'AsciiSmuggling',
+  beavertails: 'BeaverTails',
   bfla: 'BFLAEnforcement',
   bola: 'BOLAEnforcement',
   competitors: 'CompetitorEndorsement',
@@ -851,6 +857,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 export const pluginDescriptions: Record<Plugin, string> = {
   'ascii-smuggling':
     'Tests system resilience against Unicode tag-based instruction smuggling attacks that can bypass content filters and security controls',
+  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
   bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
   competitors:
