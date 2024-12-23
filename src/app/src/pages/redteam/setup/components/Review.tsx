@@ -6,6 +6,7 @@ import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
+import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -499,14 +500,24 @@ export default function Review() {
                 </Button>
               )}
               {evalId && (
-                <Button
-                  variant="contained"
-                  color="success"
-                  href={`/report?evalId=${evalId}`}
-                  startIcon={<AssessmentIcon />}
-                >
-                  View Report
-                </Button>
+                <>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    href={`/report?evalId=${evalId}`}
+                    startIcon={<AssessmentIcon />}
+                  >
+                    View Report
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    href={`/eval?evalId=${evalId}`}
+                    startIcon={<SearchIcon />}
+                  >
+                    View Probes
+                  </Button>
+                </>
               )}
               <Tooltip title="Run Settings">
                 <IconButton
@@ -588,6 +599,22 @@ export default function Review() {
                 </Box>
               }
             />
+            <Box>
+              <TextField
+                fullWidth
+                type="number"
+                label="Number of test cases"
+                value={config.numTests}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (!Number.isNaN(value) && value > 0 && Number.isInteger(value)) {
+                    updateConfig('numTests', value);
+                  }
+                }}
+                disabled={isRunning}
+                helperText="Number of test cases to generate for each plugin"
+              />
+            </Box>
             <Box>
               <TextField
                 fullWidth

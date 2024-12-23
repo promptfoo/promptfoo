@@ -894,6 +894,7 @@
                           "harmful:child-exploitation",
                           "harmful:copyright-violations",
                           "harmful:cybercrime",
+                          "harmful:cybercrime:malicious-code",
                           "harmful:graphic-content",
                           "harmful:harassment-bullying",
                           "harmful:hate",
@@ -914,6 +915,7 @@
                           "harmful:specialized-advice",
                           "harmful:unsafe-practices",
                           "harmful:violent-crime",
+                          "harmful:weapons:ied",
                           "hijacking",
                           "imitation",
                           "indirect-prompt-injection",
@@ -1017,6 +1019,7 @@
                               "harmful:child-exploitation",
                               "harmful:copyright-violations",
                               "harmful:cybercrime",
+                              "harmful:cybercrime:malicious-code",
                               "harmful:graphic-content",
                               "harmful:harassment-bullying",
                               "harmful:hate",
@@ -1037,6 +1040,7 @@
                               "harmful:specialized-advice",
                               "harmful:unsafe-practices",
                               "harmful:violent-crime",
+                              "harmful:weapons:ied",
                               "hijacking",
                               "imitation",
                               "indirect-prompt-injection",
@@ -1164,7 +1168,8 @@
                           "leetspeak",
                           "math-prompt",
                           "multilingual",
-                          "rot13"
+                          "rot13",
+                          "best-of-n"
                         ]
                       },
                       {
@@ -1192,7 +1197,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, jailbreak:composite\nSupports basic, default, jailbreak, jailbreak:composite, prompt-injection, ascii-smuggling, base64, citation, crescendo, goat, jailbreak:tree, leetspeak, math-prompt, multilingual, rot13",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, jailbreak:composite\nSupports basic, default, jailbreak, jailbreak:composite, prompt-injection, ascii-smuggling, base64, citation, crescendo, goat, jailbreak:tree, leetspeak, math-prompt, multilingual, rot13, best-of-n",
               "default": [
                 "default"
               ]

@@ -240,6 +240,8 @@ jobs:
         id: eval
         run: |
           PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 1
 
       - name: Test that the eval results are uploaded
         run: |

@@ -74,6 +74,7 @@ import { WatsonXProvider } from './providers/watsonx';
 import { WebhookProvider } from './providers/webhook';
 import { WebSocketProvider } from './providers/websocket';
 import { createXAIProvider } from './providers/xai';
+import RedteamBestOfNProvider from './redteam/providers/bestOfN';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
 import RedteamGoatProvider from './redteam/providers/goat';
 import RedteamIterativeProvider from './redteam/providers/iterative';
@@ -461,6 +462,8 @@ export async function loadApiProvider(
     ret = new RedteamCrescendoProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:goat') {
     ret = new RedteamGoatProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:best-of-n') {
+    ret = new RedteamBestOfNProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
     ret = new RedteamIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {

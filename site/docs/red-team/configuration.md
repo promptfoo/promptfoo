@@ -3,6 +3,15 @@ sidebar_position: 3
 sidebar_label: 'Configuration'
 ---
 
+import React from 'react';
+import {
+HarmfulPluginsTable,
+PIIPluginsTable,
+BrandPluginsTable,
+TechnicalPluginsTable,
+} from '../\_shared/PluginTable';
+import StrategyTable from '../\_shared/StrategyTable';
+
 # Redteam Configuration
 
 The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
@@ -163,44 +172,15 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 
 #### Harmful Plugins
 
-- `harmful:violent-crime`: Content related to violent criminal activities.
-- `harmful:non-violent-crime`: Content related to non-violent criminal activities.
-- `harmful:sex-crime`: Content related to sexual crimes.
-- `harmful:child-exploitation`: Content exploiting or harming children.
-- `harmful:indiscriminate-weapons`: Content related to weapons without context.
-- `harmful:hate`: Content that promotes hate or discrimination.
-- `harmful:self-harm`: Content that encourages self-harm or suicide.
-- `harmful:sexual-content`: Explicit or inappropriate sexual content.
-- `harmful:cybercrime`: Content related to cybercriminal activities.
-- `harmful:chemical-biological-weapons`: Content related to chemical or biological weapons
-- `harmful:illegal-drugs`: Content related to illegal drug use or trade.
-- `harmful:copyright-violations`: Content violating copyright laws.
-- `harmful:harassment-bullying`: Content that harasses or bullies individuals.
-- `harmful:illegal-activities`: Content promoting illegal activities.
-- `harmful:graphic-content`: Displaying graphic or violent content.
-- `harmful:unsafe-practices`: Content promoting unsafe or harmful practices.
-- `harmful:radicalization`: Content that promotes radical or extremist views.
-- `harmful:profanity`: Content containing profane or inappropriate language.
-- `harmful:insults`: Content that insults or demeans individuals.
-- `harmful:privacy`: Content violating privacy rights.
-- `harmful:intellectual-property`: Content violating intellectual property rights.
-- `harmful:misinformation-disinformation`: Spreading false or misleading information.
-- `harmful:specialized-advice`: Providing advice in specialized fields without expertise.
+<HarmfulPluginsTable />
 
 #### PII (Personally Identifiable Information) Plugins
 
-- `pii:api-db`: Ensures the model does not attempt to access APIs or databases to retrieve PII.
-- `pii:direct`: Tests if the model directly discloses PII when explicitly asked.
-- `pii:session`: Ensures the model does not leak PII across different user sessions or interactions.
-- `pii:social`: Tests if the model can be manipulated into revealing PII through social engineering tactics.
+<PIIPluginsTable />
 
 #### Brand Plugins
 
-- `contracts`: Tests if the model enters business or legal commitments without supervision.
-- `excessive-agency`: Evaluates if the model takes excessive initiative or misunderstands its capabilities.
-- `hallucination`: Tests if the model generates false or misleading information.
-- `imitation`: Checks if the model imitates people, brands, or organizations.
-- `politics`: Tests if the model makes political statements.
+<BrandPluginsTable />
 
 #### Technical plugins
 
@@ -489,19 +469,14 @@ Strategies modify or generate additional test cases based on the output of other
 
 #### Available Strategies
 
-- `jailbreak`: Applies a linear probe jailbreak technique to deliver the payload (Default)
-- `jailbreak:composite`: Combines multiple jailbreak techniques from research papers (Default)
-- `base64`: Encodes the injected variable using Base64 encoding
-- `basic` - Raw payloads only (Default)
-- `citation`: Uses academic citations and references to potentially bypass safety measures
-- `crescendo`: Applies a multi-turn jailbreak technique
-- `jailbreak:tree`: Applies a tree-based jailbreak technique
-- `leetspeak`: Converts the injected variable to leetspeak, replacing certain letters with numbers or symbols
-- `multilingual`: Translates the request to multiple low-resource languages
-- `prompt-injection`: Wraps the payload in a prompt injection
-- `rot13`: Applies ROT13 encoding to the injected variable, shifting each letter 13 positions in the alphabet
+<StrategyTable
+  shouldRenderCategory={false}
+  shouldRenderCost={false}
+  shouldRenderDescription={false}
+  shouldRenderAsrIncrease={false}
+/>
 
-See [Strategies](/docs/category/strategies/) for comprehensive descriptions of each strategy.
+See [Strategies](/docs/red-team/strategies/) for descriptions of each strategy.
 
 #### Strategy Configuration
 

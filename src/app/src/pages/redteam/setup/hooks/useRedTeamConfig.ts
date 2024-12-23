@@ -1,7 +1,32 @@
 import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
+import type { Plugin } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Config, ProviderOptions } from '../types';
+
+interface RecentlyUsedPlugins {
+  plugins: Plugin[];
+  addPlugin: (plugin: Plugin) => void;
+}
+
+const NUM_RECENT_PLUGINS = 6;
+export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
+  persist(
+    (set) => ({
+      plugins: [],
+      addPlugin: (plugin) =>
+        set((state) => ({
+          plugins: [plugin, ...state.plugins.filter((p) => p !== plugin)].slice(
+            0,
+            NUM_RECENT_PLUGINS,
+          ),
+        })),
+    }),
+    {
+      name: 'recentlyUsedPlugins',
+    },
+  ),
+);
 
 interface RedTeamConfigState {
   config: Config;
@@ -38,6 +63,7 @@ const defaultConfig: Config = {
   strategies: ['jailbreak', 'jailbreak:composite'],
   purpose: '',
   entities: [],
+  numTests: 5,
   applicationDefinition: {
     purpose: '',
     redteamUser: '',
@@ -75,6 +101,7 @@ export const EXAMPLE_CONFIG: Config = {
   purpose:
     'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
   entities: [],
+  numTests: 5,
   applicationDefinition: {
     purpose:
       'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
