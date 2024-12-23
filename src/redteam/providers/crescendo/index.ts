@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import telemetry from '../../../telemetry';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -82,6 +83,12 @@ class CrescendoProvider implements ApiProvider {
     this.targetConversationId = uuidv4();
     this.redTeamingChatConversationId = uuidv4();
     this.stateless = config.stateless ?? true;
+    if (config.stateless !== undefined) {
+      telemetry.recordOnce('feature_used', {
+        feature: 'stateless',
+        state: String(config.stateless),
+      });
+    }
 
     if (!this.stateless) {
       this.maxBacktracks = 0;
