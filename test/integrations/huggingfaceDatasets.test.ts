@@ -1,5 +1,5 @@
 import { fetchWithProxy } from '../../src/fetch';
-import { fetchHuggingFaceDataset } from '../../src/providers/huggingfaceDatasets';
+import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
 
 jest.mock('../../src/fetch', () => ({
   fetchWithProxy: jest.fn(),

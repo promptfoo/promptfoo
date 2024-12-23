@@ -10,10 +10,10 @@ import { parse as parsePath } from 'path';
 import { testCaseFromCsvRow } from './csv';
 import { getEnvBool, getEnvString } from './envars';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
+import { fetchHuggingFaceDataset } from './integrations/huggingfaceDatasets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
-import { fetchHuggingFaceDataset } from './providers/huggingfaceDatasets';
 import telemetry from './telemetry';
 import type {
   CsvRow,
