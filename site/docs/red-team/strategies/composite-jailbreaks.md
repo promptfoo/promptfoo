@@ -21,9 +21,10 @@ You can customize the behavior with these options:
 
 ```yaml
 strategies:
-  - jailbreak:composite:
-    modelFamily: gpt # optimize for one of: gpt, claude, llama
-    n: 5 # number of prompt variations to generate
+  - id: jailbreak:composite
+    config:
+      modelFamily: gpt # optimize for one of: gpt, claude, llama
+      n: 5 # number of prompt variations to generate
 ```
 
 ## How It Works

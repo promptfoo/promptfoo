@@ -505,3 +505,7 @@ thead.collapsed .header-dismiss {
   max-height: 90%;
   object-fit: contain;
 }
+
+.error-pill {
+  cursor: pointer;
+}

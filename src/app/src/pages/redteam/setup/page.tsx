@@ -6,6 +6,7 @@ import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import AppIcon from '@mui/icons-material/Apps';
 import CloseIcon from '@mui/icons-material/Close';
+import DownloadIcon from '@mui/icons-material/Download';
 import PluginIcon from '@mui/icons-material/Extension';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import TargetIcon from '@mui/icons-material/GpsFixed';
@@ -40,6 +41,7 @@ import YamlPreview from './components/YamlPreview';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import type { Config } from './types';
+import { generateOrderedYaml } from './utils/yamlHelpers';
 import './page.css';
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
@@ -47,11 +49,13 @@ const StyledTabs = styled(Tabs)(({ theme }) => ({
     left: 0,
     right: 'auto',
   },
-  width: '280px',
-  minWidth: '280px',
+  width: '100%',
   backgroundColor: theme.palette.background.paper,
   '& .MuiTab-root': {
     minHeight: '48px',
+  },
+  '& .MuiTabs-scrollButtons': {
+    display: 'none',
   },
 }));
 
@@ -220,6 +224,7 @@ const readFileAsText = (file: File): Promise<string> => {
 const StatusSection = styled(Box)(({ theme }) => ({
   padding: theme.spacing(2),
   borderBottom: `1px solid ${theme.palette.divider}`,
+  borderRight: `1px solid ${theme.palette.divider}`,
   backgroundColor: theme.palette.background.paper,
   width: '280px',
   minWidth: '280px',
@@ -309,6 +314,7 @@ export default function RedTeamSetupPage() {
     setValue((prevValue) => {
       const newValue = prevValue + 1;
       updateHash(newValue);
+      window.scrollTo({ top: 0 });
       return newValue;
     });
   };
@@ -317,6 +323,7 @@ export default function RedTeamSetupPage() {
     setValue((prevValue) => {
       const newValue = prevValue - 1;
       updateHash(newValue);
+      window.scrollTo({ top: 0 });
       return newValue;
     });
   };
@@ -324,6 +331,7 @@ export default function RedTeamSetupPage() {
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     updateHash(newValue);
     setValue(newValue);
+    window.scrollTo({ top: 0 });
   };
 
   const toggleYamlPreview = () => {
@@ -422,6 +430,7 @@ export default function RedTeamSetupPage() {
 
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
+      window.location.reload();
     } catch (error) {
       console.error('Failed to load configuration', error);
       toast.showToast(
@@ -499,6 +508,23 @@ export default function RedTeamSetupPage() {
     toast.showToast('Configuration reset to defaults', 'success');
   };
 
+  const handleDownloadYaml = () => {
+    const yamlContent = generateOrderedYaml(config);
+    const blob = new Blob([yamlContent], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${configName || 'redteam-config'}.yaml`;
+    link.click();
+    URL.revokeObjectURL(url);
+    recordEvent('feature_used', {
+      feature: 'redteam_config_download',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+  };
+
   // --- JSX ---
   return (
     <Root>
@@ -539,7 +565,6 @@ export default function RedTeamSetupPage() {
                 variant="scrollable"
                 value={value}
                 onChange={handleChange}
-                sx={{ width: 200 }}
               >
                 <StyledTab
                   icon={<AppIcon />}
@@ -669,13 +694,30 @@ export default function RedTeamSetupPage() {
             fullWidth
             value={configName}
             onChange={(e) => setConfigName(e.target.value)}
+            sx={{ mb: 2 }}
           />
+          <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              onClick={handleDownloadYaml}
+              fullWidth
+            >
+              Export YAML
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<SaveIcon />}
+              onClick={handleSaveConfig}
+              disabled={!configName}
+              fullWidth
+            >
+              Save
+            </Button>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleSaveConfig} disabled={!configName}>
-            Save
-          </Button>
         </DialogActions>
       </Dialog>
 

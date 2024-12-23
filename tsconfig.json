@@ -12,7 +12,8 @@
     "strict": true,
     "resolveJsonModule": true,
     "composite": true,
-    "rootDir": "."
+    "rootDir": ".",
+    "baseUrl": "./"
   },
   "include": ["src/", "typings/**/*", "test/", "./package.json", "src/**/*.json", "test/**/*.json"],
   "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*"]

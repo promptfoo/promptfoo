@@ -1,5 +1,4 @@
 import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
-import type { RedteamFileConfig } from '@promptfoo/redteam/types';
 
 export interface Config {
   description: string;
@@ -8,6 +7,7 @@ export interface Config {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  numTests?: number;
   applicationDefinition: {
     purpose?: string;
     systemPrompt?: string;
@@ -33,7 +33,7 @@ export interface ProviderOptions {
     url?: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: string;
+    body?: string | object;
     messageTemplate?: string;
     // Browser specific options
     steps?: BrowserStep[];
@@ -86,13 +86,6 @@ export interface ComponentProps {
 
 export interface YamlPreviewProps {
   config: Config;
-}
-
-export interface YamlConfig {
-  description: string;
-  targets: ProviderOptions[];
-  prompts: string[];
-  redteam: RedteamFileConfig;
 }
 
 export interface LocalPluginConfig {

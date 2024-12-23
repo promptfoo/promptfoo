@@ -14,9 +14,8 @@ export async function extractSystemPurpose(
       const result = await fetchRemoteGeneration('purpose' as RedTeamTask, prompts);
       return result as string;
     } catch (error) {
-      logger.warn(
-        `[purpose] Error using remote generation, falling back to local extraction: ${error}`,
-      );
+      logger.warn(`[purpose] Error using remote generation, returning empty string: ${error}`);
+      return '';
     }
   }
 
@@ -40,7 +39,7 @@ export async function extractSystemPurpose(
       return match ? match[1].trim() : output.trim();
     });
   } catch (error) {
-    logger.warn(`[purpose] Error using remote generation, returning empty string: ${error}`);
+    logger.warn(`[purpose] Error using extracting purpose, returning empty string: ${error}`);
     return '';
   }
 }

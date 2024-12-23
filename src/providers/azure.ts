@@ -8,7 +8,6 @@ import type {
   RunStepMessageCreationDetails,
 } from '@azure/openai-assistants';
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
@@ -21,6 +20,7 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import invariant from '../util/invariant';
 import { sleep } from '../util/time';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase, calculateCost } from './shared';
 

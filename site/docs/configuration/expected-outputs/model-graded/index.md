@@ -8,19 +8,19 @@ promptfoo supports several types of model-graded assertions:
 
 Output-based:
 
-- [`llm-rubric`](llm-rubric) - checks if the LLM output matches given requirements, using a language model to grade the output based on the rubric.
-- `model-graded-closedqa` - similar to the above, a "criteria-checking" eval that ensures the answer meets a specific requirement. Uses an OpenAI-authored prompt from their public evals.
-- `factuality` - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but difference don't matter from the perspective of factuality. Uses the prompt from OpenAI's public evals.
-- `answer-relevance` - ensure that LLM output is related to original query
-- `classifier` - see [classifier grading docs](/docs/configuration/expected-outputs/classifier).
-- `moderation` - see [moderation grading docs](/docs/configuration/expected-outputs/moderation).
-- `select-best` - compare outputs from multiple test cases and choose a winner
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - checks if the LLM output matches given requirements, using a language model to grade the output based on the rubric.
+- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - similar to the above, a "criteria-checking" eval that ensures the answer meets a specific requirement. Uses an OpenAI-authored prompt from their public evals.
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but difference don't matter from the perspective of factuality. Uses the prompt from OpenAI's public evals.
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - ensure that LLM output is related to original query
+- [`classifier`](/docs/configuration/expected-outputs/classifier) - see classifier grading docs.
+- [`moderation`](/docs/configuration/expected-outputs/moderation) - see moderation grading docs.
+- [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - compare outputs from multiple test cases and choose a winner
 
 RAG-based (requires `query` and/or `context` vars):
 
-- `context-recall` - ensure that ground truth appears in context
-- `context-relevance` - ensure that context is relevant to original query
-- `context-faithfulness` - ensure that LLM output uses the context
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output uses the context
 
 ## Examples (output-based)
 

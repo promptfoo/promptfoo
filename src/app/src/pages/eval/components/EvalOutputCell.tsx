@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
-import type { EvaluateTableOutput } from '@promptfoo/types';
+import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
 import { diffSentences, diffJson, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
@@ -414,6 +414,7 @@ function EvalOutputCell({
   // Pass/fail badge creation
   let passCount = 0;
   let failCount = 0;
+  let errorCount = 0;
   const gradingResult = output.gradingResult;
 
   if (gradingResult) {
@@ -435,8 +436,14 @@ function EvalOutputCell({
     failCount = 1;
   }
 
+  if (output.failureReason === ResultFailureReason.ERROR) {
+    errorCount = 1;
+  }
+
   let passFailText;
-  if (failCount === 1 && passCount === 1) {
+  if (errorCount === 1) {
+    passFailText = 'ERROR';
+  } else if (failCount === 1 && passCount === 1) {
     passFailText = (
       <>
         {`${failCount} FAIL`} {`${passCount} PASS`}

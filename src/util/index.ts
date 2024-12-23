@@ -10,7 +10,6 @@ import yaml from 'js-yaml';
 import NodeCache from 'node-cache';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
@@ -52,7 +51,9 @@ import {
   isProviderOptions,
   OutputFileExtension,
   type EvaluateSummaryV2,
+  ResultFailureReason,
 } from '../types';
+import invariant from '../util/invariant';
 import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
 import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
@@ -62,7 +63,11 @@ import { getNunjucksEngine } from './templates';
 const DEFAULT_QUERY_LIMIT = 100;
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
-  const passFailText = output.pass ? '[PASS]' : '[FAIL]';
+  const passFailText = output.pass
+    ? '[PASS]'
+    : output.failureReason === ResultFailureReason.ASSERT
+      ? '[FAIL]'
+      : '[ERROR]';
   const namedScoresText = Object.entries(output.namedScores)
     .map(([name, value]) => `${name}: ${value?.toFixed(2)}`)
     .join(', ');

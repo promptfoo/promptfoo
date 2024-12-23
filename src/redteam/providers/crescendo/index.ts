@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
@@ -13,11 +12,18 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
-import { extractFirstJsonObject } from '../../../util/json';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
-import { getTargetResponse, redteamProviderManager, type TargetResponse } from '../shared';
+import type { Message } from '../shared';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_ROUNDS = 10;
@@ -31,22 +37,17 @@ interface CrescendoConfig {
   stateless?: boolean;
 }
 
-interface ConversationMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
-
 export class MemorySystem {
-  private conversations: Map<string, ConversationMessage[]> = new Map();
+  private conversations: Map<string, Message[]> = new Map();
 
-  addMessage(conversationId: string, message: ConversationMessage) {
+  addMessage(conversationId: string, message: Message) {
     if (!this.conversations.has(conversationId)) {
       this.conversations.set(conversationId, []);
     }
     this.conversations.get(conversationId)!.push(message);
   }
 
-  getConversation(conversationId: string): ConversationMessage[] {
+  getConversation(conversationId: string): Message[] {
     return this.conversations.get(conversationId) || [];
   }
 
@@ -132,6 +133,7 @@ class CrescendoProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+    logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -213,7 +215,7 @@ class CrescendoProvider implements ApiProvider {
       }
 
       if (!attackPrompt) {
-        logger.error('[Crescendo] failed to generate a question. Will skip turn and try again');
+        logger.debug('[Crescendo] failed to generate a question. Will skip turn and try again');
         continue;
       }
 
@@ -257,7 +259,7 @@ class CrescendoProvider implements ApiProvider {
       );
 
       if (isRefusal) {
-        logger.debug('\n[Crescendo]Response Rejected, performing back tracking...\n');
+        logger.debug('\n[Crescendo] Response Rejected, performing back tracking...\n');
         backtrackCount++;
         this.targetConversationId = await this.backtrackMemory(this.targetConversationId);
         lastFeedback = dedent`
@@ -322,14 +324,14 @@ class CrescendoProvider implements ApiProvider {
     this.logChatHistory(this.targetConversationId);
     this.logChatHistory(this.redTeamingChatConversationId);
     delete vars['sessionId'];
+
+    const messages = this.memory.getConversation(this.targetConversationId);
     return {
       output: lastResponse.output,
       metadata: {
         // Displayed in UI
-        redteamFinalPrompt: this.memory
-          .getConversation(this.targetConversationId)
-          .map((m) => `[${m.role}] ${m.content}`)
-          .join('\n\n'),
+        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
+        messages: JSON.stringify(messages, null, 2),
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
@@ -345,7 +347,7 @@ class CrescendoProvider implements ApiProvider {
     lastResponse: TargetResponse,
     lastFeedback: string,
     objectiveScore?: { value: number; rationale: string },
-  ): Promise<{ generatedQuestion: string; tokenUsage?: TokenUsage }> {
+  ): Promise<{ generatedQuestion: string | undefined; tokenUsage?: TokenUsage }> {
     logger.debug(
       `[Crescendo] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
         objectiveScore,
@@ -389,6 +391,13 @@ class CrescendoProvider implements ApiProvider {
     });
     if (response.error) {
       throw new Error(`Error from redteam provider: ${response.error}`);
+    }
+    if (!response.output) {
+      logger.debug(`[Crescendo] No output from redteam provider: ${JSON.stringify(response)}`);
+      return {
+        generatedQuestion: undefined,
+        tokenUsage: undefined,
+      };
     }
 
     const parsedOutput =
@@ -452,7 +461,7 @@ class CrescendoProvider implements ApiProvider {
     );
 
     try {
-      const parsed = extractFirstJsonObject<ConversationMessage[]>(renderedPrompt);
+      const parsed = extractFirstJsonObject<Message[]>(renderedPrompt);
       // If successful, then load it directly into the chat history
       for (const message of parsed) {
         if (
@@ -481,7 +490,11 @@ class CrescendoProvider implements ApiProvider {
     logger.debug(targetPrompt);
 
     const targetResponse = await getTargetResponse(provider, targetPrompt, context, options);
-    invariant(targetResponse.output, 'Expected output to be defined');
+    logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
+    if (targetResponse.error) {
+      throw new Error(`[Crescendo] Target returned an error: ${targetResponse.error}`);
+    }
+    invariant(targetResponse.output, '[Crescendo] Target did not return an output');
     logger.debug(`[Crescendo] Received response from target: ${targetResponse.output}`);
 
     this.memory.addMessage(this.targetConversationId, {
@@ -540,6 +553,7 @@ class CrescendoProvider implements ApiProvider {
       rationale: string;
     }>(refusalResponse.output);
 
+    logger.debug(`[Crescendo] Refusal score parsed response: ${JSON.stringify(parsed)}`);
     invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
     invariant(
       typeof parsed.metadata === 'number',
@@ -588,6 +602,7 @@ class CrescendoProvider implements ApiProvider {
       metadata: number;
     }>(evalResponse.output);
 
+    logger.debug(`[Crescendo] Eval score parsed response: ${JSON.stringify(parsed)}`);
     invariant(typeof parsed.value === 'boolean', 'Expected eval grader value to be a boolean');
     invariant(typeof parsed.metadata === 'number', 'Expected eval grader metadata to be a number');
 

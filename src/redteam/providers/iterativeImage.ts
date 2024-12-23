@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import type {
@@ -10,6 +9,7 @@ import type {
   NunjucksFilterMap,
   RedteamFileConfig,
 } from '../../types';
+import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';

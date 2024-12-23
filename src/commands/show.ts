@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import invariant from 'tiny-invariant';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
@@ -12,6 +11,7 @@ import {
   printBorder,
   setupEnv,
 } from '../util';
+import invariant from '../util/invariant';
 
 async function handlePrompt(id: string) {
   telemetry.record('command_used', {
@@ -39,15 +39,23 @@ async function handlePrompt(id: string) {
       'Dataset ID': evl.datasetId.slice(0, 6),
       'Raw score': evl.metrics?.score?.toFixed(2) || '-',
       'Pass rate':
-        evl.metrics && evl.metrics.testPassCount + evl.metrics.testFailCount > 0
+        evl.metrics &&
+        evl.metrics.testPassCount + evl.metrics.testFailCount + evl.metrics.testErrorCount > 0
           ? `${(
               (evl.metrics.testPassCount /
-                (evl.metrics.testPassCount + evl.metrics.testFailCount)) *
+                (evl.metrics.testPassCount +
+                  evl.metrics.testFailCount +
+                  evl.metrics.testErrorCount)) *
               100
             ).toFixed(2)}%`
           : '-',
       'Pass count': evl.metrics?.testPassCount || '-',
-      'Fail count': evl.metrics?.testFailCount || '-',
+      'Fail count':
+        evl.metrics?.testFailCount ||
+        '-' +
+          (evl.metrics?.testErrorCount && evl.metrics.testErrorCount > 0
+            ? `+ ${evl.metrics.testErrorCount} errors`
+            : ''),
     });
   }
   logger.info(wrapTable(table));
@@ -119,15 +127,25 @@ async function handleDataset(id: string) {
       'Raw score': prompt.prompt.metrics?.score?.toFixed(2) || '-',
       'Pass rate':
         prompt.prompt.metrics &&
-        prompt.prompt.metrics.testPassCount + prompt.prompt.metrics.testFailCount > 0
+        prompt.prompt.metrics.testPassCount +
+          prompt.prompt.metrics.testFailCount +
+          prompt.prompt.metrics.testErrorCount >
+          0
           ? `${(
               (prompt.prompt.metrics.testPassCount /
-                (prompt.prompt.metrics.testPassCount + prompt.prompt.metrics.testFailCount)) *
+                (prompt.prompt.metrics.testPassCount +
+                  prompt.prompt.metrics.testFailCount +
+                  prompt.prompt.metrics.testErrorCount)) *
               100
             ).toFixed(2)}%`
           : '-',
       'Pass count': prompt.prompt.metrics?.testPassCount || '-',
-      'Fail count': prompt.prompt.metrics?.testFailCount || '-',
+      'Fail count':
+        prompt.prompt.metrics?.testFailCount ||
+        '-' +
+          (prompt.prompt.metrics?.testErrorCount && prompt.prompt.metrics.testErrorCount > 0
+            ? `+ ${prompt.prompt.metrics.testErrorCount} errors`
+            : ''),
     });
   }
   logger.info(wrapTable(table));

@@ -1,25 +1,39 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
+import { callApi } from '@app/utils/api';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
+import SearchIcon from '@mui/icons-material/Search';
+import SettingsIcon from '@mui/icons-material/Settings';
+import StopIcon from '@mui/icons-material/Stop';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { strategyDisplayNames } from '@promptfoo/redteam/constants';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
+import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import { generateOrderedYaml } from '../utils/yamlHelpers';
+import { generateOrderedYaml, getUnifiedConfig } from '../utils/yamlHelpers';
+import { LogViewer } from './LogViewer';
 
 interface PolicyPlugin {
   id: 'policy';
@@ -28,12 +42,27 @@ interface PolicyPlugin {
   };
 }
 
+interface JobStatusResponse {
+  hasRunningJob: boolean;
+  jobId?: string;
+}
+
 export default function Review() {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
+  const [isRunning, setIsRunning] = React.useState(false);
+  const [logs, setLogs] = React.useState<string[]>([]);
+  const [evalId, setEvalId] = React.useState<string | null>(null);
+  const { showToast } = useToast();
+  const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
+  const [debugMode, setDebugMode] = React.useState(false);
+  const [delay, setDelay] = React.useState('0');
+  const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
+  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isRunSettingsDialogOpen, setIsRunSettingsDialogOpen] = useState(false);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -118,6 +147,129 @@ export default function Review() {
 
     return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
   }, [config.strategies]);
+
+  const checkForRunningJob = async (): Promise<JobStatusResponse> => {
+    try {
+      const response = await callApi('/redteam/status');
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error checking job status:', error);
+      return { hasRunningJob: false };
+    }
+  };
+
+  const handleRunWithSettings = async () => {
+    setIsRunSettingsDialogOpen(false);
+    const { hasRunningJob } = await checkForRunningJob();
+
+    if (hasRunningJob) {
+      setIsJobStatusDialogOpen(true);
+      return;
+    }
+
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      setPollInterval(null);
+    }
+
+    setIsRunning(true);
+    setLogs([]);
+    setEvalId(null);
+
+    try {
+      const response = await callApi('/redteam/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          config: getUnifiedConfig(config),
+          force: forceRegeneration,
+          verbose: debugMode,
+          delay,
+        }),
+      });
+
+      const { id } = await response.json();
+
+      const interval = setInterval(async () => {
+        const statusResponse = await callApi(`/eval/job/${id}`);
+        const status = (await statusResponse.json()) as Job;
+
+        if (status.logs) {
+          setLogs(status.logs);
+        }
+
+        if (status.status === 'complete' || status.status === 'error') {
+          clearInterval(interval);
+          setPollInterval(null);
+          setIsRunning(false);
+
+          if (status.status === 'complete' && status.result && status.evalId) {
+            setEvalId(status.evalId);
+          } else if (status.status === 'complete') {
+            console.warn('No evaluation result was generated');
+            showToast(
+              'The evaluation completed but no results were generated. Please check the logs for details.',
+              'warning',
+            );
+          } else {
+            showToast(
+              'An error occurred during evaluation. Please check the logs for details.',
+              'error',
+            );
+          }
+        }
+      }, 1000);
+
+      setPollInterval(interval);
+    } catch (error) {
+      console.error('Error running redteam:', error);
+      setIsRunning(false);
+      showToast('An error occurred while starting the evaluation. Please try again.', 'error');
+    }
+  };
+
+  const handleCancel = async () => {
+    try {
+      await callApi('/redteam/cancel', {
+        method: 'POST',
+      });
+
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        setPollInterval(null);
+      }
+
+      setIsRunning(false);
+      showToast('Cancel request submitted', 'success');
+    } catch (error) {
+      console.error('Error cancelling job:', error);
+      showToast('Failed to cancel job', 'error');
+    }
+  };
+
+  const handleCancelExistingAndRun = async () => {
+    try {
+      await handleCancel();
+      setIsJobStatusDialogOpen(false);
+      setTimeout(() => {
+        handleRunWithSettings();
+      }, 500);
+    } catch (error) {
+      console.error('Error canceling existing job:', error);
+      showToast('Failed to cancel existing job', 'error');
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [pollInterval]);
 
   return (
     <Box maxWidth="lg" mx="auto">
@@ -270,15 +422,29 @@ export default function Review() {
       </Typography>
 
       <Paper elevation={2} sx={{ p: 3 }}>
-        <Typography variant="body1" paragraph>
-          Follow these steps to run your red team configuration:
-        </Typography>
-        <ol>
-          <li>
-            <Typography variant="body1" paragraph>
-              Save your configuration as a YAML file:
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            Option 1: Save and Run via CLI
+          </Typography>
+          <Typography variant="body1">
+            Save your configuration and run it from the command line. Full control over the
+            evaluation process, good for larger scans:
+          </Typography>
+          <Box
+            component="pre"
+            sx={{
+              p: 2,
+              mb: 2,
+              backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+              borderRadius: 1,
+              fontFamily: 'monospace',
+              fontSize: '0.875rem',
+            }}
+          >
+            promptfoo redteam run
+          </Box>
+          <Stack spacing={2}>
+            <Box>
               <Button
                 variant="contained"
                 color="primary"
@@ -292,35 +458,187 @@ export default function Review() {
                 color="primary"
                 startIcon={<VisibilityIcon />}
                 onClick={handleOpenYamlDialog}
+                sx={{ ml: 2 }}
               >
                 View YAML
               </Button>
             </Box>
-          </li>
-          <li>
-            <Typography variant="body1" paragraph>
-              Open your terminal in the directory containing your configuration file, and run:
-            </Typography>
-            <Box
-              component="pre"
-              sx={{
-                p: 2,
-                backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-                borderRadius: 1,
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-              }}
-            >
-              promptfoo redteam run
+          </Stack>
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        <Box>
+          <Typography variant="h6" gutterBottom>
+            Option 2: Run Directly in Browser
+          </Typography>
+          <Typography variant="body1" paragraph>
+            Run the red team evaluation right here. Simpler but less powerful than the CLI, good for
+            tests and small scans:
+          </Typography>
+          <Box sx={{ mb: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleRunWithSettings}
+                disabled={isRunning}
+                startIcon={
+                  isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
+                }
+              >
+                {isRunning ? 'Running...' : 'Run Now'}
+              </Button>
+              {isRunning && (
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={handleCancel}
+                  startIcon={<StopIcon />}
+                >
+                  Cancel
+                </Button>
+              )}
+              {evalId && (
+                <>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    href={`/report?evalId=${evalId}`}
+                    startIcon={<AssessmentIcon />}
+                  >
+                    View Report
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    href={`/eval?evalId=${evalId}`}
+                    startIcon={<SearchIcon />}
+                  >
+                    View Probes
+                  </Button>
+                </>
+              )}
+              <Tooltip title="Run Settings">
+                <IconButton
+                  onClick={() => setIsRunSettingsDialogOpen(true)}
+                  disabled={isRunning}
+                  size="small"
+                >
+                  <SettingsIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
             </Box>
-          </li>
-        </ol>
+          </Box>
+          {logs.length > 0 && <LogViewer logs={logs} />}
+        </Box>
       </Paper>
 
       <Dialog open={isYamlDialogOpen} onClose={handleCloseYamlDialog} maxWidth="lg" fullWidth>
         <DialogTitle>YAML Configuration</DialogTitle>
         <DialogContent>
           <YamlEditor initialYaml={yamlContent} readOnly />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isJobStatusDialogOpen} onClose={() => setIsJobStatusDialogOpen(false)}>
+        <DialogTitle>Job Already Running</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" paragraph>
+            There is already a red team evaluation running. Would you like to cancel it and start a
+            new one?
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+            <Button variant="outlined" onClick={() => setIsJobStatusDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="contained" color="primary" onClick={handleCancelExistingAndRun}>
+              Cancel Existing & Run New
+            </Button>
+          </Box>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isRunSettingsDialogOpen} onClose={() => setIsRunSettingsDialogOpen(false)}>
+        <DialogTitle>Run Settings</DialogTitle>
+        <DialogContent>
+          <Stack spacing={4} sx={{ mt: 1, minWidth: 300 }}>
+            {/*
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={forceRegeneration}
+                  onChange={(e) => setForceRegeneration(e.target.checked)}
+                  disabled={isRunning}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body1">Force regeneration</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Generate new test cases even if no changes are detected
+                  </Typography>
+                </Box>
+              }
+            />
+            */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={debugMode}
+                  onChange={(e) => setDebugMode(e.target.checked)}
+                  disabled={isRunning}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body1">Debug mode</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Show additional debug information in logs
+                  </Typography>
+                </Box>
+              }
+            />
+            <Box>
+              <TextField
+                fullWidth
+                type="number"
+                label="Number of test cases"
+                value={config.numTests}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (!Number.isNaN(value) && value > 0 && Number.isInteger(value)) {
+                    updateConfig('numTests', value);
+                  }
+                }}
+                disabled={isRunning}
+                helperText="Number of test cases to generate for each plugin"
+              />
+            </Box>
+            <Box>
+              <TextField
+                fullWidth
+                type="number"
+                label="Delay between API calls (ms)"
+                value={delay}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Ensure non-negative numbers only
+                  if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
+                    setDelay(value);
+                  }
+                }}
+                disabled={isRunning}
+                InputProps={{
+                  endAdornment: <Typography variant="caption">ms</Typography>,
+                }}
+                helperText="Add a delay between API calls to avoid rate limits"
+              />
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+              <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
+            </Box>
+          </Stack>
         </DialogContent>
       </Dialog>
     </Box>

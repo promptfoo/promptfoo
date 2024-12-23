@@ -7,7 +7,6 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
-import invariant from 'tiny-invariant';
 import { testCaseFromCsvRow } from './csv';
 import { getEnvBool, getEnvString } from './envars';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
@@ -26,6 +25,7 @@ import type {
   ProviderOptions,
 } from './types';
 import { retryWithDeduplication, sampleArray } from './util/generation';
+import invariant from './util/invariant';
 import { extractJsonObjects } from './util/json';
 import { extractVariablesFromTemplates } from './util/templates';
 

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import logger from '../../logger';
 import type { Prompt } from '../../types';
 
 /**
@@ -13,13 +14,17 @@ import type { Prompt } from '../../types';
  * @throws Will throw an error if the file cannot be read or parsed.
  */
 export function processYamlFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  // Yaml is parsed later - just pass it through.
   const fileContents = fs.readFileSync(filePath, 'utf8');
-  const parsed = yaml.load(fileContents);
+  let maybeParsed: string | undefined = fileContents;
+  try {
+    maybeParsed = JSON.stringify(yaml.load(fileContents));
+  } catch (e) {
+    logger.debug(`Error parsing YAML file ${filePath}: ${e}`);
+  }
   return [
     {
-      raw: JSON.stringify(parsed),
-      label: prompt.label || `${filePath}: ${JSON.stringify(parsed).slice(0, 80)}`,
+      raw: maybeParsed,
+      label: prompt.label || `${filePath}: ${maybeParsed?.slice(0, 80)}`,
       config: prompt.config,
     },
   ];

@@ -3,6 +3,13 @@ import path from 'path';
 import winston from 'winston';
 import { getEnvString } from './envars';
 
+type LogCallback = (message: string) => void;
+let globalLogCallback: LogCallback | null = null;
+
+export function setLogCallback(callback: LogCallback | null) {
+  globalLogCallback = callback;
+}
+
 export const LOG_LEVELS = {
   error: 0,
   warn: 1,
@@ -12,14 +19,21 @@ export const LOG_LEVELS = {
 
 const consoleFormatter = winston.format.printf(
   (info: winston.Logform.TransformableInfo): string => {
+    const message = info.message as string;
+
+    // Call the callback if it exists
+    if (globalLogCallback) {
+      globalLogCallback(message);
+    }
+
     if (info.level === 'error') {
-      return chalk.red(info.message as string);
+      return chalk.red(message);
     } else if (info.level === 'warn') {
-      return chalk.yellow(info.message as string);
+      return chalk.yellow(message);
     } else if (info.level === 'info') {
-      return info.message as string;
+      return message;
     } else if (info.level === 'debug') {
-      return chalk.cyan(info.message as string);
+      return chalk.cyan(message);
     }
     throw new Error(`Invalid log level: ${info.level}`);
   },

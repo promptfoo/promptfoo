@@ -143,6 +143,7 @@ Deterministic eval metrics
 | `contains-sql`                  | output contains valid sql                                         |
 | `is-xml`                        | output is valid xml                                               |
 | `contains-xml`                  | output contains valid xml                                         |
+| `is-refusal`                    | output indicates the model refused to perform the task            |
 | `javascript`                    | provided Javascript function validates the output                 |
 | `python`                        | provided Python function validates the output                     |
 | `webhook`                       | provided webhook returns `{pass: true}`                           |
@@ -155,6 +156,7 @@ Deterministic eval metrics
 | `cost`                          | Cost is below a threshold (for models with cost info such as GPT) |
 | `is-valid-openai-function-call` | Ensure that the function call matches the function's JSON schema  |
 | `is-valid-openai-tools-call`    | Ensure that all tool calls match the tools JSON schema            |
+| `assert-set`                    | Group assertions together with optional threshold                 |
 
 Model-assisted eval metrics
 
@@ -197,7 +199,7 @@ If you're looking to customize your usage, you have a wide set of parameters at 
 | `-p, --prompts <paths...>`          | Paths to [prompt files](https://www.promptfoo.dev/docs/configuration/parameters#prompts), directory, or glob                                                                           |
 | `-r, --providers <name or path...>` | One of: openai:chat, openai:completion, openai:model-name, localai:chat:model-name, localai:completion:model-name. See [API providers][providers-docs]                                 |
 | `-o, --output <path>`               | Path to [output file](https://www.promptfoo.dev/docs/configuration/parameters#output-file) (csv, json, yaml, html)                                                                     |
-| `--tests <path>`                    | Path to [external test file](https://www.promptfoo.dev/docs/configurationexpected-outputsassertions#load-an-external-tests-file)                                                       |
+| `--tests <path>`                    | Path to [external test file](https://www.promptfoo.dev/docs/configuration/expected-outputs/#load-assertions-from-external-file)                                                        |
 | `-c, --config <paths>`              | Path to one or more [configuration files](https://www.promptfoo.dev/docs/configuration/guide). `promptfooconfig.yaml` is automatically loaded if present                               |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                 |
 | `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                                                                                                            |

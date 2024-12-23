@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
@@ -25,6 +24,7 @@ import type {
   Scenario,
 } from './types';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
+import invariant from './util/invariant';
 import { PromptSchema } from './validators/prompts';
 
 export * from './types';

@@ -132,23 +132,31 @@ async function handleExampleDownload(
   }
 
   const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
-  if (directory === '.' || !directory) {
+  if (!exampleName) {
+    return;
+  }
+
+  const basePath = directory && directory !== '.' ? `${directory}/` : '';
+  const readmePath = path.join(basePath, exampleName, 'README.md');
+  const cdCommand = `cd ${path.join(basePath, exampleName)}`;
+
+  if (exampleName.includes('redteam')) {
     logger.info(
-      dedent`View the README file at ${chalk.bold(`${exampleName}/README.md`)} or run 
-        
-        \`${chalk.bold(`cd ${exampleName} && ${runCommand}`)}\`
-        
-        to get started!`,
+      dedent`
+
+      View the README file at ${chalk.bold(readmePath)} to get started!
+      `,
     );
   } else {
     logger.info(
-      '\n' +
-        dedent`
-        View the README file at: ${chalk.bold(`${directory}/${exampleName}/README.md`)} or run
+      dedent`
 
-        \`${chalk.bold(`cd ${directory}/${exampleName} && ${runCommand}`)}\`
-        
-        to get started!`,
+      View the README at ${chalk.bold(readmePath)} or run:
+
+      \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
+
+      to get started!
+      `,
     );
   }
 

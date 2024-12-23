@@ -1,7 +1,8 @@
 import { subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
+import type { UnifiedConfig } from '@promptfoo/types';
 import yaml from 'js-yaml';
-import type { Config, YamlConfig } from '../types';
+import type { Config } from '../types';
 
 const orderRedTeam = (redteam: any): any => {
   const orderedRedTeam: any = {};
@@ -39,12 +40,15 @@ const orderKeys = (obj: any): any => {
   return orderedObj;
 };
 
-export const generateOrderedYaml = (config: Config): string => {
-  const yamlConfig: YamlConfig = {
+export function getUnifiedConfig(
+  config: Config,
+): UnifiedConfig & { redteam: NonNullable<UnifiedConfig['redteam']> } {
+  return {
     description: config.description,
     targets: [config.target],
     prompts: config.prompts,
     redteam: {
+      numTests: config.numTests,
       plugins: config.plugins.map((plugin): RedteamPluginObject => {
         if (typeof plugin === 'string') {
           return { id: plugin };
@@ -66,14 +70,16 @@ export const generateOrderedYaml = (config: Config): string => {
       }),
     },
   };
+}
 
+export function generateOrderedYaml(config: Config): string {
+  const yamlConfig = getUnifiedConfig(config);
   if (config.purpose) {
     yamlConfig.redteam.purpose = config.purpose;
   }
   if (config.entities && config.entities.length > 0) {
     yamlConfig.redteam.entities = config.entities;
   }
-
   const orderedConfig = orderKeys(yamlConfig);
 
   const yamlString = yaml.dump(orderedConfig, { noRefs: true, lineWidth: -1 });
@@ -93,4 +99,4 @@ export const generateOrderedYaml = (config: Config): string => {
   });
 
   return `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n${updatedLines.join('\n')}`;
-};
+}

@@ -15,9 +15,15 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import dedent from 'dedent';
 import 'prismjs/components/prism-clike';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
@@ -51,7 +57,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
       {requiresTransformResponse(selectedTarget) && (
         <Box>
           <Typography variant="h6" gutterBottom>
-            Configure Request Parser
+            Configure Request Transform
           </Typography>
           <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
             <Box
@@ -69,7 +75,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 onValueChange={(code) => updateCustomTarget('transformRequest', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder="Optional: A JavaScript expression to transform the prompt before sending. E.g. `{ messages: [{ role: 'user', content: prompt }] }`"
+                placeholder={dedent`Optional: A JavaScript expression to transform the prompt before sending.
+
+                  e.g. \`{ messages: [{ role: 'user', content: prompt }] }\``}
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
@@ -78,12 +86,12 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a request parser to transform the prompt before sending. This
+              Optionally, configure a request transform to modify the prompt before sending. This
               can be used to format the prompt into a specific structure required by your API.
             </Typography>
           </Box>
-          <Typography variant="h6" gutterBottom>
-            Configure Response Parser
+          <Typography variant="h6" gutterBottom mt={4}>
+            Configure Response Transform
           </Typography>
           <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
             <Box
@@ -101,7 +109,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 onValueChange={(code) => updateCustomTarget('transformResponse', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder="Optional: A JavaScript expression to parse the response. E.g. json.choices[0].message.content"
+                placeholder={dedent`Optional: A JavaScript expression to parse the response.
+
+                  e.g. \`json.choices[0].message.content\``}
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
@@ -110,7 +120,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a response parser to extract a specific part of the HTTP
+              Optionally, configure a response transform to extract a specific part of the HTTP
               response. See{' '}
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
@@ -167,9 +177,14 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
         </Button>
       </Stack>
 
-      {!selectedTarget.config.url && (
+      {!selectedTarget.config.url && !selectedTarget.config.request && (
         <Alert severity="info">
           Please configure the HTTP endpoint above and click "Test Target" to proceed.
+        </Alert>
+      )}
+      {selectedTarget.config.request && (
+        <Alert severity="info">
+          Automated target testing is not available in raw request mode.
         </Alert>
       )}
 
@@ -220,17 +235,33 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
                   maxHeight: '200px',
                   overflow: 'auto',
+                  mb: 2,
                 }}
               >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {JSON.stringify(testResult.providerResponse?.metadata?.headers, null, 2)}
-                </pre>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Header</TableCell>
+                      <TableCell>Value</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {Object.entries(testResult.providerResponse?.metadata?.headers || {}).map(
+                      ([key, value]) => (
+                        <TableRow key={key}>
+                          <TableCell>{key}</TableCell>
+                          <TableCell
+                            sx={{
+                              wordBreak: 'break-all',
+                            }}
+                          >
+                            {value as string}
+                          </TableCell>
+                        </TableRow>
+                      ),
+                    )}
+                  </TableBody>
+                </Table>
               </Paper>
               <Typography variant="subtitle2" gutterBottom>
                 Raw Result:
@@ -252,7 +283,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     wordBreak: 'break-word',
                   }}
                 >
-                  {JSON.stringify(testResult.providerResponse?.raw, null, 2)}
+                  {typeof testResult.providerResponse?.raw === 'string'
+                    ? testResult.providerResponse?.raw
+                    : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
                 </pre>
               </Paper>
               <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
@@ -262,7 +295,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 elevation={0}
                 sx={{
                   p: 2,
-                  bgcolor: 'grey.100',
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
                   maxHeight: '200px',
                   overflow: 'auto',
                 }}
@@ -274,7 +307,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     wordBreak: 'break-word',
                   }}
                 >
-                  {JSON.stringify(testResult.providerResponse?.output, null, 2)}
+                  {typeof testResult.providerResponse?.output === 'string'
+                    ? testResult.providerResponse?.output
+                    : JSON.stringify(testResult.providerResponse?.output, null, 2)}
                 </pre>
               </Paper>
               <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
@@ -284,7 +319,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 elevation={0}
                 sx={{
                   p: 2,
-                  bgcolor: 'grey.100',
+                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
                   maxHeight: '200px',
                   overflow: 'auto',
                 }}

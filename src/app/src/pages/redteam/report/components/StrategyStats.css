@@ -17,6 +17,13 @@ div.strategy-stats-content {
   border-radius: 0.5rem;
   padding: 1rem;
   height: 100%;
+  transition: background-color 0.2s ease;
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.strategy-item:hover {
+  background-color: rgba(0, 0, 0, 0.04);
 }
 
 [data-theme='dark'] .strategy-item {

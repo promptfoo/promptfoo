@@ -1,6 +1,5 @@
 import httpZ from 'http-z';
 import path from 'path';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -14,6 +13,7 @@ import type {
 } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
 import { isJavascriptFile } from '../util/file';
+import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';

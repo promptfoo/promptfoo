@@ -11,7 +11,7 @@ import TabItem from '@theme/TabItem';
 
 Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for red teaming gen AI applications.
 
-- **Automatically scans 30+ vulnerability types**:
+- **Automatically scans 50+ vulnerability types**:
   - <a href="/docs/red-team/llm-vulnerability-types/#privacy-and-security" style={{background: '#f0f0f0', borderRadius: '4px', padding: '2px 4px', fontSize: '14px'}}>Security & data privacy</a>: jailbreaks, injections, RAG poisoning, etc.
   - <a href="/docs/red-team/llm-vulnerability-types/" style={{background: '#f0f0f0', borderRadius: '4px', padding: '2px 4px', fontSize: '14px'}}>Compliance & ethics</a>: harmful & biased content, content filter validation, OWASP/NIST/EU compliance, etc.
   - <a href="/docs/red-team/configuration/#custom-policies" style={{background: '#f0f0f0', borderRadius: '4px', padding: '2px 4px', fontSize: '14px'}}>Custom policies</a>: enforce organizational guidelines.
@@ -243,5 +243,5 @@ Check out the [CI/CD integration](/docs/integrations/ci-cd/) docs for more info.
 
 - [Configuration guide](/docs/red-team/configuration/) for detailed info on configuring your red team
 - [Full guide](/docs/guides/llm-redteaming) for info examples of dynamically generated prompts, RAG/chain, etc.
-- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) for an overview of supported [plugins](/docs/category/plugins/)
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) for an overview of supported [plugins](/docs/red-team/plugins/)
 - Guides on red teaming [agents](/docs/red-team/agents/) and [RAGs](/docs/red-team/rag/)

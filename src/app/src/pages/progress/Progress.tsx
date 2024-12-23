@@ -92,6 +92,7 @@ export default function Cols() {
       calculatePassRate(col.metrics),
       col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`,
       col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`,
+      col.metrics?.testErrorCount == null ? '-' : `${col.metrics.testErrorCount}`,
       col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2),
     ]);
     return [headers]
@@ -343,7 +344,13 @@ export default function Cols() {
                   {col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`}
                 </TableCell>
                 <TableCell>
-                  {col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`}
+                  {col.metrics?.testFailCount == null
+                    ? '- ' +
+                      (col.metrics?.testErrorCount && col.metrics.testErrorCount > 0
+                        ? `+ ${col.metrics.testErrorCount} errors`
+                        : '')
+                    : `${col.metrics.testFailCount} ` +
+                      (col.metrics?.testErrorCount ? `+ ${col.metrics.testErrorCount} errors` : '')}
                 </TableCell>
                 <TableCell>
                   {col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2)}
