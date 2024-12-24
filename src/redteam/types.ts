@@ -97,6 +97,7 @@ export interface SynthesizeOptions extends CommonOptions {
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 
 export interface RedteamRunOptions {
+  id?: string;
   config?: string;
   output?: string;
   cache?: boolean;
