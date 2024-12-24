@@ -1018,7 +1018,6 @@ export async function matchesModeration(
   { userPrompt, assistantResponse, categories = [] }: ModerationMatchOptions,
   grading?: GradingConfig,
 ) {
-  // Return early if there's no response to moderate
   if (!assistantResponse) {
     return {
       pass: true,
