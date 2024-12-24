@@ -75,46 +75,6 @@ const defaultConfig: Config = {
   },
 };
 
-export const EXAMPLE_CONFIG: Config = {
-  description: 'Red Panda Bamboo Company RAG Example',
-  prompts: ['{{prompt}}'],
-  target: {
-    id: 'http',
-    label: 'promptfoo-redpanda-rag-example',
-    config: {
-      url: 'https://redpanda-internal-rag-example.promptfoo.app/chat',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-session-id': '{{sessionId}}',
-      },
-      body: {
-        input: '{{prompt}}',
-        role: 'engineering',
-      },
-      transformResponse: 'json.response',
-      sessionParser: 'x-session-id',
-    },
-  },
-  plugins: ['harmful:hate', 'harmful:self-harm', 'rbac'],
-  strategies: ['jailbreak', 'jailbreak:composite'],
-  purpose:
-    'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
-  entities: [],
-  numTests: 5,
-  applicationDefinition: {
-    purpose:
-      'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
-    redteamUser: 'An employee in the engineering department',
-    accessToData: 'General company information like policies and engineering documents',
-    forbiddenData:
-      'Anything owned by other departments. Things like future strategy, financial documents, sales documentation and planning, confidential HR information.',
-    accessToActions: 'Search the documents',
-    forbiddenActions: '',
-    connectedSystems: 'Internal company knowledge base',
-  },
-};
-
 const applicationDefinitionToPurpose = (applicationDefinition: Config['applicationDefinition']) => {
   const sections = [];
 
@@ -151,6 +111,47 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
   }
 
   return sections.join('\n\n');
+};
+
+const EXAMPLE_APPLICATION_DEFINITION = {
+  purpose:
+    'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
+  redteamUser: 'An employee in the engineering department',
+  accessToData: 'General company information like policies and engineering documents',
+  forbiddenData:
+    'Anything owned by other departments. Things like future strategy, financial documents, sales documentation and planning, confidential HR information.',
+  accessToActions: 'Search the documents',
+  forbiddenActions: '',
+  connectedSystems: 'Internal company knowledge base',
+};
+
+export const EXAMPLE_CONFIG: Config = {
+  description: 'Red Panda Bamboo Company RAG Example',
+  prompts: ['{{prompt}}'],
+  target: {
+    id: 'http',
+    label: 'promptfoo-redpanda-rag-example',
+    config: {
+      url: 'https://redpanda-internal-rag-example.promptfoo.app/chat',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-session-id': '{{sessionId}}',
+      },
+      body: {
+        input: '{{prompt}}',
+        role: 'engineering',
+      },
+      transformResponse: 'json.response',
+      sessionParser: 'x-session-id',
+    },
+  },
+  plugins: ['harmful:hate', 'harmful:self-harm', 'rbac'],
+  strategies: ['jailbreak', 'jailbreak:composite'],
+  purpose: applicationDefinitionToPurpose(EXAMPLE_APPLICATION_DEFINITION),
+  entities: [],
+  numTests: 5,
+  applicationDefinition: EXAMPLE_APPLICATION_DEFINITION,
 };
 
 export const useRedTeamConfig = create<RedTeamConfigState>()(

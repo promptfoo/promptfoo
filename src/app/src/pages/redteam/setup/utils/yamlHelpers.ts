@@ -48,6 +48,7 @@ export function getUnifiedConfig(
     targets: [config.target],
     prompts: config.prompts,
     redteam: {
+      purpose: config.purpose,
       numTests: config.numTests,
       plugins: config.plugins.map((plugin): RedteamPluginObject => {
         if (typeof plugin === 'string') {
