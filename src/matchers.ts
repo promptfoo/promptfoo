@@ -1018,6 +1018,15 @@ export async function matchesModeration(
   { userPrompt, assistantResponse, categories = [] }: ModerationMatchOptions,
   grading?: GradingConfig,
 ) {
+  // Return early if there's no response to moderate
+  if (!assistantResponse) {
+    return {
+      pass: true,
+      score: 1,
+      reason: 'No output to moderate',
+    };
+  }
+
   // Get default providers
   const defaultProviders = await getDefaultProviders();
 

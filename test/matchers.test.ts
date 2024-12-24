@@ -1268,6 +1268,24 @@ describe('matchesModeration', () => {
     jest.restoreAllMocks();
   });
 
+  it('should skip moderation when assistant response is empty', async () => {
+    const openAiSpy = jest
+      .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
+      .mockResolvedValue(mockModerationResponse);
+
+    const result = await matchesModeration({
+      userPrompt: 'test prompt',
+      assistantResponse: '',
+    });
+
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'No output to moderate',
+    });
+    expect(openAiSpy).not.toHaveBeenCalled();
+  });
+
   it('should use OpenAI when OPENAI_API_KEY is present', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     const openAiSpy = jest
