@@ -6,13 +6,42 @@ sidebar_position: 60
 
 ## Out of memory error
 
-If you have a large number of tests or your tests have large outputs, you may encounter an out of memory error. Setup promptfoo to handle this by following **all** of the following steps:
+If you have a large number of tests or your tests have large outputs, you may encounter an out of memory error. There are several ways to handle this:
+
+### Basic setup
+
+Follow **all** of these steps:
 
 1. Do not use the `--no-write` flag. We need to write to disk to avoid memory issues.
 2. Use the `--no-table` flag.
 3. Only output to `jsonl` ex: `--output results.jsonl`
 
-If you're still encountering memory issues, you can increase the amount of memory available to Promptfoo by setting the `NODE_OPTIONS` environment variable. For example:
+### Granular memory optimization
+
+You can selectively strip out heavy data from the results using environment variables:
+
+```bash
+# Strip prompt text (useful if your prompts contain large amounts of text or images)
+export PROMPTFOO_STRIP_PROMPT_TEXT=true
+
+# Strip model outputs (useful if your model generates large responses)
+export PROMPTFOO_STRIP_RESPONSE_OUTPUT=true
+
+# Strip test variables (useful if your test cases contain large datasets)
+export PROMPTFOO_STRIP_TEST_VARS=true
+
+# Strip grading results (useful if you're using model-graded assertions)
+export PROMPTFOO_STRIP_GRADING_RESULT=true
+
+# Strip metadata (useful if you're storing large amounts of custom metadata)
+export PROMPTFOO_STRIP_METADATA=true
+```
+
+You can use any combination of these variables to optimize memory usage while preserving the data you need.
+
+### Increase Node.js memory limit
+
+If you're still encountering memory issues after trying the above options, you can increase the amount of memory available to Promptfoo by setting the `NODE_OPTIONS` environment variable:
 
 ```bash
 # 8192 MB is 8 GB. Set this to an appropriate value for your machine.
