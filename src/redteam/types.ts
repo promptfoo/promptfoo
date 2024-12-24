@@ -61,6 +61,7 @@ type CommonOptions = {
   strategies?: RedteamStrategy[];
   delay?: number;
   remote?: boolean;
+  sharing?: boolean;
 };
 
 export interface RedteamCliGenerateOptions extends CommonOptions {
