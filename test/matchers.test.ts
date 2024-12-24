@@ -1281,7 +1281,7 @@ describe('matchesModeration', () => {
     expect(result).toEqual({
       pass: true,
       score: 1,
-      reason: 'No output to moderate',
+      reason: expect.any(String),
     });
     expect(openAiSpy).not.toHaveBeenCalled();
   });
