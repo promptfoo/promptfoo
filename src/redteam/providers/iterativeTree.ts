@@ -377,7 +377,8 @@ async function _evaluatePrompt(
   explanation?: string;
   response: string;
 }> {
-  const { redteamProvider, targetProvider, judgeSystemPrompt, onTopicSystemPrompt, apiContext } = context;
+  const { redteamProvider, targetProvider, judgeSystemPrompt, onTopicSystemPrompt, apiContext } =
+    context;
 
   // Check if prompt is on topic
   const onTopicResponse = await redteamProvider.callApi(
@@ -413,7 +414,7 @@ async function _evaluatePrompt(
   );
 
   const judgeResult = extractFirstJsonObject(judgeResponse.output) as JudgeResponse | null;
-  
+
   return {
     score: judgeResult?.score || 0,
     isOnTopic,
