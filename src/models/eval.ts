@@ -426,7 +426,6 @@ export default class Eval {
       stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
     }
 
-    // Legacy support
     const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
 
     const prompts = shouldStripPromptText
