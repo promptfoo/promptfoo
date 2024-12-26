@@ -66,5 +66,8 @@
   ],
   "[shellscript]": {
     "editor.defaultFormatter": "foxundermoon.shell-format"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
   }
 }
