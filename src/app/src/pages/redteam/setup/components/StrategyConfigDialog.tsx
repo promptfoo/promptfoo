@@ -1,15 +1,12 @@
 import React from 'react';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  TextField,
-  Typography,
-  Chip,
-  Box,
-} from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 
 const DEFAULT_LANGUAGES: Record<string, string> = {
   bn: 'Bengali',
@@ -47,8 +44,6 @@ export default function StrategyConfigDialog({
 
     if (num < 1) {
       setError('Must be at least 1');
-    } else if (num > 100) {
-      setError('Maximum value is 100');
     } else {
       setError('');
     }
