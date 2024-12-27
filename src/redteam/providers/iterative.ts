@@ -21,28 +21,26 @@ import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from
 
 // Based on: https://arxiv.org/abs/2312.02119
 
-export const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
-  ? Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)
-  : 10;
-
 async function runRedteamConversation({
-  prompt,
+  context,
   filters,
-  vars,
+  injectVar,
+  numIterations,
+  options,
+  prompt,
   redteamProvider,
   targetProvider,
-  injectVar,
-  context,
-  options,
+  vars,
 }: {
-  prompt: Prompt;
+  context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
-  vars: Record<string, string | object>;
+  injectVar: string;
+  numIterations: number;
+  options?: CallApiOptionsParams;
+  prompt: Prompt;
   redteamProvider: ApiProvider;
   targetProvider: ApiProvider;
-  injectVar: string;
-  context?: CallApiContextParams;
-  options?: CallApiOptionsParams;
+  vars: Record<string, string | object>;
 }) {
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
@@ -77,7 +75,7 @@ async function runRedteamConversation({
   let finalIteration = 0;
   let finalTargetPrompt: string | undefined = undefined;
 
-  for (let i = 0; i < NUM_ITERATIONS; i++) {
+  for (let i = 0; i < numIterations; i++) {
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
@@ -331,11 +329,18 @@ async function runRedteamConversation({
 class RedteamIterativeProvider implements ApiProvider {
   private readonly redteamProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
-
+  private readonly numIterations: number;
   constructor(readonly config: Record<string, string | object>) {
     logger.debug(`[Iterative] Constructor config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+
+    this.numIterations = Number.parseInt(
+      process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS ||
+        (config.numIterations as string | undefined) ||
+        '10',
+      10,
+    );
 
     // Redteam provider can be set from the config.
 
@@ -376,6 +381,7 @@ class RedteamIterativeProvider implements ApiProvider {
       }),
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
+      numIterations: this.numIterations,
       context,
       options,
     });
