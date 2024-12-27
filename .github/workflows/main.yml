@@ -19,9 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Temporarily disabled 22.x due to github runner compatibility issues
-        # TODO(Michael): Re-enable once issues are resolved, 2024-08-23
-        node: ['18.x', '20.x']
+        node: ['18.x', '20.x', '22.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
         exclude:
           # Remove when https://github.com/nodejs/node/issues/51766 is resolved
@@ -224,6 +222,7 @@ jobs:
 
   share-test:
     name: Share Test
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -240,7 +239,9 @@ jobs:
       - name: run promptfoo eval
         id: eval
         run: |
-          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
+          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 1
 
       - name: Test that the eval results are uploaded
         run: |
@@ -258,11 +259,12 @@ jobs:
           fi
 
       - name: Share to cloud
+        if: env.PROMPTFOO_STAGING_API_KEY != ''
+        env:
+          PROMPTFOO_STAGING_API_KEY: ${{ secrets.PROMPTFOO_STAGING_API_KEY }}
         run: |
-          if [ -n "${{ secrets.PROMPTFOO_STAGING_API_KEY }}" ]; then
-            node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
-            node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
-          fi
+          node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
+          node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
 
   redteam:
     name: Redteam
@@ -280,6 +282,7 @@ jobs:
 
   redteam-custom-enterprise-server:
     name: Redteam Custom Enterprise Server
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -294,6 +297,9 @@ jobs:
           npm run build
 
       - name: Login
+        if: env.PROMPTFOO_INTEGRATION_TEST_API_KEY != ''
+        env:
+          PROMPTFOO_INTEGRATION_TEST_API_KEY: ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }}
         run: |
           npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
 

@@ -83,7 +83,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
       {requiresTransformResponse(selectedTarget) && (
         <Box>
           <Typography variant="h6" gutterBottom>
-            Configure Request Parser
+            Configure Request Transform
           </Typography>
           <Box
             mt={2}
@@ -107,12 +107,13 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a request parser to transform the prompt before sending.
+              Optionally, configure a request transform to modify the prompt before sending. This
+              can be used to format the prompt into a specific structure required by your API.
             </Typography>
           </Box>
 
           <Typography variant="h6" gutterBottom mt={4}>
-            Configure Response Parser
+            Configure Response Transform
           </Typography>
           <Box
             mt={2}
@@ -136,8 +137,16 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a response parser to extract a specific part of the HTTP
-              response.
+              Optionally, configure a response transform to extract a specific part of the HTTP
+              response. See{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                docs
+              </a>{' '}
+              for more information.
             </Typography>
           </Box>
         </Box>
@@ -245,7 +254,13 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       ([key, value]) => (
                         <TableRow key={key}>
                           <TableCell>{key}</TableCell>
-                          <TableCell>{value as string}</TableCell>
+                          <TableCell
+                            sx={{
+                              wordBreak: 'break-all',
+                            }}
+                          >
+                            {value as string}
+                          </TableCell>
                         </TableRow>
                       ),
                     )}

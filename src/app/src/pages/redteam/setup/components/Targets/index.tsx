@@ -98,7 +98,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
   const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
-  const [forceStructuredHttp, setForceStructuredHttp] = useState(false);
 
   const { recordEvent } = useTelemetry();
   const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -132,7 +131,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   }, [selectedTarget, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
-    setForceStructuredHttp(false);
     const value = event.target.value as string;
     const currentLabel = selectedTarget.label;
     recordEvent('feature_used', { feature: 'redteam_config_target_changed', target: value });
@@ -217,30 +215,15 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
         if (bodyStr.includes('{{prompt}}')) {
           setBodyError(null);
-        } else {
+        } else if (!updatedTarget.config.request) {
           setBodyError('Request body must contain {{prompt}}');
         }
       } else if (field === 'request') {
-        try {
-          const requestStr = String(value).trim();
-          if (requestStr.includes('{{prompt}}')) {
-            updatedTarget.config.request = requestStr;
-            delete updatedTarget.config.url;
-            delete updatedTarget.config.method;
-            delete updatedTarget.config.headers;
-            delete updatedTarget.config.body;
-            setBodyError(null);
-          } else {
-            setBodyError('Request must contain {{prompt}} template variable');
-            return;
-          }
-        } catch (err) {
-          const errorMessage = String(err)
-            .replace(/^Error:\s*/, '')
-            .replace(/\bat\b.*$/, '')
-            .trim();
-          setBodyError(`Invalid HTTP request format: ${errorMessage}`);
-          return;
+        updatedTarget.config.request = value;
+        if (value && !value.includes('{{prompt}}')) {
+          setBodyError('Raw request must contain {{prompt}} template variable');
+        } else {
+          setBodyError(null);
         }
       } else if (field === 'label') {
         updatedTarget.label = value;
@@ -443,8 +426,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             setBodyError={setBodyError}
             urlError={urlError}
             setUrlError={setUrlError}
-            forceStructured={forceStructuredHttp}
-            setForceStructured={setForceStructuredHttp}
             updateFullTarget={setSelectedTarget}
           />
         )}

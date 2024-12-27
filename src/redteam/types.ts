@@ -32,8 +32,10 @@ export type RedteamPluginObject = ConfigurableObject &
 export type RedteamPlugin = string | RedteamPluginObject;
 
 export type RedteamStrategyObject = ConfigurableObject & {
-  config?: StrategyConfig & {
-    plugins?: RedteamPluginObject['id'][];
+  id: string;
+  config?: {
+    enabled?: boolean;
+    plugins?: string[];
     [key: string]: unknown;
   };
 };
@@ -59,6 +61,7 @@ type CommonOptions = {
   strategies?: RedteamStrategy[];
   delay?: number;
   remote?: boolean;
+  sharing?: boolean;
 };
 
 export interface RedteamCliGenerateOptions extends CommonOptions {
@@ -95,6 +98,7 @@ export interface SynthesizeOptions extends CommonOptions {
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 
 export interface RedteamRunOptions {
+  id?: string;
   config?: string;
   output?: string;
   cache?: boolean;

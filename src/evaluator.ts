@@ -31,6 +31,7 @@ import {
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import invariant from './util/invariant';
+import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
@@ -268,7 +269,7 @@ class Evaluator {
       };
       if (response.error) {
         ret.error = response.error;
-      } else if (response.output == null) {
+      } else if (response.output === null || response.output === undefined) {
         ret.success = false;
         ret.score = 0;
         ret.error = 'No output';
@@ -666,7 +667,7 @@ class Evaluator {
       try {
         await this.evalRecord.addResult(row, evalStep.test);
       } catch (error) {
-        logger.error(`Error saving result: ${error} ${JSON.stringify(row)}`);
+        logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
       }
 
       for (const writer of this.fileWriters) {

@@ -176,6 +176,7 @@ export async function doGenerateRedteam(
     purpose: redteamConfig?.purpose || options.purpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
+    sharing: redteamConfig?.sharing || options.sharing,
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
@@ -208,6 +209,7 @@ export async function doGenerateRedteam(
     entities,
     strategies: strategyObjs || [],
     plugins: plugins || [],
+    sharing: config.sharing,
   };
 
   let ret: Partial<UnifiedConfig> | undefined;

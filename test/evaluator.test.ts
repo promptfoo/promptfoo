@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import glob from 'glob';
 import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
+import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
@@ -1730,6 +1731,46 @@ describe('evaluator', () => {
 
     expect(sleep).not.toHaveBeenCalled();
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles circular references when logging errors during result saving', async () => {
+    // Create a circular reference object that would cause JSON.stringify to fail
+    type CircularType = { prop: string; self?: CircularType };
+    const circularObj: CircularType = { prop: 'value' };
+    circularObj.self = circularObj;
+
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    // Mock Eval.prototype.addResult to throw an error
+    const mockAddResult = jest.fn().mockRejectedValue(new Error('Mock save error'));
+    const originalAddResult = Eval.prototype.addResult;
+    Eval.prototype.addResult = mockAddResult;
+
+    // Create a test suite that will generate a result with a circular reference
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { circular: circularObj },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const errorSpy = jest.spyOn(logger, 'error');
+    await evaluate(testSuite, evalRecord, {});
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Error saving result: Error: Mock save error'),
+    );
+    Eval.prototype.addResult = originalAddResult;
+    errorSpy.mockRestore();
   });
 });
 

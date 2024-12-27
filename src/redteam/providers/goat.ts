@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import telemetry from '../../telemetry';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -14,6 +15,8 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import type { Message } from './shared';
+import { getLastMessageContent } from './shared';
 
 export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
@@ -41,6 +44,12 @@ export default class GoatProvider implements ApiProvider {
         stateless: options.stateless,
       })}`,
     );
+    if (options.stateless !== undefined) {
+      telemetry.recordOnce('feature_used', {
+        feature: 'stateless',
+        state: String(options.stateless),
+      });
+    }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
     this.maxTurns = options.maxTurns || 5;
@@ -60,7 +69,7 @@ export default class GoatProvider implements ApiProvider {
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
 
-    const messages: { content: string; role: 'user' | 'assistant' | 'system' }[] = [];
+    const messages: Message[] = [];
     const totalTokenUsage = {
       total: 0,
       prompt: 0,
@@ -86,7 +95,29 @@ export default class GoatProvider implements ApiProvider {
           method: 'POST',
         });
         const data = await response.json();
-        messages.push(data.message);
+        if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
+          logger.debug(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
+          continue;
+        }
+        const attackerMessage = data.message;
+
+        const targetVars = {
+          ...context.vars,
+          [this.injectVar]: attackerMessage.content,
+        };
+
+        const renderedAttackerPrompt = await renderPrompt(
+          context.prompt,
+          targetVars,
+          context.filters,
+          targetProvider,
+        );
+
+        messages.push({
+          role: attackerMessage.role,
+          content: renderedAttackerPrompt,
+        });
+
         if (data.tokenUsage) {
           totalTokenUsage.total += data.tokenUsage.total || 0;
           totalTokenUsage.prompt += data.tokenUsage.prompt || 0;
@@ -103,14 +134,9 @@ export default class GoatProvider implements ApiProvider {
 
         const targetPrompt = this.stateless
           ? JSON.stringify(messages)
-          : await renderPrompt(
-              context.prompt,
-              { ...context.vars, [this.injectVar]: messages[messages.length - 1].content },
-              context.filters,
-              targetProvider,
-            );
+          : messages[messages.length - 1].content;
 
-        logger.debug(`GOAT turn ${turn} target prompt: ${targetPrompt}`);
+        logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
         const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
@@ -118,7 +144,7 @@ export default class GoatProvider implements ApiProvider {
           await sleep(targetProvider.delay);
         }
 
-        logger.debug(`GOAT turn ${turn} target response: ${JSON.stringify(targetResponse)}`);
+        logger.debug(`GOAT turn ${turn} target response: ${safeJsonStringify(targetResponse)}`);
 
         if (targetResponse.sessionId) {
           context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
@@ -129,14 +155,24 @@ export default class GoatProvider implements ApiProvider {
         }
         invariant(
           targetResponse.output,
-          `[GOAT] Expected target response output to be set, but got: ${JSON.stringify(targetResponse)}`,
+          `[GOAT] Expected target response output to be set, but got: ${safeJsonStringify(targetResponse)}`,
         );
+
+        const stringifiedOutput =
+          typeof targetResponse.output === 'string'
+            ? targetResponse.output
+            : safeJsonStringify(targetResponse.output);
+
+        if (!stringifiedOutput) {
+          logger.debug(
+            `[GOAT] Target response output is not a string or JSON: ${safeJsonStringify(targetResponse)}`,
+          );
+          continue;
+        }
+
         messages.push({
-          content:
-            typeof targetResponse.output === 'string'
-              ? targetResponse.output
-              : JSON.stringify(targetResponse.output),
           role: 'assistant',
+          content: stringifiedOutput,
         });
 
         if (targetResponse.tokenUsage) {
@@ -155,9 +191,9 @@ export default class GoatProvider implements ApiProvider {
     delete context?.vars?.sessionId;
 
     return {
-      output: messages[messages.length - 1]?.content,
+      output: getLastMessageContent(messages, 'assistant'),
       metadata: {
-        redteamFinalPrompt: messages[messages.length - 2]?.content,
+        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
         messages: JSON.stringify(messages, null, 2),
       },
       tokenUsage: totalTokenUsage,

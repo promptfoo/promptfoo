@@ -12,6 +12,7 @@ import type {
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
 import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';
 
 const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
@@ -130,6 +131,10 @@ async function runRedteamConversation({
 
     // Get new prompt
     const redteamResp = await redteamProvider.callApi(redteamBody);
+    if (redteamProvider.delay) {
+      logger.debug(`[IterativeImage] Sleeping for ${redteamProvider.delay}ms`);
+      await sleep(redteamProvider.delay);
+    }
     if (redteamResp.tokenUsage) {
       totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
       totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
@@ -174,6 +179,10 @@ async function runRedteamConversation({
       },
     ]);
     const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
+    if (redteamProvider.delay) {
+      logger.debug(`[IterativeImage] Sleeping for ${redteamProvider.delay}ms`);
+      await sleep(redteamProvider.delay);
+    }
     if (isOnTopicResp.tokenUsage) {
       totalTokenUsage.total += isOnTopicResp.tokenUsage.total || 0;
       totalTokenUsage.prompt += isOnTopicResp.tokenUsage.prompt || 0;
@@ -215,6 +224,10 @@ async function runRedteamConversation({
           },
         ]),
       );
+      if (visionProvider.delay) {
+        logger.debug(`[IterativeImage] Sleeping for ${visionProvider.delay}ms`);
+        await sleep(visionProvider.delay);
+      }
       if (visionResponse.tokenUsage) {
         totalTokenUsage.total += visionResponse.tokenUsage.total || 0;
         totalTokenUsage.prompt += visionResponse.tokenUsage.prompt || 0;
@@ -237,6 +250,10 @@ async function runRedteamConversation({
       },
     ]);
     const judgeResp = await redteamProvider.callApi(judgeBody);
+    if (redteamProvider.delay) {
+      logger.debug(`[IterativeImage] Sleeping for ${redteamProvider.delay}ms`);
+      await sleep(redteamProvider.delay);
+    }
     if (judgeResp.tokenUsage) {
       totalTokenUsage.total += judgeResp.tokenUsage.total || 0;
       totalTokenUsage.prompt += judgeResp.tokenUsage.prompt || 0;

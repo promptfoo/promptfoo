@@ -7,6 +7,7 @@ export interface Config {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  numTests?: number;
   applicationDefinition: {
     purpose?: string;
     systemPrompt?: string;
