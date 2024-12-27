@@ -34,6 +34,97 @@ export interface EvalOutputCellProps {
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
 }
 
+const CellActions = React.memo(
+  ({
+    shiftKeyPressed,
+    copied,
+    handleCopy,
+    handleToggleHighlight,
+    handlePromptOpen,
+    openPrompt,
+    output,
+    handlePromptClose,
+    text,
+    handleRating,
+    handleSetScore,
+    handleCommentOpen,
+  }: {
+    shiftKeyPressed: boolean;
+    copied: boolean;
+    handleCopy: () => void;
+    handleToggleHighlight: () => void;
+    handlePromptOpen: () => void;
+    openPrompt: boolean;
+    output: EvaluateTableOutput;
+    handlePromptClose: () => void;
+    text: string;
+    handleRating: (isPass: boolean) => void;
+    handleSetScore: () => void;
+    handleCommentOpen: () => void;
+  }) => (
+    <div className="cell-actions">
+      {shiftKeyPressed && (
+        <>
+          <span className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
+            <Tooltip title="Copy output to clipboard">
+              <span>{copied ? '✅' : '📋'}</span>
+            </Tooltip>
+          </span>
+          <span
+            className="action"
+            onClick={handleToggleHighlight}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <Tooltip title="Toggle test highlight">
+              <span>🌟</span>
+            </Tooltip>
+          </span>
+        </>
+      )}
+      {output.prompt && (
+        <>
+          <span className="action" onClick={handlePromptOpen}>
+            <Tooltip title="View output and test details">
+              <span>🔎</span>
+            </Tooltip>
+          </span>
+          {openPrompt && output.metadata && (
+            <EvalOutputPromptDialog
+              open={openPrompt}
+              onClose={handlePromptClose}
+              prompt={output.prompt}
+              provider={output.provider}
+              gradingResults={output.gradingResult?.componentResults}
+              output={text}
+              metadata={output.metadata}
+            />
+          )}
+        </>
+      )}
+      <span className="action" onClick={() => handleRating(true)}>
+        <Tooltip title="Mark test passed (score 1.0)">
+          <span>👍</span>
+        </Tooltip>
+      </span>
+      <span className="action" onClick={() => handleRating(false)}>
+        <Tooltip title="Mark test failed (score 0.0)">
+          <span>👎</span>
+        </Tooltip>
+      </span>
+      <span className="action" onClick={handleSetScore}>
+        <Tooltip title="Set test score">
+          <span>🔢</span>
+        </Tooltip>
+      </span>
+      <span className="action" onClick={handleCommentOpen}>
+        <Tooltip title="Edit comment">
+          <span>✏️</span>
+        </Tooltip>
+      </span>
+    </div>
+  ),
+);
+
 function EvalOutputCell({
   output,
   maxTextLength,
@@ -340,64 +431,20 @@ function EvalOutputCell({
 
   const shiftKeyPressed = useShiftKey();
   const actions = (
-    <div className="cell-actions">
-      {shiftKeyPressed && (
-        <>
-          <span className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
-            <Tooltip title="Copy output to clipboard">
-              <span>{copied ? '✅' : '📋'}</span>
-            </Tooltip>
-          </span>
-          <span
-            className="action"
-            onClick={handleToggleHighlight}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            <Tooltip title="Toggle test highlight">
-              <span>🌟</span>
-            </Tooltip>
-          </span>
-        </>
-      )}
-      {output.prompt && (
-        <>
-          <span className="action" onClick={handlePromptOpen}>
-            <Tooltip title="View output and test details">
-              <span>🔎</span>
-            </Tooltip>
-          </span>
-          <EvalOutputPromptDialog
-            open={openPrompt}
-            onClose={handlePromptClose}
-            prompt={output.prompt}
-            provider={output.provider}
-            gradingResults={output.gradingResult?.componentResults}
-            output={text}
-            metadata={output.metadata}
-          />
-        </>
-      )}
-      <span className="action" onClick={() => handleRating(true)}>
-        <Tooltip title="Mark test passed (score 1.0)">
-          <span>👍</span>
-        </Tooltip>
-      </span>
-      <span className="action" onClick={() => handleRating(false)}>
-        <Tooltip title="Mark test failed (score 0.0)">
-          <span>👎</span>
-        </Tooltip>
-      </span>
-      <span className="action" onClick={handleSetScore}>
-        <Tooltip title="Set test score">
-          <span>🔢</span>
-        </Tooltip>
-      </span>
-      <span className="action" onClick={handleCommentOpen}>
-        <Tooltip title="Edit comment">
-          <span>✏️</span>
-        </Tooltip>
-      </span>
-    </div>
+    <CellActions
+      shiftKeyPressed={shiftKeyPressed}
+      copied={copied}
+      handleCopy={handleCopy}
+      handleToggleHighlight={handleToggleHighlight}
+      handlePromptOpen={handlePromptOpen}
+      openPrompt={openPrompt}
+      output={output}
+      handlePromptClose={handlePromptClose}
+      text={text}
+      handleRating={handleRating}
+      handleSetScore={handleSetScore}
+      handleCommentOpen={handleCommentOpen}
+    />
   );
 
   const cellStyle = useMemo(() => {

@@ -724,15 +724,17 @@ function ResultsTable({
       >
         <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
           {stickyHeader && isCollapsed && (
-            <div className="header-dismiss">
-              <IconButton
-                onClick={() => setStickyHeader(false)}
-                size="small"
-                sx={{ color: 'text.primary' }}
-              >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </div>
+            <tr className="header-dismiss-row">
+              <th colSpan={reactTable.getAllColumns().length} style={{ textAlign: 'right' }}>
+                <IconButton
+                  onClick={() => setStickyHeader(false)}
+                  size="small"
+                  sx={{ color: 'text.primary' }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </th>
+            </tr>
           )}
           {reactTable.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id} className="header">

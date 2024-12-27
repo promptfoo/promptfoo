@@ -509,3 +509,29 @@ thead.collapsed .header-dismiss {
 .error-pill {
   cursor: pointer;
 }
+
+/* Add these styles */
+.header-dismiss-row {
+  background: inherit;
+}
+
+.header-dismiss-row th {
+  padding: 4px;
+  border-bottom: none;
+}
+
+thead.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--mui-palette-background-paper); /* Use theme background */
+}
+
+thead.collapsed .header-dismiss-row {
+  border-bottom: 1px solid var(--mui-palette-divider);
+}
+
+/* Remove the old styles if they exist */
+.header-dismiss {
+  /* remove if exists */
+}
