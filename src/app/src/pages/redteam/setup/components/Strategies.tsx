@@ -197,77 +197,77 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         {singleTurnStrategies.map((strategy) => (
           <Grid item xs={12} sm={6} md={4} key={strategy.id}>
             <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
-              <FormControlLabel
-                sx={{ width: '100%' }}
-                control={
-                  <Checkbox
-                    checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
-                    onChange={() => handleStrategyToggle(strategy.id)}
-                    color="primary"
-                  />
-                }
-                label={
-                  <Box>
-                    <Box
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  width: '100%',
+                }}
+              >
+                <FormControlLabel
+                  sx={{ flex: 1 }}
+                  control={
+                    <Checkbox
+                      checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
+                      onChange={() => handleStrategyToggle(strategy.id)}
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="subtitle1">{strategy.name}</Typography>
+                        {DEFAULT_STRATEGIES.includes(
+                          strategy.id as (typeof DEFAULT_STRATEGIES)[number],
+                        ) && <Chip label="Recommended" size="small" color="default" />}
+                        {AGENTIC_STRATEGIES.includes(
+                          strategy.id as (typeof AGENTIC_STRATEGIES)[number],
+                        ) && (
+                          <Chip
+                            label="Agent"
+                            size="small"
+                            sx={{
+                              backgroundColor: (theme) =>
+                                theme.palette.mode === 'dark'
+                                  ? alpha(theme.palette.warning.main, 0.1)
+                                  : alpha(theme.palette.warning.main, 0.1),
+                              color: 'warning.main',
+                              borderColor: 'warning.main',
+                              border: 1,
+                            }}
+                          />
+                        )}
+                      </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        {strategy.description}
+                      </Typography>
+                    </Box>
+                  }
+                />
+                {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
+                  CONFIGURABLE_STRATEGIES.includes(
+                    strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
+                  ) && (
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleConfigClick(strategy.id);
+                      }}
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        position: 'relative',
-                        pr: 4,
+                        ml: 1,
+                        opacity: 0.6,
+                        '&:hover': {
+                          opacity: 1,
+                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                        },
                       }}
                     >
-                      <Typography variant="subtitle1">{strategy.name}</Typography>
-                      {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
-                        CONFIGURABLE_STRATEGIES.includes(
-                          strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
-                        ) && (
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConfigClick(strategy.id);
-                            }}
-                            sx={{
-                              position: 'absolute',
-                              right: 0,
-                              opacity: 0.6,
-                              '&:hover': {
-                                opacity: 1,
-                                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                              },
-                            }}
-                          >
-                            <SettingsOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        )}
-                      {DEFAULT_STRATEGIES.includes(
-                        strategy.id as (typeof DEFAULT_STRATEGIES)[number],
-                      ) && <Chip label="Recommended" size="small" color="default" />}
-                      {AGENTIC_STRATEGIES.includes(
-                        strategy.id as (typeof AGENTIC_STRATEGIES)[number],
-                      ) && (
-                        <Chip
-                          label="Agent"
-                          size="small"
-                          sx={{
-                            backgroundColor: (theme) =>
-                              theme.palette.mode === 'dark'
-                                ? alpha(theme.palette.warning.main, 0.1)
-                                : alpha(theme.palette.warning.main, 0.1),
-                            color: 'warning.main',
-                            borderColor: 'warning.main',
-                            border: 1,
-                          }}
-                        />
-                      )}
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {strategy.description}
-                    </Typography>
-                  </Box>
-                }
-              />
+                      <SettingsOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  )}
+              </Box>
             </Paper>
           </Grid>
         ))}
@@ -280,77 +280,77 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         {multiTurnStrategies.map((strategy) => (
           <Grid item xs={12} sm={6} md={4} key={strategy.id}>
             <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
-              <FormControlLabel
-                sx={{ width: '100%' }}
-                control={
-                  <Checkbox
-                    checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
-                    onChange={() => handleStrategyToggle(strategy.id)}
-                    color="primary"
-                  />
-                }
-                label={
-                  <Box>
-                    <Box
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  width: '100%',
+                }}
+              >
+                <FormControlLabel
+                  sx={{ flex: 1 }}
+                  control={
+                    <Checkbox
+                      checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
+                      onChange={() => handleStrategyToggle(strategy.id)}
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="subtitle1">{strategy.name}</Typography>
+                        {DEFAULT_STRATEGIES.includes(
+                          strategy.id as (typeof DEFAULT_STRATEGIES)[number],
+                        ) && <Chip label="Recommended" size="small" color="default" />}
+                        {AGENTIC_STRATEGIES.includes(
+                          strategy.id as (typeof AGENTIC_STRATEGIES)[number],
+                        ) && (
+                          <Chip
+                            label="Agent"
+                            size="small"
+                            sx={{
+                              backgroundColor: (theme) =>
+                                theme.palette.mode === 'dark'
+                                  ? alpha(theme.palette.warning.main, 0.1)
+                                  : alpha(theme.palette.warning.main, 0.1),
+                              color: 'warning.main',
+                              borderColor: 'warning.main',
+                              border: 1,
+                            }}
+                          />
+                        )}
+                      </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        {strategy.description}
+                      </Typography>
+                    </Box>
+                  }
+                />
+                {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
+                  CONFIGURABLE_STRATEGIES.includes(
+                    strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
+                  ) && (
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleConfigClick(strategy.id);
+                      }}
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        position: 'relative',
-                        pr: 4,
+                        ml: 1,
+                        opacity: 0.6,
+                        '&:hover': {
+                          opacity: 1,
+                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                        },
                       }}
                     >
-                      <Typography variant="subtitle1">{strategy.name}</Typography>
-                      {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
-                        CONFIGURABLE_STRATEGIES.includes(
-                          strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
-                        ) && (
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConfigClick(strategy.id);
-                            }}
-                            sx={{
-                              position: 'absolute',
-                              right: 0,
-                              opacity: 0.6,
-                              '&:hover': {
-                                opacity: 1,
-                                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                              },
-                            }}
-                          >
-                            <SettingsOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        )}
-                      {DEFAULT_STRATEGIES.includes(
-                        strategy.id as (typeof DEFAULT_STRATEGIES)[number],
-                      ) && <Chip label="Recommended" size="small" color="default" />}
-                      {AGENTIC_STRATEGIES.includes(
-                        strategy.id as (typeof AGENTIC_STRATEGIES)[number],
-                      ) && (
-                        <Chip
-                          label="Agent"
-                          size="small"
-                          sx={{
-                            backgroundColor: (theme) =>
-                              theme.palette.mode === 'dark'
-                                ? alpha(theme.palette.warning.main, 0.1)
-                                : alpha(theme.palette.warning.main, 0.1),
-                            color: 'warning.main',
-                            borderColor: 'warning.main',
-                            border: 1,
-                          }}
-                        />
-                      )}
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {strategy.description}
-                    </Typography>
-                  </Box>
-                }
-              />
+                      <SettingsOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  )}
+              </Box>
             </Paper>
           </Grid>
         ))}
