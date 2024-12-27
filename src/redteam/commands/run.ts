@@ -4,6 +4,7 @@ import cliState from '../../cliState';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
+import { getConfigFromCloud } from '../../util/cloud';
 import { doRedteamRun } from '../shared';
 import type { RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
@@ -12,6 +13,7 @@ export function redteamRunCommand(program: Command) {
   program
     .command('run')
     .description('Run red teaming process (init, generate, and evaluate)')
+    .option('-i, --id <cloudId>', 'Id of the configuration file from the cloud')
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option(
       '-o, --output [path]',
@@ -41,6 +43,11 @@ export function redteamRunCommand(program: Command) {
 
       if (opts.verbose) {
         setLogLevel('debug');
+      }
+
+      if (opts.id) {
+        const config = await getConfigFromCloud(opts.id);
+        opts.liveRedteamConfig = config;
       }
 
       try {

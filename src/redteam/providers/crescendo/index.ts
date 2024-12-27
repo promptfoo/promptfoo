@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import telemetry from '../../../telemetry';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -15,6 +16,7 @@ import type {
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
@@ -82,6 +84,12 @@ class CrescendoProvider implements ApiProvider {
     this.targetConversationId = uuidv4();
     this.redTeamingChatConversationId = uuidv4();
     this.stateless = config.stateless ?? true;
+    if (config.stateless !== undefined) {
+      telemetry.recordOnce('feature_used', {
+        feature: 'stateless',
+        state: String(config.stateless),
+      });
+    }
 
     if (!this.stateless) {
       this.maxBacktracks = 0;
@@ -389,6 +397,10 @@ class CrescendoProvider implements ApiProvider {
       },
       vars: {},
     });
+    if (redTeamingChat.delay) {
+      logger.debug(`[Crescendo] Sleeping for ${redTeamingChat.delay}ms`);
+      await sleep(redTeamingChat.delay);
+    }
     if (response.error) {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
@@ -541,6 +553,10 @@ class CrescendoProvider implements ApiProvider {
       },
       vars: {},
     });
+    if (scoringProvider.delay) {
+      logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
+      await sleep(scoringProvider.delay);
+    }
     if (refusalResponse.error) {
       throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
     }
@@ -589,6 +605,10 @@ class CrescendoProvider implements ApiProvider {
       },
       vars: {},
     });
+    if (scoringProvider.delay) {
+      logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
+      await sleep(scoringProvider.delay);
+    }
     if (evalResponse.error) {
       throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
     }

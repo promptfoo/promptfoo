@@ -61,6 +61,7 @@ type CommonOptions = {
   strategies?: RedteamStrategy[];
   delay?: number;
   remote?: boolean;
+  sharing?: boolean;
 };
 
 export interface RedteamCliGenerateOptions extends CommonOptions {
@@ -97,6 +98,7 @@ export interface SynthesizeOptions extends CommonOptions {
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 
 export interface RedteamRunOptions {
+  id?: string;
   config?: string;
   output?: string;
   cache?: boolean;

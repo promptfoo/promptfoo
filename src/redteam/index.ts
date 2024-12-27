@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import logger, { getLogLevel } from '../logger';
-import type { TestCase, TestCaseWithPlugin } from '../types';
+import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
@@ -19,7 +19,7 @@ import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
-import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
+import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 
 /**
  * Determines the status of test generation based on requested and generated counts.
@@ -126,11 +126,20 @@ const formatTestCount = (numTests: number): string =>
  * @param targetPlugins - Optional array of plugin IDs to match against
  */
 function pluginMatchesStrategyTargets(
-  pluginId: RedteamPluginObject['id'],
+  testCase: TestCaseWithPlugin,
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
+  const pluginId = testCase.metadata?.pluginId;
   if (pluginId === 'pliny') {
     // Pliny jailbreaks stand alone.
+    return false;
+  }
+  if (
+    pluginId === 'intent' &&
+    isProviderOptions(testCase.provider) &&
+    testCase.provider?.id === 'sequence'
+  ) {
+    // Sequence providers are verbatim and strategies don't apply
     return false;
   }
 
@@ -189,7 +198,7 @@ async function applyStrategies(
 
     const targetPlugins = strategy.config?.plugins;
     const applicableTestCases = testCases.filter((t) =>
-      pluginMatchesStrategyTargets(t.metadata?.pluginId || '', targetPlugins),
+      pluginMatchesStrategyTargets(t, targetPlugins),
     );
 
     const strategyTestCases: TestCase[] = await strategyAction(
