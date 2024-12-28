@@ -34,6 +34,7 @@ import { shouldGenerateRemote } from '../remoteGeneration';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { getTargetResponse, redteamProviderManager } from './shared';
+import { TokenUsageTracker } from './shared/TokenUsageTracker';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -415,13 +416,7 @@ export async function runRedteamConversation({
   let bestScore = 0;
   let noImprovementCount = 0;
 
-  const totalTokenUsage = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    numRequests: 0,
-    cached: 0,
-  };
+  const tokenTracker = new TokenUsageTracker();
 
   let bestResponse = '';
 
@@ -449,11 +444,7 @@ export async function runRedteamConversation({
         ]);
 
         if (redteamTokenUsage) {
-          totalTokenUsage.total += redteamTokenUsage.total || 0;
-          totalTokenUsage.prompt += redteamTokenUsage.prompt || 0;
-          totalTokenUsage.completion += redteamTokenUsage.completion || 0;
-          totalTokenUsage.numRequests += redteamTokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += redteamTokenUsage.cached || 0;
+          tokenTracker.update(redteamTokenUsage);
         }
 
         attempts++;
@@ -477,11 +468,7 @@ export async function runRedteamConversation({
           targetPrompt,
         );
         if (isOnTopicTokenUsage) {
-          totalTokenUsage.total += isOnTopicTokenUsage.total || 0;
-          totalTokenUsage.prompt += isOnTopicTokenUsage.prompt || 0;
-          totalTokenUsage.completion += isOnTopicTokenUsage.completion || 0;
-          totalTokenUsage.cached += isOnTopicTokenUsage.cached || 0;
-          totalTokenUsage.numRequests += isOnTopicTokenUsage.numRequests ?? 1;
+          tokenTracker.update(isOnTopicTokenUsage);
         }
 
         const targetResponse = await getTargetResponse(
@@ -495,11 +482,7 @@ export async function runRedteamConversation({
         }
         invariant(targetResponse.output, '[IterativeTree] Target did not return an output');
         if (targetResponse.tokenUsage) {
-          totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
-          totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
-          totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
-          totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
+          tokenTracker.update(targetResponse.tokenUsage);
         }
 
         const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
@@ -549,7 +532,7 @@ export async function runRedteamConversation({
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
-            tokenUsage: totalTokenUsage,
+            tokenUsage: tokenTracker.getUsage(),
           };
         }
 
@@ -562,7 +545,7 @@ export async function runRedteamConversation({
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
-            tokenUsage: totalTokenUsage,
+            tokenUsage: tokenTracker.getUsage(),
           };
         }
 
@@ -575,7 +558,7 @@ export async function runRedteamConversation({
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
-            tokenUsage: totalTokenUsage,
+            tokenUsage: tokenTracker.getUsage(),
           };
         }
 
@@ -615,11 +598,7 @@ export async function runRedteamConversation({
     options,
   );
   if (finalTargetResponse.tokenUsage) {
-    totalTokenUsage.total += finalTargetResponse.tokenUsage.total || 0;
-    totalTokenUsage.prompt += finalTargetResponse.tokenUsage.prompt || 0;
-    totalTokenUsage.completion += finalTargetResponse.tokenUsage.completion || 0;
-    totalTokenUsage.numRequests += finalTargetResponse.tokenUsage.numRequests ?? 1;
-    totalTokenUsage.cached += finalTargetResponse.tokenUsage.cached || 0;
+    tokenTracker.update(finalTargetResponse.tokenUsage);
   }
 
   logger.debug(
@@ -631,7 +610,7 @@ export async function runRedteamConversation({
     metadata: {
       redteamFinalPrompt: finalTargetPrompt,
     },
-    tokenUsage: totalTokenUsage,
+    tokenUsage: tokenTracker.getUsage(),
   };
 }
 
