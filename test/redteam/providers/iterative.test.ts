@@ -1,28 +1,50 @@
 import { jest } from '@jest/globals';
 import RedteamIterativeProvider from '../../../src/redteam/providers/iterative/index';
-import type { ApiProvider, ProviderResponse } from '../../../src/types';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import type {
+  ApiProvider,
+  ProviderResponse,
+  CallApiContextParams,
+  CallApiOptionsParams,
+} from '../../../src/types';
 
-// Mock the redteamProviderManager
+type GetTargetResponseFn = (
+  provider: ApiProvider,
+  prompt: string,
+  context?: CallApiContextParams,
+  options?: CallApiOptionsParams,
+) => Promise<ProviderResponse>;
+
+// Mock the redteamProviderManager and other shared functions
 jest.mock('../../../src/redteam/providers/shared', () => ({
   redteamProviderManager: {
     getProvider: jest.fn(),
   },
+  checkPenalizedPhrases: jest.fn().mockReturnValue(false),
+  getTargetResponse: jest
+    .fn<GetTargetResponseFn>()
+    .mockImplementation((provider, prompt, context, options) =>
+      provider.callApi(prompt, context, options),
+    ),
 }));
-
-const mockGetProvider = jest.fn<() => Promise<ApiProvider>>();
 
 describe('RedteamIterativeProvider', () => {
   let mockApiProvider: jest.Mocked<ApiProvider>;
 
   beforeEach(() => {
     mockApiProvider = {
-      id: jest.fn<() => string>(),
-      callApi: jest.fn<() => Promise<ProviderResponse>>(),
+      id: jest.fn<() => string>().mockReturnValue('mock-provider'),
+      callApi:
+        jest.fn<
+          (
+            prompt: string,
+            context?: CallApiContextParams,
+            options?: CallApiOptionsParams,
+          ) => Promise<ProviderResponse>
+        >(),
+      delay: undefined,
     };
-    // Mock both the direct provider and the redteam provider manager
-    mockGetProvider.mockResolvedValue(mockApiProvider);
-    (redteamProviderManager.getProvider as jest.Mock).mockResolvedValue(mockApiProvider);
+    jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockApiProvider);
   });
 
   afterEach(() => {
@@ -64,8 +86,13 @@ describe('RedteamIterativeProvider', () => {
   describe('conversation handling', () => {
     it('should track token usage correctly', async () => {
       const provider = new RedteamIterativeProvider({ injectVar: 'test' });
-      const mockResponse: ProviderResponse = {
-        output: 'test output',
+
+      // Mock redteam response
+      const mockRedteamResponse: ProviderResponse = {
+        output: JSON.stringify({
+          improvement: 'test improvement',
+          prompt: 'test prompt',
+        }),
         tokenUsage: {
           total: 100,
           prompt: 50,
@@ -75,8 +102,61 @@ describe('RedteamIterativeProvider', () => {
         },
       };
 
-      mockApiProvider.callApi.mockResolvedValue(mockResponse);
-      mockGetProvider.mockResolvedValue(mockApiProvider);
+      // Mock on-topic response
+      const mockOnTopicResponse: ProviderResponse = {
+        output: JSON.stringify({ onTopic: true }),
+        tokenUsage: {
+          total: 50,
+          prompt: 25,
+          completion: 25,
+          numRequests: 1,
+          cached: 0,
+        },
+      };
+
+      // Mock target response
+      const mockTargetResponse: ProviderResponse = {
+        output: 'test output',
+        tokenUsage: {
+          total: 75,
+          prompt: 35,
+          completion: 40,
+          numRequests: 1,
+          cached: 0,
+        },
+      };
+
+      // Mock judge response
+      const mockJudgeResponse: ProviderResponse = {
+        output: JSON.stringify({
+          currentResponse: { rating: 5, explanation: 'ok' },
+          previousBestResponse: { rating: 0, explanation: 'none' },
+        }),
+        tokenUsage: {
+          total: 25,
+          prompt: 10,
+          completion: 15,
+          numRequests: 1,
+          cached: 0,
+        },
+      };
+
+      let callCount = 0;
+      mockApiProvider.callApi.mockImplementation(() => {
+        callCount++;
+        switch (callCount) {
+          case 1:
+            return Promise.resolve(mockRedteamResponse);
+          case 2:
+            return Promise.resolve(mockOnTopicResponse);
+          case 3:
+            return Promise.resolve(mockTargetResponse);
+          case 4:
+            return Promise.resolve(mockJudgeResponse);
+          default:
+            return Promise.resolve({ output: '' });
+        }
+      });
 
       const result = await provider.callApi('test prompt', {
         originalProvider: mockApiProvider,
@@ -85,7 +165,11 @@ describe('RedteamIterativeProvider', () => {
       });
 
       expect(result.tokenUsage).toBeDefined();
-      expect(result.tokenUsage!.total).toBeGreaterThan(0);
+      expect(result.tokenUsage!.total).toBe(250); // Sum of all token usages
+      expect(result.tokenUsage!.prompt).toBe(120);
+      expect(result.tokenUsage!.completion).toBe(130);
+      expect(result.tokenUsage!.numRequests).toBe(4);
+      expect(result.tokenUsage!.cached).toBe(0);
     });
 
     it('should handle conversation state updates', async () => {
@@ -215,7 +299,9 @@ describe('RedteamIterativeProvider', () => {
 
     it('should handle provider errors gracefully', async () => {
       const provider = new RedteamIterativeProvider({ injectVar: 'test' });
-      (redteamProviderManager.getProvider as jest.Mock).mockRejectedValue(new Error('Provider error'));
+      jest
+        .mocked(redteamProviderManager.getProvider)
+        .mockRejectedValue(new Error('Provider error'));
 
       await expect(
         provider.callApi('test prompt', {
@@ -298,14 +384,15 @@ describe('RedteamIterativeProvider', () => {
           return Promise.resolve({ error: 'Target provider error' });
         }
         return Promise.resolve({
-          output: callCount === 1
-            ? JSON.stringify({
-                improvement: 'test improvement',
-                prompt: 'test prompt',
-              })
-            : callCount === 2
-              ? '{"onTopic": true}'
-              : '',
+          output:
+            callCount === 1
+              ? JSON.stringify({
+                  improvement: 'test improvement',
+                  prompt: 'test prompt',
+                })
+              : callCount === 2
+                ? '{"onTopic": true}'
+                : '',
         });
       });
 
@@ -447,14 +534,20 @@ describe('RedteamIterativeProvider', () => {
       mockApiProvider.callApi.mockImplementation(() => {
         callCount++;
         return Promise.resolve({
-          output: callCount === 1
-            ? JSON.stringify({
-                improvement: 'test improvement',
-                prompt: 'test prompt',
-              })
-            : callCount === 2
-              ? '{"onTopic": true}'
-              : 'response',
+          output:
+            callCount === 1
+              ? JSON.stringify({
+                  improvement: 'test improvement',
+                  prompt: 'test prompt',
+                })
+              : callCount === 2
+                ? JSON.stringify({ onTopic: true })
+                : callCount === 3
+                  ? 'response'
+                  : JSON.stringify({
+                      currentResponse: { rating: 5, explanation: 'ok' },
+                      previousBestResponse: { rating: 0, explanation: 'none' },
+                    }),
         });
       });
 
@@ -464,8 +557,12 @@ describe('RedteamIterativeProvider', () => {
         prompt: { raw: 'test', label: 'test' },
       });
 
-      expect(result.tokenUsage?.numRequests).toBeGreaterThan(0);
-      expect(result.tokenUsage?.total).toBe(0);
+      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage!.total).toBe(0);
+      expect(result.tokenUsage!.prompt).toBe(0);
+      expect(result.tokenUsage!.completion).toBe(0);
+      expect(result.tokenUsage!.numRequests).toBe(4);
+      expect(result.tokenUsage!.cached).toBe(0);
     });
 
     it('should respect delay between calls', async () => {
@@ -477,14 +574,15 @@ describe('RedteamIterativeProvider', () => {
       mockApiProvider.callApi.mockImplementation(() => {
         callCount++;
         return Promise.resolve({
-          output: callCount === 1
-            ? JSON.stringify({
-                improvement: 'test improvement',
-                prompt: 'test prompt',
-              })
-            : callCount === 2
-              ? '{"onTopic": true}'
-              : 'response',
+          output:
+            callCount === 1
+              ? JSON.stringify({
+                  improvement: 'test improvement',
+                  prompt: 'test prompt',
+                })
+              : callCount === 2
+                ? '{"onTopic": true}'
+                : 'response',
         });
       });
 

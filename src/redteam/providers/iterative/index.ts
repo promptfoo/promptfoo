@@ -8,6 +8,7 @@ import {
   type Prompt,
   type NunjucksFilterMap,
   type RedteamFileConfig,
+  type TokenUsage,
 } from '../../../types';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
@@ -16,13 +17,12 @@ import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from '../prompts';
 import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from '../shared';
-import { TokenUsageTracker } from '../shared/TokenUsageTracker';
 import { getRedteamResponse, checkIfOnTopic, getJudgeScore } from './api';
 import type { ConversationState, RedteamResponse } from './types';
 
 async function handleRedteamIteration(
   state: ConversationState,
-  tokenTracker: TokenUsageTracker,
+  tokenUsage: Required<TokenUsage>,
   iteration: number,
   params: {
     redteamProvider: ApiProvider;
@@ -54,7 +54,15 @@ async function handleRedteamIteration(
 
   // Get and parse redteam response
   const redteamResp = await getRedteamResponse(redteamProvider, state.redteamHistory);
-  tokenTracker.update(redteamResp.tokenUsage);
+  if (redteamResp.tokenUsage) {
+    tokenUsage.total += redteamResp.tokenUsage.total ?? 0;
+    tokenUsage.prompt += redteamResp.tokenUsage.prompt ?? 0;
+    tokenUsage.completion += redteamResp.tokenUsage.completion ?? 0;
+    tokenUsage.numRequests += redteamResp.tokenUsage.numRequests ?? 1;
+    tokenUsage.cached += redteamResp.tokenUsage.cached ?? 0;
+  } else {
+    tokenUsage.numRequests += 1;
+  }
 
   if (redteamProvider.delay) {
     await sleep(redteamProvider.delay);
@@ -81,13 +89,29 @@ async function handleRedteamIteration(
     onTopicSystemPrompt,
     targetPrompt,
   );
-  tokenTracker.update(onTopicTokens);
+  if (onTopicTokens) {
+    tokenUsage.total += onTopicTokens.total ?? 0;
+    tokenUsage.prompt += onTopicTokens.prompt ?? 0;
+    tokenUsage.completion += onTopicTokens.completion ?? 0;
+    tokenUsage.numRequests += onTopicTokens.numRequests ?? 1;
+    tokenUsage.cached += onTopicTokens.cached ?? 0;
+  } else {
+    tokenUsage.numRequests += 1;
+  }
 
   const targetResponse = await getTargetResponse(targetProvider, targetPrompt, context, options);
   if (targetResponse.error) {
     throw new Error(`[Iterative] Target returned an error: ${targetResponse.error}`);
   }
-  tokenTracker.update(targetResponse.tokenUsage);
+  if (targetResponse.tokenUsage) {
+    tokenUsage.total += targetResponse.tokenUsage.total ?? 0;
+    tokenUsage.prompt += targetResponse.tokenUsage.prompt ?? 0;
+    tokenUsage.completion += targetResponse.tokenUsage.completion ?? 0;
+    tokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
+    tokenUsage.cached += targetResponse.tokenUsage.cached ?? 0;
+  } else {
+    tokenUsage.numRequests += 1;
+  }
 
   // Get and process judge score
   const {
@@ -101,7 +125,15 @@ async function handleRedteamIteration(
     targetResponse.output,
     state.bestResponse,
   );
-  tokenTracker.update(judgeTokens);
+  if (judgeTokens) {
+    tokenUsage.total += judgeTokens.total ?? 0;
+    tokenUsage.prompt += judgeTokens.prompt ?? 0;
+    tokenUsage.completion += judgeTokens.completion ?? 0;
+    tokenUsage.numRequests += judgeTokens.numRequests ?? 1;
+    tokenUsage.cached += judgeTokens.cached ?? 0;
+  } else {
+    tokenUsage.numRequests += 1;
+  }
 
   // Apply penalties
   let finalScore = initialScore;
@@ -152,7 +184,15 @@ async function runRedteamConversation(params: {
 }) {
   const nunjucks = getNunjucksEngine();
   const goal = String(params.vars[params.injectVar]);
-  const tokenTracker = new TokenUsageTracker();
+
+  // Initialize token usage directly
+  const tokenUsage: Required<TokenUsage> = {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    numRequests: 0,
+    cached: 0,
+  };
 
   const state: ConversationState = {
     highestScore: 0,
@@ -168,7 +208,7 @@ async function runRedteamConversation(params: {
   };
 
   for (let i = 0; i < params.numIterations; i++) {
-    const shouldStop = await handleRedteamIteration(state, tokenTracker, i, {
+    const shouldStop = await handleRedteamIteration(state, tokenUsage, i, {
       ...params,
       goal,
       onTopicSystemPrompt: nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal }),
@@ -188,7 +228,7 @@ async function runRedteamConversation(params: {
       previousOutputs: JSON.stringify(state.previousOutputs, null, 2),
       redteamFinalPrompt: state.finalTargetPrompt,
     },
-    tokenUsage: tokenTracker.getUsage(),
+    tokenUsage, // Return the token usage directly
   };
 }
 
