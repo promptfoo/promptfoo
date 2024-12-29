@@ -13,7 +13,14 @@ import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
 jest.mock('../../src/cache', () => ({
+  ...jest.requireActual('../../src/cache'),
   fetchWithCache: jest.fn(),
+}));
+
+jest.mock('../../src/fetch', () => ({
+  ...jest.requireActual('../../src/fetch'),
+  fetchWithRetries: jest.fn(),
+  fetchWithTimeout: jest.fn(),
 }));
 
 jest.mock('../../src/util', () => ({
@@ -77,6 +84,7 @@ describe('HttpProvider', () => {
       expect.any(Number),
       'text',
       undefined,
+      undefined,
     );
   });
 
@@ -126,6 +134,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
+      undefined,
       undefined,
     );
   });
@@ -185,6 +194,7 @@ describe('HttpProvider', () => {
       expect.any(Number),
       'text',
       undefined,
+      undefined,
     );
   });
 
@@ -233,6 +243,7 @@ describe('HttpProvider', () => {
       expect.any(Number),
       'text',
       undefined,
+      undefined,
     );
   });
 
@@ -271,6 +282,8 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
+        undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
     });
@@ -302,16 +315,18 @@ describe('HttpProvider', () => {
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://example.com/api/submit',
-        expect.objectContaining({
+        {
           method: 'POST',
-          headers: expect.objectContaining({
+          headers: {
             host: 'example.com',
             'content-type': 'application/json',
-          }),
+          },
           body: '{"data": "test data"}',
-        }),
+        },
         expect.any(Number),
         'text',
+        undefined,
+        undefined,
       );
       expect(result.output).toEqual({ result: 'received' });
     });
@@ -352,6 +367,8 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
+        undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
     });
@@ -679,6 +696,7 @@ describe('HttpProvider', () => {
       expect.any(Number),
       'text',
       undefined,
+      undefined,
     );
   });
 
@@ -708,6 +726,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
+      undefined,
       undefined,
     );
   });
@@ -754,6 +773,7 @@ describe('HttpProvider', () => {
         expect.any(Number),
         'text',
         undefined,
+        undefined,
       );
     });
 
@@ -784,6 +804,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
         undefined,
       );
     });
@@ -816,6 +837,7 @@ describe('HttpProvider', () => {
         expect.any(Number),
         'text',
         undefined,
+        undefined,
       );
     });
 
@@ -846,6 +868,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
         undefined,
       );
     });
@@ -892,6 +915,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
         undefined,
       );
     });
@@ -956,6 +980,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
         undefined,
       );
     });
@@ -1029,6 +1054,39 @@ describe('HttpProvider', () => {
       expect(result).toEqual({ output: 'success' });
     });
   });
+
+  it('should respect maxRetries configuration', async () => {
+    provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        maxRetries: 2,
+      },
+    });
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: 'test prompt' }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      2,
+    );
+  });
 });
 
 describe('createTransformRequest', () => {
@@ -1077,6 +1135,7 @@ describe('createTransformRequest', () => {
       },
       REQUEST_TIMEOUT_MS,
       'text',
+      undefined,
       undefined,
     );
   });
@@ -1216,6 +1275,7 @@ describe('content type handling', () => {
       expect.any(Number),
       'text',
       undefined,
+      undefined,
     );
   });
 
@@ -1246,6 +1306,7 @@ describe('content type handling', () => {
       }),
       expect.any(Number),
       'text',
+      undefined,
       undefined,
     );
   });
@@ -1288,13 +1349,14 @@ describe('request transformation', () => {
 
     expect(fetchWithCache).toHaveBeenCalledWith(
       'http://test.com',
-      expect.objectContaining({
+      {
         method: 'POST',
-        headers: expect.objectContaining({ 'content-type': 'application/json' }),
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'value', transformed: 'test' }),
-      }),
+      },
       expect.any(Number),
       'text',
+      undefined,
       undefined,
     );
   });
@@ -1330,6 +1392,7 @@ describe('request transformation', () => {
       },
       REQUEST_TIMEOUT_MS,
       'text',
+      undefined,
       undefined,
     );
   });

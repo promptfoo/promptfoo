@@ -55,9 +55,10 @@ export async function fetchWithCache<T = any>(
   timeout: number = REQUEST_TIMEOUT_MS,
   format: 'json' | 'text' = 'json',
   bust: boolean = false,
+  maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
   if (!enabled || bust) {
-    const resp = await fetchWithRetries(url, options, timeout);
+    const resp = await fetchWithRetries(url, options, timeout, maxRetries);
 
     const respText = await resp.text();
     try {
@@ -86,7 +87,7 @@ export async function fetchWithCache<T = any>(
   const cachedResponse = await cache.wrap(cacheKey, async () => {
     // Fetch the actual data and store it in the cache
     cached = false;
-    const response = await fetchWithRetries(url, options, timeout);
+    const response = await fetchWithRetries(url, options, timeout, maxRetries);
     const responseText = await response.text();
     const headers = Object.fromEntries(response.headers.entries());
 
