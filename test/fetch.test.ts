@@ -348,6 +348,48 @@ describe('fetchWithRetries', () => {
     jest.clearAllMocks();
   });
 
+  it('should make exactly one attempt when retries is 0', async () => {
+    const successResponse = createMockResponse();
+    jest.mocked(global.fetch).mockResolvedValueOnce(successResponse);
+
+    await fetchWithRetries('https://example.com', {}, 1000, 0);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled(); // Should not sleep when retries=0
+  });
+
+  it('should handle negative retry values by treating them as 0', async () => {
+    const successResponse = createMockResponse();
+    jest.mocked(global.fetch).mockResolvedValueOnce(successResponse);
+
+    await fetchWithRetries('https://example.com', {}, 1000, -1);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should make retries+1 total attempts', async () => {
+    jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
+      'Request failed after 2 retries: Network error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries
+    expect(sleep).toHaveBeenCalledTimes(2); // Should sleep between attempts, but not after last attempt
+  });
+
+  it('should not sleep after the final attempt', async () => {
+    jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
+      'Request failed after 1 retries: Network error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2); // Initial attempt + 1 retry
+    expect(sleep).toHaveBeenCalledTimes(1); // Should only sleep once between attempts
+  });
+
   it('should handle 5XX errors when PROMPTFOO_RETRY_5XX is true', async () => {
     jest.mocked(getEnvBool).mockReturnValueOnce(true);
 
@@ -396,7 +438,7 @@ describe('fetchWithRetries', () => {
       'Request failed after 2 retries: Network error',
     );
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(global.fetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries = 3 total attempts
+    expect(sleep).toHaveBeenCalledTimes(2); // Sleep happens between attempts, so 2 times
   });
 });

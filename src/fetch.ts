@@ -126,10 +126,14 @@ export async function fetchWithRetries(
   timeout: number,
   retries: number = 4,
 ): Promise<Response> {
+  // Ensure retries is non-negative
+  retries = Math.max(0, retries);
+
   let lastError;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
 
-  for (let i = 0; i < retries; i++) {
+  // Change to <= retries to make at least one attempt
+  for (let i = 0; i <= retries; i++) {
     let response;
     try {
       response = await fetchWithTimeout(url, options, timeout);
@@ -164,9 +168,12 @@ export async function fetchWithRetries(
       }
 
       logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
+      // Only wait and retry if this wasn't the last attempt
+      if (i < retries) {
+        const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
+        await sleep(waitTime);
+      }
       lastError = error;
-      const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-      await sleep(waitTime);
     }
   }
   throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
