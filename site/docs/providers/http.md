@@ -322,6 +322,14 @@ module.exports = (json, text) => {
 };
 ```
 
+You can also use a default export:
+
+```javascript
+export default (json, text) => {
+  return json.choices[0].message.content;
+};
+```
+
 You can also specify a function name to be imported from a file:
 
 ```yaml
@@ -485,10 +493,10 @@ Supported config options:
 
 | Field             | Type                    | Description                                                                                                                                                                         |
 | ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url               | string                  | The API endpoint URL.                                                                                                                                                               |
+| url               | string                  | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                             |
 | method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
-| headers           | Record\<string, string> | HTTP headers to include with the request.                                                                                                                                           |
-| body              | object \| string        | Request body. Objects are automatically stringified as JSON.                                                                                                                        |
+| headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
+| body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
 | request           | string                  | Raw HTTP request template. Alternative to url/method/headers/body.                                                                                                                  |
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
