@@ -126,14 +126,12 @@ export async function fetchWithRetries(
   timeout: number,
   retries: number = 4,
 ): Promise<Response> {
-  // Ensure retries is non-negative
-  retries = Math.max(0, retries);
+  const maxRetries = Math.max(0, retries);
 
   let lastError;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
 
-  // Change to <= retries to make at least one attempt
-  for (let i = 0; i <= retries; i++) {
+  for (let i = 0; i <= maxRetries; i++) {
     let response;
     try {
       response = await fetchWithTimeout(url, options, timeout);
@@ -144,7 +142,7 @@ export async function fetchWithRetries(
 
       if (response && isRateLimited(response)) {
         logger.debug(
-          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${retries}`,
+          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${maxRetries}`,
         );
         await handleRateLimit(response);
         continue;
@@ -169,12 +167,12 @@ export async function fetchWithRetries(
 
       logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
       // Only wait and retry if this wasn't the last attempt
-      if (i < retries) {
+      if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
         await sleep(waitTime);
       }
       lastError = error;
     }
   }
-  throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
+  throw new Error(`Request failed after ${maxRetries} retries: ${(lastError as Error).message}`);
 }
