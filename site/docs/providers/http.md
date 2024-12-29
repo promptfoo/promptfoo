@@ -480,8 +480,7 @@ By default, it will attempt up to 4 retries with exponential backoff. You can co
 
 ```yaml
 providers:
-  - id: my-api
-    type: http
+  - id: http
     config:
       url: https://api.example.com/v1/chat
       maxRetries: 2 # Override default of 4 retries
@@ -491,13 +490,13 @@ providers:
 
 Supported config options:
 
-| Field             | Type                    | Description                                                                                                                                                                         |
+| Option            | Type                    | Description                                                                                                                                                                         |
 | ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | url               | string                  | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                             |
+| request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
 | method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
 | headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
 | body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
-| request           | string                  | Raw HTTP request template. Alternative to url/method/headers/body.                                                                                                                  |
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
