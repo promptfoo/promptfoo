@@ -1,8 +1,7 @@
 import dedent from 'dedent';
 import path from 'path';
-import { disableCache, fetchWithCache } from '../../src/cache';
+import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
-import { fetchWithRetries } from '../../src/fetch';
 import {
   createTransformRequest,
   createTransformResponse,
