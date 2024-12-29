@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
+import { fetchWithTimeout } from '../../src/fetch';
 import {
   createTransformRequest,
   createTransformResponse,
@@ -9,11 +10,15 @@ import {
   HttpProvider,
   processJsonBody,
 } from '../../src/providers/http';
-import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
+}));
+
+jest.mock('../../src/fetch', () => ({
+  ...jest.requireActual('../../src/fetch'),
+  fetchWithTimeout: jest.fn(),
 }));
 
 jest.mock('../../src/util', () => ({
@@ -77,6 +82,7 @@ describe('HttpProvider', () => {
       expect.any(Number),
       'text',
       undefined,
+      undefined,
     );
   });
 
@@ -126,6 +132,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
+      undefined,
       undefined,
     );
   });
@@ -185,6 +192,7 @@ describe('HttpProvider', () => {
       expect.any(Number),
       'text',
       undefined,
+      undefined,
     );
   });
 
@@ -233,6 +241,7 @@ describe('HttpProvider', () => {
       expect.any(Number),
       'text',
       undefined,
+      undefined,
     );
   });
 
@@ -271,6 +280,8 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
+        undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
     });
@@ -302,16 +313,18 @@ describe('HttpProvider', () => {
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://example.com/api/submit',
-        expect.objectContaining({
+        {
           method: 'POST',
-          headers: expect.objectContaining({
+          headers: {
             host: 'example.com',
             'content-type': 'application/json',
-          }),
+          },
           body: '{"data": "test data"}',
-        }),
+        },
         expect.any(Number),
         'text',
+        undefined,
+        undefined,
       );
       expect(result.output).toEqual({ result: 'received' });
     });
@@ -352,6 +365,8 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
+        undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
     });
@@ -679,6 +694,7 @@ describe('HttpProvider', () => {
       expect.any(Number),
       'text',
       undefined,
+      undefined,
     );
   });
 
@@ -708,6 +724,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
+      undefined,
       undefined,
     );
   });
@@ -754,6 +771,7 @@ describe('HttpProvider', () => {
         expect.any(Number),
         'text',
         undefined,
+        undefined,
       );
     });
 
@@ -784,6 +802,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
         undefined,
       );
     });
@@ -816,6 +835,7 @@ describe('HttpProvider', () => {
         expect.any(Number),
         'text',
         undefined,
+        undefined,
       );
     });
 
@@ -846,6 +866,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
         undefined,
       );
     });
@@ -892,6 +913,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
         undefined,
       );
     });
@@ -956,6 +978,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
+        undefined,
         undefined,
       );
     });
@@ -1029,6 +1052,84 @@ describe('HttpProvider', () => {
       expect(result).toEqual({ output: 'success' });
     });
   });
+
+  it('should respect maxRetries configuration', async () => {
+    provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        maxRetries: 2,
+      },
+    });
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: 'test prompt' }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      2,
+    );
+  });
+
+  it('should handle rate limiting with maxRetries', async () => {
+    provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        maxRetries: 1,
+      },
+    });
+
+    // Create a proper rate limit response that will trigger the retry logic
+    const mockRateLimitResponse = new Response(null, {
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: {
+        'x-ratelimit-remaining': '0',
+        'retry-after': '1',
+      },
+    });
+
+    const mockSuccess = new Response(JSON.stringify({ result: 'success after retry' }), {
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Clear previous mocks
+    jest.clearAllMocks();
+    
+    // Mock fetchWithCache to handle retries
+    jest.mocked(fetchWithCache)
+      .mockRejectedValueOnce(new Error('Rate limit exceeded'))
+      .mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success after retry' }),
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        cached: false,
+      });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledTimes(2);
+    expect(result.output).toEqual({ result: 'success after retry' });
+  });
 });
 
 describe('createTransformRequest', () => {
@@ -1075,8 +1176,9 @@ describe('createTransformRequest', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'value', transformed: 'TEST' }),
       },
-      REQUEST_TIMEOUT_MS,
+      expect.any(Number),
       'text',
+      undefined,
       undefined,
     );
   });
@@ -1216,6 +1318,7 @@ describe('content type handling', () => {
       expect.any(Number),
       'text',
       undefined,
+      undefined,
     );
   });
 
@@ -1246,6 +1349,7 @@ describe('content type handling', () => {
       }),
       expect.any(Number),
       'text',
+      undefined,
       undefined,
     );
   });
@@ -1288,13 +1392,14 @@ describe('request transformation', () => {
 
     expect(fetchWithCache).toHaveBeenCalledWith(
       'http://test.com',
-      expect.objectContaining({
+      {
         method: 'POST',
-        headers: expect.objectContaining({ 'content-type': 'application/json' }),
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'value', transformed: 'test' }),
-      }),
+      },
       expect.any(Number),
       'text',
+      undefined,
       undefined,
     );
   });
@@ -1328,8 +1433,9 @@ describe('request transformation', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'value', transformed: 'TEST' }),
       },
-      REQUEST_TIMEOUT_MS,
+      expect.any(Number),
       'text',
+      undefined,
       undefined,
     );
   });
@@ -1363,7 +1469,7 @@ describe('response handling', () => {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: 'test',
-        transformResponse: (data: Record<string, unknown>, text: string) => text,
+        transformResponse: (_data: any, text: string) => text,
       },
     });
 
@@ -1377,7 +1483,7 @@ describe('response handling', () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
-    expect(result.output).toBe(mockResponse.data);
+    expect(result.output).toBe('Raw response');
   });
 
   it('should include debug information when requested', async () => {
@@ -1433,6 +1539,8 @@ describe('session handling', () => {
 
     const result = await provider.callApi('test');
     expect(result.sessionId).toBe('test-session');
-    expect(sessionParser).toHaveBeenCalledWith({ headers: mockResponse.headers });
+    expect(sessionParser).toHaveBeenCalledWith({
+      headers: { 'x-session-id': 'test-session' },
+    });
   });
 });

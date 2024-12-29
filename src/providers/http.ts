@@ -505,6 +505,8 @@ export class HttpProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'text',
+        undefined,
+        this.config.maxRetries,
       );
     } catch (err) {
       return {
