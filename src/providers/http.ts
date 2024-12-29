@@ -34,6 +34,7 @@ export const HttpProviderConfigSchema = z.object({
    * @deprecated
    */
   responseParser: z.union([z.string(), z.function()]).optional(),
+  maxRetries: z.number().optional(),
 });
 
 export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -433,6 +434,7 @@ export class HttpProvider implements ApiProvider {
         REQUEST_TIMEOUT_MS,
         'text',
         context?.debug,
+        this.config.maxRetries,
       );
     } catch (err) {
       return {

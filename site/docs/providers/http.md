@@ -468,6 +468,10 @@ providers:
         user_message: '{{prompt}}'
 ```
 
+## Request Retries
+
+The HTTP provider automatically retries failed requests and rate-limited responses. By default, it will attempt up to 4 retries with exponential backoff. You can configure the maximum number of retries using the `maxRetries` option:
+
 ## Reference
 
 Supported config options:
@@ -482,6 +486,7 @@ Supported config options:
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
+| maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
