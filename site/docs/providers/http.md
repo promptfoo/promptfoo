@@ -322,14 +322,6 @@ module.exports = (json, text) => {
 };
 ```
 
-You can also use a default export:
-
-```javascript
-export default (json, text) => {
-  return json.choices[0].message.content;
-};
-```
-
 You can also specify a function name to be imported from a file:
 
 ```yaml
@@ -470,19 +462,34 @@ providers:
 
 ## Request Retries
 
-The HTTP provider automatically retries failed requests and rate-limited responses. By default, it will attempt up to 4 retries with exponential backoff. You can configure the maximum number of retries using the `maxRetries` option:
+The HTTP provider automatically retries failed requests in the following scenarios:
+
+- Rate limiting (HTTP 429)
+- Server errors
+- Network failures
+
+By default, it will attempt up to 4 retries with exponential backoff. You can configure the maximum number of retries using the `maxRetries` option:
+
+```yaml
+providers:
+  - id: my-api
+    type: http
+    config:
+      url: https://api.example.com/v1/chat
+      maxRetries: 2 # Override default of 4 retries
+```
 
 ## Reference
 
 Supported config options:
 
-| Option            | Type                    | Description                                                                                                                                                                         |
+| Field             | Type                    | Description                                                                                                                                                                         |
 | ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url               | string                  | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                             |
-| request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
-| method            | string                  | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                                                                                         |
-| headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
-| body              | Record\<string, any>    | The request body. For POST requests, this will be sent as JSON.                                                                                                                     |
+| url               | string                  | The API endpoint URL.                                                                                                                                                               |
+| method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
+| headers           | Record\<string, string> | HTTP headers to include with the request.                                                                                                                                           |
+| body              | object \| string        | Request body. Objects are automatically stringified as JSON.                                                                                                                        |
+| request           | string                  | Raw HTTP request template. Alternative to url/method/headers/body.                                                                                                                  |
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
