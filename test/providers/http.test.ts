@@ -9,6 +9,7 @@ import {
   HttpProvider,
   processJsonBody,
 } from '../../src/providers/http';
+import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
 jest.mock('../../src/cache', () => ({
@@ -1132,7 +1133,7 @@ describe('createTransformRequest', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'value', transformed: 'TEST' }),
       },
-      expect.any(Number),
+      REQUEST_TIMEOUT_MS,
       'text',
       undefined,
       undefined,
@@ -1389,7 +1390,7 @@ describe('request transformation', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'value', transformed: 'TEST' }),
       },
-      expect.any(Number),
+      REQUEST_TIMEOUT_MS,
       'text',
       undefined,
       undefined,
@@ -1425,7 +1426,7 @@ describe('response handling', () => {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: 'test',
-        transformResponse: (_data: any, text: string) => text,
+        transformResponse: (data: Record<string, unknown>, text: string) => text,
       },
     });
 
@@ -1439,7 +1440,7 @@ describe('response handling', () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
-    expect(result.output).toBe('Raw response');
+    expect(result.output).toBe(mockResponse.data);
   });
 
   it('should include debug information when requested', async () => {
@@ -1495,8 +1496,6 @@ describe('session handling', () => {
 
     const result = await provider.callApi('test');
     expect(result.sessionId).toBe('test-session');
-    expect(sessionParser).toHaveBeenCalledWith({
-      headers: { 'x-session-id': 'test-session' },
-    });
+    expect(sessionParser).toHaveBeenCalledWith({ headers: mockResponse.headers });
   });
 });
