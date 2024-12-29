@@ -438,7 +438,7 @@ describe('fetchWithRetries', () => {
       'Request failed after 2 retries: Network error',
     );
 
-    expect(global.fetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries = 3 total attempts
-    expect(sleep).toHaveBeenCalledTimes(2); // Sleep happens between attempts, so 2 times
+    expect(global.fetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries
+    expect(sleep).toHaveBeenCalledTimes(2);
   });
 });
