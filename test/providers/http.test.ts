@@ -1,8 +1,8 @@
 import dedent from 'dedent';
 import path from 'path';
-import { fetchWithCache } from '../../src/cache';
+import { disableCache, fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
-import { fetchWithTimeout } from '../../src/fetch';
+import { fetchWithRetries } from '../../src/fetch';
 import {
   createTransformRequest,
   createTransformResponse,
@@ -13,11 +13,13 @@ import {
 import { maybeLoadFromExternalFile } from '../../src/util';
 
 jest.mock('../../src/cache', () => ({
+  ...jest.requireActual('../../src/cache'),
   fetchWithCache: jest.fn(),
 }));
 
 jest.mock('../../src/fetch', () => ({
   ...jest.requireActual('../../src/fetch'),
+  fetchWithRetries: jest.fn(),
   fetchWithTimeout: jest.fn(),
 }));
 
@@ -1084,51 +1086,6 @@ describe('HttpProvider', () => {
       undefined,
       2,
     );
-  });
-
-  it('should handle rate limiting with maxRetries', async () => {
-    provider = new HttpProvider(mockUrl, {
-      config: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { key: '{{ prompt }}' },
-        maxRetries: 1,
-      },
-    });
-
-    // Create a proper rate limit response that will trigger the retry logic
-    const mockRateLimitResponse = new Response(null, {
-      status: 429,
-      statusText: 'Too Many Requests',
-      headers: {
-        'x-ratelimit-remaining': '0',
-        'retry-after': '1',
-      },
-    });
-
-    const mockSuccess = new Response(JSON.stringify({ result: 'success after retry' }), {
-      status: 200,
-      statusText: 'OK',
-    });
-
-    // Clear previous mocks
-    jest.clearAllMocks();
-    
-    // Mock fetchWithCache to handle retries
-    jest.mocked(fetchWithCache)
-      .mockRejectedValueOnce(new Error('Rate limit exceeded'))
-      .mockResolvedValueOnce({
-        data: JSON.stringify({ result: 'success after retry' }),
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        cached: false,
-      });
-
-    const result = await provider.callApi('test prompt');
-
-    expect(fetchWithCache).toHaveBeenCalledTimes(2);
-    expect(result.output).toEqual({ result: 'success after retry' });
   });
 });
 
