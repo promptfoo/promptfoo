@@ -322,7 +322,7 @@ You can test for factuality and LLM "grounding" through [Promptfoo evals framewo
 
 ### Red Team Plugins
 
-Promptfoo provides a way to test against misinformation through its [hallucination](/docs/red-team/plugins/hallucination/) and [overreliance](/docs/red-team/plugins/overreliance/plugins) plugins.
+Promptfoo provides a way to test against misinformation through its [hallucination](/docs/red-team/plugins/hallucination/) and [overreliance](/docs/red-team/plugins/overreliance/) plugins.
 
 :::note
 The hallucination plugin works by generating requests that it knows are inaccurate and checking whether they are fulfilled. If you want to test specific facts for a RAG architecture or fine-tuned model, we recommend using evals.
