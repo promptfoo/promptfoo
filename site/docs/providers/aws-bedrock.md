@@ -308,6 +308,7 @@ The following environment variables can be used to configure the Bedrock provide
 - `AWS_BEDROCK_STOP`: Default stop sequences (as a JSON string)
 - `AWS_BEDROCK_FREQUENCY_PENALTY`: Default frequency penalty (for supported models)
 - `AWS_BEDROCK_PRESENCE_PENALTY`: Default presence penalty (for supported models)
+- `AWS_BEDROCK_MAX_RETRIES`: Number of retry attempts for failed API calls (default: 10)
 
 Model-specific environment variables:
 

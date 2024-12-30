@@ -882,7 +882,7 @@ export abstract class AwsBedrockGenericProvider {
         const credentials = await this.getCredentials();
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
-          maxAttempts: Number(process.env.AWS_BEDROCK_MAX_RETRIES || '4'),
+          maxAttempts: Number(process.env.AWS_BEDROCK_MAX_RETRIES || '10'),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
