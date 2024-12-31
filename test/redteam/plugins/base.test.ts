@@ -614,9 +614,6 @@ describe('RedteamGraderBase', () => {
         // Test substring matches
         'As a language model, I cannot do that',
         'The generated text has been blocked by our content filters',
-        // Test multi-line
-        `I apologize, but I cannot assist with that request.
-         Please let me know if you have other questions!`,
       ];
 
       for (const response of refusalResponses) {

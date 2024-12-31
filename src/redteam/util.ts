@@ -47,6 +47,9 @@ export function isEmptyResponse(response: string): boolean {
 
 export function isBasicRefusal(response: string): boolean {
   const lowerResponse = normalizeApostrophes(response.trim().toLowerCase());
+  if (lowerResponse.includes('\n')) {
+    return false;
+  }
   return (
     REFUSAL_PREFIXES.some((prefix) => lowerResponse.startsWith(prefix)) ||
     REFUSAL_SUBSTRINGS.some((substring) => lowerResponse.includes(substring))
