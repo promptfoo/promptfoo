@@ -5,8 +5,8 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
+import { fromError } from 'zod-validation-error';
 import { synthesize } from '..';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
@@ -15,8 +15,10 @@ import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import type { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
+import { isRunningUnderNpx } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
+import invariant from '../../util/invariant';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 import {
   REDTEAM_MODEL,
@@ -25,16 +27,18 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../constants';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
 import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
-import { shouldGenerateRemote } from '../util';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
   return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
 }
 
-export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptions>) {
+export async function doGenerateRedteam(
+  options: Partial<RedteamCliGenerateOptions>,
+): Promise<Partial<UnifiedConfig> | null> {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
@@ -48,21 +52,20 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
-  if (!options.force && fs.existsSync(outputPath) && configPath) {
-    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as any;
+  if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
+    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as Partial<UnifiedConfig>;
     const storedHash = redteamContent.metadata?.configHash;
     const currentHash = getConfigHash(configPath);
 
     shouldGenerate = storedHash !== currentHash;
+    if (!shouldGenerate) {
+      logger.warn(
+        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+      );
+      return redteamContent;
+    }
   } else {
     shouldGenerate = true;
-  }
-
-  if (!shouldGenerate) {
-    logger.warn(
-      'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-    );
-    return;
   }
 
   if (configPath) {
@@ -84,10 +87,12 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
   } else {
     logger.info(
       chalk.red(
-        `\nCan't generate without configuration - run ${chalk.yellow.bold('promptfoo redteam init')} first`,
+        `\nCan't generate without configuration - run ${chalk.yellow.bold(
+          isRunningUnderNpx() ? 'npx promptfoo redteam init' : 'promptfoo redteam init',
+        )} first`,
       ),
     );
-    return;
+    return null;
   }
 
   const startTime = Date.now();
@@ -165,16 +170,18 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     language: redteamConfig?.language || options.language,
     maxConcurrency: options.maxConcurrency,
     numTests: redteamConfig?.numTests ?? options.numTests,
+    entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
+    sharing: redteamConfig?.sharing || options.sharing,
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
     logger.error('Invalid redteam configuration:');
-    logger.error(parsedConfig.error.toString());
+    logger.error(fromError(parsedConfig.error).toString());
     throw new Error('Invalid redteam configuration');
   }
 
@@ -189,15 +196,23 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
     maxConcurrency: config.maxConcurrency,
     delay: config.delay,
+    abortSignal: options.abortSignal,
   } as SynthesizeOptions);
+
+  if (redteamTests.length === 0) {
+    logger.warn('No test cases generated. Please check for errors and try again.');
+    return null;
+  }
 
   const updatedRedteamConfig = {
     purpose,
     entities,
     strategies: strategyObjs || [],
     plugins: plugins || [],
+    sharing: config.sharing,
   };
 
+  let ret: Partial<UnifiedConfig> | undefined;
   if (options.output) {
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
@@ -216,21 +231,24 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
       redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
       metadata: {
         ...(existingYaml.metadata || {}),
-        ...(configPath ? { configHash: getConfigHash(configPath) } : {}),
+        ...(configPath && redteamTests.length > 0
+          ? { configHash: getConfigHash(configPath) }
+          : { configHash: 'force-regenerate' }),
       },
     };
-    writePromptfooConfig(updatedYaml, options.output);
+    ret = writePromptfooConfig(updatedYaml, options.output);
     printBorder();
     const relativeOutputPath = path.relative(process.cwd(), options.output);
-    logger.info(`Wrote ${redteamTests.length} new test cases to ${relativeOutputPath}`);
+    logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
     if (!options.inRedteamRun) {
+      const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
         '\n' +
           chalk.green(
             `Run ${chalk.bold(
               relativeOutputPath === 'redteam.yaml'
-                ? 'promptfoo redteam eval'
-                : `promptfoo redteam eval -c ${relativeOutputPath}`,
+                ? `${commandPrefix} redteam eval`
+                : `${commandPrefix} redteam eval -c ${relativeOutputPath}`,
             )} to run the red team!`,
           ),
       );
@@ -252,16 +270,17 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
       ...(existingConfig.metadata || {}),
       configHash: getConfigHash(configPath),
     };
-    writePromptfooConfig(existingConfig, configPath);
+    ret = writePromptfooConfig(existingConfig, configPath);
     logger.info(
       `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
     );
+    const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
     const command = configPath.endsWith('promptfooconfig.yaml')
-      ? 'promptfoo eval'
-      : `promptfoo eval -c ${path.relative(process.cwd(), configPath)}`;
+      ? `${commandPrefix} eval`
+      : `${commandPrefix} eval -c ${path.relative(process.cwd(), configPath)}`;
     logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
   } else {
-    writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml');
+    ret = writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml');
   }
 
   telemetry.record('command_used', {
@@ -272,6 +291,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     numTestsGenerated: redteamTests.length,
   });
   await telemetry.send();
+  return ret;
 }
 
 export function redteamGenerateCommand(

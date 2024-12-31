@@ -2,7 +2,14 @@ import dedent from 'dedent';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
-import { HttpProvider, createResponseParser, processJsonBody } from '../../src/providers/http';
+import {
+  createTransformRequest,
+  createTransformResponse,
+  determineRequestBody,
+  HttpProvider,
+  processJsonBody,
+} from '../../src/providers/http';
+import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
 jest.mock('../../src/cache', () => ({
@@ -47,7 +54,7 @@ describe('HttpProvider', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: { key: '{{ prompt }}' },
-        responseParser: (data: any) => data.result,
+        transformResponse: (data: any) => data.result,
       },
     });
     const mockResponse = {
@@ -79,7 +86,7 @@ describe('HttpProvider', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: { key: 'value' },
-        responseParser: (data: any) => data.result,
+        transformResponse: (data: any) => data.result,
       },
     });
     const mockError = new Error('Network error');
@@ -98,7 +105,7 @@ describe('HttpProvider', () => {
         headers: { Authorization: 'Bearer token' },
         body: { key: '{{ prompt }}' },
         queryParams: { foo: 'bar' },
-        responseParser: (data: any) => data,
+        transformResponse: (data: any) => data,
       },
     });
     const mockResponse = {
@@ -134,7 +141,7 @@ describe('HttpProvider', () => {
       provider = new HttpProvider(mockUrl, {
         config: {
           body: { key: '{{ prompt }}' },
-          responseParser: parser,
+          transformResponse: parser,
         },
       });
       const mockResponse = {
@@ -156,7 +163,7 @@ describe('HttpProvider', () => {
         method: 'POST',
         headers: { 'X-Custom-Header': '{{ prompt | upper }}' },
         body: { key: '{{ prompt }}' },
-        responseParser: (data: any) => data,
+        transformResponse: (data: any) => data,
       },
     });
     const mockResponse = {
@@ -187,11 +194,7 @@ describe('HttpProvider', () => {
       new HttpProvider(mockUrl, {
         config: invalidConfig as any,
       });
-    }).toThrow(
-      new Error(
-        'Invariant failed: Expected HTTP provider http://example.com/api to have a config containing {body}, but instead got "this isnt json"',
-      ),
-    );
+    }).toThrow(/Expected object, received string/);
   });
 
   it('should return provider id and string representation', () => {
@@ -210,7 +213,7 @@ describe('HttpProvider', () => {
           q: '{{ prompt }}',
           foo: 'bar',
         },
-        responseParser: (data: any) => data,
+        transformResponse: (data: any) => data,
       },
     });
     const mockResponse = {
@@ -243,7 +246,7 @@ describe('HttpProvider', () => {
       const provider = new HttpProvider('http', {
         config: {
           request: rawRequest,
-          responseParser: (data: any) => data,
+          transformResponse: (data: any) => data,
         },
       });
 
@@ -283,7 +286,7 @@ describe('HttpProvider', () => {
       const provider = new HttpProvider('https', {
         config: {
           request: rawRequest,
-          responseParser: (data: any) => data,
+          transformResponse: (data: any) => data,
         },
       });
 
@@ -324,7 +327,7 @@ describe('HttpProvider', () => {
       const provider = new HttpProvider('https', {
         config: {
           request: filePath,
-          responseParser: (data: any) => data,
+          transformResponse: (data: any) => data,
         },
       });
 
@@ -428,13 +431,13 @@ describe('HttpProvider', () => {
     });
   });
 
-  describe('createResponseParser', () => {
+  describe('createtransformResponse', () => {
     it('should handle function parser', async () => {
       const functionParser = (data: any) => data.result;
       const provider = new HttpProvider(mockUrl, {
         config: {
           body: { key: 'value' },
-          responseParser: functionParser,
+          transformResponse: functionParser,
         },
       });
 
@@ -454,7 +457,7 @@ describe('HttpProvider', () => {
       const mockParser = jest.fn((data, text) => text.toUpperCase());
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
-      const parser = await createResponseParser('file://custom-parser.js');
+      const parser = await createTransformResponse('file://custom-parser.js');
       const result = parser({ customField: 'parsed' }, 'parsed');
       expect(importModule).toHaveBeenCalledWith(
         path.resolve('/mock/base/path', 'custom-parser.js'),
@@ -464,7 +467,7 @@ describe('HttpProvider', () => {
     });
 
     it('should throw error for unsupported parser type', async () => {
-      await expect(createResponseParser(123 as any)).rejects.toThrow(
+      await expect(createTransformResponse(123 as any)).rejects.toThrow(
         "Unsupported response parser type: number. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.",
       );
     });
@@ -473,7 +476,7 @@ describe('HttpProvider', () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           body: { key: 'value' },
-          responseParser: 'json.result',
+          transformResponse: 'json.result',
         },
       });
 
@@ -493,7 +496,7 @@ describe('HttpProvider', () => {
       const mockParser = jest.fn((data, text) => data.specificField);
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
-      const parser = await createResponseParser('file://custom-parser.js:parseResponse');
+      const parser = await createTransformResponse('file://custom-parser.js:parseResponse');
       const result = parser({ specificField: 'parsed' }, '');
       expect(importModule).toHaveBeenCalledWith(
         path.resolve('/mock/base/path', 'custom-parser.js'),
@@ -505,13 +508,13 @@ describe('HttpProvider', () => {
     it('should throw error for malformed file:// parser', async () => {
       jest.mocked(importModule).mockResolvedValueOnce({});
 
-      await expect(createResponseParser('file://invalid-parser.js')).rejects.toThrow(
+      await expect(createTransformResponse('file://invalid-parser.js')).rejects.toThrow(
         /Response parser malformed: .*invalid-parser\.js must export a function or have a default export as a function/,
       );
     });
 
     it('should return default parser when no parser is provided', async () => {
-      const parser = await createResponseParser(undefined);
+      const parser = await createTransformResponse(undefined);
       const result = parser({ key: 'value' }, 'raw text');
       expect(result.output).toEqual({ key: 'value' });
     });
@@ -520,7 +523,7 @@ describe('HttpProvider', () => {
       const mockParser = jest.fn((data) => data.defaultField);
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
-      const parser = await createResponseParser('file://default-parser.js');
+      const parser = await createTransformResponse('file://default-parser.js');
       const result = parser({ defaultField: 'parsed' }, '');
 
       expect(result).toBe('parsed');
@@ -553,7 +556,7 @@ describe('HttpProvider', () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         body: { key: 'value' },
-        responseParser: (json: any, text: string) => ({ custom: json.result }),
+        transformResponse: (json: any, text: string) => ({ custom: json.result }),
       },
     });
 
@@ -956,5 +959,480 @@ describe('HttpProvider', () => {
         undefined,
       );
     });
+  });
+
+  describe('deprecated responseParser handling', () => {
+    it('should use responseParser when transformResponse is not set', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+          responseParser: (data: any) => ({ chat_history: data.result }),
+        },
+      });
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+
+      expect(result).toEqual({ output: { chat_history: 'success' } });
+    });
+
+    it('should prefer transformResponse over responseParser when both are set', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+          responseParser: (data: any) => ({ chat_history: 'from responseParser' }),
+          transformResponse: (data: any) => ({ chat_history: 'from transformResponse' }),
+        },
+      });
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+
+      expect(result).toEqual({ output: { chat_history: 'from transformResponse' } });
+    });
+
+    it('should handle string-based responseParser when transformResponse is not set', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+          responseParser: 'json.result',
+        },
+      });
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+
+      expect(result).toEqual({ output: 'success' });
+    });
+  });
+});
+
+describe('createTransformRequest', () => {
+  it('should return identity function when no transform specified', async () => {
+    const transform = await createTransformRequest(undefined);
+    const result = await transform('test prompt');
+    expect(result).toBe('test prompt');
+  });
+
+  it('should handle string templates', async () => {
+    const transform = await createTransformRequest('return {"text": prompt}');
+    const result = await transform('hello');
+    expect(result).toEqual({
+      text: 'hello',
+    });
+  });
+
+  it('should handle function-based request transform', async () => {
+    jest.clearAllMocks();
+
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: 'value' },
+        transformRequest: (prompt: string) => ({ transformed: prompt.toUpperCase() }),
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'http://test.com',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: 'value', transformed: 'TEST' }),
+      },
+      REQUEST_TIMEOUT_MS,
+      'text',
+      undefined,
+    );
+  });
+
+  it('should throw error for unsupported transform type', async () => {
+    await expect(createTransformRequest(123 as any)).rejects.toThrow(
+      'Unsupported request transform type: number',
+    );
+  });
+});
+
+describe('determineRequestBody', () => {
+  it('should merge parsed prompt object with config body when content type is JSON', () => {
+    const result = determineRequestBody(
+      true,
+      { promptField: 'test value' },
+      { configField: 'config value' },
+      { vars: 'not used in this case' },
+    );
+
+    expect(result).toEqual({
+      promptField: 'test value',
+      configField: 'config value',
+    });
+  });
+
+  it('should process JSON body with variables when parsed prompt is not an object', () => {
+    const result = determineRequestBody(
+      true,
+      'test prompt',
+      { message: '{{ prompt }}' },
+      { prompt: 'test prompt' },
+    );
+
+    expect(result).toEqual({
+      message: 'test prompt',
+    });
+  });
+
+  it('should process text body when content type is not JSON', () => {
+    const result = determineRequestBody(false, 'test prompt', 'Message: {{ prompt }}', {
+      prompt: 'test prompt',
+    });
+
+    expect(result).toBe('Message: test prompt');
+  });
+
+  it('should handle nested JSON structures', () => {
+    const result = determineRequestBody(
+      true,
+      'test prompt',
+      {
+        outer: {
+          inner: '{{ prompt }}',
+          static: 'value',
+        },
+        array: ['{{ prompt }}', 'static'],
+      },
+      { prompt: 'test prompt' },
+    );
+
+    expect(result).toEqual({
+      outer: {
+        inner: 'test prompt',
+        static: 'value',
+      },
+      array: ['test prompt', 'static'],
+    });
+  });
+
+  it('should handle undefined config body with object prompt', () => {
+    const result = determineRequestBody(true, { message: 'test prompt' }, undefined, {});
+
+    expect(result).toEqual({
+      message: 'test prompt',
+    });
+  });
+
+  it('should handle array config body', () => {
+    const result = determineRequestBody(true, 'test prompt', ['static', '{{ prompt }}'], {
+      prompt: 'test prompt',
+    });
+
+    expect(result).toEqual(['static', 'test prompt']);
+  });
+});
+
+describe('constructor validation', () => {
+  it('should validate config using Zod schema', () => {
+    expect(() => {
+      new HttpProvider('http://test.com', {
+        config: {
+          headers: { 'Content-Type': 123 }, // Invalid header type
+        },
+      });
+    }).toThrow('Expected string, received number');
+  });
+
+  it('should require body or GET method', () => {
+    expect(() => {
+      new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          // Missing body
+        },
+      });
+    }).toThrow(/Expected HTTP provider http:\/\/test.com to have a config containing {body}/);
+  });
+});
+
+describe('content type handling', () => {
+  it('should handle JSON content type with object body', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'http://test.com',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'content-type': 'application/json' }),
+        body: JSON.stringify({ key: 'test' }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+    );
+  });
+
+  it('should handle non-JSON content type with string body', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: 'Raw text {{ prompt }}',
+      },
+    });
+
+    const mockResponse = {
+      data: 'success',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'http://test.com',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'content-type': 'text/plain' }),
+        body: 'Raw text test',
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+    );
+  });
+
+  it('should throw error for object body with non-JSON content type', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: { key: 'value' },
+      },
+    });
+
+    await expect(provider.callApi('test')).rejects.toThrow(/Content-Type is not application\/json/);
+  });
+});
+
+describe('request transformation', () => {
+  it('should handle string-based request transform', async () => {
+    jest.clearAllMocks();
+
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: 'value' },
+        transformRequest: 'return { transformed: prompt.toLowerCase() }',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('TEST');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'http://test.com',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'content-type': 'application/json' }),
+        body: JSON.stringify({ key: 'value', transformed: 'test' }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+    );
+  });
+
+  it('should handle function-based request transform', async () => {
+    jest.clearAllMocks();
+
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: 'value' },
+        transformRequest: (prompt: string) => ({ transformed: prompt.toUpperCase() }),
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'http://test.com',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: 'value', transformed: 'TEST' }),
+      },
+      REQUEST_TIMEOUT_MS,
+      'text',
+      undefined,
+    );
+  });
+});
+
+describe('response handling', () => {
+  it('should handle successful JSON response', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+  });
+
+  it('should handle non-JSON response', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: 'test',
+        transformResponse: (data: Record<string, unknown>, text: string) => text,
+      },
+    });
+
+    const mockResponse = {
+      data: 'Raw response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe(mockResponse.data);
+  });
+
+  it('should include debug information when requested', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: { 'x-test': 'test-header' },
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test', {
+      debug: true,
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+    });
+    expect(result.raw).toBe(mockResponse.data);
+    expect(result.metadata).toEqual({
+      headers: mockResponse.headers,
+    });
+  });
+});
+
+describe('session handling', () => {
+  it('should extract session ID from headers when configured', async () => {
+    const sessionParser = jest.fn().mockReturnValue('test-session');
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        sessionParser,
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: { 'x-session-id': 'test-session' },
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.sessionId).toBe('test-session');
+    expect(sessionParser).toHaveBeenCalledWith({ headers: mockResponse.headers });
   });
 });

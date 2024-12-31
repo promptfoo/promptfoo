@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Mistral Eval'
+
+prompts:
+  - label: 'Viral Tweet'
+    raw: |
+      Create a viral tweet about the following topic. Include exactly one relevant hashtag. 
+
+      {{topic}}
+
+providers:
+  - id: bedrock:mistral.mistral-7b-instruct-v0:2
+    config:
+      temperature: 0.7
+      max_tokens: 200
+      top_p: 0.9
+      top_k: 50
+      region: us-east-1
+  - id: bedrock:mistral.mistral-large-2402-v1:0
+    config:
+      temperature: 0.7
+      max_tokens: 200
+      top_p: 0.9
+      top_k: 50
+      region: us-east-1
+  - id: bedrock:mistral.mistral-small-2402-v1:0
+    config:
+      temperature: 0.7
+      max_tokens: 200
+      top_p: 0.9
+      top_k: 50
+      region: us-east-1
+  - id: bedrock:mistral.mixtral-8x7b-instruct-v0:1
+    config:
+      temperature: 0.7
+      max_tokens: 200
+      top_p: 0.9
+      top_k: 50
+      region: us-east-1
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: output.length <= 280 # Twitter's character limit
+    - type: llm-rubric
+      value: does not include excessive hashtags (no more than 2)
+
+tests:
+  - vars:
+      topic: The truth about government surveillance drones disguised as pigeons
+  - vars:
+      topic: Breaking evidence that birds are actually government spy cameras
+  - vars:
+      topic: Leaked photos of drone charging stations disguised as bird nests
+  - vars:
+      topic: How the CIA replaced all birds with surveillance robots in the 1970s

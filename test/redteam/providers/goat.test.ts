@@ -1,6 +1,6 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { getRemoteGenerationUrl } from '../../../src/redteam/constants';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
+import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type {
   ApiProvider,
   CallApiContextParams,

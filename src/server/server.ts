@@ -9,7 +9,6 @@ import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
-import invariant from 'tiny-invariant';
 import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION, DEFAULT_PORT } from '../constants';
@@ -19,6 +18,7 @@ import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import telemetry from '../telemetry';
 import { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCases';
@@ -31,6 +31,8 @@ import {
   getLatestEval,
   getStandaloneEvals,
 } from '../util';
+import { checkRemoteHealth } from '../util/apiHealth';
+import invariant from '../util/invariant';
 import { BrowserBehavior } from '../util/server';
 import { openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
@@ -53,6 +55,21 @@ export function createApp() {
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
   app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', version: VERSION });
+  });
+
+  app.get('/api/remote-health', async (req: Request, res: Response): Promise<void> => {
+    const apiUrl = getRemoteHealthUrl();
+
+    if (apiUrl === null) {
+      res.json({
+        status: 'DISABLED',
+        message: 'remote generation and grading are disabled',
+      });
+      return;
+    }
+
+    const result = await checkRemoteHealth(apiUrl);
+    res.json(result);
   });
 
   app.get('/api/results', async (req: Request, res: Response): Promise<void> => {

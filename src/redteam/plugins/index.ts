@@ -1,15 +1,20 @@
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+import invariant from '../../util/invariant';
 import type { HarmPlugin } from '../constants';
-import { PII_PLUGINS, REDTEAM_PROVIDER_HARM_PLUGINS, getRemoteGenerationUrl } from '../constants';
+import { PII_PLUGINS, REDTEAM_PROVIDER_HARM_PLUGINS } from '../constants';
 import { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../constants';
-import { neverGenerateRemote, shouldGenerateRemote } from '../util';
+import {
+  neverGenerateRemote,
+  shouldGenerateRemote,
+  getRemoteGenerationUrl,
+} from '../remoteGeneration';
 import { type RedteamPluginBase } from './base';
+import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { DebugAccessPlugin } from './debugAccess';
@@ -23,6 +28,7 @@ import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
+import { PlinyPlugin } from './pliny';
 import { PolicyPlugin } from './policy';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
@@ -110,6 +116,8 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 >;
 
 const pluginFactories: PluginFactory[] = [
+  createPluginFactory(BeavertailsPlugin, 'beavertails'),
+  createPluginFactory(PlinyPlugin, 'pliny'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
   createPluginFactory(DebugAccessPlugin, 'debug-access'),

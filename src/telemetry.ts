@@ -66,6 +66,12 @@ export class Telemetry {
 
   private recordedEvents: Set<string> = new Set();
 
+  /**
+   * Record an event once, unique by event name and properties.
+   *
+   * @param eventName - The name of the event to record.
+   * @param properties - The properties of the event to record.
+   */
   recordOnce(eventName: TelemetryEventTypes, properties: EventProperties): void {
     if (this.disabled) {
       this.recordTelemetryDisabled();
@@ -145,7 +151,7 @@ export class Telemetry {
         throw new Error(`Failed to save consent: ${response.statusText}`);
       }
     } catch (err) {
-      logger.error(`Error saving consent: ${(err as Error).message}`);
+      logger.debug(`Failed to save consent: ${(err as Error).message}`);
     }
   }
 }

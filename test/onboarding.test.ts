@@ -16,6 +16,12 @@ jest.mock('fs/promises', () => ({
   rm: jest.fn(),
 }));
 
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
+
+jest.mock('better-sqlite3');
+
 jest.mock('@inquirer/select', () => ({
   __esModule: true,
   default: jest.fn(),
@@ -29,6 +35,10 @@ jest.mock('@inquirer/checkbox', () => ({
 jest.mock('@inquirer/confirm', () => ({
   __esModule: true,
   default: jest.fn(),
+}));
+
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
 }));
 
 jest.mock('../src/telemetry', () => ({

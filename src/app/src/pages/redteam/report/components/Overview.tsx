@@ -9,7 +9,7 @@ import {
   severityDisplayNames,
   type Plugin as PluginType,
 } from '@promptfoo/redteam/constants';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/shared';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import { useReportStore } from './store';
 import './Overview.css';

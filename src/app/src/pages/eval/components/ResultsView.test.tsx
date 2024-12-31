@@ -77,15 +77,7 @@ describe('ResultsView', () => {
     renderWithToastProvider(
       <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
     );
-    expect(screen.getByText('Columns')).toBeInTheDocument();
+    expect(screen.getByText('Table Settings')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search or select an eval...')).toBeInTheDocument();
-  });
-
-  it('displays the correct column visibility state', () => {
-    renderWithToastProvider(
-      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
-    );
-    const columnSelect = screen.getByLabelText('Columns');
-    expect(columnSelect).toHaveTextContent('Variable 1, Prompt 1');
   });
 });

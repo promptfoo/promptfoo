@@ -24,7 +24,7 @@ import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from 
 
 // see https://platform.openai.com/docs/models
 const OPENAI_CHAT_MODELS = [
-  ...['o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
+  ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
       input: 15 / 1e6,
@@ -494,7 +494,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     // NOTE: Special handling for o1 models which do not support max_tokens and temperature
-    const isO1Model = this.modelName.startsWith('o1-');
+    const isO1Model = this.modelName.startsWith('o1');
     const maxCompletionTokens = isO1Model
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;

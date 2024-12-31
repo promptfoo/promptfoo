@@ -22,6 +22,10 @@ import type {
 } from '../../src/types';
 import { TestGrader } from '../util/utils';
 
+jest.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+}));
+
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));

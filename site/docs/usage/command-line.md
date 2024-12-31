@@ -34,9 +34,10 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--env-file, --env-path <path>`     | Path to .env file                                                       |
 | `--filter-failing <path>`           | Path to JSON output file with failing tests                             |
 | `-n, --filter-first-n <number>`     | Only run the first N tests                                              |
+| `--filter-sample <number>`          | Only run a random sample of N tests                                     |
+| `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair                |
 | `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern              |
 | `--filter-providers <providers>`    | Only run tests with these providers                                     |
-| `--filter-sample <number>`          | Only run a random sample of N tests                                     |
 | `--filter-targets <targets>`        | Only run tests with these targets                                       |
 | `--grader <provider>`               | Model that will grade outputs                                           |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                  |
@@ -158,18 +159,20 @@ These general-purpose environment variables are supported:
 
 | Name                                   | Description                                                                                                                                      | Default        |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| `FORCE_COLOR`                          | Set to 0 to disable terminal colors for printed outputs                                                                                          |                |
 | `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` | How many assertions to run at a time                                                                                                             | 3              |
 | `PROMPTFOO_CONFIG_DIR`                 | Directory that stores eval history                                                                                                               | `~/.promptfoo` |
 | `PROMPTFOO_DISABLE_AJV_STRICT_MODE`    | If set, disables AJV strict mode for JSON schema validation                                                                                      |                |
 | `PROMPTFOO_DISABLE_CONVERSATION_VAR`   | Prevents the `_conversation` variable from being set                                                                                             |                |
+| `PROMPTFOO_DISABLE_ERROR_LOG`          | Prevents error logs from being written to a file                                                                                                 |                |
 | `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`    | If set, disables smart variable substitution within JSON prompts                                                                                 |                |
 | `PROMPTFOO_DISABLE_REF_PARSER`         | Prevents JSON schema dereferencing                                                                                                               |                |
 | `PROMPTFOO_DISABLE_TEMPLATING`         | Disable Nunjucks rendering                                                                                                                       |                |
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`      | Prevents Array-type vars from being expanded into multiple test cases                                                                            |                |
 | `PROMPTFOO_FAILED_TEST_EXIT_CODE`      | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                   | 100            |
+| `PROMPTFOO_LOG_DIR`                    | Directory to write error logs                                                                                                                    | `.`            |
 | `PROMPTFOO_PASS_RATE_THRESHOLD`        | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 0 failures                                                          | 0              |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`       | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior. |                |
-| `FORCE_COLOR`                          | Set to 0 to disable terminal colors for printed outputs                                                                                          |                |
 
 :::tip
 promptfoo will load environment variables from the `.env` in your current working directory.

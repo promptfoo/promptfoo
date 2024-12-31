@@ -1,10 +1,12 @@
 import { fetchWithCache } from '../cache';
 import { VERSION } from '../constants';
-import { getEnvString } from '../envars';
 import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
-import { getRemoteGenerationUrl } from '../redteam/constants';
+import {
+  getRemoteGenerationUrl,
+  getRemoteGenerationUrlForUnaligned,
+} from '../redteam/remoteGeneration';
 import type {
   ApiProvider,
   ProviderResponse,
@@ -54,11 +56,12 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
     };
 
     try {
-      logger.debug(`Calling promptfoo generate harmful API with body: ${JSON.stringify(body)}`);
+      logger.debug(
+        `[HarmfulCompletionProvider] Calling generate harmful API (${getRemoteGenerationUrlForUnaligned()}) with body: ${JSON.stringify(body)}`,
+      );
       // We're using the promptfoo API to avoid having users provide their own unaligned model.
       const response = await fetchWithRetries(
-        getEnvString('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT') ||
-          'https://api.promptfoo.dev/redteam/generateHarmful',
+        getRemoteGenerationUrlForUnaligned(),
         {
           method: 'POST',
           headers: {
@@ -66,22 +69,25 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        10000,
+        60000,
         2,
       );
 
       if (!response.ok) {
-        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
+        throw new Error(
+          `[HarmfulCompletionProvider] API call failed with status ${response.status}: ${await response.text()}`,
+        );
       }
 
       const data = await response.json();
-      logger.debug(`promptfoo API call response: ${JSON.stringify(data)}`);
+      logger.debug(`[HarmfulCompletionProvider] API call response: ${JSON.stringify(data)}`);
       return {
         output: [data.output].flat(),
       };
     } catch (err) {
+      logger.info(`[HarmfulCompletionProvider] API call error: ${String(err)}`);
       return {
-        error: `API call error: ${String(err)}`,
+        error: `[HarmfulCompletionProvider]API call error: ${String(err)}`,
       };
     }
   }
@@ -140,7 +146,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const { result, tokenUsage } = data;
 
       if (!result) {
-        throw new Error('No choices returned from API');
+        return {
+          error: 'LLM did not return a result, likely refusal',
+        };
       }
 
       return {

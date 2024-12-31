@@ -4,7 +4,7 @@ prompts:
 providers:
   - anthropic:messages:claude-3-haiku-20240307
   - anthropic:messages:claude-3-5-sonnet-20240620
-  - bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
 
 tests:
   - vars:

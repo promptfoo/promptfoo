@@ -28,8 +28,8 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import invariant from '@promptfoo/util/invariant';
 import type { VisibilityState } from '@tanstack/table-core';
-import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
@@ -219,9 +219,18 @@ export default function ResultsView({
 
   const promptOptions = head.prompts.map((prompt, idx) => {
     const label = prompt.label || prompt.display || prompt.raw;
+    const provider = prompt.provider || 'unknown';
+    const displayLabel = [
+      label && `"${label.slice(0, 60)}${label.length > 60 ? '...' : ''}"`,
+      provider && `[${provider}]`,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
     return {
       value: `Prompt ${idx + 1}`,
-      label: `Prompt ${idx + 1}: ${label && label.length > 100 ? label.slice(0, 100) + '...' : label || ''}`,
+      label: displayLabel,
+      description: label,
       group: 'Prompts',
     };
   });
@@ -253,8 +262,8 @@ export default function ResultsView({
   );
 
   const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: [],
-    columnVisibility: {},
+    selectedColumns: allColumns,
+    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
   };
 
   const updateColumnVisibility = React.useCallback(
@@ -271,20 +280,10 @@ export default function ResultsView({
     [allColumns, setColumnState, currentEvalId],
   );
 
-  React.useEffect(() => {
-    if (
-      currentColumnState.selectedColumns.length === 0 ||
-      !currentColumnState.selectedColumns.every((col: string) => allColumns.includes(col))
-    ) {
-      updateColumnVisibility(allColumns);
-    }
-  }, [allColumns, currentColumnState.selectedColumns, updateColumnVisibility]);
-
   const handleChange = React.useCallback(
     (event: SelectChangeEvent<string[]>) => {
-      const newSelectedColumns = Array.isArray(event.target.value)
-        ? event.target.value
-        : event.target.value.split(',');
+      const newSelectedColumns =
+        typeof event.target.value === 'string' ? event.target.value.split(',') : event.target.value;
 
       updateColumnVisibility(newSelectedColumns);
     },
@@ -425,13 +424,6 @@ export default function ResultsView({
       </ResponsiveStack>
       <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
         <Box>
-          <ColumnSelector
-            columnData={columnData}
-            selectedColumns={currentColumnState.selectedColumns}
-            onChange={handleChange}
-          />
-        </Box>
-        <Box>
           <FilterModeSelector filterMode={filterMode} onChange={handleFilterModeChange} />
         </Box>
         <Box>
@@ -447,6 +439,20 @@ export default function ResultsView({
         <Box flexGrow={1} />
         <Box display="flex" justifyContent="flex-end">
           <ResponsiveStack direction="row" spacing={2}>
+            <ColumnSelector
+              columnData={columnData}
+              selectedColumns={currentColumnState.selectedColumns}
+              onChange={handleChange}
+            />
+            <Tooltip title="Edit table view settings" placement="bottom">
+              <Button
+                color="primary"
+                onClick={() => setViewSettingsModalOpen(true)}
+                startIcon={<SettingsIcon />}
+              >
+                Table Settings
+              </Button>
+            </Tooltip>
             <Button color="primary" onClick={handleOpenMenu} startIcon={<ArrowDropDownIcon />}>
               Eval actions
             </Button>
@@ -516,15 +522,6 @@ export default function ResultsView({
                 </Tooltip>
               </Menu>
             )}
-            <Tooltip title="Edit table view settings" placement="bottom">
-              <Button
-                color="primary"
-                onClick={() => setViewSettingsModalOpen(true)}
-                startIcon={<SettingsIcon />}
-              >
-                Table Settings
-              </Button>
-            </Tooltip>
             {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
             {(config?.redteam || config?.metadata?.redteam) && (
               <Tooltip title="View vulnerability scan report" placement="bottom">
@@ -555,6 +552,7 @@ export default function ResultsView({
         searchText={debouncedSearchText}
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
+        setFilterMode={setFilterMode}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

@@ -7,7 +7,7 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCases';
 import type { TestSuite, UnifiedConfig } from '../../types';
-import { printBorder, setupEnv } from '../../util';
+import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 
 interface DatasetGenerateOptions {
@@ -79,7 +79,8 @@ async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void>
     existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
-    logger.info(chalk.green(`Run ${chalk.bold('promptfoo eval')} to run the generated tests`));
+    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+    logger.info(chalk.green(`Run ${chalk.bold(runCommand)} to run the generated tests`));
   } else {
     logger.info(
       `Copy the above test cases or run ${chalk.greenBright(

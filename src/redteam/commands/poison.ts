@@ -6,7 +6,7 @@ import * as path from 'path';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
-import { getRemoteGenerationUrl } from '../constants';
+import { getRemoteGenerationUrl } from '../remoteGeneration';
 
 interface PoisonOptions {
   documents: string[];

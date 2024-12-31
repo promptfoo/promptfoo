@@ -17,7 +17,7 @@ providers:
           '{{model}}'
           #
       # Parse OpenAI response
-      responseParser: 'json.choices[0].message.content'
+      transformResponse: 'json.choices[0].message.content'
 
 tests:
   - vars:

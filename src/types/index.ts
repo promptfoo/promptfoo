@@ -58,9 +58,10 @@ export const CommandLineOptionsSchema = z.object({
   watch: z.boolean().optional(),
   filterFailing: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
-  filterSample: z.coerce.number().int().positive().optional(),
+  filterMetadata: z.string().optional(),
   filterPattern: z.string().optional(),
   filterProviders: z.string().optional(),
+  filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string()).optional(),
 
@@ -154,12 +155,13 @@ const EvaluateOptionsSchema = z.object({
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
 });
-export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema>;
+export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
 const PromptMetricsSchema = z.object({
   score: z.number(),
   testPassCount: z.number(),
   testFailCount: z.number(),
+  testErrorCount: z.number(),
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
@@ -200,6 +202,15 @@ export interface PromptWithMetadata {
   count: number;
 }
 
+export enum ResultFailureReason {
+  // The test passed, or we don't know exactly why the test case failed.
+  NONE = 0,
+  // The test case failed because an assertion rejected it.
+  ASSERT = 1,
+  // Test case failed due to some other error.
+  ERROR = 2,
+}
+
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
   description?: string; // on the new version 2, this is stored per-result // FIXME(ian): The EvalResult model doesn't pass this through, but that's ok since we can use testCase.description?
@@ -212,6 +223,7 @@ export interface EvaluateResult {
   vars: Record<string, string | object>;
   response?: ProviderResponse;
   error?: string | null;
+  failureReason: ResultFailureReason;
   success: boolean;
   score: number;
   latencyMs: number;
@@ -224,6 +236,7 @@ export interface EvaluateResult {
 export interface EvaluateTableOutput {
   id: string;
   pass: boolean;
+  failureReason: ResultFailureReason;
   score: number;
   namedScores: Record<string, number>;
   text: string;
@@ -255,6 +268,7 @@ export interface EvaluateTable {
 export interface EvaluateStats {
   successes: number;
   failures: number;
+  errors: number;
   tokenUsage: Required<TokenUsage>;
 }
 
@@ -349,10 +363,12 @@ export const BaseAssertionTypesSchema = z.enum([
   'cost',
   'equals',
   'factuality',
+  'g-eval',
   'icontains-all',
   'icontains-any',
   'icontains',
   'is-json',
+  'is-refusal',
   'is-sql',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
@@ -383,11 +399,20 @@ type NotPrefixed<T extends string> = `not-${T}`;
 // and selects the highest scoring one after all other assertions have completed.
 export type SpecialAssertionTypes = 'select-best' | 'human';
 
-export type AssertionType =
-  | BaseAssertionTypes
-  | NotPrefixed<BaseAssertionTypes>
-  | SpecialAssertionTypes
-  | RedteamAssertionTypes;
+export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human']);
+
+export const NotPrefixedAssertionTypesSchema = BaseAssertionTypesSchema.transform(
+  (baseType) => `not-${baseType}` as NotPrefixed<BaseAssertionTypes>,
+);
+
+export const AssertionTypeSchema = z.union([
+  BaseAssertionTypesSchema,
+  NotPrefixedAssertionTypesSchema,
+  SpecialAssertionTypesSchema,
+  z.custom<RedteamAssertionTypes>(),
+]);
+
+export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
@@ -406,7 +431,7 @@ export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
-  type: z.custom<AssertionType>(),
+  type: AssertionTypeSchema,
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
@@ -845,10 +870,12 @@ export interface OutputFile {
 
 // Live eval job state
 export interface Job {
-  status: 'in-progress' | 'complete';
+  evalId: string | null;
+  status: 'in-progress' | 'complete' | 'error';
   progress: number;
   total: number;
   result: EvaluateSummaryV3 | EvaluateSummaryV2 | null;
+  logs: string[];
 }
 
 // used for writing eval results

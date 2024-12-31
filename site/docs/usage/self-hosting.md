@@ -42,12 +42,12 @@ You can use specific version tags instead of `latest` to pin to a specific versi
 2. Run the container:
 
 ```bash
-docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo ghcr.io/promptfoo/promptfoo:latest
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/home/promptfoo/.promptfoo ghcr.io/promptfoo/promptfoo:latest
 ```
 
 Key points:
 
-- `-v /path/to/local_promptfoo:/root/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
+- `-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
 - Omitting the `-v` argument will result in non-persistent evals.
 - Add any api keys as environment variables on the docker container. For example, `-e OPENAI_API_KEY=sk-abc123` sets the OpenAI API key so users can run evals directly from the web UI. Replace `sk-abc123` with your actual API key.
 
@@ -75,14 +75,14 @@ docker build -t promptfoo .
 Launch the Docker container using this command:
 
 ```sh
-docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/home/promptfoo/.promptfoo promptfoo
 ```
 
 ## Advanced Configuration
 
 ### Eval Storage
 
-promptfoo uses a SQLite database (`promptfoo.db`) located in `/root/.promptfoo` on the image. Ensure this directory is persisted to save your evals. Pass `-v /path/to/local_promptfoo:/root/.promptfoo` to the `docker run` command to persist the evals.
+promptfoo uses a SQLite database (`promptfoo.db`) located in `/home/promptfoo/.promptfoo` on the image. Ensure this directory is persisted to save your evals. Pass `-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo` to the `docker run` command to persist the evals.
 
 ## Pointing promptfoo to your hosted instance
 

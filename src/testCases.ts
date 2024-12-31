@@ -7,10 +7,10 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
-import invariant from 'tiny-invariant';
 import { testCaseFromCsvRow } from './csv';
-import { getEnvBool } from './envars';
+import { getEnvBool, getEnvString } from './envars';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
+import { fetchHuggingFaceDataset } from './integrations/huggingfaceDatasets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
@@ -26,6 +26,7 @@ import type {
   ProviderOptions,
 } from './types';
 import { retryWithDeduplication, sampleArray } from './util/generation';
+import invariant from './util/invariant';
 import { extractJsonObjects } from './util/json';
 import { extractVariablesFromTemplates } from './util/templates';
 
@@ -57,7 +58,6 @@ export async function readVarsFiles(
       Object.assign(ret, yamlData);
     }
   }
-
   return ret;
 }
 
@@ -80,7 +80,12 @@ export async function readStandaloneTestsFile(
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'csv tests file - local',
     });
-    rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true, bom: true });
+    const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
+    rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), {
+      columns: true,
+      bom: true,
+      delimiter,
+    });
   } else if (fileExtension === 'json') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'json tests file',
@@ -170,6 +175,13 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
+    if (loadTestsGlob.startsWith('huggingface://datasets/')) {
+      telemetry.recordAndSendOnce('feature_used', {
+        feature: 'huggingface dataset',
+      });
+      return await fetchHuggingFaceDataset(loadTestsGlob);
+    }
+
     if (loadTestsGlob.startsWith('file://')) {
       loadTestsGlob = loadTestsGlob.slice('file://'.length);
     }
@@ -177,6 +189,11 @@ export async function readTests(
     const testFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
+
+    if (loadTestsGlob.startsWith('https://docs.google.com/spreadsheets/')) {
+      testFiles.push(loadTestsGlob);
+    }
+
     const _deref = async (testCases: TestCase[], file: string) => {
       logger.debug(`Dereferencing test file: ${file}`);
       return (await $RefParser.dereference(testCases)) as TestCase[];
@@ -189,7 +206,10 @@ export async function readTests(
     }
     for (const testFile of testFiles) {
       let testCases: TestCase[] | undefined;
-      if (testFile.endsWith('.csv')) {
+      if (
+        testFile.endsWith('.csv') ||
+        testFile.startsWith('https://docs.google.com/spreadsheets/')
+      ) {
         testCases = await readStandaloneTestsFile(testFile, basePath);
       } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
         testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];

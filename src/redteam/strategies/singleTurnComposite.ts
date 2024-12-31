@@ -1,12 +1,11 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
-import { getRemoteGenerationUrl } from '../constants';
-import { neverGenerateRemote } from '../util';
+import invariant from '../../util/invariant';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 async function generateCompositePrompts(
   testCases: TestCase[],
@@ -31,6 +30,7 @@ async function generateCompositePrompts(
     }
 
     await async.forEachOfLimit(testCases, concurrency, async (testCase, index) => {
+      logger.debug(`[Composite] Processing test case: ${JSON.stringify(testCase)}`);
       invariant(
         testCase.vars,
         `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
@@ -60,6 +60,11 @@ async function generateCompositePrompts(
           data,
         )}`,
       );
+      if (data.error) {
+        logger.error(`[jailbreak:composite] Error in composite generation: ${data.error}}`);
+        logger.debug(`[jailbreak:composite] Response: ${JSON.stringify(data)}`);
+        return;
+      }
 
       const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => ({
         ...testCase,

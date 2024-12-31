@@ -1,0 +1,16 @@
+{
+  "name": "redteam-chatbot",
+  "version": "0.0.0",
+  "description": "A simple chatbot for testing multi-turn redteam scenarios in Promptfoo",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
+  },
+  "author": "Promptfoo",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "promptfoo": "^0.100.5"
+  }
+}

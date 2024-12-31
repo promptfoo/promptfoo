@@ -1,5 +1,5 @@
-import invariant from 'tiny-invariant';
 import type { Prompt } from '../../types';
+import invariant from '../../util/invariant';
 
 /**
  * Processes a string as a literal prompt.

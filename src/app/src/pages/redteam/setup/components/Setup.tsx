@@ -48,12 +48,12 @@ export default function Setup({ open, onClose }: SetupProps) {
         </Typography>
         <ul>
           <li>
-            <strong>Targets:</strong> The specific endpoints, models, or components of your AI
-            system that will be tested.
-          </li>
-          <li>
             <strong>Application:</strong> Metadata used to tailor the adversarial inputs to your
             application.
+          </li>
+          <li>
+            <strong>Targets:</strong> The specific endpoints, models, or components of your AI
+            system that will be tested.
           </li>
           <li>
             <strong>Plugins:</strong> Modules that generate diverse adversarial inputs, simulating

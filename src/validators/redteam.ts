@@ -20,12 +20,27 @@ import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
 import { isJavascriptFile } from '../util/file';
 import { ProviderSchema } from '../validators/providers';
 
+const pluginOptions: string[] = [...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].sort();
 /**
  * Schema for individual redteam plugins
  */
 const RedteamPluginObjectSchema = z.object({
   id: z
-    .enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]])
+    .union([
+      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
+        if (!pluginOptions.includes(val)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.invalid_enum_value,
+            options: pluginOptions,
+            received: val,
+            message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+          });
+        }
+      }),
+      z.string().startsWith('file://', {
+        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      }),
+    ])
     .describe('Name of the plugin'),
   numTests: z
     .number()
@@ -42,9 +57,18 @@ const RedteamPluginObjectSchema = z.object({
 export const RedteamPluginSchema = z.union([
   z
     .union([
-      z.enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]]),
-      z.string().refine((value) => value.startsWith('file://'), {
-        message: 'Plugin must be one of `promptfoo redteam plugins` or start with "file://"',
+      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
+        if (!pluginOptions.includes(val)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.invalid_enum_value,
+            options: pluginOptions,
+            received: val,
+            message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+          });
+        }
+      }),
+      z.string().startsWith('file://', {
+        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
@@ -53,14 +77,22 @@ export const RedteamPluginSchema = z.union([
 
 const strategyIdSchema = z
   .union([
-    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]),
+    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+      if (!ALL_STRATEGIES.includes(val as Strategy)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.invalid_enum_value,
+          options: [...ALL_STRATEGIES] as [string, ...string[]],
+          received: val,
+          message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
+        });
+      }
+    }),
     z.string().refine(
       (value) => {
-        console.error(value);
         return value.startsWith('file://') && isJavascriptFile(value);
       },
       {
-        message: 'Strategy must be a valid file:// path to a .js/.ts file',
+        message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
       },
     ),
   ])
@@ -95,7 +127,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   delay: z
     .number()
     .int()
-    .positive()
+    .nonnegative()
     .optional()
     .describe('Delay in milliseconds between plugin API calls'),
   envFile: z.string().optional().describe('Path to the environment file'),
@@ -132,10 +164,7 @@ export const RedteamConfigSchema = z
       .string()
       .optional()
       .describe('Purpose override string - describes the prompt templates'),
-    provider: z
-      .lazy(() => ProviderSchema)
-      .optional()
-      .describe('Provider used for generating adversarial inputs'),
+    provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
     language: z.string().optional().describe('Language of tests ot generate for this plugin'),
     entities: z
@@ -166,7 +195,7 @@ export const RedteamConfigSchema = z
     delay: z
       .number()
       .int()
-      .positive()
+      .nonnegative()
       .optional()
       .describe('Delay in milliseconds between plugin API calls'),
   })
@@ -283,11 +312,12 @@ export const RedteamConfigSchema = z
       numTests: data.numTests,
       plugins: uniquePlugins,
       strategies,
+      ...(data.delay ? { delay: data.delay } : {}),
+      ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
-      ...(data.delay ? { delay: data.delay } : {}),
     };
   });
 

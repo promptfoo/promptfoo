@@ -54,9 +54,10 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
               .map((evalData) => {
                 const passCount = evalData.metrics?.testPassCount ?? 0;
                 const failCount = evalData.metrics?.testFailCount ?? 0;
+                const errorCount = evalData.metrics?.testErrorCount ?? 0;
                 const passRate =
-                  passCount + failCount > 0
-                    ? ((passCount / (passCount + failCount)) * 100.0).toFixed(2) + '%'
+                  passCount + failCount + errorCount > 0
+                    ? ((passCount / (passCount + failCount + errorCount)) * 100.0).toFixed(2) + '%'
                     : '-';
                 return (
                   <TableRow key={`eval-${evalData.id}`}>
@@ -71,7 +72,9 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                     <TableCell>{evalData.metrics?.score?.toFixed(2) ?? '-'}</TableCell>
                     <TableCell>{passRate}</TableCell>
                     <TableCell>{passCount}</TableCell>
-                    <TableCell>{failCount}</TableCell>
+                    <TableCell>
+                      {failCount} {errorCount > 0 ? `+ ${errorCount} errors` : ''}
+                    </TableCell>
                   </TableRow>
                 );
               })}

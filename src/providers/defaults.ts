@@ -33,6 +33,25 @@ interface DefaultProviders {
   synthesizeProvider: ApiProvider;
 }
 
+const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
+  'datasetGenerationProvider',
+  'gradingJsonProvider',
+  'gradingProvider',
+  'llmRubricProvider',
+  'suggestionsProvider',
+  'synthesizeProvider',
+];
+
+let defaultCompletionProvider: ApiProvider;
+
+/**
+ * This will override all of the completion type providers defined in the constant COMPLETION_PROVIDERS
+ * @param provider - The provider to set as the default completion provider.
+ */
+export async function setDefaultCompletionProviders(provider: ApiProvider) {
+  defaultCompletionProvider = provider;
+}
+
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
   const preferAnthropic =
     !getEnvString('OPENAI_API_KEY') &&
@@ -56,6 +75,8 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
     (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME);
 
+  let providers: Pick<DefaultProviders, keyof DefaultProviders>;
+
   if (preferAzure) {
     logger.debug('Using Azure OpenAI default providers');
     const deploymentName =
@@ -74,7 +95,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       env,
     });
 
-    return {
+    providers = {
       datasetGenerationProvider: azureProvider,
       embeddingProvider: azureEmbeddingProvider,
       gradingJsonProvider: azureProvider,
@@ -83,11 +104,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       suggestionsProvider: azureProvider,
       synthesizeProvider: azureProvider,
     };
-  }
-
-  if (preferAnthropic) {
+  } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
-    return {
+    providers = {
       datasetGenerationProvider: AnthropicGradingProvider,
       embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
       gradingJsonProvider: AnthropicGradingJsonProvider,
@@ -97,13 +116,13 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       suggestionsProvider: AnthropicSuggestionsProvider,
       synthesizeProvider: AnthropicGradingJsonProvider,
     };
-  }
-
-  const preferGoogle =
-    !process.env.OPENAI_API_KEY && !env?.OPENAI_API_KEY && (await hasGoogleDefaultCredentials());
-  if (preferGoogle) {
+  } else if (
+    !getEnvString('OPENAI_API_KEY') &&
+    !env?.OPENAI_API_KEY &&
+    (await hasGoogleDefaultCredentials())
+  ) {
     logger.debug('Using Google default providers');
-    return {
+    providers = {
       datasetGenerationProvider: GeminiGradingProvider,
       embeddingProvider: GeminiEmbeddingProvider,
       gradingJsonProvider: GeminiGradingProvider,
@@ -112,16 +131,23 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
     };
+  } else {
+    logger.debug('Using OpenAI default providers');
+    providers = {
+      datasetGenerationProvider: OpenAiGradingProvider,
+      embeddingProvider: OpenAiEmbeddingProvider,
+      gradingJsonProvider: OpenAiGradingJsonProvider,
+      gradingProvider: OpenAiGradingProvider,
+      moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: OpenAiSuggestionsProvider,
+      synthesizeProvider: OpenAiGradingJsonProvider,
+    };
   }
-
-  logger.debug('Using OpenAI default providers');
-  return {
-    datasetGenerationProvider: OpenAiGradingProvider,
-    embeddingProvider: OpenAiEmbeddingProvider,
-    gradingJsonProvider: OpenAiGradingJsonProvider,
-    gradingProvider: OpenAiGradingProvider,
-    moderationProvider: OpenAiModerationProvider,
-    suggestionsProvider: OpenAiSuggestionsProvider,
-    synthesizeProvider: OpenAiGradingJsonProvider,
-  };
+  if (defaultCompletionProvider) {
+    logger.debug(`Overriding default completion provider: ${defaultCompletionProvider.id()}`);
+    COMPLETION_PROVIDERS.forEach((provider) => {
+      providers[provider] = defaultCompletionProvider;
+    });
+  }
+  return providers;
 }

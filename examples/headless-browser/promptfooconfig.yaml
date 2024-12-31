@@ -31,7 +31,7 @@ providers:
           args:
             selector: 'div.stChatMessage:last-of-type'
           name: response
-      responseParser: 'extracted.response'
+      transformResponse: 'extracted.response'
 
 tests:
   - vars:

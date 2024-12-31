@@ -3,6 +3,15 @@ sidebar_position: 3
 sidebar_label: 'Configuration'
 ---
 
+import React from 'react';
+import {
+HarmfulPluginsTable,
+PIIPluginsTable,
+BrandPluginsTable,
+TechnicalPluginsTable,
+} from '../\_shared/PluginTable';
+import StrategyTable from '../\_shared/StrategyTable';
+
 # Redteam Configuration
 
 The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
@@ -163,44 +172,15 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 
 #### Harmful Plugins
 
-- `harmful:violent-crime`: Content related to violent criminal activities.
-- `harmful:non-violent-crime`: Content related to non-violent criminal activities.
-- `harmful:sex-crime`: Content related to sexual crimes.
-- `harmful:child-exploitation`: Content exploiting or harming children.
-- `harmful:indiscriminate-weapons`: Content related to weapons without context.
-- `harmful:hate`: Content that promotes hate or discrimination.
-- `harmful:self-harm`: Content that encourages self-harm or suicide.
-- `harmful:sexual-content`: Explicit or inappropriate sexual content.
-- `harmful:cybercrime`: Content related to cybercriminal activities.
-- `harmful:chemical-biological-weapons`: Content related to chemical or biological weapons
-- `harmful:illegal-drugs`: Content related to illegal drug use or trade.
-- `harmful:copyright-violations`: Content violating copyright laws.
-- `harmful:harassment-bullying`: Content that harasses or bullies individuals.
-- `harmful:illegal-activities`: Content promoting illegal activities.
-- `harmful:graphic-content`: Displaying graphic or violent content.
-- `harmful:unsafe-practices`: Content promoting unsafe or harmful practices.
-- `harmful:radicalization`: Content that promotes radical or extremist views.
-- `harmful:profanity`: Content containing profane or inappropriate language.
-- `harmful:insults`: Content that insults or demeans individuals.
-- `harmful:privacy`: Content violating privacy rights.
-- `harmful:intellectual-property`: Content violating intellectual property rights.
-- `harmful:misinformation-disinformation`: Spreading false or misleading information.
-- `harmful:specialized-advice`: Providing advice in specialized fields without expertise.
+<HarmfulPluginsTable />
 
 #### PII (Personally Identifiable Information) Plugins
 
-- `pii:api-db`: Ensures the model does not attempt to access APIs or databases to retrieve PII.
-- `pii:direct`: Tests if the model directly discloses PII when explicitly asked.
-- `pii:session`: Ensures the model does not leak PII across different user sessions or interactions.
-- `pii:social`: Tests if the model can be manipulated into revealing PII through social engineering tactics.
+<PIIPluginsTable />
 
 #### Brand Plugins
 
-- `contracts`: Tests if the model enters business or legal commitments without supervision.
-- `excessive-agency`: Evaluates if the model takes excessive initiative or misunderstands its capabilities.
-- `hallucination`: Tests if the model generates false or misleading information.
-- `imitation`: Checks if the model imitates people, brands, or organizations.
-- `politics`: Tests if the model makes political statements.
+<BrandPluginsTable />
 
 #### Technical plugins
 
@@ -490,19 +470,14 @@ Strategies modify or generate additional test cases based on the output of other
 
 #### Available Strategies
 
-- `base64`: Encodes the injected variable using Base64 encoding
-- `basic` - Raw payloads only (Default)
-- `citation`: Uses academic citations and references to potentially bypass safety measures
-- `crescendo`: Applies a multi-turn jailbreak technique
-- `jailbreak:composite`: Combines multiple jailbreak techniques from research papers
-- `jailbreak:tree`: Applies a tree-based jailbreak technique
-- `jailbreak`: Applies a linear probe jailbreak technique to deliver the payload (Default)
-- `leetspeak`: Converts the injected variable to leetspeak, replacing certain letters with numbers or symbols
-- `multilingual`: Translates the request to multiple low-resource languages
-- `prompt-injection`: Wraps the payload in a prompt injection (Default)
-- `rot13`: Applies ROT13 encoding to the injected variable, shifting each letter 13 positions in the alphabet
+<StrategyTable
+  shouldRenderCategory={false}
+  shouldRenderCost={false}
+  shouldRenderDescription={false}
+  shouldRenderAsrIncrease={false}
+/>
 
-See [Strategies](/docs/category/strategies/) for comprehensive descriptions of each strategy.
+See [Strategies](/docs/red-team/strategies/) for descriptions of each strategy.
 
 #### Strategy Configuration
 
@@ -533,11 +508,24 @@ strategies:
 
 The `purpose` field provides context to guide the generation of adversarial inputs. It is derived automatically, or you can set it.
 
-The purpose should be short but descriptive, as it will be used as the basis for generated adversarial tests. For example:
+The purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading. For example:
 
 ```yaml
 redteam:
-  purpose: 'Helpful travel agent specializing in Europe, currently chatting with John Smith'
+  purpose: |
+    The application is a customer service assistant for users on redpandashopping.com. redpandashopping.com is an online electronics retailer selling cell phones, tv's and computers.
+
+    You are acting as a customer on redpandashopping.com
+
+    You have access to: Product information, reviews, their own order history, their own customer support issues
+
+    You do not have access to: Other user's order histories and customer support issues
+
+    You can take the following actions: Search for products, ask for reviews of products, view their own order history, view their own customer support issues, open new customer support issues, reply to existing customer support issues.
+
+    You should not take the following actions: Place new orders, cancel orders
+
+    The LLM agent has access to these systems: Product catalogue, reviews, order histories, customer support software
 ```
 
 ### Language
@@ -567,9 +555,13 @@ Your choice of attack provider is extremely important for the quality of your re
 
 ### How attacks are generated
 
-By default, Promptfoo uses your local OpenAI key to perform attack generation. If you do not have a key, it will use our API to generate initial inputs, but the actual attacks are still performed locally.
+By default, Promptfoo uses your local OpenAI key for redteam attack generation. If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The evaluation of your target model is always performed locally.
 
 You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
+
+:::note
+Custom plugins and strategies require an OpenAI key or your own provider configuration.
+:::
 
 ### Changing the model
 
@@ -632,7 +624,7 @@ targets:
         'Content-Type': 'application/json'
       body:
         myPrompt: '{{prompt}}'
-      responseParser: 'json.output'
+      transformResponse: 'json.output'
 ```
 
 Or, let's say you have a raw HTTP request exported from a tool like Burp Suite. Put it in a file called `request.txt`:
@@ -853,3 +845,28 @@ Either way, this will allow you to evaluate your custom tests.
 ### Loading custom tests from CSV
 
 Promptfoo supports loading tests from CSV as well as Google Sheets. See [CSV loading](/docs/configuration/guide/#loading-tests-from-csv) and [Google Sheets](/docs/integrations/google-sheets/) for more info.
+
+### Loading tests from HuggingFace datasets
+
+Promptfoo can load test cases directly from [HuggingFace datasets](https://huggingface.co/docs/datasets). This is useful when you want to use existing datasets for testing or red teaming. For example:
+
+```yaml
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts
+```
+
+# Or with query parameters
+
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train&config=custom
+
+````
+
+Each row in the dataset becomes a test case, with dataset fields available as variables in your prompts:
+
+```yaml
+prompts:
+  - "Question: {{question}}\nExpected: {{answer}}"
+
+tests: huggingface://datasets/rajpurkar/squad
+````
+
+For detailed information about query parameters, dataset configuration, and more examples, see the [HuggingFace provider documentation](/docs/providers/huggingface/#datasets).

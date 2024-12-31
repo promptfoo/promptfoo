@@ -11,6 +11,7 @@ import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
 import type { EnvOverrides } from './types/env';
+import { isRunningUnderNpx } from './util';
 import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -612,13 +613,11 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 }
 
 export async function initializeProject(directory: string | null, interactive: boolean = true) {
-  const isNpx = getEnvString('npm_execpath')?.includes('npx');
-
   try {
     const result = await createDummyFiles(directory, interactive);
     const { outDirectory, ...telemetryDetails } = result;
 
-    const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
+    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
 
     if (outDirectory === '.') {
       logger.info(chalk.green(`✅ Run \`${chalk.bold(runCommand)}\` to get started!`));
@@ -636,7 +635,7 @@ export async function initializeProject(directory: string | null, interactive: b
     return telemetryDetails;
   } catch (err) {
     if (err instanceof ExitPromptError) {
-      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
+      const runCommand = isRunningUnderNpx() ? 'npx promptfoo@latest init' : 'promptfoo init';
       logger.info(
         '\n' +
           chalk.blue('Initialization paused. To continue setup later, use the command: ') +

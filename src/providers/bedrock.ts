@@ -16,6 +16,7 @@ import type {
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic';
+import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
@@ -190,6 +191,43 @@ export interface BedrockAI21GenerationOptions extends BedrockOptions {
   stop?: string[];
   temperature?: number;
   top_p?: number;
+}
+
+export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
+  interfaceConfig?: {
+    max_new_tokens?: number;
+    temperature?: number;
+    top_p?: number;
+    top_k?: number;
+    stopSequences?: string[];
+  };
+  toolConfig?: {
+    tools?: {
+      toolSpec: {
+        name: string;
+        description?: string;
+        inputSchema: {
+          json: {
+            type: 'object';
+            properties: {
+              [propertyName: string]: {
+                description: string;
+                type: string;
+              };
+            };
+            required: string[];
+          };
+        };
+      };
+    }[];
+    toolChoice?: {
+      any?: any;
+      auto?: any;
+      tool?: {
+        name: string;
+      };
+    };
+  };
 }
 
 interface IBedrockModel {
@@ -390,6 +428,66 @@ export const BEDROCK_MODEL = {
       }
       return responseJson.choices[0].message.content;
     },
+  },
+  AMAZON_NOVA: {
+    params: (config: BedrockAmazonNovaGenerationOptions, prompt: string) => {
+      let messages;
+      let systemPrompt;
+      try {
+        const parsed = JSON.parse(prompt);
+        if (Array.isArray(parsed)) {
+          messages = parsed
+            .map((msg) => ({
+              role: msg.role,
+              content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
+            }))
+            .filter((msg) => msg.role !== 'system');
+          const systemMessage = parsed.find((msg) => msg.role === 'system');
+          if (systemMessage) {
+            systemPrompt = [{ text: systemMessage.content }];
+          }
+        } else {
+          const { system, extractedMessages } = novaParseMessages(prompt);
+          messages = extractedMessages;
+          if (system) {
+            systemPrompt = [{ text: system }];
+          }
+        }
+      } catch {
+        const { system, extractedMessages } = novaParseMessages(prompt);
+        messages = extractedMessages;
+        if (system) {
+          systemPrompt = [{ text: system }];
+        }
+      }
+
+      const params: any = { messages };
+      if (systemPrompt) {
+        addConfigParam(params, 'system', systemPrompt, undefined, undefined);
+      }
+
+      const inferenceConfig: any = config.interfaceConfig ? { ...config.interfaceConfig } : {};
+      addConfigParam(
+        inferenceConfig,
+        'max_new_tokens',
+        config?.interfaceConfig?.max_new_tokens,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
+        1024,
+      );
+      addConfigParam(
+        inferenceConfig,
+        'temperature',
+        config?.interfaceConfig?.temperature,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+        0,
+      );
+
+      addConfigParam(params, 'inferenceConfig', inferenceConfig, undefined, undefined);
+      addConfigParam(params, 'toolConfig', config.toolConfig, undefined, undefined);
+
+      return params;
+    },
+    output: (responseJson: any) => novaOutputFromMessage(responseJson),
   },
   CLAUDE_COMPLETION: {
     params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
@@ -611,12 +709,15 @@ export const BEDROCK_MODEL = {
 export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'ai21.jamba-1-5-large-v1:0': BEDROCK_MODEL.AI21,
   'ai21.jamba-1-5-mini-v1:0': BEDROCK_MODEL.AI21,
+  'amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
+  'anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -628,11 +729,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
-  'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
-  'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -644,14 +740,36 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
+
+  // US Models
+  'us.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'us.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'us.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'us.anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
+  'us.meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
+  'us.meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'us.meta.llama3-2-11b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+
+  // EU Models
+  'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+
+  // APAC Models
+  'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -663,7 +781,10 @@ function getHandlerForModel(modelName: string) {
   if (modelName.startsWith('ai21.')) {
     return BEDROCK_MODEL.AI21;
   }
-  if (modelName.startsWith('anthropic.claude')) {
+  if (modelName.includes('amazon.nova')) {
+    return BEDROCK_MODEL.AMAZON_NOVA;
+  }
+  if (modelName.includes('anthropic.claude')) {
     return BEDROCK_MODEL.CLAUDE_MESSAGES;
   }
   if (modelName.startsWith('meta.llama2')) {

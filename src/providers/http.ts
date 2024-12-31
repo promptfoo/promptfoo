@@ -1,6 +1,6 @@
 import httpZ from 'http-z';
 import path from 'path';
-import invariant from 'tiny-invariant';
+import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { importModule } from '../esm';
@@ -13,22 +13,30 @@ import type {
 } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
 import { isJavascriptFile } from '../util/file';
+import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 const nunjucks = getNunjucksEngine();
 
-interface HttpProviderConfig {
-  url?: string;
-  method?: string;
-  headers?: Record<string, string>;
-  body?: Record<string, any> | string | any[];
-  queryParams?: Record<string, string>;
-  responseParser?: string | Function;
-  sessionParser?: string | Function;
-  request?: string;
-}
+export const HttpProviderConfigSchema = z.object({
+  body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
+  headers: z.record(z.string()).optional(),
+  method: z.string().optional(),
+  queryParams: z.record(z.string()).optional(),
+  request: z.string().optional(),
+  sessionParser: z.union([z.string(), z.function()]).optional(),
+  transformRequest: z.union([z.string(), z.function()]).optional(),
+  transformResponse: z.union([z.string(), z.function()]).optional(),
+  url: z.string().optional(),
+  /**
+   * @deprecated
+   */
+  responseParser: z.union([z.string(), z.function()]).optional(),
+});
+
+export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
@@ -81,7 +89,7 @@ export async function createSessionParser(
   );
 }
 
-export async function createResponseParser(
+export async function createTransformResponse(
   parser: string | Function | undefined,
 ): Promise<(data: any, text: string) => ProviderResponse> {
   if (!parser) {
@@ -210,17 +218,89 @@ function parseRawRequest(input: string) {
   }
 }
 
+export async function createTransformRequest(
+  transform: string | Function | undefined,
+): Promise<(prompt: string) => any> {
+  if (!transform) {
+    return (prompt) => prompt;
+  }
+
+  if (typeof transform === 'function') {
+    return (prompt) => transform(prompt);
+  }
+
+  if (typeof transform === 'string') {
+    if (transform.startsWith('file://')) {
+      let filename = transform.slice('file://'.length);
+      let functionName: string | undefined;
+      if (filename.includes(':')) {
+        const splits = filename.split(':');
+        if (splits[0] && isJavascriptFile(splits[0])) {
+          [filename, functionName] = splits;
+        }
+      }
+      const requiredModule = await importModule(
+        path.resolve(cliState.basePath || '', filename),
+        functionName,
+      );
+      if (typeof requiredModule === 'function') {
+        return requiredModule;
+      }
+      throw new Error(
+        `Request transform malformed: ${filename} must export a function or have a default export as a function`,
+      );
+    }
+    // Handle string template
+    return (prompt) => {
+      const rendered = nunjucks.renderString(transform, { prompt });
+      return new Function('prompt', `${rendered}`)(prompt);
+    };
+  }
+
+  throw new Error(
+    `Unsupported request transform type: ${typeof transform}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+  );
+}
+
+export function determineRequestBody(
+  contentType: boolean,
+  parsedPrompt: any,
+  configBody: Record<string, any> | any[] | string | undefined,
+  vars: Record<string, any>,
+): Record<string, any> | any[] | string {
+  if (contentType) {
+    // For JSON content type
+    if (typeof parsedPrompt === 'object' && parsedPrompt !== null) {
+      // If parser returned an object, merge it with config body
+      return Object.assign({}, configBody || {}, parsedPrompt);
+    }
+    // Otherwise process the config body with parsed prompt
+    return processJsonBody(configBody as Record<string, any> | any[], {
+      ...vars,
+      prompt: parsedPrompt,
+    });
+  }
+  // For non-JSON content type, process as text
+  return processTextBody(configBody as string, {
+    ...vars,
+    prompt: parsedPrompt,
+  });
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  private responseParser: Promise<(data: any, text: string) => ProviderResponse>;
+  private transformResponse: Promise<(data: any, text: string) => ProviderResponse>;
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
-
+  private transformRequest: Promise<(prompt: string) => any>;
   constructor(url: string, options: ProviderOptions) {
-    this.config = options.config;
+    this.config = HttpProviderConfigSchema.parse(options.config);
     this.url = this.config.url || url;
-    this.responseParser = createResponseParser(this.config.responseParser);
+    this.transformResponse = createTransformResponse(
+      this.config.transformResponse || this.config.responseParser,
+    );
     this.sessionParser = createSessionParser(this.config.sessionParser);
+    this.transformRequest = createTransformRequest(this.config.transformRequest);
 
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
@@ -300,14 +380,19 @@ export class HttpProvider implements ApiProvider {
     const headers = this.getHeaders(defaultHeaders, vars);
     this.validateContentTypeAndBody(headers, this.config.body);
 
+    // Transform prompt using request transform
+    const transformedPrompt = await (await this.transformRequest)(prompt);
+
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
       method: nunjucks.renderString(this.config.method || 'GET', vars),
       headers,
-      // We validate the content type and body with this.validateContentTypeAndBody
-      body: contentTypeIsJson(headers)
-        ? processJsonBody(this.config.body as Record<string, any> | any[], vars)
-        : processTextBody(this.config.body as string, vars),
+      body: determineRequestBody(
+        contentTypeIsJson(headers),
+        transformedPrompt,
+        this.config.body,
+        vars,
+      ),
       queryParams: this.config.queryParams
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
@@ -316,7 +401,7 @@ export class HttpProvider implements ApiProvider {
             ]),
           )
         : undefined,
-      responseParser: this.config.responseParser,
+      transformResponse: this.config.transformResponse || this.config.responseParser,
     };
 
     const method = renderedConfig.method || 'POST';
@@ -371,13 +456,16 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
     try {
-      const parsedOutput = (await this.responseParser)(parsedData, rawText);
+      const parsedOutput = (await this.transformResponse)(parsedData, rawText);
       ret.output = parsedOutput.output || parsedOutput;
       try {
-        ret.sessionId =
+        const sessionId =
           response.headers && this.sessionParser !== null
             ? (await this.sessionParser)({ headers: response.headers })
             : undefined;
+        if (sessionId) {
+          ret.sessionId = sessionId;
+        }
       } catch (err) {
         logger.error(
           `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)}`,
@@ -432,7 +520,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     try {
-      const parsedOutput = (await this.responseParser)(parsedData, rawText);
+      const parsedOutput = (await this.transformResponse)(parsedData, rawText);
       return {
         output: parsedOutput.output || parsedOutput,
       };

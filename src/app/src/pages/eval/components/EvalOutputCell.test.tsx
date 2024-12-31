@@ -1,5 +1,9 @@
 import { render, screen } from '@testing-library/react';
-import type { AssertionType, EvaluateTableOutput } from '@promptfoo/types';
+import {
+  ResultFailureReason,
+  type AssertionType,
+  type EvaluateTableOutput,
+} from '@promptfoo/types';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
@@ -39,6 +43,7 @@ describe('EvalOutputCell', () => {
       latencyMs: 100,
       namedScores: {},
       pass: true,
+      failureReason: ResultFailureReason.NONE,
       prompt: 'Test prompt',
       provider: 'test-provider',
       score: 0.8,
@@ -80,6 +85,7 @@ describe('EvalOutputCell', () => {
       latencyMs: 100,
       namedScores: {},
       pass: true,
+      failureReason: ResultFailureReason.NONE,
       prompt: 'Test prompt',
       provider: 'test-provider',
       score: 0.8,

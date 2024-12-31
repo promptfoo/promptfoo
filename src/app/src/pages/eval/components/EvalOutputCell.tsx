@@ -1,8 +1,9 @@
 import * as React from 'react';
+import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
-import type { EvaluateTableOutput } from '@promptfoo/types';
+import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
 import { diffSentences, diffJson, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
@@ -11,6 +12,10 @@ import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 import { useStore as useResultsViewStore } from './store';
+
+type CSSPropertiesWithCustomVars = React.CSSProperties & {
+  [key: `--${string}`]: string | number;
+};
 
 function scoreToString(score: number | null) {
   if (score === null || score === 0 || score === 1) {
@@ -44,7 +49,8 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail } = useResultsViewStore();
+  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
+    useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -394,14 +400,21 @@ function EvalOutputCell({
     </div>
   );
 
-  const cellStyle: Record<string, string> = {};
-  if (output.gradingResult?.comment === '!highlight') {
-    cellStyle.backgroundColor = '#ffffeb';
-  }
+  const cellStyle = useMemo(() => {
+    const base =
+      output.gradingResult?.comment === '!highlight' ? { backgroundColor: '#ffffeb' } : {};
+
+    return {
+      ...base,
+      '--max-image-width': `${maxImageWidth}px`,
+      '--max-image-height': `${maxImageHeight}px`,
+    } as CSSPropertiesWithCustomVars;
+  }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
 
   // Pass/fail badge creation
   let passCount = 0;
   let failCount = 0;
+  let errorCount = 0;
   const gradingResult = output.gradingResult;
 
   if (gradingResult) {
@@ -423,8 +436,14 @@ function EvalOutputCell({
     failCount = 1;
   }
 
+  if (output.failureReason === ResultFailureReason.ERROR) {
+    errorCount = 1;
+  }
+
   let passFailText;
-  if (failCount === 1 && passCount === 1) {
+  if (errorCount === 1) {
+    passFailText = 'ERROR';
+  } else if (failCount === 1 && passCount === 1) {
     passFailText = (
       <>
         {`${failCount} FAIL`} {`${passCount} PASS`}
