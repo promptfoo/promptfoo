@@ -506,7 +506,8 @@ export const PLUGINS: Plugin[] = [
   {
     category: 'Security and Access Control',
     name: 'Divergent Repetition',
-    description: 'Tests whether an AI system can be manipulated into revealing its training data through repetitive pattern exploitation.',
+    description:
+      'Tests whether an AI system can be manipulated into revealing its training data through repetitive pattern exploitation.',
     pluginId: 'divergent-repetition',
     link: '/docs/red-team/plugins/divergent-repetition/',
     label: 'security',
