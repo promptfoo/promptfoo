@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
@@ -10,10 +10,15 @@ interface Message {
   content: string;
 }
 
-function ChatMessage({ message }: { message: Message }) {
+const ChatMessage = memo(({ message }: { message: Message | null }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const isUser = message.role === 'user';
+  const isUser = message?.role === 'user';
+  const isAssistant = message?.role === 'assistant';
+
+  if (!message) {
+    return null;
+  }
 
   const backgroundColor = isUser
     ? 'linear-gradient(to bottom right, #FF8B96, #FF4B40)'
@@ -26,7 +31,7 @@ function ChatMessage({ message }: { message: Message }) {
   const borderRadius = isUser ? '20px 20px 5px 20px' : '20px 20px 20px 5px';
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', mb: 1 }}>
+    <Box sx={{ display: 'flex', justifyContent: alignSelf, mb: 1 }}>
       <Paper
         elevation={1}
         sx={{
@@ -37,7 +42,20 @@ function ChatMessage({ message }: { message: Message }) {
           alignSelf,
           boxShadow: isDark ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
         }}
+        role="alert"
       >
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          {isUser && (
+            <span role="img" aria-label="attacker" style={{ marginRight: '8px' }}>
+              ⚔️
+            </span>
+          )}
+          {isAssistant && (
+            <span role="img" aria-label="target" style={{ marginRight: '8px' }}>
+              🎯
+            </span>
+          )}
+        </Box>
         <Typography
           variant="body1"
           sx={{
@@ -52,7 +70,7 @@ function ChatMessage({ message }: { message: Message }) {
       </Paper>
     </Box>
   );
-}
+});
 
 interface ChatMessagesProps {
   messages: Message[];
@@ -69,11 +87,11 @@ export default function ChatMessages({ messages }: ChatMessagesProps) {
 
   const minHeight = 200;
   const maxHeight = isExpanded ? 'none' : minHeight;
-  const hasMoreMessages = messages.length > 4;
+  const hasMoreMessages = messages.length > 1;
 
   return (
     <>
-      <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
+      <Typography variant="subtitle1" sx={{ mb: 2, mt: 2 }}>
         Messages
       </Typography>
       <Box

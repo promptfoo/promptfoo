@@ -50,8 +50,11 @@ export async function importModule(modulePath: string, functionName?: string) {
     logger.debug('Attempting CommonJS require fallback...');
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = require(path.resolve(modulePath));
+      const importedModule = require(path.resolve(modulePath));
+      const mod = importedModule?.default?.default || importedModule?.default || importedModule;
       logger.debug('Successfully required module:', {
+        hasDefaultDefault: !!importedModule?.default?.default,
+        hasDefault: !!importedModule?.default,
         moduleType: typeof mod,
         exports: Object.keys(mod),
       });

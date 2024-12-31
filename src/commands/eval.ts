@@ -134,9 +134,10 @@ export async function doEval(
     }
 
     testSuite.tests = await filterTests(testSuite, {
-      firstN: cmdObj.filterFirstN,
-      pattern: cmdObj.filterPattern,
       failing: cmdObj.filterFailing,
+      firstN: cmdObj.filterFirstN,
+      metadata: cmdObj.filterMetadata,
+      pattern: cmdObj.filterPattern,
       sample: cmdObj.filterSample,
     });
 
@@ -516,6 +517,10 @@ export function evalCommand(
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option('--filter-failing <path>', 'Path to json output file')
+    .option(
+      '--filter-metadata <key=value>',
+      'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',
+    )
 
     // Output configuration
     .option(

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Typography, TextField } from '@mui/material';
 import Link from '@mui/material/Link';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
@@ -19,6 +19,18 @@ const CustomTargetConfiguration: React.FC<CustomTargetConfigurationProps> = ({
   setRawConfigJson,
   bodyError,
 }) => {
+  const [targetId, setTargetId] = useState(selectedTarget.id || '');
+
+  useEffect(() => {
+    setTargetId(selectedTarget.id || '');
+  }, [selectedTarget.id]);
+
+  const handleTargetIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newId = e.target.value;
+    setTargetId(newId);
+    updateCustomTarget('id', newId);
+  };
+
   return (
     <Box mt={2}>
       <Typography variant="h6" gutterBottom>
@@ -28,8 +40,8 @@ const CustomTargetConfiguration: React.FC<CustomTargetConfigurationProps> = ({
         <TextField
           fullWidth
           label="Target ID"
-          value={selectedTarget.id}
-          onChange={(e) => updateCustomTarget('id', e.target.value)}
+          value={targetId}
+          onChange={handleTargetIdChange}
           margin="normal"
           required
           placeholder="e.g., openai:chat:gpt-4o"

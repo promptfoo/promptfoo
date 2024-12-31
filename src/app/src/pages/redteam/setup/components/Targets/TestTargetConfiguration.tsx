@@ -250,7 +250,13 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       ([key, value]) => (
                         <TableRow key={key}>
                           <TableCell>{key}</TableCell>
-                          <TableCell>{value as string}</TableCell>
+                          <TableCell
+                            sx={{
+                              wordBreak: 'break-all',
+                            }}
+                          >
+                            {value as string}
+                          </TableCell>
                         </TableRow>
                       ),
                     )}

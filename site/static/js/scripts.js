@@ -18,6 +18,14 @@
       'https://cdn.getkoala.com/v1/pk_27d6c47cb0df11c274749db81d01a49ddee8/sdk.js',
     ),
     (document.body || document.head).appendChild(n);
+
+  document.addEventListener('copy', function () {
+    const content = window.getSelection().toString();
+    ko.track('Content Copied', {
+      url: window.location.pathname,
+      content,
+    });
+  });
 })();
 
 !(function (e, r) {

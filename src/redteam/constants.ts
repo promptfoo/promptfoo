@@ -49,6 +49,9 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   'harmful:insults': 'Insults and personal attacks',
   'harmful:profanity': 'Requests containing profanity',
   'harmful:radicalization': 'Radicalization',
+  'harmful:illegal-drugs:meth': 'Methamphetamine',
+  'harmful:weapons:ied': 'Improvised Explosive Devices',
+  'harmful:cybercrime:malicious-code': 'Malicious Code',
 
   // Commented out
   //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
@@ -86,15 +89,18 @@ export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
   'ascii-smuggling',
+  'beavertails',
   'bfla',
   'bola',
   'competitors',
   'cross-session-leak',
   'debug-access',
+  'divergent-repetition',
   'imitation',
   'indirect-prompt-injection',
   'overreliance',
   'prompt-extraction',
+  'pliny',
   'rbac',
   'religion',
   'shell-injection',
@@ -446,6 +452,7 @@ export const ADDITIONAL_STRATEGIES = [
   'math-prompt',
   'multilingual',
   'rot13',
+  'best-of-n',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
@@ -462,6 +469,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Single-shot baseline security tests without optimization',
+  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
+  'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
   citation: 'Exploits academic authority bias to bypass content filters',
@@ -470,6 +479,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   'cross-session-leak': 'Tests for information leakage between user sessions',
   'debug-access': 'Tests for exposed debugging interfaces and commands',
+  'divergent-repetition':
+    'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
@@ -497,6 +508,9 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
   'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
   'harmful:violent-crime': 'Tests handling of violent crime content',
+  'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
+  'harmful:cybercrime:malicious-code': 'Tests creation of malicious code',
+  'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
   hijacking: 'Tests for unauthorized resource usage and purpose deviation',
   imitation: 'Tests for unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
@@ -513,6 +527,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:direct': 'Tests for direct PII exposure vulnerabilities',
   'pii:session': 'Tests for PII exposure in session data',
   'pii:social': 'Tests for PII exposure via social engineering',
+  pliny: 'Tests handling of common prompt injections',
   policy: 'Tests compliance with custom security policies',
   politics: 'Tests handling of political content and bias',
   'prompt-extraction': 'Tests for system prompt disclosure vulnerabilities',
@@ -530,6 +545,8 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
+  beavertails: 'BeaverTails Dataset',
+  'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
   competitors: 'Competitors',
@@ -566,6 +583,9 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'harmful:specialized-advice': 'Unauthorized Advice',
   'harmful:unsafe-practices': 'Dangerous Activity Content',
   'harmful:violent-crime': 'Violent Crime Content',
+  'harmful:illegal-drugs:meth': 'Methamphetamine Content',
+  'harmful:cybercrime:malicious-code': 'Malicious Code',
+  'harmful:weapons:ied': 'Improvised Explosive Devices',
   hijacking: 'Resource Hijacking',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
@@ -582,6 +602,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'pii:direct': 'PII via Direct Exposure',
   'pii:session': 'PII via Session Data',
   'pii:social': 'PII via Social Engineering',
+  pliny: 'Common Prompt Injections',
   policy: 'Policy Compliance',
   politics: 'Political Bias',
   'prompt-extraction': 'System Prompt Disclosure',
@@ -592,6 +613,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Command Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
+  'divergent-repetition': 'Divergent Repetition',
 };
 
 export enum Severity {
@@ -614,6 +636,7 @@ export const severityDisplayNames: Record<Severity, string> = {
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
+  beavertails: Severity.Low,
   bfla: Severity.High,
   bola: Severity.High,
   competitors: Severity.Low,
@@ -647,6 +670,9 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'harmful:specialized-advice': Severity.Medium,
   'harmful:unsafe-practices': Severity.Low,
   'harmful:violent-crime': Severity.High,
+  'harmful:illegal-drugs:meth': Severity.Low,
+  'harmful:cybercrime:malicious-code': Severity.Low,
+  'harmful:weapons:ied': Severity.Low,
   hijacking: Severity.High,
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
@@ -657,6 +683,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'pii:direct': Severity.High,
   'pii:session': Severity.High,
   'pii:social': Severity.High,
+  pliny: Severity.Medium,
   policy: Severity.High,
   politics: Severity.Low,
   'prompt-extraction': Severity.Medium,
@@ -665,6 +692,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
   ssrf: Severity.High,
+  'divergent-repetition': Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -690,6 +718,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'cross-session-leak',
     'harmful:privacy',
     'prompt-extraction',
+    'divergent-repetition',
   ],
 
   'Compliance & Legal': [
@@ -701,10 +730,13 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:non-violent-crime',
     'harmful:sex-crime',
     'harmful:cybercrime',
+    'harmful:cybercrime:malicious-code',
     'harmful:illegal-activities',
     'harmful:illegal-drugs',
+    'harmful:illegal-drugs:meth',
     'harmful:chemical-biological-weapons',
     'harmful:indiscriminate-weapons',
+    'harmful:weapons:ied',
     'harmful:unsafe-practices',
   ],
 
@@ -721,6 +753,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'politics',
     'religion',
+    'pliny',
+    'beavertails',
   ],
 
   Brand: [
@@ -759,6 +793,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
   'ascii-smuggling': 'AsciiSmuggling',
+  beavertails: 'BeaverTails',
   bfla: 'BFLAEnforcement',
   bola: 'BOLAEnforcement',
   competitors: 'CompetitorEndorsement',
@@ -766,6 +801,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'cross-session-leak': 'CrossSessionLeak',
   'debug-access': 'DebugAccess',
   default: 'Default',
+  'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   hallucination: 'Hallucination',
   harmful: 'Harmful',
@@ -793,6 +829,9 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Specialized Advice - Financial',
   'harmful:unsafe-practices': 'Promotion of unsafe practices',
   'harmful:violent-crime': 'Violent Crimes',
+  'harmful:illegal-drugs:meth': 'Methamphetamine',
+  'harmful:cybercrime:malicious-code': 'Malicious Code',
+  'harmful:weapons:ied': 'Improvised Explosive Devices',
   hijacking: 'Hijacking',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'IndirectPromptInjection',
@@ -803,6 +842,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'pii:direct': 'PIILeak',
   'pii:session': 'PIILeak',
   'pii:social': 'PIILeak',
+  pliny: 'Pliny',
   policy: 'PolicyViolation',
   politics: 'PoliticalStatement',
   'prompt-extraction': 'PromptExtraction',
@@ -824,6 +864,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 export const pluginDescriptions: Record<Plugin, string> = {
   'ascii-smuggling':
     'Tests system resilience against Unicode tag-based instruction smuggling attacks that can bypass content filters and security controls',
+  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
   bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
   competitors:
@@ -835,6 +876,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',
   default: 'Executes comprehensive baseline security testing across multiple risk categories',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'divergent-repetition':
+    'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
@@ -848,6 +891,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'pii:direct': 'Evaluates direct PII exposure vulnerabilities',
   'pii:session': 'Tests for PII leakage in session data',
   'pii:social': 'Assesses PII exposure through social engineering vectors',
+  pliny: 'Tests handling of common prompt injections',
   policy: 'Validates compliance with custom security policies and controls',
   politics: 'Tests handling of political content and bias mitigation',
   'prompt-extraction': 'Evaluates protection against system prompt disclosure attempts',
@@ -865,7 +909,10 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:hate': 'Tests handling of hate speech and discriminatory content',
   'harmful:illegal-activities': 'Tests handling of illegal activity content',
   'harmful:illegal-drugs': 'Tests handling of drug-related content',
+  'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
+  'harmful:cybercrime:malicious-code': 'Tests creation of malicious code',
   'harmful:indiscriminate-weapons': 'Tests handling of weapons-related content',
+  'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
   'harmful:insults': 'Tests handling of personal attacks and insults',
   'harmful:intellectual-property': 'Tests handling of IP theft attempts',
   'harmful:misinformation-disinformation': 'Tests handling of disinformation campaigns',
@@ -885,6 +932,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'ascii-smuggling': 'Evaluates system resilience against Unicode tag-based instruction smuggling',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Establishes baseline security posture through fundamental test cases',
+  'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
@@ -903,6 +951,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Encoding',
   basic: 'Basic',
+  'best-of-n': 'Best-of-N',
   citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',

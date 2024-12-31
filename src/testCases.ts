@@ -10,6 +10,7 @@ import { parse as parsePath } from 'path';
 import { testCaseFromCsvRow } from './csv';
 import { getEnvBool, getEnvString } from './envars';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
+import { fetchHuggingFaceDataset } from './integrations/huggingfaceDatasets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
@@ -174,6 +175,13 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
+    if (loadTestsGlob.startsWith('huggingface://datasets/')) {
+      telemetry.recordAndSendOnce('feature_used', {
+        feature: 'huggingface dataset',
+      });
+      return await fetchHuggingFaceDataset(loadTestsGlob);
+    }
+
     if (loadTestsGlob.startsWith('file://')) {
       loadTestsGlob = loadTestsGlob.slice('file://'.length);
     }

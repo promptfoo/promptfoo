@@ -74,9 +74,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        throw new Error(
-          `[HarmfulCompletionProvider] API call failed with status ${response.status}: ${await response.text()}`,
-        );
+        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
       }
 
       const data = await response.json();
@@ -85,9 +83,9 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         output: [data.output].flat(),
       };
     } catch (err) {
-      logger.info(`[HarmfulCompletionProvider] API call error: ${String(err)}`);
+      logger.info(`[HarmfulCompletionProvider] ${err}`);
       return {
-        error: `[HarmfulCompletionProvider]API call error: ${String(err)}`,
+        error: `[HarmfulCompletionProvider] ${err}`,
       };
     }
   }
@@ -146,7 +144,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const { result, tokenUsage } = data;
 
       if (!result) {
-        throw new Error('No choices returned from API');
+        return {
+          error: 'LLM did not return a result, likely refusal',
+        };
       }
 
       return {

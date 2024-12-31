@@ -442,16 +442,23 @@ export const BEDROCK_MODEL = {
               content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
             }))
             .filter((msg) => msg.role !== 'system');
-          systemPrompt = parsed.find((msg) => msg.role === 'system')?.content;
+          const systemMessage = parsed.find((msg) => msg.role === 'system');
+          if (systemMessage) {
+            systemPrompt = [{ text: systemMessage.content }];
+          }
         } else {
           const { system, extractedMessages } = novaParseMessages(prompt);
           messages = extractedMessages;
-          systemPrompt = system;
+          if (system) {
+            systemPrompt = [{ text: system }];
+          }
         }
       } catch {
         const { system, extractedMessages } = novaParseMessages(prompt);
         messages = extractedMessages;
-        systemPrompt = system;
+        if (system) {
+          systemPrompt = [{ text: system }];
+        }
       }
 
       const params: any = { messages };
@@ -875,6 +882,8 @@ export abstract class AwsBedrockGenericProvider {
         const credentials = await this.getCredentials();
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
+          maxAttempts: Number(process.env.AWS_BEDROCK_MAX_RETRIES || '10'),
+          retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
         });
@@ -936,26 +945,19 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
 
     const bedrockInstance = await this.getBedrockInstance();
-    let response;
-    try {
-      // https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel
-      response = await bedrockInstance.invokeModel({
-        modelId: this.modelName,
-        ...(this.config.guardrailIdentifier
-          ? { guardrailIdentifier: this.config.guardrailIdentifier }
-          : {}),
-        ...(this.config.guardrailVersion ? { guardrailVersion: this.config.guardrailVersion } : {}),
-        ...(this.config.trace ? { trace: this.config.trace } : {}),
-        accept: 'application/json',
-        contentType: 'application/json',
-        body: JSON.stringify(params),
-      });
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
-    logger.debug(`\tAmazon Bedrock API response: ${response.body.transformToString()}`);
+    const response = await bedrockInstance.invokeModel({
+      modelId: this.modelName,
+      ...(this.config.guardrailIdentifier
+        ? { guardrailIdentifier: this.config.guardrailIdentifier }
+        : {}),
+      ...(this.config.guardrailVersion ? { guardrailVersion: this.config.guardrailVersion } : {}),
+      ...(this.config.trace ? { trace: this.config.trace } : {}),
+      accept: 'application/json',
+      contentType: 'application/json',
+      body: JSON.stringify(params),
+    });
+
+    logger.debug(`Amazon Bedrock API response: ${response.body.transformToString()}`);
     if (isCacheEnabled()) {
       try {
         await cache.set(cacheKey, new TextDecoder().decode(response.body));
@@ -1014,9 +1016,7 @@ export class AwsBedrockEmbeddingProvider
       };
     }
     logger.debug(
-      `\tAWS Bedrock API response (embeddings): ${JSON.stringify(
-        response.body.transformToString(),
-      )}`,
+      `AWS Bedrock API response (embeddings): ${JSON.stringify(response.body.transformToString())}`,
     );
 
     try {

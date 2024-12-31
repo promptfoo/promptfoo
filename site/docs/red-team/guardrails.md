@@ -1,13 +1,15 @@
 ---
-sidebar_label: Guardrails API
+sidebar_label: Guardrails
 sidebar_position: 99
 ---
 
-# Guardrails API
+# Guardrails
 
 The Guardrails API helps detect potential security risks in user inputs to language models, identify personally identifiable information (PII), and assess potential harm in content.
 
-## Base URL
+The Guardrails API is focused on classification and detection. It returns a result, and your application can decide whether to warn, block, or otherwise respond to the input.
+
+## API Base URL
 
 ```
 https://api.promptfoo.dev
@@ -345,6 +347,18 @@ curl https://api.promptfoo.dev/v1/harm \
 
 This example shows the detection of potentially harmful content related to indiscriminate weapons.
 
-## More
+## Guardrails UI
+
+Promptfoo also provides a UI for guardrail observability for Cloud or Enterprise users.
+
+The dashboard provides a summary of guardrail events.
+
+![Guardrails UI](/img/guardrails.png)
+
+The table view provides detailed information about each event.
+
+![Guardrails event](/img/guardrails-table.png)
+
+# More
 
 For more information on LLM vulnerabilities and how to mitigate LLM failure modes, refer to our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) and [Introduction to AI red teaming](/docs/red-team/) documentation.

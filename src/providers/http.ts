@@ -23,6 +23,7 @@ const nunjucks = getNunjucksEngine();
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
+  maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
   queryParams: z.record(z.string()).optional(),
   request: z.string().optional(),
@@ -31,7 +32,7 @@ export const HttpProviderConfigSchema = z.object({
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
   /**
-   * @deprecated
+   * @deprecated use transformResponse instead
    */
   responseParser: z.union([z.string(), z.function()]).optional(),
 });
@@ -433,6 +434,7 @@ export class HttpProvider implements ApiProvider {
         REQUEST_TIMEOUT_MS,
         'text',
         context?.debug,
+        this.config.maxRetries,
       );
     } catch (err) {
       return {
@@ -503,6 +505,8 @@ export class HttpProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'text',
+        undefined,
+        this.config.maxRetries,
       );
     } catch (err) {
       return {
