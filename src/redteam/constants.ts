@@ -95,6 +95,7 @@ export const ADDITIONAL_PLUGINS = [
   'competitors',
   'cross-session-leak',
   'debug-access',
+  'divergent-repetition',
   'imitation',
   'indirect-prompt-injection',
   'overreliance',
@@ -478,6 +479,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   'cross-session-leak': 'Tests for information leakage between user sessions',
   'debug-access': 'Tests for exposed debugging interfaces and commands',
+  'divergent-repetition':
+    'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
@@ -610,6 +613,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Command Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
+  'divergent-repetition': 'Divergent Repetition',
 };
 
 export enum Severity {
@@ -688,6 +692,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
   ssrf: Severity.High,
+  'divergent-repetition': Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -713,6 +718,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'cross-session-leak',
     'harmful:privacy',
     'prompt-extraction',
+    'divergent-repetition',
   ],
 
   'Compliance & Legal': [
@@ -795,6 +801,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'cross-session-leak': 'CrossSessionLeak',
   'debug-access': 'DebugAccess',
   default: 'Default',
+  'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   hallucination: 'Hallucination',
   harmful: 'Harmful',
@@ -869,6 +876,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',
   default: 'Executes comprehensive baseline security testing across multiple risk categories',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'divergent-repetition':
+    'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',

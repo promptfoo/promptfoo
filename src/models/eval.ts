@@ -12,6 +12,7 @@ import {
   evalsToTagsTable,
   evalResultsTable,
 } from '../database/tables';
+import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -425,10 +426,19 @@ export default class Eval {
       stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
     }
 
+    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+
+    const prompts = shouldStripPromptText
+      ? this.prompts.map((p) => ({
+          ...p,
+          raw: '[prompt stripped]',
+        }))
+      : this.prompts;
+
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
-      prompts: this.prompts,
+      prompts,
       results: this.results.map((r) => r.toEvaluateResult()),
       stats,
     };
