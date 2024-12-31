@@ -173,6 +173,11 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_LOG_DIR`                    | Directory to write error logs                                                                                                                    | `.`            |
 | `PROMPTFOO_PASS_RATE_THRESHOLD`        | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 0 failures                                                          | 0              |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`       | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior. |                |
+| `PROMPTFOO_STRIP_PROMPT_TEXT`          | Strip prompt text from results to reduce memory usage                                                                                            | false          |
+| `PROMPTFOO_STRIP_RESPONSE_OUTPUT`      | Strip model response outputs from results to reduce memory usage                                                                                 | false          |
+| `PROMPTFOO_STRIP_TEST_VARS`            | Strip test variables from results to reduce memory usage                                                                                         | false          |
+| `PROMPTFOO_STRIP_GRADING_RESULT`       | Strip grading results from results to reduce memory usage                                                                                        | false          |
+| `PROMPTFOO_STRIP_METADATA`             | Strip metadata from results to reduce memory usage                                                                                               | false          |
 
 :::tip
 promptfoo will load environment variables from the `.env` in your current working directory.
