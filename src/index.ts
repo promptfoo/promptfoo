@@ -160,5 +160,3 @@ export default {
   providers,
   redteam,
 };
-
-export type { Prompt, PromptWithMetadata, TestCase, TestSuite } from './types';
