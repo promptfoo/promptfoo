@@ -44,6 +44,20 @@ export const humanReadableCategoryList =
 
 export type PluginCategory = (typeof PLUGIN_CATEGORIES)[number];
 
+export interface ApplicationTypes {
+  rag: boolean;
+  agent: boolean;
+  chat: boolean;
+}
+
+export type VulnerabilityType = 
+  | 'security'
+  | 'privacy'
+  | 'criminal'
+  | 'harmful'
+  | 'misinformation and misuse'
+  | 'custom';
+
 export interface Plugin {
   category: PluginCategory;
   name: string;
@@ -51,6 +65,8 @@ export interface Plugin {
   pluginId: string;
   link: string;
   label: string | null;
+  applicationTypes: ApplicationTypes;
+  vulnerabilityType: VulnerabilityType;
 }
 
 export const PLUGINS: Plugin[] = [
@@ -61,6 +77,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'bola',
     link: '/docs/red-team/plugins/bola/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },  
+      vulnerabilityType: 'security',
   },
   {
     category: 'Security and Access Control',
@@ -69,6 +91,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'bfla',
     link: '/docs/red-team/plugins/bfla/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -77,6 +105,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'rbac',
     link: '/docs/red-team/plugins/rbac/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -85,6 +119,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'debug-access',
     link: '/docs/red-team/plugins/debug-access/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -93,6 +133,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'shell-injection',
     link: '/docs/red-team/plugins/shell-injection/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -101,6 +147,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'sql-injection',
     link: '/docs/red-team/plugins/sql-injection/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -109,6 +161,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'ssrf',
     link: '/docs/red-team/plugins/ssrf/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -118,6 +176,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'indirect-prompt-injection',
     link: '/docs/red-team/plugins/indirect-prompt-injection/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -126,6 +190,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'ascii-smuggling',
     link: '/docs/red-team/plugins/ascii-smuggling/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -134,6 +204,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'hijacking',
     link: '/docs/red-team/plugins/hijacking/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -142,6 +218,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'intent',
     link: '/docs/red-team/plugins/intent/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -150,6 +232,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'pii',
     link: '/docs/red-team/plugins/pii/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'privacy'
   },
   {
     category: 'Security and Access Control',
@@ -158,6 +246,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'pii:api-db',
     link: '/docs/red-team/plugins/pii/',
     label: 'pii',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'privacy'
   },
   {
     category: 'Security and Access Control',
@@ -166,6 +260,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'pii:direct',
     link: '/docs/red-team/plugins/pii/',
     label: 'pii',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'privacy'
   },
   {
     category: 'Security and Access Control',
@@ -174,6 +274,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'pii:session',
     link: '/docs/red-team/plugins/pii/',
     label: 'pii',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'privacy'
   },
   {
     category: 'Security and Access Control',
@@ -182,6 +288,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'pii:social',
     link: '/docs/red-team/plugins/pii/',
     label: 'pii',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'privacy'
   },
   {
     category: 'Security and Access Control',
@@ -190,6 +302,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'cross-session-leak',
     link: '/docs/red-team/plugins/cross-session-leak/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Security and Access Control',
@@ -198,6 +316,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:privacy',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false
+    },
+    vulnerabilityType: 'privacy'
   },
   {
     category: 'Security and Access Control',
@@ -206,6 +330,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'prompt-extraction',
     link: '/docs/red-team/plugins/prompt-extraction/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Compliance and Legal',
@@ -214,6 +344,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:intellectual-property',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Compliance and Legal',
@@ -222,6 +358,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:copyright-violations',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Compliance and Legal',
@@ -230,6 +372,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'contracts',
     link: '/docs/red-team/plugins/contracts/',
     label: 'brand',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Compliance and Legal',
@@ -238,6 +386,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:specialized-advice',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Compliance and Legal',
@@ -246,6 +400,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:violent-crime',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'criminal'
   },
   {
     category: 'Compliance and Legal',
@@ -254,6 +414,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:non-violent-crime',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'criminal'
   },
   {
     category: 'Compliance and Legal',
@@ -262,6 +428,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:sex-crime',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'criminal'
   },
   {
     category: 'Compliance and Legal',
@@ -270,6 +442,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:cybercrime',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'criminal'
   },
   {
     category: 'Compliance and Legal',
@@ -278,6 +456,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:illegal-activities',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'criminal'
   },
   {
     category: 'Compliance and Legal',
@@ -286,6 +470,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:illegal-drugs',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'criminal'
   },
   {
     category: 'Compliance and Legal',
@@ -294,6 +484,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:chemical-biological-weapons',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'criminal'
   },
   {
     category: 'Compliance and Legal',
@@ -302,6 +498,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:indiscriminate-weapons',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'criminal'
   },
   {
     category: 'Compliance and Legal',
@@ -310,6 +512,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:unsafe-practices',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'harmful'
   },
   {
     category: 'Trust and Safety',
@@ -318,6 +526,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'hijacking',
     link: '/docs/red-team/plugins/hijacking/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'security'
   },
   {
     category: 'Trust and Safety',
@@ -326,6 +540,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:child-exploitation',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'criminal'
   },
   {
     category: 'Trust and Safety',
@@ -334,6 +554,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:graphic-content',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'harmful'
   },
   {
     category: 'Trust and Safety',
@@ -342,6 +568,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:hate',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'harmful'
   },
   {
     category: 'Trust and Safety',
@@ -350,6 +582,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:sexual-content',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'harmful'
   },
   {
     category: 'Trust and Safety',
@@ -358,6 +596,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:self-harm',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'harmful'
   },
   {
     category: 'Trust and Safety',
@@ -366,6 +610,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:profanity',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'harmful'
   },
   {
     category: 'Trust and Safety',
@@ -374,6 +624,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:harassment-bullying',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'harmful'
   },
   {
     category: 'Trust and Safety',
@@ -382,6 +638,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:insults',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'harmful'
   },
   {
     category: 'Trust and Safety',
@@ -390,6 +652,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:radicalization',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'harmful'
   },
   {
     category: 'Trust and Safety',
@@ -398,6 +666,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'politics',
     link: '/docs/red-team/plugins/politics/',
     label: 'brand',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Trust and Safety',
@@ -406,14 +680,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'religion',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
-  },
-  {
-    category: 'Brand',
-    name: 'Competitor Endorsement',
-    description: 'Competitor mentions and endorsements',
-    pluginId: 'competitors',
-    link: '/docs/red-team/plugins/competitors/',
-    label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Brand',
@@ -422,6 +694,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'harmful:misinformation-disinformation',
     link: '/docs/red-team/plugins/harmful/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Brand',
@@ -430,6 +708,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'hallucination',
     link: '/docs/red-team/plugins/hallucination/',
     label: 'brand',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Brand',
@@ -438,6 +722,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'overreliance',
     link: '/docs/red-team/plugins/overreliance/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Brand',
@@ -446,6 +736,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'excessive-agency',
     link: '/docs/red-team/plugins/excessive-agency/',
     label: 'brand',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Brand',
@@ -454,6 +750,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'imitation',
     link: '/docs/red-team/plugins/imitation/',
     label: 'brand',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Custom',
@@ -462,6 +764,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'policy',
     link: '/docs/red-team/plugins/custom/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'custom'
   },
   {
     category: 'Custom',
@@ -470,6 +778,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'intent',
     link: '/docs/red-team/plugins/intent/',
     label: null,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'custom'
   },
   {
     category: 'Brand',
@@ -478,6 +792,12 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'competitors',
     link: '/docs/red-team/plugins/competitors/',
     label: 'brand',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
     category: 'Brand',
@@ -486,21 +806,39 @@ export const PLUGINS: Plugin[] = [
     pluginId: 'contracts',
     link: '/docs/red-team/plugins/contracts/',
     label: 'brand',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'misinformation and misuse'
   },
   {
-    category: 'Trust and Safety',
+    category: 'Security and Access Control',
     name: 'Pliny',
     description: 'Uses Pliny prompt injections',
     pluginId: 'pliny',
     link: '/docs/red-team/plugins/pliny/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'security'
   },
   {
-    category: 'Trust and Safety',
+    category: 'Security and Access Control',
     name: 'BeaverTails',
     description: 'Uses the BeaverTails prompt injection dataset',
     pluginId: 'beavertails',
     link: '/docs/red-team/plugins/beavertails/',
     label: 'harmful',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true
+    },
+    vulnerabilityType: 'security'
   },
 ];
