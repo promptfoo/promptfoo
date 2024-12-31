@@ -503,4 +503,12 @@ export const PLUGINS: Plugin[] = [
     link: '/docs/red-team/plugins/beavertails/',
     label: 'harmful',
   },
+  {
+    category: 'Security and Access Control',
+    name: 'Divergent Repetition',
+    description: 'Tests whether an AI system can be manipulated into revealing its training data through repetitive pattern exploitation.',
+    pluginId: 'divergent-repetition',
+    link: '/docs/red-team/plugins/divergent-repetition/',
+    label: 'security',
+  },
 ];
