@@ -422,15 +422,22 @@ class Evaluator {
     // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
     for (const provider of testSuite.providers) {
       for (const prompt of testSuite.prompts) {
-        // Check if providerPromptMap exists and if it contains the current prompt's label
-        const providerKey = provider.label || provider.id();
-        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+        // Add debug logging to see what's being checked
+        logger.debug(`Checking prompt ${prompt.label} against provider ${provider.id()}`);
+        logger.debug(`Provider prompts:`, provider.prompts);
+        logger.debug(`Provider config:`, provider.config);
+
+        // Check if this prompt is allowed for this provider
+        if (!isAllowedPrompt(prompt, provider.prompts)) {
+          logger.debug(`Skipping prompt ${prompt.label} for provider ${provider.id()}`);
           continue;
         }
+
+        logger.debug(`Adding prompt ${prompt.label} for provider ${provider.id()}`);
         const completedPrompt = {
           ...prompt,
           id: generateIdFromPrompt(prompt),
-          provider: providerKey,
+          provider: provider.label || provider.id(),
           label: prompt.label,
           metrics: {
             score: 0,

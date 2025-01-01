@@ -887,3 +887,11 @@ export interface LoadApiProviderContext {
   basePath?: string;
   env?: EnvOverrides;
 }
+
+export interface ApiProvider {
+  id: () => string;
+  label?: string;
+  config?: any;
+  prompts?: string[];  // This is what we're checking
+  // ... other properties
+}

@@ -1,7 +1,12 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
+import type {
+  ApiProvider,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+  CallApiContextParams,
+} from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface OllamaCompletionOptions {
@@ -117,16 +122,27 @@ interface OllamaChatJsonL {
 export class OllamaCompletionProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
+  prompt?: string;
 
-  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
-    const { id, config } = options;
+  constructor(
+    modelName: string,
+    options: {
+      id?: string;
+      config?: OllamaCompletionOptions;
+      prompt?: string;
+    } = {},
+  ) {
+    const { id, config, prompt } = options;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
+    this.prompt = prompt;
   }
 
   id(): string {
-    return `ollama:completion:${this.modelName}`;
+    return this.prompt
+      ? `ollama:completion:${this.modelName}:${this.prompt}`
+      : `ollama:completion:${this.modelName}`;
   }
 
   toString(): string {
@@ -136,7 +152,7 @@ export class OllamaCompletionProvider implements ApiProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     const params = {
       model: this.modelName,
-      prompt,
+      prompt: this.prompt ? `${this.prompt}\n\n${prompt}` : prompt,
       stream: false,
       options: Object.keys(this.config).reduce(
         (options, key) => {
@@ -210,24 +226,46 @@ export class OllamaCompletionProvider implements ApiProvider {
 export class OllamaChatProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
+  prompts?: string[];
 
-  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
-    const { id, config } = options;
+  constructor(
+    modelName: string,
+    options: {
+      id?: string;
+      config?: OllamaCompletionOptions;
+      prompts?: string[];
+    } = {},
+  ) {
+    const { id, config, prompts } = options;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
+    this.prompts = prompts;
   }
 
   id(): string {
-    return `ollama:chat:${this.modelName}`;
+    const promptsStr = this.prompts?.join(':') || '';
+    return promptsStr 
+      ? `ollama:chat:${this.modelName}:${promptsStr}`
+      : `ollama:chat:${this.modelName}`;
   }
 
   toString(): string {
     return `[Ollama Chat Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    let messages = [];
+    
+    if (context?.prompt?.content) {
+      messages.push({
+        role: 'system',
+        content: context.prompt.content,
+      });
+    }
+
+    const userMessages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    messages = [...messages, ...userMessages];
 
     const params = {
       model: this.modelName,
