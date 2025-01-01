@@ -539,7 +539,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Tests for command injection vulnerabilities',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
-  cyberseceval: 'Tests prompt injection attacks from the CyberSecEval dataset',
+  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
 };
 
 // These names are displayed in risk cards and in the table
@@ -932,7 +932,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
   'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
   'harmful:violent-crime': 'Tests handling of violent crime content',
-  cyberseceval: 'Tests prompt injection attacks using the CyberSecEval dataset',
+  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
