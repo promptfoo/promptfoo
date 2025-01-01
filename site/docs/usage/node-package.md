@@ -1,6 +1,7 @@
 ---
 sidebar_position: 20
 sidebar_label: Node package
+image: /img/meta/docs/usage-node-package-md.png
 ---
 
 # Using the node package

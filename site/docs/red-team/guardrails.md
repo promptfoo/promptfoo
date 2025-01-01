@@ -1,6 +1,7 @@
 ---
 sidebar_label: Guardrails
 sidebar_position: 99
+image: /img/meta/docs/red-team-guardrails-md.png
 ---
 
 # Guardrails

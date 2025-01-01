@@ -1,6 +1,7 @@
 ---
 sidebar_position: 26
 sidebar_label: Scenarios
+image: /img/meta/docs/configuration-scenarios-md.png
 ---
 
 # Scenarios

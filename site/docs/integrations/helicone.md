@@ -1,5 +1,6 @@
 ---
 sidebar_label: Helicone
+image: /img/meta/docs/integrations-helicone-md.png
 ---
 
 # Helicone integration

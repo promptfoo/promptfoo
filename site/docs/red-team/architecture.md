@@ -1,6 +1,7 @@
 ---
 sidebar_label: Architecture
 sidebar_position: 10
+image: /img/meta/docs/red-team-architecture-md.png
 ---
 
 # Architecture

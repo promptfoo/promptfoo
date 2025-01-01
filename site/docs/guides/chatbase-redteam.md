@@ -1,3 +1,7 @@
+---
+image: /img/meta/docs/guides-chatbase-redteam-md.png
+---
+
 # Redteaming a Chatbase Chatbot
 
 ## Introduction

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Jenkins
+image: /img/meta/docs/integrations-jenkins-md.png
 ---
 
 # Setting up promptfoo with Jenkins

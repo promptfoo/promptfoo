@@ -1,6 +1,7 @@
 ---
 sidebar_position: 50
 sidebar_label: Javascript
+image: /img/meta/docs/configuration-expected-outputs-javascript-md.png
 ---
 
 # Javascript assertions

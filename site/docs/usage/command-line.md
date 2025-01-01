@@ -1,6 +1,7 @@
 ---
 sidebar_position: 10
 sidebar_label: Command line
+image: /img/meta/docs/usage-command-line-md.png
 ---
 
 # Command line

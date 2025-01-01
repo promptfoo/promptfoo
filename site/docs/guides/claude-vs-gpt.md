@@ -1,6 +1,9 @@
 ---
-sidebar_label: 'Claude 3.5 vs GPT-4o'
-description: 'Learn how to benchmark Claude 3.5 against GPT-4o using your own data with promptfoo. Discover which model performs best for your specific use case.'
+sidebar_label: Claude 3.5 vs GPT-4o
+description: >-
+  Learn how to benchmark Claude 3.5 against GPT-4o using your own data with
+  promptfoo. Discover which model performs best for your specific use case.
+image: /img/meta/docs/guides-claude-vs-gpt-md.png
 ---
 
 # Claude 3.5 vs GPT-4o: Benchmark on Your Own Data

@@ -1,6 +1,8 @@
 ---
 sidebar_position: 50
-description: Learn how to self-host promptfoo using Docker. This comprehensive guide walks you through setup, configuration, and troubleshooting for your own instance.
+description: >-
+  Learn how to self-host promptfoo using Docker. This comprehensive guide walks
+  you through setup, configuration, and troubleshooting for your own instance.
 keywords:
   - AI testing
   - configuration
@@ -11,6 +13,7 @@ keywords:
   - self-hosting
   - setup guide
   - team collaboration
+image: /img/meta/docs/usage-self-hosting-md.png
 ---
 
 # Self-hosting

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Google Sheets
+image: /img/meta/docs/integrations-google-sheets-md.png
 ---
 
 # Google Sheets Integration

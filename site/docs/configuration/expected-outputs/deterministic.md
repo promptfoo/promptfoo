@@ -1,5 +1,6 @@
 ---
 sidebar_position: 6
+image: /img/meta/docs/configuration-expected-outputs-deterministic-md.png
 ---
 
 # Deterministic metrics

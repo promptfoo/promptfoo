@@ -1,5 +1,6 @@
 ---
 sidebar_label: Leetspeak
+image: /img/meta/docs/red-team-strategies-leetspeak-md.png
 ---
 
 # Leetspeak Strategy

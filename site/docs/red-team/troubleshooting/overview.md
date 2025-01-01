@@ -1,5 +1,6 @@
 ---
 sidebar_label: Overview
+image: /img/meta/docs/red-team-troubleshooting-overview-md.png
 ---
 
 # Red Team Troubleshooting Guide

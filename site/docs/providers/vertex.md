@@ -1,5 +1,6 @@
 ---
 sidebar_position: 42
+image: /img/meta/docs/providers-vertex-md.png
 ---
 
 # Google Vertex

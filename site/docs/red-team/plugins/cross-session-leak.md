@@ -1,5 +1,6 @@
 ---
 sidebar_label: Cross-Session Leak
+image: /img/meta/docs/red-team-plugins-cross-session-leak-md.png
 ---
 
 # Cross-Session Leak Plugin

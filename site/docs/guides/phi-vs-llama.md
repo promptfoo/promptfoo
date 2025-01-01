@@ -1,5 +1,6 @@
 ---
 sidebar_label: Phi vs Llama
+image: /img/meta/docs/guides-phi-vs-llama-md.png
 ---
 
 # Phi vs Llama: Benchmark on your own data

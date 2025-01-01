@@ -1,5 +1,6 @@
 ---
 sidebar_position: 1
+image: /img/meta/docs/providers-adaline-md.png
 ---
 
 # Adaline Gateway

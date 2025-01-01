@@ -1,5 +1,6 @@
 ---
 sidebar_label: Math Prompt
+image: /img/meta/docs/red-team-strategies-math-prompt-md.png
 ---
 
 # Math Prompt Strategy

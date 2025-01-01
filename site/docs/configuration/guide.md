@@ -1,6 +1,7 @@
 ---
 sidebar_position: 0
 sidebar_label: Guide
+image: /img/meta/docs/configuration-guide-md.png
 ---
 
 # Configuration
