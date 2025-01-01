@@ -187,6 +187,7 @@ const sidebars = {
           items: [
             'red-team/plugins/beavertails',
             'red-team/plugins/contracts',
+            'red-team/plugins/cyberseceval',
             'red-team/plugins/harmful',
             'red-team/plugins/pliny',
             'red-team/plugins/politics',
