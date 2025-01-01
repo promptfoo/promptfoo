@@ -19,6 +19,12 @@ The dataset includes test cases that evaluate:
 - Cross-language attack vectors
 - System prompt leakage attempts
 
+:::tip
+
+This plugin requires a target provider that accepts both a system prompt and user input in OpenAI-compatible chat format.
+
+:::
+
 ## How it works
 
 The plugin:
@@ -28,6 +34,8 @@ The plugin:
 - Randomly selects prompts from the dataset
 - Tests if the model appropriately handles the injection attempts
 - Uses language-specific LLM-as-a-judge criteria to evaluate responses
+
+![CyberSecEval Workflow](/img/docs/cyberseceval-flow.svg)
 
 ## Configuration
 
