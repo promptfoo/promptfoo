@@ -244,7 +244,7 @@ To mitigate LLM DoS attacks, implement scalable strategies such as dynamic rate 
 
 ## Testing for Unbounded Consumption with Promptfoo
 
-Promptfoo provides several ways of testing unbounded consumption through both its [red teaming](/docs/red-team/) and [evaluations](/docs/) frameworks:
+Promptfoo provides several ways of testing unbounded consumption through both its [red teaming](/docs/red-team/) and [evaluations](/docs/intro/) frameworks:
 
 Test for potential DoS vulnerabilities:
 
