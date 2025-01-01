@@ -164,7 +164,7 @@ Promptfoo can hook directly into your existing LLM app to attack targets via Pyt
 - [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
 - [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
 
-## Run the eval
+## Run the scan
 
 Now that we've generated the test cases, we're ready to run the adversarial evaluation.
 
