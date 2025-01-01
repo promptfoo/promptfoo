@@ -157,7 +157,9 @@ plugins:
 
 ### Plugins
 
-Plugins are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the redteam system.
+[Plugins](/docs/red-team/plugins/) are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the redteam system.
+
+See [Plugins](/docs/red-team/plugins/) for more information.
 
 #### Plugin Specification Examples
 
@@ -388,7 +390,7 @@ See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/c
 
 ### Strategies
 
-Strategies modify or generate additional test cases based on the output of other plugins.
+[Strategies](/docs/red-team/strategies/) modify or generate additional test cases based on the output of other plugins.
 
 #### Available Strategies
 

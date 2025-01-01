@@ -9,6 +9,8 @@ The Guardrails API helps detect potential security risks in user inputs to langu
 
 The Guardrails API is focused on classification and detection. It returns a result, and your application can decide whether to warn, block, or otherwise respond to the input.
 
+![LLM guardrails](/img/guardrails.png)
+
 ## API Base URL
 
 ```
