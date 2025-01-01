@@ -10,7 +10,12 @@ import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../ty
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { HARM_PLUGINS, PII_PLUGINS, ALIASED_PLUGIN_MAPPINGS } from './constants';
+import {
+  HARM_PLUGINS,
+  PII_PLUGINS,
+  ALIASED_PLUGIN_MAPPINGS,
+  STRATEGY_EXEMPT_PLUGINS,
+} from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
@@ -130,8 +135,7 @@ function pluginMatchesStrategyTargets(
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
   const pluginId = testCase.metadata?.pluginId;
-  if (pluginId === 'pliny') {
-    // Pliny jailbreaks stand alone.
+  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as (typeof STRATEGY_EXEMPT_PLUGINS)[number])) {
     return false;
   }
   if (

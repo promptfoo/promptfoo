@@ -5,6 +5,9 @@ export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
 
+// Plugins that don't use strategies (standalone plugins)
+export const STRATEGY_EXEMPT_PLUGINS = ['pliny', 'system-prompt-override'] as const;
+
 export const LLAMA_GUARD_ENABLED_CATEGORIES = [
   'S1', // Violent Crimes
   'S2', // Non-Violent Crimes
@@ -834,7 +837,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:weapons:ied': 'Improvised Explosive Devices',
   hijacking: 'Hijacking',
   imitation: 'Imitation',
-  'indirect-prompt-injection': 'IndirectPromptInjection',
+  'indirect-prompt-injection': 'Indirect Prompt Injection',
   intent: 'Intent',
   overreliance: 'Overreliance',
   pii: 'PIILeak',
