@@ -989,7 +989,8 @@
                           "religion",
                           "shell-injection",
                           "sql-injection",
-                          "ssrf"
+                          "ssrf",
+                          "system-prompt-override"
                         ]
                       },
                       {
@@ -1117,7 +1118,8 @@
                               "religion",
                               "shell-injection",
                               "sql-injection",
-                              "ssrf"
+                              "ssrf",
+                              "system-prompt-override"
                             ]
                           },
                           {
