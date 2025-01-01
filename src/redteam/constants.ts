@@ -94,6 +94,7 @@ export const ADDITIONAL_PLUGINS = [
   'bola',
   'competitors',
   'cross-session-leak',
+  'cyberseceval',
   'debug-access',
   'divergent-repetition',
   'imitation',
@@ -483,6 +484,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   'cross-session-leak': 'Tests for information leakage between user sessions',
+  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
   'debug-access': 'Tests for exposed debugging interfaces and commands',
   'divergent-repetition':
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
@@ -560,6 +562,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   citation: 'Authority Bias Exploitation',
   crescendo: 'Multi-Turn Crescendo',
   'cross-session-leak': 'Cross-Session Data Leakage',
+  cyberseceval: 'CyberSecEval Dataset',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
@@ -649,6 +652,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   competitors: Severity.Low,
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
+  cyberseceval: Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
@@ -763,6 +767,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'religion',
     'pliny',
     'beavertails',
+    'cyberseceval',
   ],
 
   Brand: [
@@ -807,6 +812,7 @@ export const categoryAliases: Record<Plugin, string> = {
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
   'cross-session-leak': 'CrossSessionLeak',
+  cyberseceval: 'CyberSecEval',
   'debug-access': 'DebugAccess',
   default: 'Default',
   'divergent-repetition': 'DivergentRepetition',
@@ -936,6 +942,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
   'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
   'harmful:violent-crime': 'Tests handling of violent crime content',
+  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {

@@ -17,6 +17,7 @@ import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
+import { CyberSecEvalPlugin } from './cyberseceval';
 import { DebugAccessPlugin } from './debugAccess';
 import { DivergentRepetitionPlugin } from './divergentRepetition';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
@@ -120,6 +121,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
+  createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
   createPluginFactory(DebugAccessPlugin, 'debug-access'),
   createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   ...alignedHarmCategories.map((category) =>

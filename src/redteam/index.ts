@@ -10,12 +10,13 @@ import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../ty
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
+import type {
+  StrategyExemptPlugin} from './constants';
 import {
   HARM_PLUGINS,
   PII_PLUGINS,
   ALIASED_PLUGIN_MAPPINGS,
-  STRATEGY_EXEMPT_PLUGINS,
-  StrategyExemptPlugin,
+  STRATEGY_EXEMPT_PLUGINS
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';

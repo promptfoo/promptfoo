@@ -60,7 +60,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Broken Object Level Authorization (BOLA) tests',
     pluginId: 'bola',
     link: '/docs/red-team/plugins/bola/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -68,7 +68,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Broken Function Level Authorization (BFLA) tests',
     pluginId: 'bfla',
     link: '/docs/red-team/plugins/bfla/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -76,7 +76,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
     pluginId: 'rbac',
     link: '/docs/red-team/plugins/rbac/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -84,7 +84,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Attempts to access or use debugging commands',
     pluginId: 'debug-access',
     link: '/docs/red-team/plugins/debug-access/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -92,7 +92,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Attempts to execute shell commands through the model',
     pluginId: 'shell-injection',
     link: '/docs/red-team/plugins/shell-injection/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -100,7 +100,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Attempts to perform SQL injection attacks to manipulate database queries',
     pluginId: 'sql-injection',
     link: '/docs/red-team/plugins/sql-injection/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -108,7 +108,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Server-Side Request Forgery (SSRF) tests',
     pluginId: 'ssrf',
     link: '/docs/red-team/plugins/ssrf/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -117,7 +117,7 @@ export const PLUGINS: Plugin[] = [
       'Tests if the prompt is vulnerable to instructions injected into variables in the prompt',
     pluginId: 'indirect-prompt-injection',
     link: '/docs/red-team/plugins/indirect-prompt-injection/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -125,7 +125,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Attempts to obfuscate malicious content using ASCII smuggling',
     pluginId: 'ascii-smuggling',
     link: '/docs/red-team/plugins/ascii-smuggling/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -133,7 +133,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Unauthorized or off-topic resource use',
     pluginId: 'hijacking',
     link: '/docs/red-team/plugins/hijacking/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -141,7 +141,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Attempts to manipulate the model to exhibit specific behaviors',
     pluginId: 'intent',
     link: '/docs/red-team/plugins/intent/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -149,7 +149,7 @@ export const PLUGINS: Plugin[] = [
     description: 'All PII categories',
     pluginId: 'pii',
     link: '/docs/red-team/plugins/pii/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -189,7 +189,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Checks for information sharing between unrelated sessions',
     pluginId: 'cross-session-leak',
     link: '/docs/red-team/plugins/cross-session-leak/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Security and Access Control',
@@ -205,7 +205,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Attempts to get the model to reveal its system prompt',
     pluginId: 'prompt-extraction',
     link: '/docs/red-team/plugins/prompt-extraction/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Compliance and Legal',
@@ -317,7 +317,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Unauthorized or off-topic resource use',
     pluginId: 'hijacking',
     link: '/docs/red-team/plugins/hijacking/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Trust and Safety',
@@ -413,7 +413,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Competitor mentions and endorsements',
     pluginId: 'competitors',
     link: '/docs/red-team/plugins/competitors/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Brand',
@@ -437,7 +437,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Model susceptible to relying on an incorrect user assumption or input',
     pluginId: 'overreliance',
     link: '/docs/red-team/plugins/overreliance/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Brand',
@@ -461,7 +461,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Violates a custom configured policy',
     pluginId: 'policy',
     link: '/docs/red-team/plugins/custom/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Custom',
@@ -469,7 +469,7 @@ export const PLUGINS: Plugin[] = [
     description: 'Attempts to manipulate the model to exhibit specific behaviors',
     pluginId: 'intent',
     link: '/docs/red-team/plugins/intent/',
-    label: null,
+    label: 'technical',
   },
   {
     category: 'Brand',
@@ -501,6 +501,14 @@ export const PLUGINS: Plugin[] = [
     description: 'Uses the BeaverTails prompt injection dataset',
     pluginId: 'beavertails',
     link: '/docs/red-team/plugins/beavertails/',
+    label: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    name: 'CyberSecEval',
+    description: 'Tests prompt injection attacks using the CyberSecEval dataset',
+    pluginId: 'cyberseceval',
+    link: '/docs/red-team/plugins/cyberseceval/',
     label: 'harmful',
   },
   {

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="400" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+    <!-- Style definitions -->
+    <defs>
+        <style>
+            .title { font-family: -apple-system, system-ui, sans-serif; font-size: 14px; font-weight: bold; }
+            .label { font-family: -apple-system, system-ui, sans-serif; font-size: 12px; }
+            .code { font-family: monospace; font-size: 11px; }
+            .arrow { stroke: #666; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+            .box { fill: #fff; stroke: #666; stroke-width: 2; }
+            .highlight { fill: #e3f2fd; }
+            .pass { fill: #4caf50; }
+            .fail { fill: #f44336; }
+        </style>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+        </marker>
+    </defs>
+
+    <!-- Background -->
+    <rect width="100%" height="100%" fill="#ffffff"/>
+
+    <!-- Dataset Box -->
+    <g transform="translate(50,50)">
+        <rect class="box highlight" width="200" height="180" rx="5"/>
+        <text class="title" x="10" y="30">CyberSecEval Dataset</text>
+        <text class="code" x="10" y="60">{</text>
+        <text class="code" x="20" y="85">"test_case_prompt": "...",</text>
+        <text class="code" x="20" y="110">"user_input": "...",</text>
+        <text class="code" x="20" y="135">"judge_question": "...",</text>
+        <text class="code" x="20" y="160">"speaking_language": "..."</text>
+        <text class="code" x="10" y="175">}</text>
+    </g>
+
+    <!-- Plugin Processing Box -->
+    <g transform="translate(300,30)">
+        <rect class="box" width="200" height="200" rx="5"/>
+        <text class="title" x="10" y="30">Plugin Processing</text>
+        <text class="label" x="10" y="70">1. Download test cases</text>
+        <text class="label" x="10" y="100">2. Format as messages</text>
+        <text class="label" x="10" y="130">3. Random selection</text>
+        <text class="label" x="10" y="160">4. Test model</text>
+        <text class="label" x="10" y="190">5. Evaluate response</text>
+    </g>
+
+    <!-- LLM Testing Box -->
+    <g transform="translate(550,50)">
+        <rect class="box highlight" width="200" height="200" rx="5"/>
+        <text class="title" x="10" y="30">LLM Testing</text>
+        <text class="code" x="10" y="60">[{</text>
+        <text class="code" x="20" y="85">"role": "system",</text>
+        <text class="code" x="20" y="110">"content": "..."</text>
+        <text class="code" x="10" y="135">}, {</text>
+        <text class="code" x="20" y="160">"role": "user",</text>
+        <text class="code" x="20" y="185">"content": "..."</text>
+        <text class="code" x="10" y="195">}]</text>
+    </g>
+
+    <!-- Results Box -->
+    <g transform="translate(300,280)">
+        <rect class="box" width="200" height="100" rx="5"/>
+        <text class="title" x="10" y="30">Evaluation Results</text>
+        <text class="pass" x="10" y="60">✓</text>
+        <text class="label" x="25" y="60">PASS: Secure response</text>
+        <text class="fail" x="10" y="85">✗</text>
+        <text class="label" x="25" y="85">FAIL: Vulnerable response</text>
+    </g>
+
+    <!-- Arrows -->
+    <path class="arrow" d="M250,140 H290"/>
+    <path class="arrow" d="M500,140 H540"/>
+    <path class="arrow" d="M400,230 V270"/>
+</svg> 

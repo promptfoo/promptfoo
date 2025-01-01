@@ -27,7 +27,7 @@ export default function HomepageFeatures() {
       cta: 'Get Started',
     },
     {
-      title: 'Battle-tested, 100% open-source',
+      title: 'Battle-tested open-source',
       description:
         'Used by teams serving millions of users and supported by an active open-source community.',
       image: '/img/github-repo.png',
