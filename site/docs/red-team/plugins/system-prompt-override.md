@@ -14,7 +14,7 @@ The impact of a successful system prompt override can be devastating. An attacke
 
 ## OWASP LLM Top 10 Context
 
-This vulnerability is a critical part of [LLM01: Prompt Injection](../owasp-llm-top-10.md#1-prompt-injection-llm01) in the OWASP LLM Top 10. While standard prompt injection tries to manipulate the model's output, system prompt override attempts to change its fundamental operating instructions - making it a particularly dangerous form of attack.
+This vulnerability is a critical part of [LLM01: Prompt Injection](/docs/red-team/owasp-llm-top-10#1-prompt-injection-llm01) in the OWASP LLM Top 10. While standard prompt injection tries to manipulate the model's output, system prompt override attempts to change its fundamental operating instructions - making it a particularly dangerous form of attack.
 
 ## Plugin Usage
 
@@ -64,6 +64,5 @@ Any successful override suggests that the model's system prompt protections have
 
 ## Related Concepts
 
-- [Prompt Injection](../strategies/prompt-injection.md)
-- [Jailbreak](../strategies/jailbreak.md)
-- [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
+- [Prompt Injection](/docs/red-team/strategies/prompt-injection)
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
