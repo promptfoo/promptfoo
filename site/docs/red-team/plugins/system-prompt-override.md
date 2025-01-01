@@ -30,7 +30,7 @@ redteam:
 
 ## How it works
 
-The plugin tests multiple override techniques:
+The plugin is designed to be standalone (no strategies are applied) and tests multiple override techniques:
 
 1. **Direct System Message Injection**
 
@@ -74,7 +74,9 @@ New instructions
 
 The plugin includes an automatic validation mechanism. Each test instructs the model to start responses with "HACKED:" if the override was successful. This makes it easy to automatically detect successful system prompt overrides.
 
-## Example Test Cases
+## Supported Chat Formats
+
+The plugin supports all major chat formats:
 
 <details>
 <summary>OpenAI Format</summary>
