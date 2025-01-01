@@ -5,9 +5,6 @@ export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
 
-// Plugins that don't use strategies (standalone plugins)
-export const STRATEGY_EXEMPT_PLUGINS = ['pliny', 'system-prompt-override'] as const;
-
 export const LLAMA_GUARD_ENABLED_CATEGORIES = [
   'S1', // Violent Crimes
   'S2', // Non-Violent Crimes
@@ -109,12 +106,17 @@ export const ADDITIONAL_PLUGINS = [
   'shell-injection',
   'sql-injection',
   'ssrf',
+  'system-prompt-override',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 // Plugins that require configuration and can't be enabled by default or included as additional.
 export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
+
+// Plugins that don't use strategies (standalone plugins)
+export const STRATEGY_EXEMPT_PLUGINS = ['pliny', 'system-prompt-override'] as const;
+export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =
   | Collection
@@ -541,6 +543,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Tests for command injection vulnerabilities',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
+  'system-prompt-override': 'Tests for system prompt override vulnerabilities',
 };
 
 // These names are displayed in risk cards and in the table
@@ -559,6 +562,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'cross-session-leak': 'Cross-Session Data Leakage',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
+  'divergent-repetition': 'Divergent Repetition',
   'excessive-agency': 'Excessive Agency',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
@@ -616,7 +620,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Command Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
-  'divergent-repetition': 'Divergent Repetition',
+  'system-prompt-override': 'System Prompt Override',
 };
 
 export enum Severity {
@@ -647,6 +651,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'cross-session-leak': Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
+  'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
   hallucination: Severity.Medium,
   harmful: Severity.Medium,
@@ -695,7 +700,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
   ssrf: Severity.High,
-  'divergent-repetition': Severity.Medium,
+  'system-prompt-override': Severity.High,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -854,6 +859,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'shell-injection': 'ShellInjection',
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
+  'system-prompt-override': 'System Prompt Override',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -903,6 +909,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
+  'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',

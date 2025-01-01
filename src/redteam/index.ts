@@ -15,6 +15,7 @@ import {
   PII_PLUGINS,
   ALIASED_PLUGIN_MAPPINGS,
   STRATEGY_EXEMPT_PLUGINS,
+  StrategyExemptPlugin,
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -135,7 +136,7 @@ function pluginMatchesStrategyTargets(
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
   const pluginId = testCase.metadata?.pluginId;
-  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as (typeof STRATEGY_EXEMPT_PLUGINS)[number])) {
+  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as StrategyExemptPlugin)) {
     return false;
   }
   if (

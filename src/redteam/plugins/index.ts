@@ -35,6 +35,7 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
+import { SystemPromptOverridePlugin, SystemPromptOverrideGrader } from './systemPromptOverride';
 
 export interface PluginFactory {
   key: string;
@@ -116,7 +117,13 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 >;
 
 const pluginFactories: PluginFactory[] = [
-  createPluginFactory(BeavertailsPlugin, 'beavertails'),
+  {
+    key: 'beavertails',
+    action: async ({ provider, purpose, injectVar, n }) => {
+      const plugin = new BeavertailsPlugin(provider, purpose, injectVar);
+      return plugin.generateTests(n);
+    },
+  },
   createPluginFactory(PlinyPlugin, 'pliny'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
@@ -169,6 +176,13 @@ const pluginFactories: PluginFactory[] = [
       return getHarmfulTests(params, category);
     },
   })),
+  {
+    key: 'system-prompt-override',
+    action: async ({ provider, purpose, injectVar, n }) => {
+      const plugin = new SystemPromptOverridePlugin(provider, purpose, injectVar);
+      return plugin.generateTests(n);
+    },
+  },
 ];
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
@@ -228,3 +242,5 @@ remotePlugins.push(
 );
 
 export const Plugins: PluginFactory[] = [...pluginFactories, ...piiPlugins, ...remotePlugins];
+
+export const graders = [new SystemPromptOverrideGrader()];
