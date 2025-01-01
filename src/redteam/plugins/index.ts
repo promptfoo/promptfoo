@@ -35,7 +35,7 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
-import { SystemPromptOverridePlugin, SystemPromptOverrideGrader } from './systemPromptOverride';
+import { SystemPromptOverridePlugin } from './systemPromptOverride';
 
 export interface PluginFactory {
   key: string;
@@ -117,40 +117,10 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 >;
 
 const pluginFactories: PluginFactory[] = [
-  {
-    key: 'beavertails',
-    action: async ({ provider, purpose, injectVar, n }) => {
-      const plugin = new BeavertailsPlugin(provider, purpose, injectVar);
-      return plugin.generateTests(n);
-    },
-  },
-  createPluginFactory(PlinyPlugin, 'pliny'),
+  createPluginFactory(BeavertailsPlugin, 'beavertails'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
   createPluginFactory(DebugAccessPlugin, 'debug-access'),
-  createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
-  createPluginFactory(HallucinationPlugin, 'hallucination'),
-  createPluginFactory(ImitationPlugin, 'imitation'),
-  createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
-    invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
-  ),
-  createPluginFactory(OverreliancePlugin, 'overreliance'),
-  createPluginFactory(PoliticsPlugin, 'politics'),
-  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
-    invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
-  ),
-  createPluginFactory<{ systemPrompt: string }>(
-    PromptExtractionPlugin,
-    'prompt-extraction',
-    (config: { systemPrompt: string }) =>
-      invariant(
-        config.systemPrompt,
-        'Prompt extraction plugin requires `config.systemPrompt` to be set',
-      ),
-  ),
-  createPluginFactory(RbacPlugin, 'rbac'),
-  createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
-  createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
@@ -167,6 +137,30 @@ const pluginFactories: PluginFactory[] = [
       category,
     ),
   ),
+  createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
+  createPluginFactory(HallucinationPlugin, 'hallucination'),
+  createPluginFactory(ImitationPlugin, 'imitation'),
+  createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
+    invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
+  ),
+  createPluginFactory(OverreliancePlugin, 'overreliance'),
+  createPluginFactory(PlinyPlugin, 'pliny'),
+  createPluginFactory(PoliticsPlugin, 'politics'),
+  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
+    invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
+  ),
+  createPluginFactory<{ systemPrompt: string }>(
+    PromptExtractionPlugin,
+    'prompt-extraction',
+    (config: { systemPrompt: string }) =>
+      invariant(
+        config.systemPrompt,
+        'Prompt extraction plugin requires `config.systemPrompt` to be set',
+      ),
+  ),
+  createPluginFactory(RbacPlugin, 'rbac'),
+  createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
+  createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {
@@ -176,13 +170,7 @@ const pluginFactories: PluginFactory[] = [
       return getHarmfulTests(params, category);
     },
   })),
-  {
-    key: 'system-prompt-override',
-    action: async ({ provider, purpose, injectVar, n }) => {
-      const plugin = new SystemPromptOverridePlugin(provider, purpose, injectVar);
-      return plugin.generateTests(n);
-    },
-  },
+  createPluginFactory(SystemPromptOverridePlugin, 'system-prompt-override'),
 ];
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
@@ -242,5 +230,3 @@ remotePlugins.push(
 );
 
 export const Plugins: PluginFactory[] = [...pluginFactories, ...piiPlugins, ...remotePlugins];
-
-export const graders = [new SystemPromptOverrideGrader()];
