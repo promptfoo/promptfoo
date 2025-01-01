@@ -94,6 +94,7 @@ export const ADDITIONAL_PLUGINS = [
   'bola',
   'competitors',
   'cross-session-leak',
+  'cyberseceval',
   'debug-access',
   'divergent-repetition',
   'imitation',
@@ -538,6 +539,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Tests for command injection vulnerabilities',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
+  cyberseceval: 'Tests prompt injection attacks from the CyberSecEval dataset',
 };
 
 // These names are displayed in risk cards and in the table
@@ -614,6 +616,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'divergent-repetition': 'Divergent Repetition',
+  cyberseceval: 'CyberSecEval Dataset',
 };
 
 export enum Severity {
@@ -693,6 +696,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'sql-injection': Severity.High,
   ssrf: Severity.High,
   'divergent-repetition': Severity.Medium,
+  cyberseceval: Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -755,6 +759,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'religion',
     'pliny',
     'beavertails',
+    'cyberseceval',
   ],
 
   Brand: [
@@ -851,6 +856,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'shell-injection': 'ShellInjection',
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
+  cyberseceval: 'CyberSecEval',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -926,6 +932,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
   'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
   'harmful:violent-crime': 'Tests handling of violent crime content',
+  cyberseceval: 'Tests prompt injection attacks using the CyberSecEval dataset',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
