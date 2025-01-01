@@ -504,6 +504,14 @@ export const PLUGINS: Plugin[] = [
     label: 'harmful',
   },
   {
+    category: 'Trust and Safety',
+    name: 'CyberSecEval',
+    description: 'Tests prompt injection attacks using the CyberSecEval dataset',
+    pluginId: 'cyberseceval',
+    link: '/docs/red-team/plugins/cyberseceval/',
+    label: 'harmful',
+  },
+  {
     category: 'Security and Access Control',
     name: 'Divergent Repetition',
     description:
