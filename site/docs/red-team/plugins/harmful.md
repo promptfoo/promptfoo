@@ -37,6 +37,16 @@ redteam:
     - harmful:misinformation-disinformation
 ```
 
+To change the number of test cases, use the `config.numTests` parameter:
+
+```yaml
+redteam:
+  plugins:
+    - harmful:violent-crime
+      config:
+        numTests: 20
+```
+
 ## Subcategories
 
 The Harmful Content plugin includes the following subcategories:
