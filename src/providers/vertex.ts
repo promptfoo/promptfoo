@@ -303,11 +303,16 @@ export class VertexChatProvider extends VertexGenericProvider {
       let output = '';
       for (const datum of dataWithResponse) {
         if (datum.candidates && datum.candidates[0]?.content?.parts) {
-          const part = datum.candidates[0].content.parts[0];
-          if ('text' in part) {
-            output += part.text;
-          } else {
-            output += JSON.stringify(part);
+          for (const candidate of datum.candidates) {
+            if (candidate.content?.parts) {
+              for (const part of candidate.content.parts) {
+                if ('text' in part) {
+                  output += part.text;
+                } else {
+                  output += JSON.stringify(part);
+                }
+              }
+            }
           }
         } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
           if (cliState.config?.redteam) {

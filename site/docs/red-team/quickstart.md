@@ -65,6 +65,8 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 The `setup` command will open a web UI that asks questions to help you configure your red teaming project.
 
+### Provide application details
+
 Start by providing some details about the target application. The more details we provide, the more tailored the generated test cases will be.
 
 At a minimum, be sure to fill out the **Purpose** field with a description of your application.
@@ -72,6 +74,8 @@ At a minimum, be sure to fill out the **Purpose** field with a description of yo
 ![llm red team setup](/img/docs/setup/application-details.png)
 
 ---
+
+### Configure the target
 
 Next, configure Promptfoo to communicate with your target application or model.
 
@@ -83,7 +87,9 @@ Because the Promptfoo scanner runs locally on your machine, it can attack any en
 
 ---
 
-Next, select the plugins that you want to use. Plugins are adversarial generators. They produce malicious inputs that are sent to your application.
+### Select plugins
+
+Next, select the plugins that you want to use. [Plugins](/docs/red-team/plugins/) are adversarial generators. They produce malicious inputs that are sent to your application.
 
 Check off the individual plugins you want to use, or select a preset that includes a combination of plugins (if in doubt, stick with "Default").
 
@@ -91,13 +97,17 @@ Check off the individual plugins you want to use, or select a preset that includ
 
 ---
 
-Now we select strategies. Strategies are adversarial techniques that wrap the generated inputs in a specific attack pattern.
+### Select attack strategies
+
+Now we select strategies. [Strategies](/docs/red-team/strategies/) are techniques that wrap the generated inputs in a specific attack pattern.
 
 This is how Promptfoo generates more sophisticated jailbreaks and injections.
 
 ![llm red team setup](/img/docs/setup/strategy.png)
 
 ---
+
+### Review and save
 
 Finally, download the generated configuration file. You'll use this to run the red team from your local machine.
 
@@ -114,9 +124,11 @@ promptfoo redteam init --no-gui
 
 :::
 
+## Common target types
+
 ### Attacking an API endpoint
 
-Edit the config to set up the target endpoint. For example:
+The configuration file includes a description of the target endpoint. You can edit the config to make changes to the target. For example:
 
 ```yaml
 targets:
@@ -137,11 +149,13 @@ The `label` is used to create issues and report the results of the red teaming. 
 
 Setting the `purpose` is optional, but it will significantly improve the quality of the generated test cases and grading. Be specific about who the user of the system is and what information and actions they should be able to access.
 
+:::info
 For more information on configuring an HTTP target, see [HTTP requests](/docs/providers/http/).
+:::
 
 ### Alternative: Test specific prompts and models
 
-If you don't have a live endpoint, you can edit the config to set the specific prompt(s) and the LLM(s) to test:
+If you don't have a live endpoint, you can edit the config to set the specific prompt(s) and the LLM model(s) to test:
 
 ```yaml
 prompts:
@@ -154,19 +168,21 @@ targets:
     label: 'travel-agent-mini'
 ```
 
-For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/parameters/#prompts).
+Promptfoo supports dozens of model providers. For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/parameters/#prompts).
 
 ### Alternative: Talking directly to your app
 
-Promptfoo can hook directly into your existing LLM app to attack targets via Python, Javascript, RAG or agent workflows, HTTP API, and more. See [custom providers](/docs/red-team/configuration/#custom-providerstargets) for details on setting up:
+Promptfoo hooks directly into your existing LLM app to attack targets via Python, Javascript, RAG or agent workflows, HTTP API, and more. See [custom providers](/docs/red-team/configuration/#custom-providerstargets) for details on setting up:
 
 - [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
 - [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
 - [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
 
-## Run the eval
+## Run the scan
 
 Now that we've generated the test cases, we're ready to run the adversarial evaluation.
+
+Run this command in the same directory as your `promptfooconfig.yaml` file:
 
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
@@ -187,6 +203,8 @@ Now that we've generated the test cases, we're ready to run the adversarial eval
 </Tabs>
 
 This command will generate several hundred adversarial inputs across many categories of potential harm and save them in `redteam.yaml`. Then, it will run the test cases against the target.
+
+![llm red team run](/img/docs/redteam-run.png)
 
 ## View the results
 

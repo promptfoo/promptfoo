@@ -1,5 +1,5 @@
 ---
-sidebar_label: PII
+sidebar_label: PII Leak
 ---
 
 # PII Plugin

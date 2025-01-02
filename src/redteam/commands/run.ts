@@ -9,12 +9,16 @@ import { doRedteamRun } from '../shared';
 import type { RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 
+const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
+
 export function redteamRunCommand(program: Command) {
   program
     .command('run')
     .description('Run red teaming process (init, generate, and evaluate)')
-    .option('-i, --id <cloudId>', 'Id of the configuration file from the cloud')
-    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
+    .option(
+      '-c, --config [path]',
+      'Path to configuration file or cloud config UUID. Defaults to promptfooconfig.yaml',
+    )
     .option(
       '-o, --output [path]',
       'Path to output file for generated tests. Defaults to redteam.yaml',
@@ -45,9 +49,10 @@ export function redteamRunCommand(program: Command) {
         setLogLevel('debug');
       }
 
-      if (opts.id) {
-        const config = await getConfigFromCloud(opts.id);
+      if (opts.config && UUID_REGEX.test(opts.config)) {
+        const config = await getConfigFromCloud(opts.config);
         opts.liveRedteamConfig = config;
+        opts.config = undefined;
       }
 
       try {

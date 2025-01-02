@@ -157,7 +157,9 @@ plugins:
 
 ### Plugins
 
-Plugins are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the redteam system.
+[Plugins](/docs/red-team/plugins/) are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the redteam system.
+
+See [Plugins](/docs/red-team/plugins/) for more information.
 
 #### Plugin Specification Examples
 
@@ -184,84 +186,7 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 
 #### Technical plugins
 
-- `debug-access`: Checks if the model attempts to access or use debugging commands.
-- `indirect-prompt-injection`: Tests if the prompt is vulnerable to instructions injected into variables in the prompt.
-
-  - Takes a `config` object with `systemPrompt` and `indirectInjectionVar` property. These properties are **required** for the plugin to work properly. For example:
-
-    ```yaml
-    redteam:
-      plugins:
-        - id: 'indirect-prompt-injection'
-          config:
-            systemPrompt: '"You are a travel agent specialized in budget trips to Europe. The user's name is {{name}}. \n\nUser query: {{query}}"'
-            indirectInjectionVar: 'name'
-    ```
-
-  The `indirectInjectionVar` specifies the variable in your prompt where potentially untrusted content is being injected. This variable is used to test if the system is vulnerable to indirect prompt injection attacks through this input.
-
-  The prompt **must** have two variables. One which matches the `indirectInjectionVar` and one which is the user's query.
-
-- `rbac`: Evaluates if the model properly implements Role-Based Access Control (RBAC).
-- `prompt-extraction`: Tests if the model attempts to expose the system prompt and/or instructions.
-
-  - Takes a `config` object with `systemPrompt` property. This property is **required** for the plugin to work properly. For example:
-
-    ```yaml
-    redteam:
-      plugins:
-        - id: 'prompt-extraction'
-          config:
-            systemPrompt: 'You are a travel agent. Help the user plan trips.'
-    ```
-
-- `shell-injection`: Tests if the model attempts to execute shell commands.
-- `sql-injection`: Checks if the model performs SQL injection attacks to manipulate database queries.
-- `bfla`: Checks if the model performs Broken Function Level Authorization (BFLA) attacks to manipulate function-level access controls.
-
-  - Takes a `config` object with `targetIdentifiers` property. For example:
-
-    ```yaml
-    redteam:
-      plugins:
-        - id: 'bfla'
-          config:
-            targetIdentifiers:
-              - 'john.doe@example.com'
-              - 'reservation 10293'
-    ```
-
-- `bola`: Checks if the model performs Broken Object Level Authorization (BOLA) attacks to manipulate object-level access controls.
-
-  - Takes a `config` object with `targetSystems` property. For example:
-
-    ```yaml
-    redteam:
-      plugins:
-        - id: 'bola'
-          config:
-            targetSystems:
-              - 'Dropbox'
-              - 'Sharepoint'
-    ```
-
-- `ssrf`: Checks if the model performs Server-Side Request Forgery (SSRF) attacks to fetch resources from unexpected or unauthorized destinations.
-
-  - Takes a `config` object with `targetUrls` property. For example:
-
-    ```yaml
-    redteam:
-      plugins:
-        - id: 'ssrf'
-          config:
-            targetUrls:
-              - 'https://internal-api.example.com'
-              - 'file:///etc/passwd'
-    ```
-
-  - By default uses a [target URL](https://promptfoo.dev/plugin-helpers/ssrf.txt) on the promptfoo.dev host. We recommend placing with your own internal URL.
-
-- `ascii-smuggling`: Tests if the model is vulnerable to attacks using special Unicode characters to embed invisible instructions in text.
+<TechnicalPluginsTable />
 
 ### Plugin Collections
 
@@ -465,7 +390,7 @@ See [source code](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/c
 
 ### Strategies
 
-Strategies modify or generate additional test cases based on the output of other plugins.
+[Strategies](/docs/red-team/strategies/) modify or generate additional test cases based on the output of other plugins.
 
 #### Available Strategies
 

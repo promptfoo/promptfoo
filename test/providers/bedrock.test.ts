@@ -66,6 +66,7 @@ class TestBedrockProvider extends AwsBedrockGenericProvider {
 describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    delete process.env.AWS_BEDROCK_MAX_RETRIES;
   });
 
   afterEach(() => {
@@ -82,6 +83,8 @@ describe('AwsBedrockGenericProvider', () => {
 
     expect(BedrockRuntime).toHaveBeenCalledWith({
       region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
     });
   });
 
@@ -101,6 +104,8 @@ describe('AwsBedrockGenericProvider', () => {
 
     expect(BedrockRuntime).toHaveBeenCalledWith({
       region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
       credentials: {
         accessKeyId: 'test-access-key',
         secretAccessKey: 'test-secret-key',
@@ -118,10 +123,28 @@ describe('AwsBedrockGenericProvider', () => {
 
     expect(BedrockRuntime).toHaveBeenCalledWith({
       region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
     });
     expect(BedrockRuntime).not.toHaveBeenCalledWith(
       expect.objectContaining({ credentials: expect.anything() }),
     );
+  });
+
+  it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {
+    process.env.AWS_BEDROCK_MAX_RETRIES = '10';
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', { config: { region: 'us-east-1' } });
+      }
+    })();
+    await provider.getBedrockInstance();
+
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+    });
   });
 
   describe('BEDROCK_MODEL CLAUDE_MESSAGES', () => {
