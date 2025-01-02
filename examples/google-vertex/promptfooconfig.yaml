@@ -5,11 +5,16 @@ prompts:
   - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
 
 providers:
-  - id: vertex:gemini-1.5-flash
+  - id: 'vertex:gemini-1.5-flash'
+    config:
+      systemInstruction:
+      parts:
+        - text: Always talk like a cow. Mooo!
+  - id: 'vertex:gemini-2.0-flash-thinking-exp-1219'
     config:
       systemInstruction:
         parts:
-          - text: Always talk like a cow. Mooo!
+          - text: Always talk like a sheep. Baaaah!
 
 defaultTest:
   options:
@@ -20,6 +25,8 @@ defaultTest:
       embedding: vertex:embedding:text-embedding-004
 
 tests:
+  - vars:
+      question: 'Solve 3*x^3-5*x=1'
   - vars:
       question: What's the weather in New York?
     assert:
