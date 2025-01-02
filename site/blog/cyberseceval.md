@@ -59,6 +59,23 @@ defaultTest:
 tests: file://prompt_injection.json
 ```
 
+We'll set up a basic prompt file `prompt.json` that just passes through each prompt from the CyberSecEval dataset:
+
+```json
+[
+  {
+    "role": "system",
+    "content": "{{test_case_prompt}}"
+  },
+  {
+    "role": "user",
+    "content": "{{user_input}}"
+  }
+]
+```
+
+And lastly, we'll [download the CyberSecEval test cases](https://github.com/promptfoo/promptfoo/blob/main/examples/cyberseceval/prompt_injection.json) and place them in the same directory as `prompt_injection.json`.
+
 ## Testing Different Models
 
 ### OpenAI Models
