@@ -3,9 +3,7 @@ import { PLUGINS } from './data/plugins';
 
 const SecurityPluginsTable = () => {
   // Filter for plugins with security vulnerability type
-  const securityPlugins = PLUGINS.filter(plugin => 
-    plugin.vulnerabilityType === 'security'
-  );
+  const securityPlugins = PLUGINS.filter((plugin) => plugin.vulnerabilityType === 'security');
 
   return (
     <table>
@@ -33,4 +31,4 @@ const SecurityPluginsTable = () => {
   );
 };
 
-export default SecurityPluginsTable; 
+export default SecurityPluginsTable;

@@ -3,9 +3,7 @@ import { PLUGINS } from './data/plugins';
 
 const HarmfulPluginsTable = () => {
   // Filter for plugins with harmful vulnerability type
-  const harmfulPlugins = PLUGINS.filter(plugin => 
-    plugin.vulnerabilityType === 'harmful'
-  );
+  const harmfulPlugins = PLUGINS.filter((plugin) => plugin.vulnerabilityType === 'harmful');
 
   return (
     <table>
@@ -33,4 +31,4 @@ const HarmfulPluginsTable = () => {
   );
 };
 
-export default HarmfulPluginsTable; 
+export default HarmfulPluginsTable;

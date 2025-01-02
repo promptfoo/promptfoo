@@ -3,9 +3,7 @@ import { PLUGINS } from './data/plugins';
 
 const CriminalPluginsTable = () => {
   // Filter for plugins with criminal vulnerability type
-  const criminalPlugins = PLUGINS.filter(plugin => 
-    plugin.vulnerabilityType === 'criminal'
-  );
+  const criminalPlugins = PLUGINS.filter((plugin) => plugin.vulnerabilityType === 'criminal');
 
   return (
     <table>
@@ -33,4 +31,4 @@ const CriminalPluginsTable = () => {
   );
 };
 
-export default CriminalPluginsTable; 
+export default CriminalPluginsTable;

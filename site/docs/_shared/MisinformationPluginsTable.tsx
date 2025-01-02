@@ -3,8 +3,8 @@ import { PLUGINS } from './data/plugins';
 
 const MisinformationPluginsTable = () => {
   // Filter for plugins with misinformation and misuse vulnerability type
-  const misinformationPlugins = PLUGINS.filter(plugin => 
-    plugin.vulnerabilityType === 'misinformation and misuse'
+  const misinformationPlugins = PLUGINS.filter(
+    (plugin) => plugin.vulnerabilityType === 'misinformation and misuse',
   );
 
   return (
@@ -33,4 +33,4 @@ const MisinformationPluginsTable = () => {
   );
 };
 
-export default MisinformationPluginsTable; 
+export default MisinformationPluginsTable;

@@ -3,9 +3,7 @@ import { PLUGINS } from './data/plugins';
 
 const PrivacyPluginsTable = () => {
   // Filter for plugins with privacy vulnerability type
-  const privacyPlugins = PLUGINS.filter(plugin => 
-    plugin.vulnerabilityType === 'privacy'
-  );
+  const privacyPlugins = PLUGINS.filter((plugin) => plugin.vulnerabilityType === 'privacy');
 
   return (
     <table>
@@ -33,4 +31,4 @@ const PrivacyPluginsTable = () => {
   );
 };
 
-export default PrivacyPluginsTable; 
+export default PrivacyPluginsTable;
