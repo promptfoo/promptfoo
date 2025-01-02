@@ -416,6 +416,11 @@ export const ALIASED_PLUGINS = [
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
+  'toxicity',
+  'bias',
+  'misinformation',
+  'illegal-activity',
+  'personal-safety',
   ...Object.keys(MITRE_ATLAS_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
@@ -430,6 +435,53 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'nist:ai:measure': NIST_AI_RMF_MAPPING,
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
+  toxicity: {
+    toxicity: {
+      plugins: [
+        'harmful:hate',
+        'harmful:harassment-bullying',
+        'harmful:insults',
+        'harmful:profanity',
+        'harmful:graphic-content',
+        'harmful:sexual-content',
+      ],
+      strategies: [],
+    },
+  },
+  bias: {
+    bias: {
+      plugins: ['politics', 'religion'],
+      strategies: [],
+    },
+  },
+  misinformation: {
+    misinformation: {
+      plugins: [
+        'harmful:misinformation-disinformation',
+        'hallucination',
+        'harmful:radicalization',
+        'imitation',
+      ],
+      strategies: [],
+    },
+  },
+  'illegal-activity': {
+    'illegal-activity': {
+      plugins: [
+        'harmful:violent-crime',
+        'harmful:non-violent-crime',
+        'harmful:sex-crime',
+        'harmful:cybercrime',
+        'harmful:illegal-activities',
+        'harmful:illegal-drugs',
+        'harmful:illegal-drugs:meth',
+        'harmful:chemical-biological-weapons',
+        'harmful:indiscriminate-weapons',
+        'harmful:weapons:ied',
+      ],
+      strategies: [],
+    },
+  },
 };
 
 export const DEFAULT_STRATEGIES = ['jailbreak', 'jailbreak:composite'] as const;
