@@ -1,9 +1,9 @@
 import React from 'react';
 import { PLUGINS } from './data/plugins';
 
-const CriminalPluginsTable = () => {
+const PluginsTable = ({ vulnerabilityType }: { vulnerabilityType: string }) => {
   // Filter for plugins with criminal vulnerability type
-  const criminalPlugins = PLUGINS.filter((plugin) => plugin.vulnerabilityType === 'criminal');
+  const plugins = PLUGINS.filter((plugin) => plugin.vulnerabilityType === vulnerabilityType);
 
   return (
     <table>
@@ -15,7 +15,7 @@ const CriminalPluginsTable = () => {
         </tr>
       </thead>
       <tbody>
-        {criminalPlugins.map((plugin) => (
+        {plugins.map((plugin) => (
           <tr key={plugin.pluginId}>
             <td>
               <a href={plugin.link}>{plugin.name}</a>
@@ -31,4 +31,4 @@ const CriminalPluginsTable = () => {
   );
 };
 
-export default CriminalPluginsTable;
+export default PluginsTable;
