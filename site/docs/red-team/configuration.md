@@ -192,12 +192,24 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 
 - `harmful`: Includes all available harm plugins
 - `pii`: Includes all available PII plugins
+- `toxicity`: Includes all available plugins related to toxicity
+- `bias`: Includes all available plugins related to bias
+- `misinformation`: Includes all available plugins related to misinformation
+- `illegal-activity`: Includes all available plugins related to illegal activity
 
-#### Standards
+Example usage:
+
+```yaml
+plugins:
+  - toxicity
+  - bias
+```
+
+### Standards
 
 Promptfoo supports several preset configurations based on common security frameworks and standards.
 
-##### NIST AI Risk Management Framework (AI RMF)
+#### NIST AI Risk Management Framework (AI RMF)
 
 The NIST AI RMF preset includes plugins that align with the NIST AI Risk Management Framework measures. You can use this preset by including `nist:ai:measure` in your plugins list.
 
@@ -217,7 +229,7 @@ plugins:
   - nist:ai:measure:3.2
 ```
 
-##### OWASP Top 10 for Large Language Model Applications
+#### OWASP Top 10 for Large Language Model Applications
 
 The OWASP LLM Top 10 preset includes plugins that address the security risks outlined in the OWASP Top 10 for Large Language Model Applications. You can use this preset by including `owasp:llm` in your plugins list.
 
@@ -237,7 +249,7 @@ plugins:
   - owasp:llm:09
 ```
 
-##### OWASP API Security Top 10
+#### OWASP API Security Top 10
 
 The OWASP API Security Top 10 preset includes plugins that address the security risks outlined in the OWASP API Security Top 10. You can use this preset by including `owasp:api` in your plugins list.
 
@@ -257,7 +269,7 @@ plugins:
   - owasp:api:10
 ```
 
-##### MITRE ATLAS
+#### MITRE ATLAS
 
 The MITRE ATLAS preset includes plugins that align with the MITRE ATLAS framework for AI system threats. You can use this preset by including `mitre:atlas` in your plugins list.
 
