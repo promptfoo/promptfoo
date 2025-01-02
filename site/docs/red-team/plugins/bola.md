@@ -1,10 +1,8 @@
 ---
-sidebar_position: 1
+sidebar_label: Object-Level Authorization
 ---
 
-import PluginTable from '@site/docs/\_shared/PluginTable';
-
-# BOLA (Broken Object Level Authorization)
+# BOLA (Broken Object Level Authorization) Plugin
 
 The BOLA (Broken Object Level Authorization) red teaming plugin is designed to test an AI system's vulnerability to attacks that attempt to access or modify resources belonging to other users or outside the authorized scope ([OWASP API 1](https://owasp.org/www-project-api-security/)).
 
@@ -77,5 +75,3 @@ By incorporating the BOLA plugin in your LLM red teaming strategy, you can ident
 - [Information Disclosure](../llm-vulnerability-types.md#privacy-and-security)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
-
-<PluginTable vulnerabilityType="security" shouldRenderCategory={false} />
