@@ -134,3 +134,19 @@ defaultTest:
 | `systemInstruction`                | System prompt. Nunjucks template variables `{{var}}` are supported                                       | None                                 |
 
 Note that not all models support all parameters. Please consult the [Google documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) on how to use and format parameters.
+
+## Troubleshooting
+
+### `gcloud` reauth related errors
+
+If you get an error that looks like this:
+
+```
+API call error: Error: {"error":"invalid_grant","error_description":"reauth related error (invalid_rapt)","error_uri":"https://support.google.com/a/answer/9368756","error_subtype":"invalid_rapt"}
+```
+
+This is due to an authentication issue. You can fix this by running:
+
+```sh
+gcloud auth application-default login
+```
