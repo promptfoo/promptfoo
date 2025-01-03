@@ -45,6 +45,7 @@ export type EnvOverrides = {
   REPLICATE_API_TOKEN?: string;
   VERTEX_API_HOST?: string;
   VERTEX_API_KEY?: string;
+  VERTEX_API_VERSION?: string;
   VERTEX_PROJECT_ID?: string;
   VERTEX_PUBLISHER?: string;
   VERTEX_REGION?: string;
