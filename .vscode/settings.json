@@ -29,6 +29,7 @@
     "Groq",
     "Huggingface",
     "icontains",
+    "Jaccard",
     "jailbreaking",
     "jamba",
     "leaderboard",
