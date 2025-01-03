@@ -442,7 +442,7 @@ export async function synthesize({
   if (shouldGenerateRemote()) {
     const healthUrl = getRemoteHealthUrl();
     if (healthUrl) {
-      logger.debug('Checking promptfoo API health...');
+      logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
       const healthResult = await checkRemoteHealth(healthUrl);
       if (healthResult.status !== 'OK') {
         throw new Error(
