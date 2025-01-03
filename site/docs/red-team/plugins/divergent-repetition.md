@@ -69,6 +69,6 @@ To protect against divergent repetition attacks:
 
 - [Prompt Extraction](prompt-extraction.md)
 - [Cross-Session Leak](cross-session-leak.md)
-- [Information Disclosure](../llm-vulnerability-types.md#privacy-and-security)
+- [Information Disclosure](/docs/red-team/llm-vulnerability-types/#privacy-vulnerabilities)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
