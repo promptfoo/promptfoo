@@ -994,6 +994,7 @@
                           "shell-injection",
                           "sql-injection",
                           "ssrf",
+                          "system-prompt-override",
                           "toxicity"
                         ]
                       },
@@ -1127,6 +1128,7 @@
                               "shell-injection",
                               "sql-injection",
                               "ssrf",
+                              "system-prompt-override",
                               "toxicity"
                             ]
                           },
