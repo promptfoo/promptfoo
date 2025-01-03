@@ -6,10 +6,6 @@ import {
   calculateBranches,
   calculateSimilarity,
   selectDiverseBestNodes,
-  evaluateResponse,
-  getNewPrompt,
-  checkIfOnTopic,
-  updateRedteamHistory,
 } from '../../../src/redteam/providers/iterativeTree';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -17,6 +13,12 @@ import {
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import {
+  evaluateResponse,
+  checkIfOnTopic,
+  updateRedteamHistory,
+  getNewPrompt,
+} from '../../../src/redteam/utils/evaluation';
 import type {
   ApiProvider,
   CallApiContextParams,
