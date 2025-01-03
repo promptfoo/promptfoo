@@ -89,10 +89,13 @@ const config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        gtag: {
-          trackingID: 'G-3TS8QLZQ93',
-          anonymizeIP: true,
-        },
+        gtag:
+          process.env.NODE_ENV === 'production'
+            ? {
+                trackingID: 'G-3TS8QLZQ93',
+                anonymizeIP: true,
+              }
+            : undefined,
       }),
     ],
   ],
