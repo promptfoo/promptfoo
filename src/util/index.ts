@@ -8,7 +8,6 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import NodeCache from 'node-cache';
-import nunjucks from 'nunjucks';
 import * as path from 'path';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
@@ -985,26 +984,58 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
-  // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
   }
+
+  const nunjucks = getNunjucksEngine();
+
+  const hasTemplateVars = (value: unknown): boolean =>
+    typeof value === 'string' && value.includes('{{') && value.includes('}}');
+
+  const isSchemaVar = (value: unknown): boolean =>
+    typeof value === 'string' && value.includes('{{') && value.includes('schema') && value.includes('}}');
+
+  const tryParseJSON = (value: string): unknown => {
+    try {
+      if (value.trim().startsWith('{') || value.trim().startsWith('[')) {
+        return JSON.parse(value);
+      }
+    } catch {
+      // If parsing fails, return as string
+    }
+    return value;
+  };
+
   if (typeof obj === 'string') {
+    // For schema variables, render and try to parse as JSON
+    if (isSchemaVar(obj)) {
+      const rendered = nunjucks.renderString(obj, vars);
+      return tryParseJSON(rendered) as unknown as T;
+    }
+
+    // For strings with template variables, render them
+    if (hasTemplateVars(obj)) {
+      const rendered = nunjucks.renderString(obj, vars);
+      return rendered as unknown as T;
+    }
+
+    // For regular strings without template variables, render them
     return nunjucks.renderString(obj, vars) as unknown as T;
   }
+
   if (Array.isArray(obj)) {
     return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
   }
+
   if (typeof obj === 'object' && obj !== null) {
     const result: Record<string, unknown> = {};
-    for (const key in obj) {
-      result[key] = renderVarsInObject((obj as Record<string, unknown>)[key], vars);
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      result[key] = renderVarsInObject(value, vars);
     }
     return result as T;
-  } else if (typeof obj === 'function') {
-    const fn = obj as Function;
-    return renderVarsInObject(fn({ vars }) as T);
   }
+
   return obj;
 }
 
