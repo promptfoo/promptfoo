@@ -61,6 +61,7 @@ interface VertexCompletionOptions {
   projectId?: string;
   region?: string;
   publisher?: string;
+  apiVersion?: string;
 
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
@@ -156,6 +157,15 @@ class VertexGenericProvider implements ApiProvider {
       this.env?.VERTEX_PUBLISHER ||
       getEnvString('VERTEX_PUBLISHER') ||
       'google'
+    );
+  }
+
+  getApiVersion(): string {
+    return (
+      this.config.apiVersion ||
+      this.env?.VERTEX_API_VERSION ||
+      getEnvString('VERTEX_API_VERSION') ||
+      'v1'
     );
   }
 
@@ -255,7 +265,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     let data;
     try {
       const { client, projectId } = await getGoogleClient();
-      const url = `https://${this.getApiHost()}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:streamGenerateContent`;
       const res = await client.request({
@@ -303,11 +313,16 @@ export class VertexChatProvider extends VertexGenericProvider {
       let output = '';
       for (const datum of dataWithResponse) {
         if (datum.candidates && datum.candidates[0]?.content?.parts) {
-          const part = datum.candidates[0].content.parts[0];
-          if ('text' in part) {
-            output += part.text;
-          } else {
-            output += JSON.stringify(part);
+          for (const candidate of datum.candidates) {
+            if (candidate.content?.parts) {
+              for (const part of candidate.content.parts) {
+                if ('text' in part) {
+                  output += part.text;
+                } else {
+                  output += JSON.stringify(part);
+                }
+              }
+            }
           }
         } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
           if (cliState.config?.redteam) {
@@ -411,7 +426,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     let data: Palm2ApiResponse;
     try {
       const { client, projectId } = await getGoogleClient();
-      const url = `https://${this.getApiHost()}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
       const res = await client.request<Palm2ApiResponse>({
@@ -476,6 +491,10 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     return this.config.region || 'us-central1';
   }
 
+  getApiVersion(): string {
+    return this.config.apiVersion || 'v1';
+  }
+
   async callApi(): Promise<ProviderResponse> {
     throw new Error('Vertex API does not provide text inference.');
   }
@@ -492,7 +511,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     let data: any;
     try {
       const { client, projectId } = await getGoogleClient();
-      const url = `https://${this.getRegion()}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
+      const url = `https://${this.getRegion()}-aiplatform.googleapis.com/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:predict`;
       const res = await client.request<any>({
