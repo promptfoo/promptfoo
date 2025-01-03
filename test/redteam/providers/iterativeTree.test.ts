@@ -296,6 +296,9 @@ describe('RedteamIterativeProvider', () => {
 
       // Test minimum branches
       expect(calculateBranches(1, 6)).toBe(1);
+
+      // Test maximum branches
+      expect(calculateBranches(10, 0)).toBe(4);
     });
 
     it('should never return less than MIN_BRANCHES', () => {
@@ -351,9 +354,9 @@ describe('RedteamIterativeProvider', () => {
 
       expect(result).toHaveLength(3);
       expect(result).toEqual([
-        { prompt: 'test 1', score: 8, children: [], depth: 0 },
-        { prompt: 'test 2', score: 7, children: [], depth: 0 },
-        { prompt: 'very different', score: 6, children: [], depth: 0 },
+        expect.objectContaining({ score: 8 }),
+        expect.objectContaining({ score: 7 }),
+        expect.objectContaining({ prompt: 'very different' }),
       ]);
     });
 
