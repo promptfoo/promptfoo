@@ -31,6 +31,7 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { createTokenUsage, trackApiCall } from '../utils/tokenUsage';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { getTargetResponse, redteamProviderManager } from './shared';
@@ -97,7 +98,7 @@ export async function evaluateResponse(
   targetResponse: string,
   previousBestResponse: string,
   containsPenalizedPhrase: boolean,
-): Promise<{ score: number; explanation: string }> {
+): Promise<{ score: number; explanation: string; tokenUsage?: TokenUsage }> {
   const judgeBody = JSON.stringify([
     {
       role: 'system',
@@ -146,6 +147,7 @@ export async function evaluateResponse(
   return {
     score: currentScore,
     explanation: parsed.currentResponse.explanation,
+    tokenUsage: judgeResp.tokenUsage,
   };
 }
 
@@ -391,7 +393,7 @@ export async function runRedteamConversation({
 }): Promise<{
   output: string;
   metadata: { redteamFinalPrompt?: string };
-  tokenUsage?: TokenUsage;
+  tokenUsage: TokenUsage;
 }> {
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;
@@ -422,13 +424,7 @@ export async function runRedteamConversation({
   let bestScore = 0;
   let noImprovementCount = 0;
 
-  const totalTokenUsage = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    numRequests: 0,
-    cached: 0,
-  };
+  let currentTokenUsage = createTokenUsage();
 
   let bestResponse = '';
 
@@ -455,13 +451,7 @@ export async function runRedteamConversation({
           { role: 'assistant', content: node.prompt },
         ]);
 
-        if (redteamTokenUsage) {
-          totalTokenUsage.total += redteamTokenUsage.total || 0;
-          totalTokenUsage.prompt += redteamTokenUsage.prompt || 0;
-          totalTokenUsage.completion += redteamTokenUsage.completion || 0;
-          totalTokenUsage.numRequests += redteamTokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += redteamTokenUsage.cached || 0;
-        }
+        currentTokenUsage = trackApiCall({ tokenUsage: redteamTokenUsage }, currentTokenUsage);
 
         attempts++;
         logger.debug(
@@ -483,13 +473,7 @@ export async function runRedteamConversation({
           onTopicSystemPrompt,
           targetPrompt,
         );
-        if (isOnTopicTokenUsage) {
-          totalTokenUsage.total += isOnTopicTokenUsage.total || 0;
-          totalTokenUsage.prompt += isOnTopicTokenUsage.prompt || 0;
-          totalTokenUsage.completion += isOnTopicTokenUsage.completion || 0;
-          totalTokenUsage.cached += isOnTopicTokenUsage.cached || 0;
-          totalTokenUsage.numRequests += isOnTopicTokenUsage.numRequests ?? 1;
-        }
+        currentTokenUsage = trackApiCall({ tokenUsage: isOnTopicTokenUsage }, currentTokenUsage);
 
         const targetResponse = await getTargetResponse(
           targetProvider,
@@ -501,25 +485,24 @@ export async function runRedteamConversation({
           throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
         }
         invariant(targetResponse.output, '[IterativeTree] Target did not return an output');
-        if (targetResponse.tokenUsage) {
-          totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
-          totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
-          totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
-          totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
-          totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
-        }
+        currentTokenUsage = trackApiCall(targetResponse, currentTokenUsage);
 
         const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
           targetResponse.output.toLowerCase().includes(phrase),
         );
 
-        const { score, explanation } = await evaluateResponse(
+        const {
+          score,
+          explanation,
+          tokenUsage: judgeTokenUsage,
+        } = await evaluateResponse(
           redteamProvider,
           judgeSystemPrompt,
           targetResponse.output,
           bestResponse,
           containsPenalizedPhrase,
         );
+        currentTokenUsage = trackApiCall({ tokenUsage: judgeTokenUsage }, currentTokenUsage);
 
         logger.debug(
           `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, on-topic=${isOnTopic}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
@@ -556,7 +539,7 @@ export async function runRedteamConversation({
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
-            tokenUsage: totalTokenUsage,
+            tokenUsage: currentTokenUsage,
           };
         }
 
@@ -569,7 +552,7 @@ export async function runRedteamConversation({
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
-            tokenUsage: totalTokenUsage,
+            tokenUsage: currentTokenUsage,
           };
         }
 
@@ -582,7 +565,7 @@ export async function runRedteamConversation({
             metadata: {
               redteamFinalPrompt: targetPrompt,
             },
-            tokenUsage: totalTokenUsage,
+            tokenUsage: currentTokenUsage,
           };
         }
 
@@ -621,13 +604,7 @@ export async function runRedteamConversation({
     context,
     options,
   );
-  if (finalTargetResponse.tokenUsage) {
-    totalTokenUsage.total += finalTargetResponse.tokenUsage.total || 0;
-    totalTokenUsage.prompt += finalTargetResponse.tokenUsage.prompt || 0;
-    totalTokenUsage.completion += finalTargetResponse.tokenUsage.completion || 0;
-    totalTokenUsage.numRequests += finalTargetResponse.tokenUsage.numRequests ?? 1;
-    totalTokenUsage.cached += finalTargetResponse.tokenUsage.cached || 0;
-  }
+  currentTokenUsage = trackApiCall(finalTargetResponse, currentTokenUsage);
 
   logger.debug(
     `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,
@@ -638,7 +615,7 @@ export async function runRedteamConversation({
     metadata: {
       redteamFinalPrompt: finalTargetPrompt,
     },
-    tokenUsage: totalTokenUsage,
+    tokenUsage: currentTokenUsage,
   };
 }
 

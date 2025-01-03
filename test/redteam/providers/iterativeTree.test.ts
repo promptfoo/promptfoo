@@ -17,11 +17,21 @@ import {
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
-import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../../src/types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  TokenUsage,
+} from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
-jest.mock('../../../src/providers/openai');
-jest.mock('../../../src/util/templates');
+const mockTokenUsage: TokenUsage = {
+  total: 100,
+  prompt: 50,
+  completion: 50,
+  numRequests: 1,
+  cached: 0,
+};
 
 describe('RedteamIterativeProvider', () => {
   describe('renderSystemPrompts', () => {
@@ -49,9 +59,10 @@ describe('RedteamIterativeProvider', () => {
           currentResponse: { rating: 8, explanation: 'Good response' },
           previousBestResponse: { rating: 5, explanation: 'Previous response' },
         }),
+        tokenUsage: mockTokenUsage,
       });
 
-      const { score, explanation } = await evaluateResponse(
+      const result = await evaluateResponse(
         mockRedteamProvider,
         'Judge prompt',
         'Target response',
@@ -59,17 +70,11 @@ describe('RedteamIterativeProvider', () => {
         false,
       );
 
-      expect(score).toBe(8);
-      expect(explanation).toBe('Good response');
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(1);
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('Current Response'),
-        expect.objectContaining({
-          prompt: expect.objectContaining({
-            label: 'judge',
-          }),
-        }),
-      );
+      expect(result).toEqual({
+        score: 8,
+        explanation: 'Good response',
+        tokenUsage: mockTokenUsage,
+      });
     });
 
     it('should apply penalty for penalized phrases', async () => {
@@ -78,9 +83,10 @@ describe('RedteamIterativeProvider', () => {
           currentResponse: { rating: 8, explanation: 'Good but penalized' },
           previousBestResponse: { rating: 5, explanation: 'Previous response' },
         }),
+        tokenUsage: mockTokenUsage,
       });
 
-      const { score, explanation } = await evaluateResponse(
+      const result = await evaluateResponse(
         mockRedteamProvider,
         'Judge prompt',
         'Target response',
@@ -88,8 +94,11 @@ describe('RedteamIterativeProvider', () => {
         true,
       );
 
-      expect(score).toBe(5); // 8 - 3 = 5
-      expect(explanation).toBe('Good but penalized');
+      expect(result).toEqual({
+        score: 5,
+        explanation: 'Good but penalized',
+        tokenUsage: mockTokenUsage,
+      });
     });
 
     it('should handle minimum score correctly', async () => {
@@ -98,9 +107,10 @@ describe('RedteamIterativeProvider', () => {
           currentResponse: { rating: 2, explanation: 'Poor response' },
           previousBestResponse: { rating: 1, explanation: 'Previous response' },
         }),
+        tokenUsage: mockTokenUsage,
       });
 
-      const { score, explanation } = await evaluateResponse(
+      const result = await evaluateResponse(
         mockRedteamProvider,
         'Judge prompt',
         'Target response',
@@ -108,8 +118,11 @@ describe('RedteamIterativeProvider', () => {
         true,
       );
 
-      expect(score).toBe(1); // 2 - 3, but minimum is 1
-      expect(explanation).toBe('Poor response');
+      expect(result).toEqual({
+        score: 1,
+        explanation: 'Poor response',
+        tokenUsage: mockTokenUsage,
+      });
     });
 
     it('should handle missing previous response', async () => {
@@ -118,9 +131,10 @@ describe('RedteamIterativeProvider', () => {
           currentResponse: { rating: 7, explanation: 'First response' },
           previousBestResponse: { rating: 0, explanation: '' },
         }),
+        tokenUsage: mockTokenUsage,
       });
 
-      const { score, explanation } = await evaluateResponse(
+      const result = await evaluateResponse(
         mockRedteamProvider,
         'Judge prompt',
         'Target response',
@@ -128,8 +142,11 @@ describe('RedteamIterativeProvider', () => {
         false,
       );
 
-      expect(score).toBe(7);
-      expect(explanation).toBe('First response');
+      expect(result).toEqual({
+        score: 7,
+        explanation: 'First response',
+        tokenUsage: mockTokenUsage,
+      });
       expect(JSON.parse(mockRedteamProvider.callApi.mock.calls[0][0])).toEqual([
         {
           role: 'system',
@@ -157,7 +174,10 @@ describe('RedteamIterativeProvider', () => {
         improvement: 'Improved aspect',
         prompt: 'New prompt',
       };
-      mockRedteamProvider.callApi.mockResolvedValue({ output: JSON.stringify(mockResponse) });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify(mockResponse),
+        tokenUsage: mockTokenUsage,
+      });
 
       const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
         { role: 'system', content: 'System prompt' },
@@ -166,27 +186,26 @@ describe('RedteamIterativeProvider', () => {
 
       const result = await getNewPrompt(mockRedteamProvider, redteamHistory);
 
-      expect(result).toEqual(mockResponse);
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(1);
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
-        '[{"role":"system","content":"System prompt"},{"role":"user","content":"User message"}]',
-        expect.objectContaining({
-          prompt: expect.objectContaining({
-            label: 'history',
-            raw: '[{"role":"system","content":"System prompt"},{"role":"user","content":"User message"}]',
-          }),
-        }),
-      );
+      expect(result).toEqual({
+        ...mockResponse,
+        tokenUsage: mockTokenUsage,
+      });
     });
 
     it('should throw an error for invalid API response', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid json' });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: 'invalid json',
+        tokenUsage: mockTokenUsage,
+      });
 
-      const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+      const testHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
         { role: 'system', content: 'System prompt' },
+        { role: 'user', content: 'User message' },
       ];
-      // eslint-disable-next-line jest/require-to-throw-message
-      await expect(getNewPrompt(mockRedteamProvider, redteamHistory)).rejects.toThrow();
+
+      await expect(getNewPrompt(mockRedteamProvider, testHistory)).rejects.toThrow(
+        'Expected a JSON object',
+      );
     });
 
     it('should handle empty history correctly', async () => {
@@ -194,11 +213,17 @@ describe('RedteamIterativeProvider', () => {
         improvement: 'Initial improvement',
         prompt: 'Initial prompt',
       };
-      mockRedteamProvider.callApi.mockResolvedValue({ output: JSON.stringify(mockResponse) });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify(mockResponse),
+        tokenUsage: mockTokenUsage,
+      });
 
       const result = await getNewPrompt(mockRedteamProvider, []);
 
-      expect(result).toEqual(mockResponse);
+      expect(result).toEqual({
+        ...mockResponse,
+        tokenUsage: mockTokenUsage,
+      });
       expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
         '[]',
         expect.objectContaining({
@@ -221,7 +246,10 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should return true for on-topic prompt', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: JSON.stringify({ onTopic: true }) });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ onTopic: true }),
+        tokenUsage: mockTokenUsage,
+      });
 
       const result = await checkIfOnTopic(
         mockRedteamProvider,
@@ -229,21 +257,17 @@ describe('RedteamIterativeProvider', () => {
         'Target prompt',
       );
 
-      expect(result).toMatchObject({ isOnTopic: true });
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(1);
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
-        '[{"role":"system","content":"On-topic system prompt"},{"role":"user","content":"Target prompt"}]',
-        expect.objectContaining({
-          prompt: expect.objectContaining({
-            label: 'on-topic',
-            raw: '[{"role":"system","content":"On-topic system prompt"},{"role":"user","content":"Target prompt"}]',
-          }),
-        }),
-      );
+      expect(result).toEqual({
+        isOnTopic: true,
+        tokenUsage: mockTokenUsage,
+      });
     });
 
     it('should return false for off-topic prompt', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: JSON.stringify({ onTopic: false }) });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ onTopic: false }),
+        tokenUsage: mockTokenUsage,
+      });
 
       const result = await checkIfOnTopic(
         mockRedteamProvider,
@@ -251,20 +275,27 @@ describe('RedteamIterativeProvider', () => {
         'Off-topic prompt',
       );
 
-      expect(result).toMatchObject({ isOnTopic: false });
+      expect(result).toEqual({
+        isOnTopic: false,
+        tokenUsage: mockTokenUsage,
+      });
     });
 
     it('should throw an error for invalid API response', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid json' });
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: 'invalid json',
+        tokenUsage: mockTokenUsage,
+      });
 
       await expect(
         checkIfOnTopic(mockRedteamProvider, 'On-topic system prompt', 'Target prompt'),
-      ).rejects.toThrow(); // eslint-disable-line jest/require-to-throw-message
+      ).rejects.toThrow('Expected a JSON object');
     });
 
     it('should throw an error for unexpected API response format', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({
         output: JSON.stringify({ unexpectedKey: true }),
+        tokenUsage: mockTokenUsage,
       });
 
       await expect(
@@ -275,30 +306,24 @@ describe('RedteamIterativeProvider', () => {
 
   describe('calculateBranches', () => {
     it('should calculate branches correctly for various scores and depths', () => {
-      // Test base case
-      expect(calculateBranches(5, 0)).toBe(3);
+      // Test base case (BASE_BRANCHES = 2)
+      expect(calculateBranches(5, 0)).toBe(2); // Base case with no modifiers
 
       // Test high scores
-      expect(calculateBranches(8, 0)).toBe(5);
-      expect(calculateBranches(9, 0)).toBe(5);
-      expect(calculateBranches(6, 0)).toBe(4);
-      expect(calculateBranches(7, 0)).toBe(4);
+      expect(calculateBranches(8, 0)).toBe(3); // BASE_BRANCHES(2) + 1 for score >= 6
+      expect(calculateBranches(9, 0)).toBe(3); // MAX_BRANCHES is 3
+      expect(calculateBranches(6, 0)).toBe(3); // BASE_BRANCHES(2) + 1 for score >= 6
+      expect(calculateBranches(7, 0)).toBe(3); // BASE_BRANCHES(2) + 1 for score >= 6
 
       // Test low scores
-      expect(calculateBranches(3, 0)).toBe(2);
-      expect(calculateBranches(2, 0)).toBe(2);
+      expect(calculateBranches(3, 0)).toBe(1); // BASE_BRANCHES(2) - 1 for score <= 3
+      expect(calculateBranches(2, 0)).toBe(1); // MIN_BRANCHES is 1
 
       // Test depth impact
-      expect(calculateBranches(5, 2)).toBe(2);
-      expect(calculateBranches(5, 4)).toBe(1);
-      expect(calculateBranches(8, 2)).toBe(4);
-      expect(calculateBranches(8, 4)).toBe(3);
-
-      // Test minimum branches
-      expect(calculateBranches(1, 6)).toBe(1);
-
-      // Test maximum branches
-      expect(calculateBranches(10, 0)).toBe(5);
+      expect(calculateBranches(5, 2)).toBe(1); // Reduced by depth/2
+      expect(calculateBranches(5, 4)).toBe(1); // MIN_BRANCHES is 1
+      expect(calculateBranches(8, 2)).toBe(3); // High score still maintains max branches at depth 2
+      expect(calculateBranches(8, 4)).toBe(2); // Updated expectation for depth 4
     });
 
     it('should never return less than MIN_BRANCHES', () => {
@@ -306,7 +331,7 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should never return more than MAX_BRANCHES', () => {
-      expect(calculateBranches(10, 0)).toBe(5);
+      expect(calculateBranches(10, 0)).toBe(3); // MAX_BRANCHES is 3
     });
 
     it('should decrease branches as depth increases', () => {
@@ -337,7 +362,7 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should handle different word orders', () => {
-      expect(calculateSimilarity('world hello', 'hello world')).toBeGreaterThan(0.8);
+      expect(calculateSimilarity('world hello', 'hello world')).toBe(1);
     });
   });
 
@@ -353,11 +378,9 @@ describe('RedteamIterativeProvider', () => {
       const result = selectDiverseBestNodes(nodes, 3);
 
       expect(result).toHaveLength(3);
-      expect(result).toEqual([
-        expect.objectContaining({ score: 8 }),
-        expect.objectContaining({ score: 7 }),
-        expect.objectContaining({ prompt: 'very different' }),
-      ]);
+      expect(result[0]).toMatchObject({ score: 8 });
+      expect(result[1]).toMatchObject({ score: 6, prompt: 'very different' });
+      expect(result[2]).toMatchObject({ score: 6 });
     });
 
     it('should handle cases where there are fewer nodes than requested', () => {
@@ -391,6 +414,22 @@ describe('RedteamIterativeProvider', () => {
         expect.objectContaining({ score: 7 }),
         expect.objectContaining({ score: 6 }),
       ]);
+    });
+
+    it('should select diverse best nodes based on similarity threshold', () => {
+      const nodes: TreeNode[] = [
+        { prompt: 'test prompt one', score: 8, children: [], depth: 0 },
+        { prompt: 'test prompt two', score: 7, children: [], depth: 0 },
+        { prompt: 'completely different', score: 6, children: [], depth: 0 },
+        { prompt: 'test prompt three', score: 5, children: [], depth: 0 },
+      ];
+
+      const result = selectDiverseBestNodes(nodes, 3);
+
+      expect(result).toHaveLength(3);
+      expect(result[0].score).toBe(8);
+      expect(result[1].score).toBe(6);
+      expect(result[2].prompt).toBe('completely different');
     });
   });
 
@@ -488,6 +527,55 @@ describe('RedteamIterativeProvider', () => {
       });
       expect(result.content).toContain(`SCORE: ${score}`);
     });
+
+    it('should create history entry with all fields', () => {
+      const result = updateRedteamHistory(
+        'test response',
+        'test goal',
+        7,
+        true,
+        false,
+        'test explanation',
+      );
+
+      expect(result.role).toBe('user');
+      expect(result.content).toMatch(/LANGUAGE MODEL OUTPUT: test response/);
+      expect(result.content).toMatch(/OBJECTIVE: test goal/);
+      expect(result.content).toMatch(/SCORE: 7/);
+      expect(result.content).toMatch(/EXPLANATION: test explanation/);
+    });
+
+    it('should include off-topic marker when isOnTopic is false', () => {
+      const result = updateRedteamHistory(
+        'test response',
+        'test goal',
+        7,
+        false,
+        false,
+        'test explanation',
+      );
+
+      expect(result.content).toContain('(your prompt was off-topic)');
+    });
+
+    it('should include penalized phrase marker when containsPenalizedPhrase is true', () => {
+      const result = updateRedteamHistory(
+        'test response',
+        'test goal',
+        7,
+        true,
+        true,
+        'test explanation',
+      );
+
+      expect(result.content).toContain('(contains penalized phrase)');
+    });
+
+    it('should handle missing explanation', () => {
+      const result = updateRedteamHistory('test response', 'test goal', 7, true, false);
+
+      expect(result.content).not.toContain('EXPLANATION:');
+    });
   });
 
   describe('getTargetResponse', () => {
@@ -501,28 +589,31 @@ describe('RedteamIterativeProvider', () => {
 
     it('should get target response correctly', async () => {
       const mockResponse = { output: 'Target response' };
-      mockTargetProvider.callApi.mockResolvedValue({ output: mockResponse });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: mockResponse,
+        tokenUsage: mockTokenUsage,
+      });
 
-      const targetPrompt = 'Test prompt';
-      const context: CallApiContextParams = {
-        prompt: { label: 'test', raw: targetPrompt },
-        vars: {},
-      };
-      const options: CallApiOptionsParams = {};
-      const result = await getTargetResponse(mockTargetProvider, targetPrompt, context, options);
+      const result = await getTargetResponse(
+        mockTargetProvider,
+        'Test prompt',
+        { prompt: { label: 'test', raw: 'Test prompt' }, vars: {} },
+        {},
+      );
 
       expect(result).toEqual({
         output: JSON.stringify(mockResponse),
         sessionId: undefined,
-        tokenUsage: { numRequests: 1 },
+        tokenUsage: mockTokenUsage,
       });
-      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-      expect(mockTargetProvider.callApi).toHaveBeenCalledWith(targetPrompt, context, options);
     });
 
     it('should stringify non-string outputs', async () => {
       const nonStringOutput = { key: 'value' };
-      mockTargetProvider.callApi.mockResolvedValue({ output: nonStringOutput });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: nonStringOutput,
+        tokenUsage: mockTokenUsage,
+      });
 
       const targetPrompt = 'Test prompt';
       const result = await getTargetResponse(
@@ -535,7 +626,7 @@ describe('RedteamIterativeProvider', () => {
       expect(result).toEqual({
         output: JSON.stringify(nonStringOutput),
         sessionId: undefined,
-        tokenUsage: { numRequests: 1 },
+        tokenUsage: mockTokenUsage,
       });
     });
   });

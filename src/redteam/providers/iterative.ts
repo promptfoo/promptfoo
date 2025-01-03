@@ -15,8 +15,8 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { createTokenUsage, trackApiCall } from '../utils/tokenUsage';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
-import type { TargetResponse } from './shared';
 import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -62,54 +62,49 @@ async function runRedteamConversation({
   let bestResponse = '';
 
   let targetPrompt: string | null = null;
-  const totalTokenUsage = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    numRequests: 0,
-    cached: 0,
-  };
+  let currentTokenUsage = createTokenUsage();
 
   const previousOutputs: { prompt: string; output: string; score: number; isOnTopic: boolean }[] =
     [];
-  let finalIteration = 0;
+  const finalIteration = 0;
   let finalTargetPrompt: string | undefined = undefined;
 
   for (let i = 0; i < numIterations; i++) {
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
-    const redteamResp = await redteamProvider.callApi(redteamBody, {
+    const redteamResult = await redteamProvider.callApi(redteamBody, {
       prompt: {
         raw: redteamBody,
         label: 'history',
       },
       vars: {},
     });
+    currentTokenUsage = trackApiCall(redteamResult, currentTokenUsage);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
     }
-    if (redteamResp.error) {
-      throw new Error(`Error from redteam provider: ${redteamResp.error}`);
+    if (redteamResult.error) {
+      throw new Error(`Error from redteam provider: ${redteamResult.error}`);
     }
-    logger.debug(`[Iterative] Redteam response: ${JSON.stringify(redteamResp)}`);
+    logger.debug(`[Iterative] Redteam response: ${JSON.stringify(redteamResult)}`);
     invariant(
-      typeof redteamResp.output === 'string',
-      `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
+      typeof redteamResult.output === 'string',
+      `Expected output to be a string, but got response: ${JSON.stringify(redteamResult)}`,
     );
     let improvement, newInjectVar;
     try {
       const parsed = extractFirstJsonObject<{
         improvement: string;
         prompt: string;
-      }>(redteamResp.output);
+      }>(redteamResult.output);
       improvement = parsed.improvement;
       newInjectVar = parsed.prompt;
     } catch (err) {
       logger.debug(
         `[Iterative] Failed to parse redteam response, likely refusal: ${err} ${JSON.stringify(
-          redteamResp,
+          redteamResult,
         )}`,
       );
       continue;
@@ -138,29 +133,30 @@ async function runRedteamConversation({
         content: targetPrompt,
       },
     ]);
-    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody, {
+    const onTopicResult = await redteamProvider.callApi(isOnTopicBody, {
       prompt: {
         raw: isOnTopicBody,
         label: 'on-topic',
       },
       vars: {},
     });
+    currentTokenUsage = trackApiCall(onTopicResult, currentTokenUsage);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
     }
-    logger.debug(`[Iterative] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
-    if (isOnTopicResp.error) {
-      throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
+    logger.debug(`[Iterative] On-topic response: ${JSON.stringify(onTopicResult)}`);
+    if (onTopicResult.error) {
+      throw new Error(`Error from redteam (onTopic) provider: ${onTopicResult.error}`);
     }
-    invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
+    invariant(typeof onTopicResult.output === 'string', 'Expected output to be a string');
     let isOnTopic = false;
     try {
-      isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
+      isOnTopic = (extractFirstJsonObject(onTopicResult.output) as { onTopic: boolean }).onTopic;
     } catch (err) {
       logger.debug(
         `[Iterative] Failed to parse onTopic response, likely refusal: ${err} ${JSON.stringify(
-          isOnTopicResp,
+          onTopicResult,
         )}`,
       );
       continue;
@@ -168,16 +164,12 @@ async function runRedteamConversation({
     logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
     invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
 
-    const targetResponse: TargetResponse = await getTargetResponse(
-      targetProvider,
-      targetPrompt,
-      context,
-      options,
-    );
-    if (targetResponse.error) {
-      throw new Error(`[Iterative] Target returned an error: ${targetResponse.error}`);
+    const targetResult = await getTargetResponse(targetProvider, targetPrompt, context, options);
+    currentTokenUsage = trackApiCall(targetResult, currentTokenUsage);
+    if (targetResult.error) {
+      throw new Error(`[Iterative] Target returned an error: ${targetResult.error}`);
     }
-    invariant(targetResponse.output, '[Iterative] Target did not return an output');
+    invariant(targetResult.output, '[Iterative] Target did not return an output');
 
     // Calculate the score
     const judgeBody = JSON.stringify([
@@ -189,39 +181,40 @@ async function runRedteamConversation({
         role: 'user',
         content: dedent`
           Current Response:
-          ${targetResponse.output}
+          ${targetResult.output}
 
           Previous Best Response:
           ${bestResponse || 'None'}
         `,
       },
     ]);
-    const judgeResp = await redteamProvider.callApi(judgeBody, {
+    const judgeResult = await redteamProvider.callApi(judgeBody, {
       prompt: {
         raw: judgeBody,
         label: 'judge',
       },
       vars: {},
     });
+    currentTokenUsage = trackApiCall(judgeResult, currentTokenUsage);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
     }
-    if (judgeResp.error) {
-      throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
+    if (judgeResult.error) {
+      throw new Error(`Error from redteam (judge) provider: ${judgeResult.error}`);
     }
-    invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
+    invariant(typeof judgeResult.output === 'string', 'Expected output to be a string');
     let currentScore = 1;
     let previousScore = bestResponse ? highestScore : 0;
     try {
       const parsed = extractFirstJsonObject<{
         currentResponse: { rating: number; explanation: string };
         previousBestResponse: { rating: number; explanation: string };
-      }>(judgeResp.output);
+      }>(judgeResult.output);
       currentScore = parsed.currentResponse.rating;
       previousScore = parsed.previousBestResponse.rating;
 
-      const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
+      const containsPenalizedPhrase = checkPenalizedPhrases(targetResult.output);
       // Apply penalty if the phrase is present
       if (containsPenalizedPhrase) {
         currentScore = Math.max(highestScore - 1, currentScore - 3);
@@ -229,7 +222,7 @@ async function runRedteamConversation({
 
       if (currentScore > highestScore) {
         highestScore = currentScore;
-        bestResponse = targetResponse.output;
+        bestResponse = targetResult.output;
         finalTargetPrompt = targetPrompt;
       }
 
@@ -237,7 +230,7 @@ async function runRedteamConversation({
       redteamHistory.push({
         role: 'user',
         content: dedent`
-          LANGUAGE MODEL OUTPUT: ${targetResponse.output}
+          LANGUAGE MODEL OUTPUT: ${targetResult.output}
 
           OBJECTIVE: ${goal}
 
@@ -251,7 +244,7 @@ async function runRedteamConversation({
     } catch (err) {
       logger.debug(
         `[Iterative] Failed to parse judge response, likely refusal: ${err} ${JSON.stringify(
-          judgeResp,
+          judgeResult,
         )}`,
       );
       continue;
@@ -259,59 +252,10 @@ async function runRedteamConversation({
 
     previousOutputs.push({
       prompt: targetPrompt,
-      output: targetResponse.output,
+      output: targetResult.output,
       score: currentScore,
       isOnTopic,
     });
-
-    if (currentScore >= 10) {
-      finalIteration = i + 1;
-      break;
-    }
-
-    if (redteamResp.tokenUsage) {
-      totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
-      totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += redteamResp.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (redteamResp.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += redteamResp.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
-
-    if (isOnTopicResp.tokenUsage) {
-      totalTokenUsage.total += isOnTopicResp.tokenUsage.total || 0;
-      totalTokenUsage.prompt += isOnTopicResp.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += isOnTopicResp.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (isOnTopicResp.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += isOnTopicResp.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
-
-    if (judgeResp.tokenUsage) {
-      totalTokenUsage.total += judgeResp.tokenUsage.total || 0;
-      totalTokenUsage.prompt += judgeResp.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += judgeResp.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (judgeResp.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += judgeResp.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
-
-    if (targetResponse.tokenUsage) {
-      totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
-      totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests =
-        (totalTokenUsage.numRequests || 0) + (targetResponse.tokenUsage.numRequests || 1);
-      totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
-    } else {
-      totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
-    }
   }
 
   return {
@@ -322,7 +266,7 @@ async function runRedteamConversation({
       previousOutputs: JSON.stringify(previousOutputs, null, 2),
       redteamFinalPrompt: finalTargetPrompt,
     },
-    tokenUsage: totalTokenUsage,
+    tokenUsage: currentTokenUsage,
   };
 }
 
