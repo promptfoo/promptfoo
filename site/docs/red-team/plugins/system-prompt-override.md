@@ -28,7 +28,11 @@ redteam:
     - system-prompt-override
 ```
 
-:::note this plugin ignores the configuration of the number of tests and does not support strategies
+:::note this plugin requires remote generation to be enabled
+:::
+:::note this plugin outputs a fixed number of tests regardless of the configuration.
+:::
+:::note this plugin does not support strategies
 :::
 
 ### How It Works

@@ -36,7 +36,6 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
-import { SystemPromptOverridePlugin } from './systemPromptOverride';
 
 export interface PluginFactory {
   key: string;
@@ -172,7 +171,6 @@ const pluginFactories: PluginFactory[] = [
       return getHarmfulTests(params, category);
     },
   })),
-  createPluginFactory(SystemPromptOverridePlugin, 'system-prompt-override'),
 ];
 
 const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
@@ -218,6 +216,7 @@ const remotePlugins: PluginFactory[] = [
   'hijacking',
   'religion',
   'ssrf',
+  'system-prompt-override',
 ].map((key) => createRemotePlugin(key));
 
 remotePlugins.push(
