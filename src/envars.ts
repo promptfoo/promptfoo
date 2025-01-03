@@ -116,6 +116,7 @@ export type EnvVars = {
   REPLICATE_TEMPERATURE?: number;
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
+  VERTEX_API_VERSION?: string;
   VOYAGE_API_BASE_URL?: string;
   VOYAGE_API_KEY?: string;
   WATSONX_AI_APIKEY?: string;
