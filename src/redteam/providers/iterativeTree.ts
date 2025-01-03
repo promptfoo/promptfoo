@@ -59,7 +59,7 @@ const MIN_BRANCHES = 1;
 const MAX_NO_IMPROVEMENT = 25;
 
 /** Maximum similarity threshold for considering prompts as diverse (Jaccard similarity [0-1]) */
-const SIMILARITY_THRESHOLD = 0.0;
+const SIMILARITY_THRESHOLD = 1.0;
 
 /**
  * Renders system prompts for the red team, on-topic check, and judge.
@@ -336,7 +336,7 @@ export function calculateSimilarity(prompt1: string, prompt2: string): number {
  */
 export function selectDiverseBestNodes(nodes: TreeNode[], numToSelect: number): TreeNode[] {
   // Sort nodes by score in descending order
-  const sortedNodes = nodes.sort((a, b) => b.score - a.score);
+  const sortedNodes = [...nodes].sort((a, b) => b.score - a.score);
 
   const selectedNodes: TreeNode[] = [];
   const promptSet = new Set<string>();
@@ -344,6 +344,7 @@ export function selectDiverseBestNodes(nodes: TreeNode[], numToSelect: number): 
   for (const node of sortedNodes) {
     // Check if we've already selected a similar prompt
     if (
+      !promptSet.has(node.prompt) &&
       !Array.from(promptSet).some(
         (prompt) => calculateSimilarity(prompt, node.prompt) > SIMILARITY_THRESHOLD,
       )

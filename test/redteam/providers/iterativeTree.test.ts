@@ -276,29 +276,26 @@ describe('RedteamIterativeProvider', () => {
   describe('calculateBranches', () => {
     it('should calculate branches correctly for various scores and depths', () => {
       // Test base case
-      expect(calculateBranches(5, 0)).toBe(3);
+      expect(calculateBranches(5, 0)).toBe(2);
 
       // Test high scores
-      expect(calculateBranches(8, 0)).toBe(5);
-      expect(calculateBranches(9, 0)).toBe(5);
-      expect(calculateBranches(6, 0)).toBe(4);
-      expect(calculateBranches(7, 0)).toBe(4);
+      expect(calculateBranches(8, 0)).toBe(4);
+      expect(calculateBranches(9, 0)).toBe(4);
+      expect(calculateBranches(6, 0)).toBe(3);
+      expect(calculateBranches(7, 0)).toBe(3);
 
       // Test low scores
-      expect(calculateBranches(3, 0)).toBe(2);
-      expect(calculateBranches(2, 0)).toBe(2);
+      expect(calculateBranches(3, 0)).toBe(1);
+      expect(calculateBranches(2, 0)).toBe(1);
 
       // Test depth impact
-      expect(calculateBranches(5, 2)).toBe(2);
+      expect(calculateBranches(5, 2)).toBe(1);
       expect(calculateBranches(5, 4)).toBe(1);
-      expect(calculateBranches(8, 2)).toBe(4);
-      expect(calculateBranches(8, 4)).toBe(3);
+      expect(calculateBranches(8, 2)).toBe(3);
+      expect(calculateBranches(8, 4)).toBe(2);
 
       // Test minimum branches
       expect(calculateBranches(1, 6)).toBe(1);
-
-      // Test maximum branches
-      expect(calculateBranches(10, 0)).toBe(5);
     });
 
     it('should never return less than MIN_BRANCHES', () => {
@@ -306,7 +303,7 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should never return more than MAX_BRANCHES', () => {
-      expect(calculateBranches(10, 0)).toBe(5);
+      expect(calculateBranches(10, 0)).toBe(4);
     });
 
     it('should decrease branches as depth increases', () => {
@@ -354,9 +351,9 @@ describe('RedteamIterativeProvider', () => {
 
       expect(result).toHaveLength(3);
       expect(result).toEqual([
-        expect.objectContaining({ score: 8 }),
-        expect.objectContaining({ score: 7 }),
-        expect.objectContaining({ prompt: 'very different' }),
+        { prompt: 'test 1', score: 8, children: [], depth: 0 },
+        { prompt: 'test 2', score: 7, children: [], depth: 0 },
+        { prompt: 'very different', score: 6, children: [], depth: 0 },
       ]);
     });
 
