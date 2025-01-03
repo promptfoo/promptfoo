@@ -4,12 +4,7 @@ sidebar_label: 'Configuration'
 ---
 
 import React from 'react';
-import {
-HarmfulPluginsTable,
-PIIPluginsTable,
-BrandPluginsTable,
-TechnicalPluginsTable,
-} from '../\_shared/PluginTable';
+import PluginTable from '../\_shared/PluginTable';
 import StrategyTable from '../\_shared/StrategyTable';
 
 # Redteam Configuration
@@ -172,21 +167,29 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
 
 To see the list of available plugins on the command line, run `promptfoo redteam plugins`.
 
+#### Criminal Plugins
+
+<PluginTable vulnerabilityType="criminal" />
+
 #### Harmful Plugins
 
-<HarmfulPluginsTable />
+<PluginTable vulnerabilityType="harmful" />
 
-#### PII (Personally Identifiable Information) Plugins
+#### Misinformation and Misuse Plugins
 
-<PIIPluginsTable />
+<PluginTable vulnerabilityType="misinformation and misuse" />
 
-#### Brand Plugins
+#### Privacy Plugins
 
-<BrandPluginsTable />
+<PluginTable vulnerabilityType="privacy" />
 
-#### Technical plugins
+#### Security Plugins
 
-<TechnicalPluginsTable />
+<PluginTable vulnerabilityType="security" />
+
+#### Custom Plugins
+
+<PluginTable vulnerabilityType="custom" />
 
 ### Plugin Collections
 
