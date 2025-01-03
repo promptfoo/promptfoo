@@ -45,31 +45,43 @@ export const humanReadableCategoryList =
 export type PluginCategory = (typeof PLUGIN_CATEGORIES)[number];
 
 export interface ApplicationTypes {
-  rag: boolean;
   agent: boolean;
   chat: boolean;
+  rag: boolean;
 }
 
 export type VulnerabilityType =
-  | 'security'
-  | 'privacy'
   | 'criminal'
+  | 'custom'
   | 'harmful'
   | 'misinformation and misuse'
-  | 'custom';
+  | 'privacy'
+  | 'security';
 
 export interface Plugin {
-  category: PluginCategory;
-  name: string;
-  description: string;
-  pluginId: string;
-  link: string;
-  label: string | null;
   applicationTypes: ApplicationTypes;
+  category: PluginCategory;
+  description: string;
+  label: string | null;
+  link: string;
+  name: string;
+  pluginId: string;
   vulnerabilityType: VulnerabilityType;
 }
 
-export const PLUGINS: Plugin[] = [
+// Type utility at the top
+type AssertArrayIsSorted<T extends readonly { pluginId: string }[]> = T extends readonly [
+  infer First extends { pluginId: string },
+  infer Second extends { pluginId: string },
+  ...infer Rest extends { pluginId: string }[],
+]
+  ? First['pluginId'] extends `${string}${Second['pluginId']}${string}`
+    ? 'Array is not sorted by pluginId'
+    : AssertArrayIsSorted<[Second, ...Rest]>
+  : unknown;
+
+// Define array first, then assert type
+export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description: 'Attempts to obfuscate malicious content using ASCII smuggling',
@@ -141,34 +153,6 @@ export const PLUGINS: Plugin[] = [
     vulnerabilityType: 'misinformation and misuse',
   },
   {
-    category: 'Brand',
-    description: 'Tests handling of competitor-related content',
-    label: 'brand',
-    link: '/docs/red-team/plugins/competitors/',
-    name: 'Competitors',
-    pluginId: 'competitors',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'misinformation and misuse',
-  },
-  {
-    category: 'Brand',
-    description: 'Tests handling of unauthorized commitments',
-    label: 'brand',
-    link: '/docs/red-team/plugins/contracts/',
-    name: 'Contracts',
-    pluginId: 'contracts',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'misinformation and misuse',
-  },
-  {
     category: 'Compliance and Legal',
     description: 'Enters business or legal commitments without supervision',
     label: 'brand',
@@ -192,7 +176,7 @@ export const PLUGINS: Plugin[] = [
     applicationTypes: {
       rag: true,
       agent: true,
-      chat: false,
+      chat: true,
     },
     vulnerabilityType: 'security',
   },
@@ -235,7 +219,7 @@ export const PLUGINS: Plugin[] = [
     applicationTypes: {
       rag: true,
       agent: true,
-      chat: false,
+      chat: true,
     },
     vulnerabilityType: 'security',
   },
@@ -279,7 +263,7 @@ export const PLUGINS: Plugin[] = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'misinformation and misuse',
+    vulnerabilityType: 'criminal',
   },
   {
     category: 'Trust and Safety',
@@ -307,7 +291,7 @@ export const PLUGINS: Plugin[] = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'misinformation and misuse',
+    vulnerabilityType: 'criminal',
   },
   {
     category: 'Compliance and Legal',
@@ -473,7 +457,7 @@ export const PLUGINS: Plugin[] = [
     applicationTypes: {
       rag: true,
       agent: true,
-      chat: false,
+      chat: true,
     },
     vulnerabilityType: 'privacy',
   },
@@ -604,20 +588,6 @@ export const PLUGINS: Plugin[] = [
     vulnerabilityType: 'security',
   },
   {
-    category: 'Trust and Safety',
-    description: 'Unauthorized or off-topic resource use',
-    label: 'technical',
-    link: '/docs/red-team/plugins/hijacking/',
-    name: 'Hijacking',
-    pluginId: 'hijacking',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'security',
-  },
-  {
     category: 'Brand',
     description: 'Imitates people, brands, or organizations',
     label: 'brand',
@@ -648,21 +618,7 @@ export const PLUGINS: Plugin[] = [
   },
   {
     category: 'Custom',
-    description: 'Attempts to manipulate the model to exhibit specific behaviors',
-    label: 'technical',
-    link: '/docs/red-team/plugins/intent/',
-    name: 'Intent',
-    pluginId: 'intent',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'custom',
-  },
-  {
-    category: 'Security and Access Control',
-    description: 'Attempts to manipulate the model to exhibit specific behaviors',
+    description: 'Probes the model to answer specific questions set by your organization',
     label: 'technical',
     link: '/docs/red-team/plugins/intent/',
     name: 'Intent',
@@ -687,20 +643,6 @@ export const PLUGINS: Plugin[] = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
-  },
-  {
-    category: 'Security and Access Control',
-    description: 'All PII categories',
-    label: 'technical',
-    link: '/docs/red-team/plugins/pii/',
-    name: 'PII Leaks',
-    pluginId: 'pii',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: false,
-    },
-    vulnerabilityType: 'privacy',
   },
   {
     category: 'Security and Access Control',
@@ -760,7 +702,8 @@ export const PLUGINS: Plugin[] = [
   },
   {
     category: 'Trust and Safety',
-    description: 'Uses Pliny prompt injections',
+    description:
+      'Tests LLM systems using a curated collection of prompts from https://github.com/elder-plinius/L1B3RT4S',
     label: 'harmful',
     link: '/docs/red-team/plugins/pliny/',
     name: 'Pliny',
@@ -768,7 +711,7 @@ export const PLUGINS: Plugin[] = [
     applicationTypes: {
       rag: true,
       agent: true,
-      chat: false,
+      chat: true,
     },
     vulnerabilityType: 'security',
   },
@@ -832,15 +775,15 @@ export const PLUGINS: Plugin[] = [
     category: 'Trust and Safety',
     description: 'Tests handling of religious content and bias',
     label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
+    link: '/docs/red-team/plugins/religion/',
     name: 'Religious Sensitivity',
     pluginId: 'religion',
     applicationTypes: {
       rag: true,
       agent: true,
-      chat: false,
+      chat: true,
     },
-    vulnerabilityType: 'harmful',
+    vulnerabilityType: 'misinformation and misuse',
   },
   {
     category: 'Security and Access Control',
@@ -899,4 +842,16 @@ export const PLUGINS: Plugin[] = [
     },
     vulnerabilityType: 'security',
   },
-];
+] as const satisfies Plugin[] & AssertArrayIsSorted<Plugin[]>;
+
+// Runtime check in development
+if (process.env.NODE_ENV === 'development') {
+  const sorted = [...PLUGINS].sort((a, b) => a.pluginId.localeCompare(b.pluginId));
+  for (let i = 0; i < PLUGINS.length; i++) {
+    if (PLUGINS[i].pluginId !== sorted[i].pluginId) {
+      console.error(
+        `PLUGINS array is not sorted correctly at index ${i}. Expected "${sorted[i].pluginId}" but found "${PLUGINS[i].pluginId}"`,
+      );
+    }
+  }
+}
