@@ -727,7 +727,7 @@ export const PLUGINS: Plugin[] = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'brand',
+    vulnerabilityType: 'misinformation and misuse',
   },
   {
     category: 'Brand',
