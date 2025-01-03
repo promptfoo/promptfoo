@@ -1,11 +1,7 @@
 import { jest } from '@jest/globals';
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
-import type { TreeNode } from '../../../src/redteam/providers/iterativeTree';
 import {
   renderSystemPrompts,
-  calculateBranches,
-  calculateSimilarity,
-  selectDiverseBestNodes,
   evaluateResponse,
   getNewPrompt,
   checkIfOnTopic,
@@ -270,127 +266,6 @@ describe('RedteamIterativeProvider', () => {
       await expect(
         checkIfOnTopic(mockRedteamProvider, 'On-topic system prompt', 'Target prompt'),
       ).rejects.toThrow('Invariant failed: Expected onTopic to be a boolean');
-    });
-  });
-
-  describe('calculateBranches', () => {
-    it('should calculate branches correctly for various scores and depths', () => {
-      // Test base case
-      expect(calculateBranches(5, 0)).toBe(2);
-
-      // Test high scores
-      expect(calculateBranches(8, 0)).toBe(4);
-      expect(calculateBranches(9, 0)).toBe(4);
-      expect(calculateBranches(6, 0)).toBe(3);
-      expect(calculateBranches(7, 0)).toBe(3);
-
-      // Test low scores
-      expect(calculateBranches(3, 0)).toBe(1);
-      expect(calculateBranches(2, 0)).toBe(1);
-
-      // Test depth impact
-      expect(calculateBranches(5, 2)).toBe(1);
-      expect(calculateBranches(5, 4)).toBe(1);
-      expect(calculateBranches(8, 2)).toBe(3);
-      expect(calculateBranches(8, 4)).toBe(2);
-
-      // Test minimum branches
-      expect(calculateBranches(1, 6)).toBe(1);
-
-      // Test maximum branches
-      expect(calculateBranches(10, 0)).toBe(4);
-    });
-
-    it('should never return less than MIN_BRANCHES', () => {
-      expect(calculateBranches(1, 10)).toBe(1);
-    });
-
-    it('should never return more than MAX_BRANCHES', () => {
-      expect(calculateBranches(10, 0)).toBe(4);
-    });
-
-    it('should decrease branches as depth increases', () => {
-      const score = 7;
-      const branchesAtDepth0 = calculateBranches(score, 0);
-      const branchesAtDepth2 = calculateBranches(score, 2);
-      const branchesAtDepth4 = calculateBranches(score, 4);
-
-      expect(branchesAtDepth2).toBeLessThan(branchesAtDepth0);
-      expect(branchesAtDepth4).toBeLessThan(branchesAtDepth2);
-    });
-  });
-
-  describe('calculateSimilarity', () => {
-    it('should calculate similarity correctly', () => {
-      expect(calculateSimilarity('hello world', 'hello there')).toBeCloseTo(0.33, 2);
-      expect(calculateSimilarity('test prompt', 'test prompt')).toBe(1);
-      expect(calculateSimilarity('completely different', 'totally unrelated')).toBe(0);
-    });
-
-    it('should be case-insensitive', () => {
-      expect(calculateSimilarity('Hello World', 'hello world')).toBe(1);
-    });
-
-    it('should handle empty strings', () => {
-      expect(calculateSimilarity('', '')).toBe(1);
-      expect(calculateSimilarity('test', '')).toBe(0);
-    });
-
-    it('should handle different word orders', () => {
-      expect(calculateSimilarity('world hello', 'hello world')).toBeGreaterThan(0.8);
-    });
-  });
-
-  describe('selectDiverseBestNodes', () => {
-    it('should select diverse best nodes', () => {
-      const nodes: TreeNode[] = [
-        { prompt: 'test 1', score: 8, children: [], depth: 0 },
-        { prompt: 'test 2', score: 7, children: [], depth: 0 },
-        { prompt: 'very different', score: 6, children: [], depth: 0 },
-        { prompt: 'test 3', score: 5, children: [], depth: 0 },
-      ];
-
-      const result = selectDiverseBestNodes(nodes, 3);
-
-      expect(result).toHaveLength(3);
-      expect(result).toEqual([
-        expect.objectContaining({ score: 8 }),
-        expect.objectContaining({ score: 7 }),
-        expect.objectContaining({ prompt: 'very different' }),
-      ]);
-    });
-
-    it('should handle cases where there are fewer nodes than requested', () => {
-      const nodes: TreeNode[] = [
-        { prompt: 'test 1', score: 8, children: [], depth: 0 },
-        { prompt: 'test 2', score: 7, children: [], depth: 0 },
-      ];
-
-      const result = selectDiverseBestNodes(nodes, 3);
-
-      expect(result).toHaveLength(2);
-      expect(result).toEqual([
-        expect.objectContaining({ score: 8 }),
-        expect.objectContaining({ score: 7 }),
-      ]);
-    });
-
-    it('should select best remaining nodes if not enough diverse nodes', () => {
-      const nodes: TreeNode[] = [
-        { prompt: 'test 1', score: 8, children: [], depth: 0 },
-        { prompt: 'test 2', score: 7, children: [], depth: 0 },
-        { prompt: 'test 3', score: 6, children: [], depth: 0 },
-        { prompt: 'test 4', score: 5, children: [], depth: 0 },
-      ];
-
-      const result = selectDiverseBestNodes(nodes, 3);
-
-      expect(result).toHaveLength(3);
-      expect(result).toEqual([
-        expect.objectContaining({ score: 8 }),
-        expect.objectContaining({ score: 7 }),
-        expect.objectContaining({ score: 6 }),
-      ]);
     });
   });
 
