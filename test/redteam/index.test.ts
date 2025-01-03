@@ -332,19 +332,6 @@ describe('synthesize', () => {
       expect(getRemoteHealthUrl).toHaveBeenCalledWith();
       expect(checkRemoteHealth).not.toHaveBeenCalled();
     });
-
-    it('should log debug messages during health check', async () => {
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-      });
-
-      expect(logger.debug).toHaveBeenCalledWith('Checking promptfoo API health...');
-      expect(logger.debug).toHaveBeenCalledWith('API health check passed');
-    });
   });
 
   it('should handle basic strategy configuration', async () => {

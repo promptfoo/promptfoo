@@ -56,6 +56,35 @@ redteam:
       numTests: 25
 ```
 
+## Full example
+
+Create a configuration file `promptfooconfig.yaml`:
+
+```yaml
+targets:
+  # You can target a model
+  - openai:chat:gpt-4o
+  # Or an API endpoint
+  - id: https
+    config:
+      url: 'https://example.com/generate'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        myPrompt: '{{prompt}}'
+
+redteam:
+  plugins:
+    - cyberseceval
+```
+
+Then, run the red team command in the same directory as your configuration file:
+
+```sh
+promptfoo redteam run
+```
+
 ## Grading
 
 The plugin uses a specialized grader that evaluates model outputs against language-specific judge questions. The grader checks if:

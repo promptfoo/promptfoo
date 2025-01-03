@@ -118,34 +118,10 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
-  createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
-  createPluginFactory(PlinyPlugin, 'pliny'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
+  createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
   createPluginFactory(DebugAccessPlugin, 'debug-access'),
-  createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
-  createPluginFactory(HallucinationPlugin, 'hallucination'),
-  createPluginFactory(ImitationPlugin, 'imitation'),
-  createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
-    invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
-  ),
-  createPluginFactory(OverreliancePlugin, 'overreliance'),
-  createPluginFactory(PoliticsPlugin, 'politics'),
-  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
-    invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
-  ),
-  createPluginFactory<{ systemPrompt: string }>(
-    PromptExtractionPlugin,
-    'prompt-extraction',
-    (config: { systemPrompt: string }) =>
-      invariant(
-        config.systemPrompt,
-        'Prompt extraction plugin requires `config.systemPrompt` to be set',
-      ),
-  ),
-  createPluginFactory(RbacPlugin, 'rbac'),
-  createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
-  createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
@@ -162,6 +138,30 @@ const pluginFactories: PluginFactory[] = [
       category,
     ),
   ),
+  createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
+  createPluginFactory(HallucinationPlugin, 'hallucination'),
+  createPluginFactory(ImitationPlugin, 'imitation'),
+  createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
+    invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
+  ),
+  createPluginFactory(OverreliancePlugin, 'overreliance'),
+  createPluginFactory(PlinyPlugin, 'pliny'),
+  createPluginFactory(PoliticsPlugin, 'politics'),
+  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
+    invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
+  ),
+  createPluginFactory<{ systemPrompt: string }>(
+    PromptExtractionPlugin,
+    'prompt-extraction',
+    (config: { systemPrompt: string }) =>
+      invariant(
+        config.systemPrompt,
+        'Prompt extraction plugin requires `config.systemPrompt` to be set',
+      ),
+  ),
+  createPluginFactory(RbacPlugin, 'rbac'),
+  createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
+  createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {
@@ -216,6 +216,7 @@ const remotePlugins: PluginFactory[] = [
   'hijacking',
   'religion',
   'ssrf',
+  'system-prompt-override',
 ].map((key) => createRemotePlugin(key));
 
 remotePlugins.push(

@@ -882,6 +882,7 @@
                           "ascii-smuggling",
                           "beavertails",
                           "bfla",
+                          "bias",
                           "bola",
                           "competitors",
                           "contracts",
@@ -920,9 +921,11 @@
                           "harmful:violent-crime",
                           "harmful:weapons:ied",
                           "hijacking",
+                          "illegal-activity",
                           "imitation",
                           "indirect-prompt-injection",
                           "intent",
+                          "misinformation",
                           "mitre:atlas",
                           "mitre:atlas:exfiltration",
                           "mitre:atlas:impact",
@@ -976,6 +979,7 @@
                           "owasp:llm:08",
                           "owasp:llm:09",
                           "owasp:llm:10",
+                          "personal-safety",
                           "pii",
                           "pii:api-db",
                           "pii:direct",
@@ -989,7 +993,9 @@
                           "religion",
                           "shell-injection",
                           "sql-injection",
-                          "ssrf"
+                          "ssrf",
+                          "system-prompt-override",
+                          "toxicity"
                         ]
                       },
                       {
@@ -1010,6 +1016,7 @@
                               "ascii-smuggling",
                               "beavertails",
                               "bfla",
+                              "bias",
                               "bola",
                               "competitors",
                               "contracts",
@@ -1048,9 +1055,11 @@
                               "harmful:violent-crime",
                               "harmful:weapons:ied",
                               "hijacking",
+                              "illegal-activity",
                               "imitation",
                               "indirect-prompt-injection",
                               "intent",
+                              "misinformation",
                               "mitre:atlas",
                               "mitre:atlas:exfiltration",
                               "mitre:atlas:impact",
@@ -1104,6 +1113,7 @@
                               "owasp:llm:08",
                               "owasp:llm:09",
                               "owasp:llm:10",
+                              "personal-safety",
                               "pii",
                               "pii:api-db",
                               "pii:direct",
@@ -1117,7 +1127,9 @@
                               "religion",
                               "shell-injection",
                               "sql-injection",
-                              "ssrf"
+                              "ssrf",
+                              "system-prompt-override",
+                              "toxicity"
                             ]
                           },
                           {

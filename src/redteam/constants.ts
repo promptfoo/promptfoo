@@ -107,12 +107,17 @@ export const ADDITIONAL_PLUGINS = [
   'shell-injection',
   'sql-injection',
   'ssrf',
+  'system-prompt-override',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 // Plugins that require configuration and can't be enabled by default or included as additional.
 export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
+
+// Plugins that don't use strategies (standalone plugins)
+export const STRATEGY_EXEMPT_PLUGINS = ['pliny', 'system-prompt-override'] as const;
+export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =
   | Collection
@@ -416,6 +421,11 @@ export const ALIASED_PLUGINS = [
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
+  'toxicity',
+  'bias',
+  'misinformation',
+  'illegal-activity',
+  'personal-safety',
   ...Object.keys(MITRE_ATLAS_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
@@ -430,6 +440,53 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'nist:ai:measure': NIST_AI_RMF_MAPPING,
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
+  toxicity: {
+    toxicity: {
+      plugins: [
+        'harmful:hate',
+        'harmful:harassment-bullying',
+        'harmful:insults',
+        'harmful:profanity',
+        'harmful:graphic-content',
+        'harmful:sexual-content',
+      ],
+      strategies: [],
+    },
+  },
+  bias: {
+    bias: {
+      plugins: ['politics', 'religion'],
+      strategies: [],
+    },
+  },
+  misinformation: {
+    misinformation: {
+      plugins: [
+        'harmful:misinformation-disinformation',
+        'hallucination',
+        'harmful:radicalization',
+        'imitation',
+      ],
+      strategies: [],
+    },
+  },
+  'illegal-activity': {
+    'illegal-activity': {
+      plugins: [
+        'harmful:violent-crime',
+        'harmful:non-violent-crime',
+        'harmful:sex-crime',
+        'harmful:cybercrime',
+        'harmful:illegal-activities',
+        'harmful:illegal-drugs',
+        'harmful:illegal-drugs:meth',
+        'harmful:chemical-biological-weapons',
+        'harmful:indiscriminate-weapons',
+        'harmful:weapons:ied',
+      ],
+      strategies: [],
+    },
+  },
 };
 
 export const DEFAULT_STRATEGIES = ['jailbreak', 'jailbreak:composite'] as const;
@@ -479,6 +536,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   'cross-session-leak': 'Tests for information leakage between user sessions',
+  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
   'debug-access': 'Tests for exposed debugging interfaces and commands',
   'divergent-repetition':
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
@@ -539,7 +597,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Tests for command injection vulnerabilities',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
-  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  'system-prompt-override': 'Tests for system prompt override vulnerabilities',
 };
 
 // These names are displayed in risk cards and in the table
@@ -556,8 +614,10 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   citation: 'Authority Bias Exploitation',
   crescendo: 'Multi-Turn Crescendo',
   'cross-session-leak': 'Cross-Session Data Leakage',
+  cyberseceval: 'CyberSecEval Dataset',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
+  'divergent-repetition': 'Divergent Repetition',
   'excessive-agency': 'Excessive Agency',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
@@ -615,8 +675,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'shell-injection': 'Command Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
-  'divergent-repetition': 'Divergent Repetition',
-  cyberseceval: 'CyberSecEval Dataset',
+  'system-prompt-override': 'System Prompt Override',
 };
 
 export enum Severity {
@@ -645,8 +704,10 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   competitors: Severity.Low,
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
+  cyberseceval: Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
+  'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
   hallucination: Severity.Medium,
   harmful: Severity.Medium,
@@ -695,8 +756,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
   ssrf: Severity.High,
-  'divergent-repetition': Severity.Medium,
-  cyberseceval: Severity.Medium,
+  'system-prompt-override': Severity.High,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -804,6 +864,7 @@ export const categoryAliases: Record<Plugin, string> = {
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
   'cross-session-leak': 'CrossSessionLeak',
+  cyberseceval: 'CyberSecEval',
   'debug-access': 'DebugAccess',
   default: 'Default',
   'divergent-repetition': 'DivergentRepetition',
@@ -839,7 +900,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:weapons:ied': 'Improvised Explosive Devices',
   hijacking: 'Hijacking',
   imitation: 'Imitation',
-  'indirect-prompt-injection': 'IndirectPromptInjection',
+  'indirect-prompt-injection': 'Indirect Prompt Injection',
   intent: 'Intent',
   overreliance: 'Overreliance',
   pii: 'PIILeak',
@@ -856,7 +917,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'shell-injection': 'ShellInjection',
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
-  cyberseceval: 'CyberSecEval',
+  'system-prompt-override': 'System Prompt Override',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -906,6 +967,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
+  'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',

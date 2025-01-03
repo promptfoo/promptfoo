@@ -71,6 +71,7 @@ Next, make sure that you've authenticated to Google Cloud using one of these met
 - `VERTEX_REGION` - gcloud region, defaults to `us-central1`
 - `VERTEX_PUBLISHER` - model publisher, defaults to `google`
 - `VERTEX_API_HOST` - used to override the full Google API host, e.g. for an LLM proxy, defaults to `{region}-aiplatform.googleapis.com`
+- `VERTEX_API_VERSION` - API version to use, defaults to `v1`
 
 The Vertex provider also supports various [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/vertex.ts#L7-L22) such as context, examples, temperature, maxOutputTokens, and more, which can be used to customize the the behavior of the model like so:
 
@@ -119,6 +120,7 @@ defaultTest:
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------ |
 | `apiKey`                           | gcloud API token.                                                                                        | None                                 |
 | `apiHost`                          | Full Google API host, e.g., for an LLM proxy.                                                            | `{region}-aiplatform.googleapis.com` |
+| `apiVersion`                       | API version to use.                                                                                      | `v1`                                 |
 | `projectId`                        | gcloud project ID.                                                                                       | None                                 |
 | `region`                           | gcloud region.                                                                                           | `us-central1`                        |
 | `publisher`                        | Model publisher.                                                                                         | `google`                             |
