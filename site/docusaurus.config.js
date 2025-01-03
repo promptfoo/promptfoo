@@ -90,7 +90,7 @@ const config = {
           customCss: require.resolve('./src/css/custom.css'),
         },
         gtag:
-          process.env.NODE_ENV === 'production'
+          process.env.NODE_ENV !== 'development'
             ? {
                 trackingID: 'G-3TS8QLZQ93',
                 anonymizeIP: true,
