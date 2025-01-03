@@ -842,8 +842,10 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'security',
   },
-] as const satisfies Plugin[] & AssertArrayIsSorted<Plugin[]>;
+] as const as readonly Plugin[];
 
+// Compile-time check
+type _CheckSort = typeof PLUGINS extends AssertArrayIsSorted<typeof PLUGINS> ? true : false;
 // Runtime check in development
 if (process.env.NODE_ENV === 'development') {
   const sorted = [...PLUGINS].sort((a, b) => a.pluginId.localeCompare(b.pluginId));
