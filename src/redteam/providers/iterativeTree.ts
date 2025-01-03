@@ -61,6 +61,10 @@ const MAX_NO_IMPROVEMENT = 25;
 /** Maximum similarity threshold for considering prompts as diverse (Jaccard similarity [0-1]) */
 const SIMILARITY_THRESHOLD = 1.0;
 
+/** Constants for TAP parameters */
+const MAX_WIDTH = 10;  // w parameter from paper
+const BRANCHING_FACTOR = 4;  // b parameter from paper
+
 /**
  * Renders system prompts for the red team, on-topic check, and judge.
  * @param nunjucks - The Nunjucks environment for rendering templates.
@@ -292,25 +296,7 @@ export function createTreeNode(prompt: string, score: number, depth: number): Tr
  * @returns The number of branches to explore for the node.
  */
 export function calculateBranches(score: number, depth: number): number {
-  // Adjust branching based on score and depth
-  let branches = BASE_BRANCHES;
-
-  // Increase branches for high scores
-  if (score >= 8) {
-    branches += 2;
-  } else if (score >= 6) {
-    branches += 1;
-  }
-
-  // Decrease branches for low scores
-  if (score <= 3) {
-    branches -= 1;
-  }
-
-  // Adjust based on depth (explore more at shallower depths)
-  branches = Math.max(MIN_BRANCHES, branches - Math.floor(depth / 2));
-
-  return Math.min(MAX_BRANCHES, branches);
+  return MIN_BRANCHES + Math.floor(Math.random() * (MAX_BRANCHES - MIN_BRANCHES + 1));
 }
 
 /**
@@ -329,41 +315,59 @@ export function calculateSimilarity(prompt1: string, prompt2: string): number {
 }
 
 /**
- * Selects a diverse set of best-performing nodes.
- * @param nodes - The list of nodes to select from.
- * @param numToSelect - The number of nodes to select.
- * @returns An array of selected diverse nodes.
+ * Phase 1 pruning: Off-topic check
+ * @param nodes - The list of nodes to prune.
+ * @param redteamProvider - The OpenAI provider for the red team.
+ * @param onTopicSystemPrompt - The system prompt for the on-topic check.
+ * @param goal - The goal or objective for the red team.
+ * @returns A promise that resolves to the pruned list of nodes.
  */
-export function selectDiverseBestNodes(nodes: TreeNode[], numToSelect: number): TreeNode[] {
-  // Sort nodes by score in descending order
-  const sortedNodes = [...nodes].sort((a, b) => b.score - a.score);
-
-  const selectedNodes: TreeNode[] = [];
-  const promptSet = new Set<string>();
-
-  for (const node of sortedNodes) {
-    // Check if we've already selected a similar prompt
-    if (
-      !promptSet.has(node.prompt) &&
-      !Array.from(promptSet).some(
-        (prompt) => calculateSimilarity(prompt, node.prompt) > SIMILARITY_THRESHOLD,
-      )
-    ) {
-      selectedNodes.push(node);
-      promptSet.add(node.prompt);
-    }
-
-    if (selectedNodes.length >= numToSelect) {
-      break;
+async function pruneOffTopicNodes(
+  nodes: TreeNode[],
+  redteamProvider: ApiProvider,
+  onTopicSystemPrompt: string,
+  goal: string,
+): Promise<TreeNode[]> {
+  const remainingNodes: TreeNode[] = [];
+  
+  for (const node of nodes) {
+    const { isOnTopic } = await checkIfOnTopic(
+      redteamProvider,
+      onTopicSystemPrompt,
+      node.prompt
+    );
+    
+    if (isOnTopic) {
+      remainingNodes.push(node);
     }
   }
+  
+  return remainingNodes;
+}
 
-  // If we don't have enough diverse nodes, fill with the best remaining ones
-  while (selectedNodes.length < numToSelect && selectedNodes.length < sortedNodes.length) {
-    selectedNodes.push(sortedNodes[selectedNodes.length]);
-  }
+/**
+ * Phase 2 pruning: Keep top w nodes by score
+ * @param nodes - The list of nodes to prune.
+ * @param width - The number of nodes to keep.
+ * @returns The pruned list of nodes.
+ */
+function pruneToWidth(nodes: TreeNode[], width: number): TreeNode[] {
+  return [...nodes]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, width);
+}
 
-  return selectedNodes;
+/**
+ * Replace selectDiverseBestNodes with TAP's simpler selection strategy
+ * @param nodes - The list of nodes to select from.
+ * @returns The selected diverse nodes.
+ */
+export function selectNodes(nodes: TreeNode[]): TreeNode[] {
+  // First do Phase 1 pruning (off-topic check)
+  const onTopicNodes = await pruneOffTopicNodes(nodes, ...);
+  
+  // Then do Phase 2 pruning (keep top w scoring nodes)
+  return pruneToWidth(onTopicNodes, MAX_WIDTH);
 }
 
 /**
@@ -600,7 +604,7 @@ export async function runRedteamConversation({
       }
     }
 
-    currentBestNodes = selectDiverseBestNodes(nextLevelNodes, BASE_BRANCHES);
+    currentBestNodes = selectNodes(nextLevelNodes);
     logger.debug(
       `[Depth ${depth}] Exploration complete. Selected ${currentBestNodes.length} diverse nodes for next depth. Current best score: ${bestScore}. Max score: ${maxScore}`,
     );
