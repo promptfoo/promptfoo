@@ -513,9 +513,7 @@ function EvalOutputCell({
 
       return (
         <Tooltip title="Model override for this test" arrow placement="top">
-          <div className="pill">
-            <div className="provider">{formattedProvider}</div>
-          </div>
+          <span className="provider">{formattedProvider}</span>
         </Tooltip>
       );
     }

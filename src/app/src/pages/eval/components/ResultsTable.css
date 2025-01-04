@@ -242,7 +242,8 @@ table.results-table,
   display: inline;
 }
 
-.results-table th .provider {
+.results-table th .provider,
+.results-table .status .provider {
   display: inline-block;
   padding: 0.25rem 0.5rem;
   background-color: var(--neutral-background-color);
