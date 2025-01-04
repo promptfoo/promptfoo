@@ -2,7 +2,11 @@ import * as React from 'react';
 import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
+import { styled } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
 import { diffSentences, diffJson, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
@@ -12,6 +16,17 @@ import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 import { useStore as useResultsViewStore } from './store';
+
+interface TestCase {
+  provider?: {
+    modelName?: string;
+    id?: string;
+  };
+}
+
+interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
+  testCase?: TestCase;
+}
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -26,13 +41,25 @@ function scoreToString(score: number | null) {
 }
 
 export interface EvalOutputCellProps {
-  output: EvaluateTableOutput;
+  output: ExtendedEvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
 }
+
+const isProviderOverridden = (output: ExtendedEvaluateTableOutput) => {
+  // Get base provider without prefix
+  const defaultProvider = (
+    typeof output.provider === 'string' ? output.provider : output.provider?.id
+  )?.replace('openai:', '');
+
+  // Get test case provider, preferring modelName
+  const testCaseProvider = output.testCase?.provider?.modelName;
+
+  return Boolean(testCaseProvider && defaultProvider && testCaseProvider !== defaultProvider);
+};
 
 function EvalOutputCell({
   output,
@@ -45,7 +72,7 @@ function EvalOutputCell({
   searchText,
   showStats,
 }: EvalOutputCellProps & {
-  firstOutput: EvaluateTableOutput;
+  firstOutput: ExtendedEvaluateTableOutput;
   showDiffs: boolean;
   searchText: string;
 }) {
@@ -490,6 +517,28 @@ function EvalOutputCell({
       .join('\n\n');
   };
 
+  const providerOverride = useMemo(() => {
+    if (isProviderOverridden(output)) {
+      const testCaseProvider = output.testCase?.provider?.modelName;
+      const formattedProvider = `openai:${testCaseProvider}`;
+
+      return (
+        <Tooltip 
+          title={`Model override for this test`}
+          arrow 
+          placement="top"
+        >
+          <div className="pill">
+            <div className="provider">
+              {formattedProvider}
+            </div>
+          </div>
+        </Tooltip>
+      );
+    }
+    return null;
+  }, [output]);
+
   return (
     <div className="cell" style={cellStyle}>
       {showPassFail && (
@@ -501,6 +550,7 @@ function EvalOutputCell({
                   {passFailText}
                   {scoreString && <span className="score"> {scoreString}</span>}
                 </div>
+                {providerOverride}
                 <CustomMetrics lookup={output.namedScores} />
               </div>
             </>
@@ -511,6 +561,7 @@ function EvalOutputCell({
                   {passFailText}
                   {scoreString && <span className="score"> {scoreString}</span>}
                 </div>
+                {providerOverride}
                 <CustomMetrics lookup={output.namedScores} />
                 <span className="fail-reason">
                   <FailReasonCarousel failReasons={failReasons} />

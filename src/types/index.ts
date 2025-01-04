@@ -241,6 +241,7 @@ export interface EvaluateTableOutput {
   namedScores: Record<string, number>;
   text: string;
   prompt: string;
+  testCase: AtomicTestCase;
   latencyMs: number;
   provider?: string;
   tokenUsage?: Partial<TokenUsage>;
