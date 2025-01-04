@@ -2,28 +2,20 @@ import * as React from 'react';
 import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import { isProviderOverridden } from '@app/utils/providerUtils';
 import Tooltip from '@mui/material/Tooltip';
-import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
+import {
+  ResultFailureReason,
+  type EvaluateTableOutput,
+} from '@promptfoo/types';
 import { diffSentences, diffJson, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
+import { isProviderOverridden } from '../../../utils/providerUtils';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 import { useStore as useResultsViewStore } from './store';
-
-interface TestCase {
-  provider?: {
-    modelName?: string;
-    id?: string;
-  };
-}
-
-interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
-  testCase?: TestCase;
-}
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -38,7 +30,7 @@ function scoreToString(score: number | null) {
 }
 
 export interface EvalOutputCellProps {
-  output: ExtendedEvaluateTableOutput;
+  output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
   promptIndex: number;
@@ -57,7 +49,7 @@ function EvalOutputCell({
   searchText,
   showStats,
 }: EvalOutputCellProps & {
-  firstOutput: ExtendedEvaluateTableOutput;
+  firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
   searchText: string;
 }) {
