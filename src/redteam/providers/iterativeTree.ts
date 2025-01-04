@@ -360,7 +360,12 @@ export async function runRedteamConversation({
   options: CallApiOptionsParams;
 }): Promise<{
   output: string;
-  metadata: { redteamFinalPrompt?: string };
+  metadata: {
+    highestScore: number;
+    redteamFinalPrompt?: string;
+    stoppingReason: 'TARGET_SCORE' | 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT';
+    attempts: number;
+  };
   tokenUsage?: TokenUsage;
 }> {
   const nunjucks = getNunjucksEngine();
@@ -401,6 +406,8 @@ export async function runRedteamConversation({
   };
 
   let bestResponse = '';
+
+  let stoppingReason: 'TARGET_SCORE' | 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT';
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -520,10 +527,14 @@ export async function runRedteamConversation({
           logger.debug(
             `[Depth ${depth}, Attempt ${attempts}] Reached target score (${TARGET_SCORE}). Max score: ${maxScore}. Stopping.`,
           );
+          stoppingReason = 'TARGET_SCORE';
           return {
             output: targetResponse.output,
             metadata: {
+              highestScore: maxScore,
               redteamFinalPrompt: targetPrompt,
+              stoppingReason,
+              attempts,
             },
             tokenUsage: totalTokenUsage,
           };
@@ -533,10 +544,14 @@ export async function runRedteamConversation({
           logger.debug(
             `[Depth ${depth}, Attempt ${attempts}] No improvement for ${MAX_NO_IMPROVEMENT} consecutive iterations. Max score: ${maxScore}. Stopping.`,
           );
+          stoppingReason = 'NO_IMPROVEMENT';
           return {
-            output: targetResponse.output,
+            output: bestResponse,
             metadata: {
+              highestScore: maxScore,
               redteamFinalPrompt: targetPrompt,
+              stoppingReason,
+              attempts,
             },
             tokenUsage: totalTokenUsage,
           };
@@ -546,10 +561,14 @@ export async function runRedteamConversation({
           logger.debug(
             `[Depth ${depth}, Attempt ${attempts}] Reached maximum attempts (${MAX_ATTEMPTS}). Max score: ${maxScore}. Stopping.`,
           );
+          stoppingReason = 'MAX_ATTEMPTS';
           return {
-            output: targetResponse.output,
+            output: bestResponse,
             metadata: {
+              highestScore: maxScore,
               redteamFinalPrompt: targetPrompt,
+              stoppingReason,
+              attempts,
             },
             tokenUsage: totalTokenUsage,
           };
@@ -607,10 +626,14 @@ export async function runRedteamConversation({
     `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,
   );
 
+  stoppingReason = 'MAX_DEPTH';
   return {
-    output: finalTargetResponse.output,
+    output: bestResponse,
     metadata: {
+      highestScore: maxScore,
       redteamFinalPrompt: finalTargetPrompt,
+      stoppingReason,
+      attempts,
     },
     tokenUsage: totalTokenUsage,
   };
