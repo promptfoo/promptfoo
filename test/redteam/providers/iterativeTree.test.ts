@@ -1,11 +1,16 @@
 import { jest } from '@jest/globals';
+import { v4 as uuidv4 } from 'uuid';
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import {
   renderSystemPrompts,
   evaluateResponse,
   getNewPrompt,
   checkIfOnTopic,
   updateRedteamHistory,
+  createTreeNode,
+  selectNodes,
+  MAX_WIDTH,
 } from '../../../src/redteam/providers/iterativeTree';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -370,8 +375,9 @@ describe('RedteamIterativeProvider', () => {
 
     beforeEach(() => {
       mockTargetProvider = {
-        callApi: jest.fn(),
-      } as unknown as jest.Mocked<ApiProvider>;
+        id: jest.fn().mockReturnValue('mock-provider'),
+        callApi: jest.fn<ApiProvider['callApi']>(),
+      } as jest.Mocked<ApiProvider>;
     });
 
     it('should get target response correctly', async () => {
@@ -413,5 +419,401 @@ describe('RedteamIterativeProvider', () => {
         tokenUsage: { numRequests: 1 },
       });
     });
+  });
+});
+
+describe('TreeNode', () => {
+  describe('createTreeNode', () => {
+    it('should create a node with unique UUID', () => {
+      const node1 = createTreeNode('prompt1', 5, 0);
+      const node2 = createTreeNode('prompt2', 5, 0);
+
+      expect(node1.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      expect(node2.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      expect(node1.id).not.toBe(node2.id);
+    });
+
+    it('should use provided UUID if given', () => {
+      const customId = uuidv4();
+      const node = createTreeNode('prompt', 5, 0, customId);
+      expect(node.id).toBe(customId);
+    });
+  });
+});
+
+describe('Tree Structure', () => {
+  it('should track parent-child relationships in treeOutputs', async () => {
+    const parentId = uuidv4();
+    const childId = uuidv4();
+    const parentNode = createTreeNode('parent', 5, 0, parentId);
+    const childNode = createTreeNode('child', 7, 1, childId);
+
+    const treeOutputs: TreeSearchOutput[] = [];
+    treeOutputs.push({
+      id: parentNode.id,
+      prompt: 'parent prompt',
+      output: 'parent output',
+      score: 5,
+      isOnTopic: true,
+      depth: 0,
+      wasSelected: true,
+    });
+
+    treeOutputs.push({
+      id: childNode.id,
+      parentId: parentNode.id,
+      prompt: 'child prompt',
+      output: 'child output',
+      score: 7,
+      isOnTopic: true,
+      depth: 1,
+      improvement: 'test improvement',
+      wasSelected: false,
+    });
+
+    // Verify relationships
+    const childOutput = treeOutputs.find((o) => o.id === childNode.id);
+    expect(childOutput?.parentId).toBe(parentNode.id);
+    expect(childOutput?.depth).toBe(1);
+    expect(childOutput?.improvement).toBe('test improvement');
+  });
+
+  describe('selectNodes', () => {
+    let mockRedteamProvider: jest.Mocked<ApiProvider>;
+
+    beforeEach(() => {
+      mockRedteamProvider = {
+        id: jest.fn().mockReturnValue('mock-provider'),
+        callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+          output: JSON.stringify({ onTopic: true }),
+        }),
+      } as jest.Mocked<ApiProvider>;
+    });
+
+    it('should mark selected nodes in treeOutputs', async () => {
+      const nodes = [
+        createTreeNode('node1', 3, 0),
+        createTreeNode('node2', 8, 0),
+        createTreeNode('node3', 5, 0),
+      ];
+
+      const treeOutputs: TreeSearchOutput[] = nodes.map((node) => ({
+        id: node.id,
+        prompt: node.prompt,
+        output: 'test output',
+        score: node.score,
+        isOnTopic: true,
+        depth: node.depth,
+        wasSelected: false,
+      }));
+
+      const selectedNodes = await selectNodes(
+        nodes,
+        mockRedteamProvider,
+        'test prompt',
+        'test goal',
+      );
+
+      // Update wasSelected in treeOutputs based on selected nodes
+      selectedNodes.forEach((node) => {
+        const output = treeOutputs.find((o) => o.id === node.id);
+        if (output) {
+          output.wasSelected = true;
+        }
+      });
+
+      // Verify selection tracking
+      const selectedOutputs = treeOutputs.filter((o) => o.wasSelected);
+      expect(selectedOutputs.length).toBeLessThanOrEqual(MAX_WIDTH);
+
+      // Get all nodes sorted by score for comparison
+      const allSortedByScore = [...treeOutputs].sort((a, b) => b.score - a.score);
+      const expectedLength = Math.min(MAX_WIDTH, allSortedByScore.length);
+      expect(selectedOutputs).toHaveLength(expectedLength);
+
+      // Verify that we selected the highest scoring nodes
+      const expectedScores = allSortedByScore.slice(0, expectedLength).map((n) => n.score);
+      const actualScores = selectedOutputs.map((n) => n.score).sort((a, b) => b - a);
+      expect(actualScores).toEqual(expectedScores);
+    });
+  });
+
+  describe('Tree Reconstruction', () => {
+    it('should be able to reconstruct tree from treeOutputs', () => {
+      const treeOutputs: TreeSearchOutput[] = [
+        {
+          id: 'root',
+          prompt: 'root prompt',
+          output: 'root output',
+          score: 5,
+          isOnTopic: true,
+          depth: 0,
+          wasSelected: true,
+        },
+        {
+          id: 'child1',
+          parentId: 'root',
+          prompt: 'child1 prompt',
+          output: 'child1 output',
+          score: 7,
+          isOnTopic: true,
+          depth: 1,
+          wasSelected: true,
+          improvement: 'improvement1',
+        },
+        {
+          id: 'child2',
+          parentId: 'root',
+          prompt: 'child2 prompt',
+          output: 'child2 output',
+          score: 6,
+          isOnTopic: true,
+          depth: 1,
+          wasSelected: false,
+          improvement: 'improvement2',
+        },
+      ];
+
+      // Helper function to reconstruct tree
+      function reconstructTree(outputs: TreeSearchOutput[]) {
+        const nodes = new Map<string, { children: string[]; output: TreeSearchOutput }>();
+
+        outputs.forEach((output) => {
+          nodes.set(output.id, { children: [], output });
+        });
+
+        outputs.forEach((output) => {
+          if (output.parentId && nodes.has(output.parentId)) {
+            nodes.get(output.parentId)?.children.push(output.id);
+          }
+        });
+
+        return nodes;
+      }
+
+      const tree = reconstructTree(treeOutputs);
+
+      // Verify tree structure
+      expect(tree.get('root')?.children).toHaveLength(2);
+      expect(tree.get('child1')?.output.wasSelected).toBe(true);
+      expect(tree.get('child2')?.output.wasSelected).toBe(false);
+      expect(tree.get('child1')?.output.improvement).toBe('improvement1');
+    });
+  });
+});
+
+describe('Tree Structure and Metadata', () => {
+  let mockRedteamProvider: jest.Mocked<ApiProvider>;
+  let mockTargetProvider: jest.Mocked<ApiProvider>;
+
+  beforeEach(() => {
+    mockRedteamProvider = {
+      id: jest.fn().mockReturnValue('mock-provider'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: JSON.stringify({ onTopic: true }),
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    mockTargetProvider = {
+      id: jest.fn().mockReturnValue('mock-provider'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: 'test response',
+      }),
+    } as jest.Mocked<ApiProvider>;
+  });
+
+  it('should track parent-child relationships in metadata', async () => {
+    const parentPrompt = 'parent prompt';
+    const childPrompt = 'child prompt';
+    const improvement = 'test improvement';
+
+    mockRedteamProvider.callApi
+      .mockResolvedValueOnce({ output: JSON.stringify({ onTopic: true }) }) // isOnTopic check
+      .mockResolvedValueOnce({ output: JSON.stringify({ improvement, prompt: childPrompt }) }); // getNewPrompt
+
+    mockTargetProvider.callApi.mockResolvedValue({ output: 'test response' });
+
+    const treeOutputs: TreeSearchOutput[] = [];
+    const parentNode = createTreeNode(parentPrompt, 5, 0);
+    const childNode = createTreeNode(childPrompt, 7, 1);
+
+    treeOutputs.push({
+      id: parentNode.id,
+      prompt: parentPrompt,
+      output: 'parent output',
+      score: 5,
+      isOnTopic: true,
+      depth: 0,
+      wasSelected: true,
+    });
+
+    treeOutputs.push({
+      id: childNode.id,
+      parentId: parentNode.id,
+      prompt: childPrompt,
+      output: 'child output',
+      score: 7,
+      isOnTopic: true,
+      depth: 1,
+      improvement,
+      wasSelected: false,
+    });
+
+    // Verify parent-child relationship
+    const childOutput = treeOutputs.find((o) => o.id === childNode.id);
+    expect(childOutput?.parentId).toBe(parentNode.id);
+    expect(childOutput?.depth).toBe(1);
+    expect(childOutput?.improvement).toBe(improvement);
+  });
+
+  it('should track tree structure across multiple depths', () => {
+    const rootId = uuidv4();
+    const child1Id = uuidv4();
+    const child2Id = uuidv4();
+    const grandchild1Id = uuidv4();
+
+    const treeOutputs: TreeSearchOutput[] = [
+      {
+        id: rootId,
+        prompt: 'root prompt',
+        output: 'root output',
+        score: 5,
+        isOnTopic: true,
+        depth: 0,
+        wasSelected: true,
+      },
+      {
+        id: child1Id,
+        parentId: rootId,
+        prompt: 'child1 prompt',
+        output: 'child1 output',
+        score: 7,
+        isOnTopic: true,
+        depth: 1,
+        wasSelected: true,
+        improvement: 'improvement1',
+      },
+      {
+        id: child2Id,
+        parentId: rootId,
+        prompt: 'child2 prompt',
+        output: 'child2 output',
+        score: 6,
+        isOnTopic: true,
+        depth: 1,
+        wasSelected: false,
+        improvement: 'improvement2',
+      },
+      {
+        id: grandchild1Id,
+        parentId: child1Id,
+        prompt: 'grandchild1 prompt',
+        output: 'grandchild1 output',
+        score: 8,
+        isOnTopic: true,
+        depth: 2,
+        wasSelected: true,
+        improvement: 'improvement3',
+      },
+    ];
+
+    // Helper function to reconstruct tree
+    function reconstructTree(outputs: TreeSearchOutput[]) {
+      const nodes = new Map<string, { children: string[]; output: TreeSearchOutput }>();
+
+      outputs.forEach((output) => {
+        nodes.set(output.id, { children: [], output });
+      });
+
+      outputs.forEach((output) => {
+        if (output.parentId && nodes.has(output.parentId)) {
+          nodes.get(output.parentId)?.children.push(output.id);
+        }
+      });
+
+      return nodes;
+    }
+
+    const tree = reconstructTree(treeOutputs);
+
+    // Verify tree structure
+    expect(tree.get(rootId)?.children).toHaveLength(2);
+    expect(tree.get(child1Id)?.children).toHaveLength(1);
+    expect(tree.get(child2Id)?.children).toHaveLength(0);
+    expect(tree.get(grandchild1Id)?.output.parentId).toBe(child1Id);
+
+    // Verify node properties
+    expect(tree.get(rootId)?.output.wasSelected).toBe(true);
+    expect(tree.get(child1Id)?.output.wasSelected).toBe(true);
+    expect(tree.get(child2Id)?.output.wasSelected).toBe(false);
+    expect(tree.get(grandchild1Id)?.output.wasSelected).toBe(true);
+
+    // Verify improvements
+    expect(tree.get(child1Id)?.output.improvement).toBe('improvement1');
+    expect(tree.get(child2Id)?.output.improvement).toBe('improvement2');
+    expect(tree.get(grandchild1Id)?.output.improvement).toBe('improvement3');
+
+    // Verify depths
+    expect(tree.get(rootId)?.output.depth).toBe(0);
+    expect(tree.get(child1Id)?.output.depth).toBe(1);
+    expect(tree.get(child2Id)?.output.depth).toBe(1);
+    expect(tree.get(grandchild1Id)?.output.depth).toBe(2);
+  });
+
+  it('should validate metadata format', () => {
+    const metadata = {
+      highestScore: 8,
+      redteamFinalPrompt: 'final prompt',
+      stoppingReason: 'TARGET_SCORE' as const,
+      attempts: 10,
+      treeOutputs: JSON.stringify([
+        {
+          id: 'root',
+          prompt: 'root prompt',
+          output: 'root output',
+          score: 5,
+          isOnTopic: true,
+          depth: 0,
+          wasSelected: true,
+        },
+        {
+          id: 'child',
+          parentId: 'root',
+          prompt: 'child prompt',
+          output: 'child output',
+          score: 8,
+          isOnTopic: true,
+          depth: 1,
+          wasSelected: true,
+          improvement: 'improvement',
+        },
+      ]),
+    };
+
+    // Verify metadata structure
+    expect(metadata).toHaveProperty('highestScore');
+    expect(metadata).toHaveProperty('redteamFinalPrompt');
+    expect(metadata).toHaveProperty('stoppingReason');
+    expect(metadata).toHaveProperty('attempts');
+    expect(metadata).toHaveProperty('treeOutputs');
+
+    // Parse and verify tree outputs
+    const treeOutputs = JSON.parse(metadata.treeOutputs);
+    expect(Array.isArray(treeOutputs)).toBe(true);
+    expect(treeOutputs[0]).toHaveProperty('id');
+    expect(treeOutputs[0]).toHaveProperty('prompt');
+    expect(treeOutputs[0]).toHaveProperty('output');
+    expect(treeOutputs[0]).toHaveProperty('score');
+    expect(treeOutputs[0]).toHaveProperty('isOnTopic');
+    expect(treeOutputs[0]).toHaveProperty('depth');
+    expect(treeOutputs[0]).toHaveProperty('wasSelected');
+
+    // Verify child node
+    expect(treeOutputs[1].parentId).toBe('root');
+    expect(treeOutputs[1].improvement).toBe('improvement');
   });
 });

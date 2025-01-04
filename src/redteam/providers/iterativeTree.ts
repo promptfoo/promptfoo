@@ -15,6 +15,7 @@
  */
 import dedent from 'dedent';
 import type { Environment } from 'nunjucks';
+import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -50,7 +51,7 @@ const MAX_DEPTH = 25;
 const MAX_NO_IMPROVEMENT = 25;
 
 /** Constants for TAP parameters */
-const MAX_WIDTH = 10; // w parameter from paper
+export const MAX_WIDTH = 10; // w parameter from paper
 const BRANCHING_FACTOR = 4; // b parameter from paper
 
 /**
@@ -260,6 +261,7 @@ export function updateRedteamHistory(
  * Represents a node in the search tree.
  */
 export interface TreeNode {
+  id: string; // UUID
   prompt: string;
   score: number;
   children: TreeNode[];
@@ -271,10 +273,22 @@ export interface TreeNode {
  * @param prompt - The prompt associated with the node.
  * @param score - The score of the node.
  * @param depth - The depth of the node in the tree.
+ * @param id - Optional custom UUID for the node. If not provided, a new UUID will be generated.
  * @returns A new TreeNode object.
  */
-export function createTreeNode(prompt: string, score: number, depth: number): TreeNode {
-  return { prompt, score, children: [], depth };
+export function createTreeNode(
+  prompt: string,
+  score: number,
+  depth: number,
+  id?: string,
+): TreeNode {
+  return {
+    id: id || uuidv4(),
+    prompt,
+    score,
+    children: [],
+    depth,
+  };
 }
 
 /**
@@ -336,6 +350,21 @@ export async function selectNodes(
 }
 
 /**
+ * Represents a node in the search tree output.
+ */
+export interface TreeSearchOutput {
+  id: string; // UUID
+  prompt: string;
+  output: string;
+  score: number;
+  isOnTopic: boolean;
+  depth: number;
+  parentId?: string; // UUID
+  improvement?: string;
+  wasSelected: boolean;
+}
+
+/**
  * Runs the red team conversation process.
  * @param params - The parameters for the red team conversation.
  * @returns A promise that resolves to an object with the output and metadata.
@@ -365,6 +394,7 @@ export async function runRedteamConversation({
     redteamFinalPrompt?: string;
     stoppingReason: 'TARGET_SCORE' | 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT';
     attempts: number;
+    treeOutputs: string; // JSON stringified array of TreeSearchOutput
   };
   tokenUsage?: TokenUsage;
 }> {
@@ -408,6 +438,8 @@ export async function runRedteamConversation({
   let bestResponse = '';
 
   let stoppingReason: 'TARGET_SCORE' | 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT';
+
+  const treeOutputs: TreeSearchOutput[] = [];
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -528,6 +560,16 @@ export async function runRedteamConversation({
             `[Depth ${depth}, Attempt ${attempts}] Reached target score (${TARGET_SCORE}). Max score: ${maxScore}. Stopping.`,
           );
           stoppingReason = 'TARGET_SCORE';
+          treeOutputs.push({
+            id: uuidv4(),
+            prompt: targetPrompt,
+            output: targetResponse.output,
+            score,
+            isOnTopic,
+            depth,
+            parentId: node.id,
+            wasSelected: false,
+          });
           return {
             output: targetResponse.output,
             metadata: {
@@ -535,6 +577,7 @@ export async function runRedteamConversation({
               redteamFinalPrompt: targetPrompt,
               stoppingReason,
               attempts,
+              treeOutputs: JSON.stringify(treeOutputs, null, 2),
             },
             tokenUsage: totalTokenUsage,
           };
@@ -545,6 +588,16 @@ export async function runRedteamConversation({
             `[Depth ${depth}, Attempt ${attempts}] No improvement for ${MAX_NO_IMPROVEMENT} consecutive iterations. Max score: ${maxScore}. Stopping.`,
           );
           stoppingReason = 'NO_IMPROVEMENT';
+          treeOutputs.push({
+            id: uuidv4(),
+            prompt: targetPrompt,
+            output: bestResponse,
+            score,
+            isOnTopic,
+            depth,
+            parentId: node.id,
+            wasSelected: false,
+          });
           return {
             output: bestResponse,
             metadata: {
@@ -552,6 +605,7 @@ export async function runRedteamConversation({
               redteamFinalPrompt: targetPrompt,
               stoppingReason,
               attempts,
+              treeOutputs: JSON.stringify(treeOutputs, null, 2),
             },
             tokenUsage: totalTokenUsage,
           };
@@ -562,6 +616,16 @@ export async function runRedteamConversation({
             `[Depth ${depth}, Attempt ${attempts}] Reached maximum attempts (${MAX_ATTEMPTS}). Max score: ${maxScore}. Stopping.`,
           );
           stoppingReason = 'MAX_ATTEMPTS';
+          treeOutputs.push({
+            id: uuidv4(),
+            prompt: targetPrompt,
+            output: bestResponse,
+            score,
+            isOnTopic,
+            depth,
+            parentId: node.id,
+            wasSelected: false,
+          });
           return {
             output: bestResponse,
             metadata: {
@@ -569,6 +633,7 @@ export async function runRedteamConversation({
               redteamFinalPrompt: targetPrompt,
               stoppingReason,
               attempts,
+              treeOutputs: JSON.stringify(treeOutputs, null, 2),
             },
             tokenUsage: totalTokenUsage,
           };
@@ -584,6 +649,18 @@ export async function runRedteamConversation({
             explanation,
           ),
         );
+
+        treeOutputs.push({
+          id: uuidv4(),
+          prompt: targetPrompt,
+          output: targetResponse.output,
+          score,
+          isOnTopic,
+          depth,
+          parentId: node.id,
+          improvement,
+          wasSelected: true,
+        });
       }
     }
 
@@ -627,6 +704,16 @@ export async function runRedteamConversation({
   );
 
   stoppingReason = 'MAX_DEPTH';
+  treeOutputs.push({
+    id: uuidv4(),
+    prompt: finalTargetPrompt,
+    output: bestResponse,
+    score: maxScore,
+    isOnTopic: true,
+    depth: MAX_DEPTH - 1,
+    parentId: bestNode.id,
+    wasSelected: false,
+  });
   return {
     output: bestResponse,
     metadata: {
@@ -634,6 +721,7 @@ export async function runRedteamConversation({
       redteamFinalPrompt: finalTargetPrompt,
       stoppingReason,
       attempts,
+      treeOutputs: JSON.stringify(treeOutputs, null, 2),
     },
     tokenUsage: totalTokenUsage,
   };
