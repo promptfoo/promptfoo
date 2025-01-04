@@ -210,3 +210,33 @@ describe('EvalOutputCell', () => {
     expect(dialogContent).toHaveTextContent('Test output text');
   });
 });
+
+describe('EvalOutputCell provider override', () => {
+  it('shows provider override when test case uses different provider', () => {
+    const output = {
+      provider: 'openai:gpt-4o',
+      testCase: {
+        provider: {
+          modelName: 'gpt-4o-mini',
+        },
+      },
+    };
+
+    const { container } = render(<EvalOutputCell output={output} {...defaultProps} />);
+    expect(container.querySelector('.provider')).toHaveTextContent('openai:gpt-4o-mini');
+  });
+
+  it('does not show provider override when providers match', () => {
+    const output = {
+      provider: 'openai:gpt-4o',
+      testCase: {
+        provider: {
+          modelName: 'gpt-4o',
+        },
+      },
+    };
+
+    const { container } = render(<EvalOutputCell output={output} {...defaultProps} />);
+    expect(container.querySelector('.provider')).not.toBeInTheDocument();
+  });
+});

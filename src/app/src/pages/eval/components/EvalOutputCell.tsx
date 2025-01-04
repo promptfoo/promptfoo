@@ -2,11 +2,8 @@ import * as React from 'react';
 import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
+import { isProviderOverridden } from '@app/utils/providerUtils';
 import Tooltip from '@mui/material/Tooltip';
-import { styled } from '@mui/material/styles';
-import { alpha } from '@mui/material/styles';
 import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
 import { diffSentences, diffJson, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
@@ -48,18 +45,6 @@ export interface EvalOutputCellProps {
   showStats: boolean;
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
 }
-
-const isProviderOverridden = (output: ExtendedEvaluateTableOutput) => {
-  // Get base provider without prefix
-  const defaultProvider = (
-    typeof output.provider === 'string' ? output.provider : output.provider?.id
-  )?.replace('openai:', '');
-
-  // Get test case provider, preferring modelName
-  const testCaseProvider = output.testCase?.provider?.modelName;
-
-  return Boolean(testCaseProvider && defaultProvider && testCaseProvider !== defaultProvider);
-};
 
 function EvalOutputCell({
   output,
@@ -518,20 +503,14 @@ function EvalOutputCell({
   };
 
   const providerOverride = useMemo(() => {
-    if (isProviderOverridden(output)) {
+    if (isProviderOverridden(output.provider, output.testCase?.provider)) {
       const testCaseProvider = output.testCase?.provider?.modelName;
       const formattedProvider = `openai:${testCaseProvider}`;
 
       return (
-        <Tooltip 
-          title={`Model override for this test`}
-          arrow 
-          placement="top"
-        >
+        <Tooltip title="Model override for this test" arrow placement="top">
           <div className="pill">
-            <div className="provider">
-              {formattedProvider}
-            </div>
+            <div className="provider">{formattedProvider}</div>
           </div>
         </Tooltip>
       );
