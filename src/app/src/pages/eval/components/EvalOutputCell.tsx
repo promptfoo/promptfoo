@@ -3,16 +3,31 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
-import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
+import {
+  ResultFailureReason,
+  type EvaluateTableOutput,
+  type ProviderOptions,
+} from '@promptfoo/types';
 import { diffSentences, diffJson, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
-import { isProviderOverridden } from '../../../utils/providerUtils';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 import { useStore as useResultsViewStore } from './store';
+
+const isProviderOverridden = (
+  defaultProvider: string | ProviderOptions | undefined,
+  testCaseProvider?: ProviderOptions,
+) => {
+  const normalizedDefault =
+    typeof defaultProvider === 'string' ? defaultProvider : defaultProvider?.id;
+
+  const normalizedTest = testCaseProvider?.id;
+
+  return Boolean(normalizedTest && normalizedDefault && normalizedTest !== normalizedDefault);
+};
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
