@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Testing sentiment analysis for customer reviews'
+providers:
+  - id: openai:gpt-4o
+  - id: openai:gpt-4o-mini
+prompts:
+  - 'Analyze the sentiment of this customer review: {{review_text}}'
+tests:
+  - description: 'Sentiment Analysis Test Cases'
+    vars:
+      review_text: 'The product arrived damaged and customer service was unhelpful'
+    provider:
+      id: openai:gpt-4o-mini
+  - vars:
+      review_text: "I've been using this product for a month now and it's been great"
