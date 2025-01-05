@@ -17,18 +17,6 @@ import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 import { useStore as useResultsViewStore } from './store';
 
-const isProviderOverridden = (
-  defaultProvider: string | ProviderOptions | undefined,
-  testCaseProvider?: ProviderOptions,
-) => {
-  const normalizedDefault =
-    typeof defaultProvider === 'string' ? defaultProvider : defaultProvider?.id;
-
-  const normalizedTest = testCaseProvider?.id;
-
-  return Boolean(normalizedTest && normalizedDefault && normalizedTest !== normalizedDefault);
-};
-
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
 };
@@ -507,13 +495,18 @@ function EvalOutputCell({
   };
 
   const providerOverride = useMemo(() => {
-    if (isProviderOverridden(output.provider, output.testCase?.provider)) {
-      const testCaseProvider = output.testCase?.provider?.modelName;
-      const formattedProvider = `openai:${testCaseProvider}`;
+    const defaultProviderId = output.provider;
+    const overrideProviderId = typeof output.testCase?.provider === 'string'
+      ? output.testCase.provider
+      : output.testCase?.provider?.modelName as string;
 
+    console.log('testCase', output.testCase);
+    console.log('Provider IDs:', JSON.stringify({ defaultProviderId, overrideProviderId, testCaseProvider: output.testCase?.provider, isOverridden: overrideProviderId !== defaultProviderId }));
+
+    if (overrideProviderId && defaultProviderId && overrideProviderId !== defaultProviderId) {
       return (
         <Tooltip title="Model override for this test" arrow placement="top">
-          <span className="provider">{formattedProvider}</span>
+          <span className="provider">{overrideProviderId}</span>
         </Tooltip>
       );
     }
@@ -523,34 +516,19 @@ function EvalOutputCell({
   return (
     <div className="cell" style={cellStyle}>
       {showPassFail && (
-        <>
-          {output.pass ? (
-            <>
-              <div className="status pass">
-                <div className="pill">
-                  {passFailText}
-                  {scoreString && <span className="score"> {scoreString}</span>}
-                </div>
-                {providerOverride}
-                <CustomMetrics lookup={output.namedScores} />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="status fail">
-                <div className="pill">
-                  {passFailText}
-                  {scoreString && <span className="score"> {scoreString}</span>}
-                </div>
-                {providerOverride}
-                <CustomMetrics lookup={output.namedScores} />
-                <span className="fail-reason">
-                  <FailReasonCarousel failReasons={failReasons} />
-                </span>
-              </div>
-            </>
+        <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
+          <div className="pill">
+            {passFailText}
+            {scoreString && <span className="score"> {scoreString}</span>}
+          </div>
+          {providerOverride}
+          <CustomMetrics lookup={output.namedScores} />
+          {!output.pass && (
+            <span className="fail-reason">
+              <FailReasonCarousel failReasons={failReasons} />
+            </span>
           )}
-        </>
+        </div>
       )}
       {showPrompts && firstOutput.prompt && (
         <div className="prompt">
