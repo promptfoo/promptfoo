@@ -781,6 +781,10 @@ There are two approaches:
 
 Either way, this will allow you to evaluate your custom tests.
 
+:::warning
+When adding custom test cases to already geenrated `redteam.yaml` file, please ensure that you do not remove the metadata section at the very end which contains the configHash value.
+:::
+
 ### Loading custom tests from CSV
 
 Promptfoo supports loading tests from CSV as well as Google Sheets. See [CSV loading](/docs/configuration/guide/#loading-tests-from-csv) and [Google Sheets](/docs/integrations/google-sheets/) for more info.
