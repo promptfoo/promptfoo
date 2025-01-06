@@ -69,18 +69,21 @@ To install the WatsonX provider, use the following steps:
    You can choose between two authentication methods:
 
    **Option 1: IAM Authentication**
+
    ```sh
    export WATSONX_AI_AUTH_TYPE=iam
    export WATSONX_AI_APIKEY=your-ibm-cloud-api-key
    ```
 
    **Option 2: Bearer Token Authentication**
+
    ```sh
    export WATSONX_AI_AUTH_TYPE=bearertoken
    export WATSONX_AI_BEARER_TOKEN=your-ibm-cloud-bearer-token
    ```
 
    Then set your project ID:
+
    ```sh
    export WATSONX_AI_PROJECT_ID=your-ibm-project-id
    ```
@@ -95,10 +98,10 @@ To install the WatsonX provider, use the following steps:
        config:
          # Option 1: IAM Authentication
          apiKey: your-ibm-cloud-api-key
-         
+
          # Option 2: Bearer Token Authentication
          # apiBearerToken: your-ibm-cloud-bearer-token
-         
+
          projectId: your-ibm-project-id
          serviceUrl: https://us-south.ml.cloud.ibm.com
    ```

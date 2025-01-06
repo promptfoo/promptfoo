@@ -178,13 +178,15 @@ describe('WatsonXProvider', () => {
       };
       jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
 
-      const provider = new WatsonXProvider(modelName, { 
+      const provider = new WatsonXProvider(modelName, {
         config: dualAuthConfig,
-        env: { WATSONX_AI_AUTH_TYPE: 'iam' }
+        env: { WATSONX_AI_AUTH_TYPE: 'iam' },
       });
       await provider.getClient();
 
-      expect(logger.info).toHaveBeenCalledWith('Using IAM Authentication based on WATSONX_AI_AUTH_TYPE.');
+      expect(logger.info).toHaveBeenCalledWith(
+        'Using IAM Authentication based on WATSONX_AI_AUTH_TYPE.',
+      );
       expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
         version: '2023-05-29',
         serviceUrl: 'https://us-south.ml.cloud.ibm.com',
@@ -193,23 +195,25 @@ describe('WatsonXProvider', () => {
     });
 
     it('should use Bearer Token Authentication when WATSONX_AI_AUTH_TYPE is set to bearertoken', async () => {
-      const dualAuthConfig = { 
-        ...config, 
+      const dualAuthConfig = {
+        ...config,
         apiKey: 'test-api-key',
-        apiBearerToken: 'test-bearer-token'
+        apiBearerToken: 'test-bearer-token',
       };
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: jest.fn(),
       };
       jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
 
-      const provider = new WatsonXProvider(modelName, { 
+      const provider = new WatsonXProvider(modelName, {
         config: dualAuthConfig,
-        env: { WATSONX_AI_AUTH_TYPE: 'bearertoken' }
+        env: { WATSONX_AI_AUTH_TYPE: 'bearertoken' },
       });
       await provider.getClient();
 
-      expect(logger.info).toHaveBeenCalledWith('Using Bearer Token Authentication based on WATSONX_AI_AUTH_TYPE.');
+      expect(logger.info).toHaveBeenCalledWith(
+        'Using Bearer Token Authentication based on WATSONX_AI_AUTH_TYPE.',
+      );
       expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
         version: '2023-05-29',
         serviceUrl: 'https://us-south.ml.cloud.ibm.com',
@@ -224,9 +228,9 @@ describe('WatsonXProvider', () => {
       };
       jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
 
-      const provider = new WatsonXProvider(modelName, { 
+      const provider = new WatsonXProvider(modelName, {
         config: dualAuthConfig,
-        env: { WATSONX_AI_AUTH_TYPE: 'invalid' }
+        env: { WATSONX_AI_AUTH_TYPE: 'invalid' },
       });
       await provider.getClient();
 
