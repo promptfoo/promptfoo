@@ -1,15 +1,32 @@
 import async from 'async';
 import chalk from 'chalk';
-import type { MultiBar, SingleBar } from 'cli-progress';
+import type {
+  MultiBar,
+  SingleBar,
+} from 'cli-progress';
 import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
-import { runAssertions, runCompareAssertion } from './assertions';
-import { fetchWithCache, getCache } from './cache';
+
+import {
+  runAssertions,
+  runCompareAssertion,
+} from './assertions';
+import {
+  fetchWithCache,
+  getCache,
+} from './cache';
 import cliState from './cliState';
-import { getEnvBool, getEnvInt, isCI } from './envars';
-import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import {
+  getEnvBool,
+  getEnvInt,
+  isCI,
+} from './envars';
+import {
+  renderPrompt,
+  runExtensionHook,
+} from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
@@ -17,7 +34,6 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
-  ResultFailureReason,
   type ApiProvider,
   type Assertion,
   type CompletedPrompt,
@@ -26,6 +42,7 @@ import {
   type EvaluateStats,
   type Prompt,
   type ProviderResponse,
+  ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
 } from './types';
@@ -33,7 +50,11 @@ import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
-import { transform, type TransformContext, TransformInputType } from './util/transform';
+import {
+  transform,
+  type TransformContext,
+  TransformInputType,
+} from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -220,6 +241,7 @@ class Evaluator {
             prompt,
             filters,
             originalProvider: provider,
+            test,
 
             // All of these are removed in python and script providers, but every Javascript provider gets them
             logger,
