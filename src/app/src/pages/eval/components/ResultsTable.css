@@ -292,7 +292,7 @@ table.results-table,
   flex-direction: row;
   gap: 0.5rem;
   align-items: center;
-  flex-wrap: wrap; /* Allow wrapping if space is tight */
+  flex-wrap: wrap;
 }
 
 .results-table .status .pill,
