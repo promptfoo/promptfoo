@@ -517,6 +517,7 @@ export function evalCommand(
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option('--filter-failing <path>', 'Path to json output file')
+    .option('--filter-errors-only <path>', 'Path to json output file with error tests')
     .option(
       '--filter-metadata <key=value>',
       'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',
