@@ -33,6 +33,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--description <description>`       | Description of the eval run                                             |
 | `--env-file, --env-path <path>`     | Path to .env file                                                       |
 | `--filter-failing <path>`           | Path to JSON output file with failing tests                             |
+| `--filter-errors-only <path>`       | Path to JSON output file with error tests                               |
 | `-n, --filter-first-n <number>`     | Only run the first N tests                                              |
 | `--filter-sample <number>`          | Only run a random sample of N tests                                     |
 | `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair                |

@@ -1,5 +1,6 @@
 import logger from '../../logger';
 import type { TestSuite } from '../../types';
+import { filterErrorTests } from './filterErrorTests';
 import { filterFailingTests } from './filterFailingTests';
 
 interface FilterOptions {
@@ -8,6 +9,7 @@ interface FilterOptions {
   metadata?: string;
   pattern?: string;
   sample?: number | string;
+  errorsOnly?: string;
 }
 
 type Tests = TestSuite['tests'];
@@ -50,6 +52,10 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
 
   if (options.failing) {
     tests = await filterFailingTests(testSuite, options.failing);
+  }
+
+  if (options.errorsOnly) {
+    tests = await filterErrorTests(testSuite, options.errorsOnly);
   }
 
   if (options.pattern) {
