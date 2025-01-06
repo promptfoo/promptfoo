@@ -134,7 +134,6 @@ export async function readTest(
   }
 
   if (testCase.provider && typeof testCase.provider !== 'function') {
-    // NOTE:  here
     // Load provider
     if (typeof testCase.provider === 'string') {
       testCase.provider = await loadApiProvider(testCase.provider);

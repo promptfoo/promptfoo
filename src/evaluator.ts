@@ -210,8 +210,6 @@ class Evaluator {
       if (test.providerOutput) {
         response.output = test.providerOutput;
       } else {
-        // NOTE:  here
-        logger.warn(`test.provider: ${test.provider}`);
         response = await ((test.provider as ApiProvider) || provider).callApi(
           renderedPrompt,
           {

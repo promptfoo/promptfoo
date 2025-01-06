@@ -298,11 +298,12 @@ table.results-table,
 .results-table .status .pill,
 .results-table .status .provider.pill {
   display: inline-flex;
+  align-self: flex-start; /* prevents it from stretching to fill width */
   align-items: center;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.9em;
-  height: 24px; /* Fixed height to ensure consistency */
+  height: 24px;
   line-height: 1;
 }
 
@@ -530,7 +531,6 @@ thead.collapsed .header-dismiss {
   cursor: pointer;
 }
 
-/* Update the provider pill styles to be more specific and consistent */
 .results-table .provider.pill {
   background-color: var(--neutral-background-color);
   border: 1px solid var(--border-color);
